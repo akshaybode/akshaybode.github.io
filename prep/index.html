@@ -31,6 +31,8 @@ body {
 a { color: inherit; text-decoration: none; }
 .wrap { max-width: 1180px; margin: 0 auto; padding: 0 24px; }
 
+/* interactive particle backdrop */
+#bg-canvas { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; }
 /* glow backdrop */
 .bg-glow { position: fixed; z-index: 0; filter: blur(110px); border-radius: 50%; opacity: .35; pointer-events: none; }
 .bg-glow.a { width: 480px; height: 480px; background: #1e7fb8; top: -160px; right: -120px; }
@@ -128,6 +130,7 @@ footer a { color: var(--accent-2); }
 </style>
 </head>
 <body>
+<canvas id="bg-canvas"></canvas>
 <div class="bg-glow a"></div>
 <div class="bg-glow b"></div>
 
@@ -388,6 +391,95 @@ footer a { color: var(--accent-2); }
 </footer>
 
 <script>
+/* ---- interactive particle background ---- */
+(function () {
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const canvas = document.getElementById("bg-canvas");
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  let w, h, nodes, raf;
+  const COUNT = window.innerWidth < 760 ? 36 : 80;
+  const LINK = 140;
+  const mouse = { x: null, y: null, active: false };
+
+  function resize() {
+    w = canvas.width = window.innerWidth * devicePixelRatio;
+    h = canvas.height = window.innerHeight * devicePixelRatio;
+  }
+  function init() {
+    resize();
+    nodes = Array.from({ length: COUNT }, () => ({
+      x: Math.random() * w, y: Math.random() * h,
+      vx: (Math.random() - 0.5) * 0.4 * devicePixelRatio,
+      vy: (Math.random() - 0.5) * 0.4 * devicePixelRatio,
+      r: (Math.random() * 1.6 + 1) * devicePixelRatio
+    }));
+  }
+  function setMouse(e) {
+    const p = (e.touches && e.touches[0]) ? e.touches[0] : e;
+    if (p.clientX == null) return;
+    mouse.x = p.clientX * devicePixelRatio;
+    mouse.y = p.clientY * devicePixelRatio;
+    mouse.active = true;
+  }
+  function clearMouse() { mouse.active = false; }
+  window.addEventListener("mousemove", setMouse, { passive: true });
+  window.addEventListener("touchmove", setMouse, { passive: true });
+  window.addEventListener("touchstart", setMouse, { passive: true });
+  window.addEventListener("mouseout", clearMouse, { passive: true });
+  window.addEventListener("touchend", clearMouse, { passive: true });
+
+  function draw() {
+    ctx.clearRect(0, 0, w, h);
+    const link = LINK * devicePixelRatio;
+    const mR = 160 * devicePixelRatio;
+    const base = 0.45 * devicePixelRatio;
+    for (let i = 0; i < nodes.length; i++) {
+      const a = nodes[i];
+      a.x += a.vx; a.y += a.vy;
+      if (a.x < 0 || a.x > w) a.vx *= -1;
+      if (a.y < 0 || a.y > h) a.vy *= -1;
+
+      let near = 0;
+      if (mouse.active) {
+        const mdx = a.x - mouse.x, mdy = a.y - mouse.y, md = Math.hypot(mdx, mdy);
+        if (md < mR && md > 0.01) {
+          near = 1 - md / mR;
+          a.vx += (mdx / md) * near * 0.6 * devicePixelRatio;
+          a.vy += (mdy / md) * near * 0.6 * devicePixelRatio;
+          const sp = Math.hypot(a.vx, a.vy) || 1;
+          a.vx = a.vx / sp * base; a.vy = a.vy / sp * base;
+          ctx.beginPath();
+          ctx.moveTo(a.x, a.y); ctx.lineTo(mouse.x, mouse.y);
+          ctx.strokeStyle = "rgba(56,189,248," + (0.45 * near) + ")";
+          ctx.lineWidth = devicePixelRatio;
+          ctx.stroke();
+        }
+      }
+
+      ctx.beginPath();
+      ctx.arc(a.x, a.y, a.r + near * 1.6 * devicePixelRatio, 0, Math.PI * 2);
+      ctx.fillStyle = near ? "rgba(34,211,238,0.95)" : "rgba(56,189,248,0.7)";
+      ctx.fill();
+
+      for (let j = i + 1; j < nodes.length; j++) {
+        const b = nodes[j], dx = a.x - b.x, dy = a.y - b.y, d = Math.hypot(dx, dy);
+        if (d < link) {
+          ctx.beginPath();
+          ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
+          ctx.strokeStyle = "rgba(99,160,220," + (0.14 * (1 - d / link)) + ")";
+          ctx.lineWidth = devicePixelRatio;
+          ctx.stroke();
+        }
+      }
+    }
+    raf = requestAnimationFrame(draw);
+  }
+  init();
+  if (!reduce) draw(); else { draw(); cancelAnimationFrame(raf); }
+  window.addEventListener("resize", () => { cancelAnimationFrame(raf); init(); if (!reduce) draw(); });
+})();
+
 /* ---- reveal on scroll ---- */
 const obs = new IntersectionObserver((entries) => {
   entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add("in"); obs.unobserve(e.target); } });
