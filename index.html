@@ -94,13 +94,22 @@ h1,h2,h3 { font-family: "Space Grotesk", "Inter", sans-serif; line-height: 1.15;
 nav {
   position: fixed; top: 0; left: 0; right: 0; z-index: 100;
   display: flex; align-items: center; justify-content: space-between;
-  padding: 14px 30px; backdrop-filter: blur(14px);
-  background: rgba(7,11,22,0.6); border-bottom: 1px solid transparent;
-  transition: background .3s, border-color .3s, padding .3s;
+  padding: 14px 30px; background: transparent;
+  transition: padding .3s;
 }
-html[data-theme="light"] nav { background: rgba(244,247,252,0.7); }
-nav.scrolled { background: rgba(7,11,22,0.88); border-color: var(--border); padding: 10px 30px; }
-html[data-theme="light"] nav.scrolled { background: rgba(244,247,252,0.92); }
+/* Blur lives on a pseudo-element, NOT on <nav>. A backdrop-filter on nav would
+   make it the containing block for its position:fixed mobile drawer child,
+   collapsing the drawer to the nav-bar height. */
+nav::before {
+  content: ""; position: absolute; inset: 0; z-index: -1;
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  background: rgba(7,11,22,0.6); border-bottom: 1px solid transparent;
+  transition: background .3s, border-color .3s;
+}
+html[data-theme="light"] nav::before { background: rgba(244,247,252,0.7); }
+nav.scrolled { padding: 10px 30px; }
+nav.scrolled::before { background: rgba(7,11,22,0.88); border-color: var(--border); }
+html[data-theme="light"] nav.scrolled::before { background: rgba(244,247,252,0.92); }
 .logo { font-family: "Space Grotesk"; font-weight: 700; font-size: 20px; letter-spacing: .5px; display: flex; align-items: center; gap: 10px; }
 .logo .badge { width: 34px; height: 34px; border-radius: 9px; background: var(--grad); color: #04121f;
   display: grid; place-items: center; font-size: 15px; box-shadow: 0 6px 18px rgba(56,189,248,.4); }
@@ -115,6 +124,13 @@ html[data-theme="light"] nav.scrolled { background: rgba(244,247,252,0.92); }
   color: var(--text); cursor: pointer; display: grid; place-items: center; font-size: 15px; transition: all .2s; }
 .icon-btn:hover { border-color: var(--accent); color: var(--accent); }
 .hamburger { display: none; }
+/* drawer-only pieces — hidden on desktop, shown inside the mobile drawer */
+.lnk-ico, .drawer-head, .drawer-foot { display: none; }
+#navScrim { position: fixed; inset: 0; z-index: 90; background: rgba(2,6,16,.6);
+  -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
+  opacity: 0; visibility: hidden; transition: opacity .35s ease, visibility .35s ease; }
+#navScrim.show { opacity: 1; visibility: visible; }
+body.menu-open { overflow: hidden; }
 
 /* ============================= HERO ============================= */
 header.hero { position: relative; min-height: 100vh; display: flex; align-items: center; overflow: hidden; }
@@ -294,13 +310,70 @@ footer .mono { color: var(--muted); }
   .cert-grid { grid-template-columns: 1fr 1fr; }
 }
 @media (max-width: 760px) {
-  .nav-links { position: fixed; inset: 0 0 0 auto; width: 250px; flex-direction: column; align-items: flex-start;
-    background: var(--bg-2); border-left: 1px solid var(--border); padding: 90px 20px 20px; gap: 6px;
-    transform: translateX(110%); transition: transform .35s; }
-  .nav-links.open { transform: translateX(0); }
-  .nav-links a { width: 100%; }
+  nav { padding: 12px 18px; }
+  nav.scrolled { padding: 10px 18px; }
   .hamburger { display: grid; }
+  .nav-cta { gap: 8px; }
   .nav-cta .btn-resume span { display: none; }
+  .nav-cta .btn-resume { padding: 9px 12px !important; }
+
+  .nav-links {
+    position: fixed; top: 0; right: 0; bottom: 0; left: auto;
+    width: min(330px, 86vw); flex-direction: column; align-items: stretch; gap: 4px;
+    background: linear-gradient(180deg, var(--panel) 0%, var(--bg-2) 100%);
+    border-left: 1px solid var(--border);
+    box-shadow: -28px 0 70px rgba(0,0,0,.55);
+    padding: 22px 18px calc(22px + env(safe-area-inset-bottom));
+    transform: translateX(112%); transition: transform .42s cubic-bezier(.16,.84,.34,1);
+    overflow-y: auto; -webkit-overflow-scrolling: touch; z-index: 101;
+  }
+  .nav-links.open { transform: translateX(0); }
+
+  .drawer-head { display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid var(--border); }
+  .drawer-title { font-family: "Space Grotesk"; font-weight: 600; font-size: 12.5px;
+    letter-spacing: 2px; text-transform: uppercase; color: var(--faint); }
+
+  .nav-links a.nav-a { width: 100%; display: flex; align-items: center; gap: 14px;
+    font-size: 16px; font-weight: 500; padding: 13px 12px; border-radius: 12px; color: var(--text); }
+  .nav-links a.nav-a:hover, .nav-links a.nav-a.active {
+    background: var(--panel-2); color: var(--accent); transform: translateX(4px); }
+  .lnk-ico { display: inline-grid; place-items: center; width: 34px; height: 34px; flex: none;
+    border-radius: 9px; background: rgba(56,189,248,.12); color: var(--accent); font-size: 14px; }
+
+  /* staggered entrance when the drawer opens */
+  .nav-links .nav-a, .nav-links .drawer-foot { opacity: 0; transform: translateX(26px);
+    transition: opacity .4s ease, transform .4s ease; }
+  .nav-links.open .nav-a, .nav-links.open .drawer-foot { opacity: 1; transform: none; }
+  .nav-links.open .nav-a:nth-child(2) { transition-delay: .05s; }
+  .nav-links.open .nav-a:nth-child(3) { transition-delay: .10s; }
+  .nav-links.open .nav-a:nth-child(4) { transition-delay: .15s; }
+  .nav-links.open .nav-a:nth-child(5) { transition-delay: .20s; }
+  .nav-links.open .nav-a:nth-child(6) { transition-delay: .25s; }
+  .nav-links.open .nav-a:nth-child(7) { transition-delay: .30s; }
+  .nav-links.open .drawer-foot { transition-delay: .34s; }
+
+  .drawer-foot { display: block; margin-top: auto; padding-top: 18px; }
+  .drawer-resume { display: flex !important; justify-content: center; width: 100%;
+    padding: 13px 16px !important; font-size: 14px; }
+  .drawer-socials { display: flex; gap: 12px; margin-top: 16px; }
+  .drawer-socials a { flex: 1; display: grid; place-items: center; height: 44px; font-size: 17px;
+    border: 1px solid var(--border); border-radius: 11px; color: var(--muted); transition: all .2s; }
+  .drawer-socials a:hover { color: var(--accent); border-color: var(--accent); transform: translateY(-2px); }
+  .drawer-loc { margin-top: 16px; text-align: center; font-size: 12.5px; color: var(--faint); }
+  .drawer-loc i { color: var(--accent-2); margin-right: 5px; }
+}
+@media (max-width: 560px) {
+  .wrap { padding: 0 18px; }
+  .hero-actions { width: 100%; gap: 12px; }
+  .hero-actions .btn { flex: 1 1 100%; justify-content: center; }
+  .hero p.lede { font-size: 16px; }
+  .section-head { margin-bottom: 40px; }
+  /* let the animated pipeline scroll horizontally instead of wrapping awkwardly */
+  .pipe { flex-wrap: nowrap; overflow-x: auto; justify-content: flex-start;
+    padding: 4px 2px 10px; scrollbar-width: none; }
+  .pipe::-webkit-scrollbar { display: none; }
+  .pnode { flex: none; }
 }
 @media (max-width: 480px) {
   .cert-grid { grid-template-columns: 1fr; }
@@ -321,19 +394,33 @@ footer .mono { color: var(--muted); }
 <nav id="nav">
   <div class="logo"><span class="badge">AB</span> Akshay&nbsp;Bode</div>
   <div class="nav-links" id="navLinks">
-    <a href="#about" class="nav-a">About</a>
-    <a href="#skills" class="nav-a">Skills</a>
-    <a href="#experience" class="nav-a">Experience</a>
-    <a href="#projects" class="nav-a">Projects</a>
-    <a href="#certs" class="nav-a">Certifications</a>
-    <a href="#contact" class="nav-a">Contact</a>
+    <div class="drawer-head">
+      <span class="drawer-title">Navigate</span>
+      <button class="icon-btn" id="drawerClose" aria-label="Close menu"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <a href="#about" class="nav-a"><i class="fa-solid fa-user lnk-ico"></i><span>About</span></a>
+    <a href="#skills" class="nav-a"><i class="fa-solid fa-layer-group lnk-ico"></i><span>Skills</span></a>
+    <a href="#experience" class="nav-a"><i class="fa-solid fa-briefcase lnk-ico"></i><span>Experience</span></a>
+    <a href="#projects" class="nav-a"><i class="fa-solid fa-diagram-project lnk-ico"></i><span>Projects</span></a>
+    <a href="#certs" class="nav-a"><i class="fa-solid fa-certificate lnk-ico"></i><span>Certifications</span></a>
+    <a href="#contact" class="nav-a"><i class="fa-solid fa-paper-plane lnk-ico"></i><span>Contact</span></a>
+    <div class="drawer-foot">
+      <a class="btn-resume drawer-resume" href="Akshay_Bode_Resume_2026.pdf" target="_blank" rel="noopener"><i class="fa-solid fa-download"></i> Download Résumé</a>
+      <div class="drawer-socials">
+        <a href="https://www.linkedin.com/in/akshaybode" target="_blank" rel="noopener" aria-label="LinkedIn"><i class="fa-brands fa-linkedin-in"></i></a>
+        <a href="https://github.com/akshaybode" target="_blank" rel="noopener" aria-label="GitHub"><i class="fa-brands fa-github"></i></a>
+        <a href="mailto:akshaybode321@gmail.com" aria-label="Email"><i class="fa-solid fa-envelope"></i></a>
+      </div>
+      <p class="drawer-loc"><i class="fa-solid fa-location-dot"></i> Pune, Maharashtra, India</p>
+    </div>
   </div>
   <div class="nav-cta">
     <button class="icon-btn" id="themeBtn" aria-label="Toggle theme"><i class="fa-solid fa-moon"></i></button>
     <a class="btn-resume" href="Akshay_Bode_Resume_2026.pdf" target="_blank" rel="noopener"><i class="fa-solid fa-download"></i> <span>Resume</span></a>
-    <button class="icon-btn hamburger" id="hamburger" aria-label="Menu"><i class="fa-solid fa-bars"></i></button>
+    <button class="icon-btn hamburger" id="hamburger" aria-label="Menu" aria-expanded="false"><i class="fa-solid fa-bars"></i></button>
   </div>
 </nav>
+<div id="navScrim"></div>
 
 <!-- ============================= HERO ============================= -->
 <header class="hero" id="home">
@@ -599,8 +686,21 @@ onScroll();
 
 topBtn.addEventListener("click", () => window.scrollTo({ top: 0, behavior: "smooth" }));
 
-hamburger.addEventListener("click", () => navLinks.classList.toggle("open"));
-navLinks.querySelectorAll("a").forEach(a => a.addEventListener("click", () => navLinks.classList.remove("open")));
+const navScrim = document.getElementById("navScrim");
+const drawerClose = document.getElementById("drawerClose");
+function setMenu(open) {
+  navLinks.classList.toggle("open", open);
+  navScrim.classList.toggle("show", open);
+  document.body.classList.toggle("menu-open", open);
+  hamburger.setAttribute("aria-expanded", open ? "true" : "false");
+  hamburger.innerHTML = open ? '<i class="fa-solid fa-xmark"></i>' : '<i class="fa-solid fa-bars"></i>';
+}
+hamburger.addEventListener("click", () => setMenu(!navLinks.classList.contains("open")));
+navScrim.addEventListener("click", () => setMenu(false));
+if (drawerClose) drawerClose.addEventListener("click", () => setMenu(false));
+navLinks.querySelectorAll("a").forEach(a => a.addEventListener("click", () => setMenu(false)));
+document.addEventListener("keydown", e => { if (e.key === "Escape") setMenu(false); });
+window.addEventListener("resize", () => { if (window.innerWidth > 760) setMenu(false); });
 
 /* ============================= SCROLLSPY ============================= */
 const sections = [...document.querySelectorAll("section[id], header[id]")];
