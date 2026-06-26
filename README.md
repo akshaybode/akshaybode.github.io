@@ -1,46 +1,41 @@
-# Portfolio Website.
+# Akshay Bode — Data Engineer Portfolio
+
 ###### https://akshaybode.github.io/
 
-### About me
-* Competitive Programming
-* Web Designing
-* Software Development
-* Android Application
-* Machine Learning
-* Open Source 
+A modern, single-page portfolio website built for a **Data Engineer** profile.
+Self-contained (vanilla HTML, CSS & JavaScript) — no build step required.
 
-### Counters
-* Course
-* Project and Apps
-* Percentile
+## Sections
+* **Hero** — animated particle-network background, rotating role text, quick links
+* **Pipeline strip** — animated Sources → Ingest → Transform → Warehouse → Analytics flow
+* **About** — bio + animated stat counters (years, records/day, performance gains)
+* **Skills** — categorized tech chips + animated proficiency bars
+* **Experience** — interactive timeline (Amdocs incl. onsite USCC migration in Mexico, IBM)
+* **Projects** — data engineering builds (ELT pipeline, real-time CDC, migration, modeling)
+* **Certifications** — DP-900, Big Data 101, AZ-900, AI-900, IBM Cloud, SnowPro Core (in progress)
+* **Contact** — email, social links, location
 
-### Skills
-### Work Experience
-### Recent Blogs
-### Contact
-* Mail Address
-* Location
+## Tech / UX features
+* Scroll-reveal animations (IntersectionObserver)
+* Sticky nav with scroll progress bar + active-section highlighting (scrollspy)
+* Animated counters and skill bars
+* Typing/rotating headline effect
+* Light / dark theme toggle (persisted in `localStorage`)
+* Canvas particle "data network" hero background
+* Fully responsive + `prefers-reduced-motion` friendly
 
-### Footer
-------------------------------------------------------------------
-To setup the project on your local machine:
+## Stack
+* HTML5, CSS3 (custom properties, grid/flex, keyframe animations)
+* Vanilla JavaScript (no frameworks)
+* Google Fonts (Inter, Space Grotesk, JetBrains Mono) + Font Awesome icons (CDN)
 
-1. Click on `Fork`.
-2. Go to your fork and `clone` the project to your local machine.
-3. `git clone https://github.com/akshaybode/akshaybode.github.io.git`
+## Run locally
+Just open `index.html` in a browser, or serve the folder:
 
-To contribute to the project:
+```bash
+python -m http.server 8000
+# then visit http://localhost:8000
+```
 
-1. Choose any open issue from [here](https://github.com/akshaybode/akshaybode.github.io/issues). 
-2. Comment on the issue: `Can I work on this?` and get assigned.
-3. Make changes to your fork and send a PR.
-
-To create a PR:
-
-Follow the given link to make a successful and valid PR: https://help.github.com/articles/creating-a-pull-request/
-
-To send a PR, follow these rules carefully,**otherwise your PR will be closed**:
-
-1. Make PR title in this format: `Fixes #IssueNo : Name of Issue`
-
-For any doubts related to the issues, i.e., to understand the issue better etc, comment down your queries on the respective issue.
+## Deploy
+Hosted on **GitHub Pages** from the repository root. Push to the default branch and Pages serves `index.html`.
