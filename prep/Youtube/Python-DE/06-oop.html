@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Part 6 — Object-Oriented Programming — Notes</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #0b1020; --bg-2: #131a2f; --bg-3: #1f2a44; --card: #131a2f;
+    --text: #e6edf6; --text-dim: #93a4bf; --accent: #60a5fa; --accent-2: #c084fc;
+    --accent-3: #34d399; --success: #22c55e; --warn: #fbbf24; --danger: #f87171;
+    --border: #2a3553; --code-bg: #0a0f1e; --py: #ffd43b; --py-blue: #4584b6;
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: linear-gradient(135deg, #0b1020 0%, #1a0f2e 100%); color: var(--text);
+    line-height: 1.65; min-height: 100vh; }
+  .container { max-width: 1100px; margin: 0 auto; padding: 24px; }
+  header { background: linear-gradient(135deg, #4584b6 0%, #7c3aed 100%);
+    border-radius: 16px; padding: 30px; margin-bottom: 18px; box-shadow: 0 20px 60px rgba(124,58,237,0.25); }
+  header .crumb { font-size: 12px; opacity: 0.85; text-transform: uppercase; letter-spacing: 1px; }
+  header h1 { font-size: 30px; margin: 6px 0 8px 0; }
+  header p { opacity: 0.92; font-size: 15px; max-width: 760px; }
+  .section { background: var(--card); border-radius: 12px; padding: 24px; margin-bottom: 18px; border: 1px solid var(--border); }
+  .section h2 { color: var(--accent); font-size: 22px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+  .section h3 { color: var(--accent-2); font-size: 18px; margin: 20px 0 10px 0; }
+  .section h4 { color: var(--accent-3); font-size: 15px; margin: 14px 0 8px 0; }
+  .section p { color: var(--text); margin-bottom: 10px; }
+  ul.bullet { padding-left: 22px; color: var(--text); font-size: 14.5px; margin: 6px 0 12px 0; }
+  ul.bullet li { padding: 4px 0; }
+  ul.bullet li b { color: var(--accent-3); }
+  table { width: 100%; border-collapse: collapse; background: var(--bg); border-radius: 8px; overflow: hidden; margin: 14px 0; font-size: 13.5px; }
+  th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { background: var(--bg-3); color: var(--accent); text-transform: uppercase; font-size: 11px; letter-spacing: 1px; }
+  tr:last-child td { border-bottom: none; }
+  .alert { padding: 12px 14px; border-radius: 8px; margin: 14px 0; border-left: 4px solid; font-size: 14px; }
+  .alert.warn { background: rgba(251,191,36,0.1); border-color: var(--warn); }
+  .alert.danger { background: rgba(248,113,113,0.1); border-color: var(--danger); }
+  .alert.success { background: rgba(34,197,94,0.1); border-color: var(--success); }
+  .alert.info { background: rgba(96,165,250,0.1); border-color: var(--accent); }
+  .alert strong { color: var(--text); }
+  .diagram { background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 22px; margin: 16px 0; overflow-x: auto; }
+  .diagram .title { text-align: center; color: var(--text-dim); font-size: 12px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 16px; }
+  .flow { display: flex; align-items: stretch; justify-content: center; flex-wrap: wrap; }
+  .flow-box { background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; min-width: 130px; text-align: center; font-size: 13px; font-weight: 600; display: flex; flex-direction: column; justify-content: center; }
+  .flow-box small { display: block; color: var(--text-dim); font-weight: 400; font-size: 11px; margin-top: 4px; }
+  .flow-arrow { display: flex; align-items: center; padding: 0 8px; color: var(--accent); font-size: 22px; font-weight: 700; }
+  .flow-box.gen { border-top: 3px solid var(--accent); }
+  .flow-box.ing { border-top: 3px solid var(--accent-2); }
+  .flow-box.sto { border-top: 3px solid var(--accent-3); }
+  .flow-box.tra { border-top: 3px solid var(--warn); }
+  :not(pre) > code { background: var(--bg-3); padding: 2px 6px; border-radius: 4px; font-size: 13px; color: var(--accent-3); font-family: "Consolas","Monaco",monospace; }
+  pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; padding: 14px; overflow-x: auto; margin: 12px 0; font-size: 13px; line-height: 1.5; }
+  pre code { color: var(--text); font-family: "Consolas","Monaco",monospace; }
+  .pager { display: flex; justify-content: space-between; gap: 12px; margin: 8px 0 30px 0; flex-wrap: wrap; }
+  .pager a { flex: 1; min-width: 200px; text-decoration: none; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; color: var(--text); transition: all 0.2s; }
+  .pager a:hover { border-color: var(--accent-2); transform: translateY(-2px); }
+  .pager .dir { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; }
+  .pager .ttl { color: var(--accent); font-weight: 600; margin-top: 3px; }
+  .pager a.next { text-align: right; }
+  footer { text-align: center; margin-top: 30px; padding: 20px; color: var(--text-dim); font-size: 13px; }
+  @media (max-width: 640px) { header h1 { font-size: 23px; } .container { padding: 12px; } }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <div class="crumb">Python for Data Engineers · Part 6 of 8</div>
+    <h1>&#129513; Object-Oriented Programming</h1>
+    <p>When functions and variables get scattered everywhere, your program becomes a mess. OOP <b>bundles</b>
+       related functions and variables into reusable templates &mdash; the foundation for any scalable app.</p>
+  </header>
+
+  <div class="section">
+    <h2>Why OOP? The "mess" problem</h2>
+    <p>Picture an online store with dozens of scattered functions and variables. Even with great naming you
+       can't manage it. OOP groups related code into <b>bundles</b> (classes), so you can reuse and scale
+       cleanly.</p>
+    <div class="diagram">
+      <div class="title">Class = a bundle of methods + attributes</div>
+      <div class="flow">
+        <div class="flow-box gen">scattered<small>many functions &amp; vars</small></div>
+        <div class="flow-arrow">&#8594;</div>
+        <div class="flow-box ing">class Customer<small>bundle 1</small></div>
+        <div class="flow-arrow">&#8594;</div>
+        <div class="flow-box sto">class Order<small>bundle 2</small></div>
+        <div class="flow-arrow">&#8594;</div>
+        <div class="flow-box tra">objects<small>reuse each bundle</small></div>
+      </div>
+    </div>
+    <table>
+      <tr><th>Term</th><th>Meaning</th></tr>
+      <tr><td><b>Class</b></td><td>The bundle / template</td></tr>
+      <tr><td><b>Object</b></td><td>A reusable instance created from a class</td></tr>
+      <tr><td><b>Method</b></td><td>A function living inside a class</td></tr>
+      <tr><td><b>Attribute</b></td><td>A variable living inside a class</td></tr>
+    </table>
+  </div>
+
+  <div class="section">
+    <h2>Building Your First Class</h2>
+<pre><code>class Employee:
+    emp_name = "Rahul"          # class attribute
+    emp_department = "IT"
+
+    def info(self):             # method -- needs 'self'
+        return f"Employee {self.emp_name} works for {self.emp_department}"
+
+emp1 = Employee()               # create an OBJECT
+print(emp1.emp_name)            # access attribute -> Rahul
+print(emp1.info())              # call method</code></pre>
+    <ul class="bullet">
+      <li>Every method's first parameter must be <code>self</code>.</li>
+      <li>To use an attribute inside a method, prefix it with <code>self.</code> (e.g. <code>self.emp_name</code>).</li>
+    </ul>
+
+    <h3>What is <code>self</code>?</h3>
+    <p>When you call <code>emp1.info()</code>, Python secretly runs <code>Employee.info(emp1)</code> &mdash; it
+       passes the object itself as <code>self</code>. That's why each object behaves independently.</p>
+    <div class="alert info"><strong>Two equivalent calls:</strong> <code>emp1.info()</code> is just a friendly
+      shortcut for <code>Employee.info(emp1)</code>.</div>
+  </div>
+
+  <div class="section">
+    <h2>The Constructor: <code>__init__</code></h2>
+    <p>Some attributes are constant (company name); others are dynamic per object (employee name). The
+       constructor <code>__init__</code> runs <b>automatically</b> the moment you create an object &mdash; perfect
+       for setting up dynamic (instance) attributes.</p>
+<pre><code>class Employee:
+    company_name = "XYZ"                       # class attribute (shared)
+
+    def __init__(self, employee_name, employee_department):
+        self.emp_name = employee_name          # instance attributes
+        self.emp_department = employee_department
+
+    def info(self):
+        return f"Employee {self.emp_name} works for {self.emp_department} in {self.company_name}"
+
+emp1 = Employee("Priya", "IT")     # __init__ runs automatically
+emp2 = Employee("Priyanka", "HR")
+print(emp1.info())                 # Priya / IT
+print(emp2.info())                 # Priyanka / HR</code></pre>
+    <table>
+      <tr><th>Attribute type</th><th>Defined</th><th>Scope</th></tr>
+      <tr><td><b>Class attribute</b></td><td>Directly in the class body</td><td>Shared / constant for all objects</td></tr>
+      <tr><td><b>Instance attribute</b></td><td>In <code>__init__</code> via <code>self.</code></td><td>Unique to each object</td></tr>
+    </table>
+  </div>
+
+  <div class="section">
+    <h2>Changing Class Attributes (the right way)</h2>
+    <p>You <em>can</em> change a class attribute from outside (<code>Employee.company_name = "ABC"</code>), but
+       that's not recommended &mdash; you lose track of changes. <b>Always change it from inside the class</b>
+       through a dedicated method.</p>
+<pre><code>class Employee:
+    company_name = "XYZ"
+    # ...
+    def changes(self, new_company):
+        Employee.company_name = new_company    # change for ALL objects
+
+emp1.changes("New Company")</code></pre>
+    <div class="alert warn"><strong>Note:</strong> changing via an object
+      (<code>emp2.company_name = "ABC"</code>) only affects that one object. Changing via the class name
+      affects everyone.</div>
+  </div>
+
+  <div class="section">
+    <h2>Three Types of Methods</h2>
+    <table>
+      <tr><th>Method type</th><th>First param</th><th>Decorator</th><th>Purpose</th></tr>
+      <tr><td><b>Instance</b></td><td><code>self</code></td><td>none</td><td>Behaves per-object; the default</td></tr>
+      <tr><td><b>Static</b></td><td>none</td><td><code>@staticmethod</code></td><td>Utility logic not tied to class/object data</td></tr>
+      <tr><td><b>Class</b></td><td><code>cls</code></td><td><code>@classmethod</code></td><td>Interacts with class attributes</td></tr>
+    </table>
+
+    <h3>Static method</h3>
+    <p>A "junk"/utility function that lives in the class but isn't tied to its attributes. No <code>self</code>.</p>
+<pre><code>class Employee:
+    @staticmethod
+    def addition(x, y):
+        return x + y
+
+print(Employee.addition(1, 2))   # 3</code></pre>
+    <div class="alert danger"><strong>Common first-timer error:</strong> "takes 2 positional arguments but 3
+      were given" &mdash; because calling on an object auto-passes the object too. Marking it
+      <code>@staticmethod</code> fixes it.</div>
+
+    <h3>Class method</h3>
+    <p>Built to interact with class attributes. Uses <code>cls</code> (industry standard) instead of
+       <code>self</code>, so it's clear you're touching the <em>class</em>, not an object.</p>
+<pre><code>class Employee:
+    company_name = "XYZ"
+
+    @classmethod
+    def change_company(cls, new_company):
+        cls.company_name = new_company</code></pre>
+  </div>
+
+  <div class="section">
+    <h2>Getters &amp; Setters</h2>
+    <p><b>Getter</b> = returns values. <b>Setter</b> = sets/updates instance attributes. You can do both with
+       normal methods, but Python has elegant decorators for them.</p>
+<pre><code>class Employee:
+    def __init__(self, name, dept):
+        self.emp_name = name
+        self.emp_department = dept
+
+    @property                         # GETTER
+    def info(self):
+        return f"{self.emp_name} works in {self.emp_department}"
+
+    @info.setter                      # SETTER (same name)
+    def info(self, new_details):      # one parameter (a list)
+        self.emp_name = new_details[0]
+        self.emp_department = new_details[1]
+
+emp1 = Employee("Priya", "IT")
+print(emp1.info)                      # GETTER -> called like an attribute
+emp1.info = ["Priya", "HR"]           # SETTER -> assigned like an attribute</code></pre>
+    <ul class="bullet">
+      <li><b><code>@property</code></b> turns a method into a getter &mdash; call it <em>without</em> parentheses.</li>
+      <li><b><code>@info.setter</code></b> defines the setter for that same name &mdash; assign to it like an attribute.</li>
+      <li>Setters take a <b>single</b> parameter, so pass multiple values as a list and unpack by index.</li>
+    </ul>
+  </div>
+
+  <div class="section">
+    <h2>&#9989; Key Takeaways</h2>
+    <ul class="bullet">
+      <li>A <b>class</b> bundles methods (functions) + attributes (variables); an <b>object</b> is a reusable instance.</li>
+      <li>Every method takes <code>self</code>; <code>emp1.info()</code> = <code>Employee.info(emp1)</code>.</li>
+      <li><code>__init__</code> (the constructor) runs automatically and sets <b>instance attributes</b>.</li>
+      <li>Class attributes are shared/constant; instance attributes are per-object.</li>
+      <li><b>@staticmethod</b> (no self) for utilities, <b>@classmethod</b> (cls) to touch class attributes.</li>
+      <li><b>@property</b> / <b>@x.setter</b> give clean getters &amp; setters &mdash; called like attributes.</li>
+    </ul>
+  </div>
+
+  <div class="pager">
+    <a class="prev" href="05-exceptions-extras.html"><div class="dir">&#8592; Previous</div><div class="ttl">Part 5 · Exceptions</div></a>
+    <a class="next" href="07-inheritance.html"><div class="dir">Next &#8594;</div><div class="ttl">Part 7 · Inheritance</div></a>
+  </div>
+
+  <footer>
+    Notes generated from the "Python Full Course For Data Engineers [6+ HOURS]" transcript ·
+    Source: youtube.com/watch?v=ZvU7lupoXQE
+  </footer>
+</div>
+</body>
+</html>

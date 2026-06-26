@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Part 1 — Python Basics &amp; Strings — Notes</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #0b1020; --bg-2: #131a2f; --bg-3: #1f2a44; --card: #131a2f;
+    --text: #e6edf6; --text-dim: #93a4bf; --accent: #60a5fa; --accent-2: #c084fc;
+    --accent-3: #34d399; --success: #22c55e; --warn: #fbbf24; --danger: #f87171;
+    --border: #2a3553; --code-bg: #0a0f1e; --py: #ffd43b; --py-blue: #4584b6;
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: linear-gradient(135deg, #0b1020 0%, #1a0f2e 100%); color: var(--text);
+    line-height: 1.65; min-height: 100vh; }
+  .container { max-width: 1100px; margin: 0 auto; padding: 24px; }
+  header { background: linear-gradient(135deg, #4584b6 0%, #7c3aed 100%);
+    border-radius: 16px; padding: 30px; margin-bottom: 18px; box-shadow: 0 20px 60px rgba(124,58,237,0.25); }
+  header .crumb { font-size: 12px; opacity: 0.85; text-transform: uppercase; letter-spacing: 1px; }
+  header h1 { font-size: 30px; margin: 6px 0 8px 0; }
+  header p { opacity: 0.92; font-size: 15px; max-width: 760px; }
+  .section { background: var(--card); border-radius: 12px; padding: 24px; margin-bottom: 18px; border: 1px solid var(--border); }
+  .section h2 { color: var(--accent); font-size: 22px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+  .section h3 { color: var(--accent-2); font-size: 18px; margin: 20px 0 10px 0; }
+  .section h4 { color: var(--accent-3); font-size: 15px; margin: 14px 0 8px 0; }
+  .section p { color: var(--text); margin-bottom: 10px; }
+  ul.bullet { padding-left: 22px; color: var(--text); font-size: 14.5px; margin: 6px 0 12px 0; }
+  ul.bullet li { padding: 4px 0; }
+  ul.bullet li b { color: var(--accent-3); }
+  table { width: 100%; border-collapse: collapse; background: var(--bg); border-radius: 8px; overflow: hidden; margin: 14px 0; font-size: 13.5px; }
+  th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { background: var(--bg-3); color: var(--accent); text-transform: uppercase; font-size: 11px; letter-spacing: 1px; }
+  tr:last-child td { border-bottom: none; }
+  .alert { padding: 12px 14px; border-radius: 8px; margin: 14px 0; border-left: 4px solid; font-size: 14px; }
+  .alert.warn { background: rgba(251,191,36,0.1); border-color: var(--warn); }
+  .alert.danger { background: rgba(248,113,113,0.1); border-color: var(--danger); }
+  .alert.success { background: rgba(34,197,94,0.1); border-color: var(--success); }
+  .alert.info { background: rgba(96,165,250,0.1); border-color: var(--accent); }
+  .alert strong { color: var(--text); }
+  .diagram { background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 22px; margin: 16px 0; overflow-x: auto; }
+  .diagram .title { text-align: center; color: var(--text-dim); font-size: 12px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 16px; }
+  .flow { display: flex; align-items: stretch; justify-content: center; flex-wrap: wrap; }
+  .flow-box { background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; min-width: 130px; text-align: center; font-size: 13px; font-weight: 600; display: flex; flex-direction: column; justify-content: center; }
+  .flow-box small { display: block; color: var(--text-dim); font-weight: 400; font-size: 11px; margin-top: 4px; }
+  .flow-arrow { display: flex; align-items: center; padding: 0 8px; color: var(--accent); font-size: 22px; font-weight: 700; }
+  .flow-box.gen { border-top: 3px solid var(--accent); }
+  .flow-box.ing { border-top: 3px solid var(--accent-2); }
+  .flow-box.sto { border-top: 3px solid var(--accent-3); }
+  .flow-box.tra { border-top: 3px solid var(--warn); }
+  :not(pre) > code { background: var(--bg-3); padding: 2px 6px; border-radius: 4px; font-size: 13px; color: var(--accent-3); font-family: "Consolas","Monaco",monospace; }
+  pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; padding: 14px; overflow-x: auto; margin: 12px 0; font-size: 13px; line-height: 1.5; }
+  pre code { color: var(--text); font-family: "Consolas","Monaco",monospace; }
+  .pager { display: flex; justify-content: space-between; gap: 12px; margin: 8px 0 30px 0; flex-wrap: wrap; }
+  .pager a { flex: 1; min-width: 200px; text-decoration: none; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; color: var(--text); transition: all 0.2s; }
+  .pager a:hover { border-color: var(--accent-2); transform: translateY(-2px); }
+  .pager .dir { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; }
+  .pager .ttl { color: var(--accent); font-weight: 600; margin-top: 3px; }
+  .pager a.next { text-align: right; }
+  footer { text-align: center; margin-top: 30px; padding: 20px; color: var(--text-dim); font-size: 13px; }
+  @media (max-width: 640px) { header h1 { font-size: 23px; } .container { padding: 12px; } }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <div class="crumb">Python for Data Engineers · Part 1 of 8</div>
+    <h1>&#128013; Python Basics &amp; Strings</h1>
+    <p>No prerequisites, no installation. We start in an online interpreter and learn how Python actually
+       runs your code, then master the <code>print</code> statement and strings &mdash; which data engineers
+       work with constantly.</p>
+  </header>
+
+  <div class="section">
+    <h2>How Python Runs Your Code</h2>
+    <p>People call Python an "interpreted" language, but that's only half the story. Two steps happen
+       every time you run a <code>.py</code> file:</p>
+    <div class="diagram">
+      <div class="title">What happens when you run a .py file</div>
+      <div class="flow">
+        <div class="flow-box gen">Your code<small>main.py</small></div>
+        <div class="flow-arrow">&#8594;</div>
+        <div class="flow-box ing">Compile<small>&rarr; bytecode</small></div>
+        <div class="flow-arrow">&#8594;</div>
+        <div class="flow-box sto">PVM<small>Python Virtual Machine</small></div>
+        <div class="flow-arrow">&#8594;</div>
+        <div class="flow-box tra">Run line by line<small>at runtime</small></div>
+      </div>
+    </div>
+    <ul class="bullet">
+      <li><b>Step 1 — Compile:</b> the <em>whole</em> script is first compiled into an intermediate form called <b>bytecode</b>.</li>
+      <li><b>Step 2 — Interpret:</b> the bytecode goes to the <b>Python Virtual Machine (PVM)</b>, which executes it <b>line by line</b> at runtime. That line-by-line execution is why Python is called "interpreted".</li>
+    </ul>
+    <div class="alert info"><strong>Vs C / C++:</strong> those compile straight to machine code the OS runs
+      directly, so they're much faster. That speed is why data tools like Databricks <em>Photon</em> and
+      Fabric native executors are built on C++ libraries (e.g. Apache Gluten). Python wins on readability,
+      reliability and AI-tool integration.</div>
+  </div>
+
+  <div class="section">
+    <h2>The <code>print</code> Statement (and why it teaches strings)</h2>
+    <p>The classic first program. <code>print()</code> displays whatever you put inside it on the screen.
+       The course uses it as a vehicle to teach strings, because <strong>data engineers work with strings
+       constantly</strong> (building dynamic file paths, cloud URLs, etc.).</p>
+<pre><code>print("hello Ansh Lamba")          # one value
+print("hello", 1, "I love you")    # combine values with commas
+print("a", 1, "b", sep="$")        # custom separator -> a$1$b</code></pre>
+    <ul class="bullet">
+      <li><b>Single vs double quotes:</b> both define strings &mdash; <code>'hi'</code> and <code>"hi"</code> are identical.</li>
+      <li><b><code>sep=</code>:</b> places a delimiter between comma-separated values.</li>
+    </ul>
+
+    <h3>Multi-line strings</h3>
+    <p>You can't break a normal string onto a new line &mdash; Python interprets line by line and throws
+       <code>SyntaxError: unterminated string literal</code>. For multi-line text use <b>triple quotes</b>
+       (<code>'''</code> or <code>"""</code>):</p>
+<pre><code>text = '''Hello, this is XYZ.
+How is your day?'''
+print(text)</code></pre>
+
+    <h3>Escaping quotes</h3>
+    <p>If a quote inside the string clashes with the surrounding quotes, you have two clean options:</p>
+    <ul class="bullet">
+      <li><b>Swap the outer quotes:</b> use double quotes outside if you need a single quote inside (best for readability).</li>
+      <li><b>Backslash escape:</b> <code>'hello \'Ansh\''</code> &mdash; the backslash tells the interpreter "treat this as a literal character, not syntax".</li>
+    </ul>
+  </div>
+
+  <div class="section">
+    <h2>Variables &amp; Assignment</h2>
+    <p>A variable is just a <b>container</b> (think of a jar) that holds a value. You store with a single
+       <code>=</code> and access by name.</p>
+<pre><code>my_var = "Ansh"
+x = 10
+y = 5
+print(x + y)              # 15  (arithmetic)
+print(my_var + "Lamba")   # AnshLamba  (string concatenation)
+# print(x + my_var)       # ERROR: can't add int + str</code></pre>
+    <h3>Multiple assignment</h3>
+<pre><code>x, y, z = 10, 5, 20     # assign several at once
+a = b = c = 20          # same value to all three</code></pre>
+
+    <h3>Comments</h3>
+    <ul class="bullet">
+      <li><b>Single line:</b> start with <code>#</code>.</li>
+      <li><b>Multi-line:</b> wrap in triple quotes <code>'''...'''</code>.</li>
+    </ul>
+    <p>Comments are optional but make you a good developer &mdash; imagine debugging line 20 of a 1,000-line
+       file, or another developer reading your code months later.</p>
+
+    <h3>Splitting a long line of code</h3>
+    <p>To spread one statement over multiple lines, end each with a backslash <code>\</code>, or wrap the
+       whole expression in parentheses <code>( )</code>. Very handy for long Spark / data-engineering code.</p>
+<pre><code>total = 10 + 20 + 30 \
+        + 20 + 10
+# or
+total = (10 + 20 + 30
+         + 20 + 10)</code></pre>
+  </div>
+
+  <div class="section">
+    <h2>Indentation</h2>
+    <p>Unlike C++, Python <b>requires</b> indentation &mdash; it defines the hierarchy (parent &rarr; child).
+       Code indented under an <code>if</code> belongs to that <code>if</code>. Wrong indentation = error.</p>
+<pre><code>x = 1
+if x == 1:
+    print("wow")     # indented = inside the if</code></pre>
+  </div>
+
+  <div class="section">
+    <h2>Type Casting</h2>
+    <p>Type casting = converting one data type to another. There are two kinds:</p>
+    <table>
+      <tr><th>Type</th><th>What happens</th><th>Example</th></tr>
+      <tr><td><b>Explicit</b></td><td>You force the conversion yourself</td><td><code>int("10")</code>, <code>str(10)</code></td></tr>
+      <tr><td><b>Implicit</b></td><td>Python converts automatically when it's safe</td><td><code>10 + 10.5</code> &rarr; int becomes <code>10.0</code> then adds &rarr; <code>20.5</code></td></tr>
+    </table>
+<pre><code>b = "10"
+print(type(b))        # &lt;class 'str'&gt;
+b_new = int(b)        # explicit cast to int
+print(type(b_new))    # &lt;class 'int'&gt;
+
+print(10 + 10.5)      # 20.5  (implicit: int -> float)</code></pre>
+  </div>
+
+  <div class="section">
+    <h2>Strings Behave Like Arrays: Indexing &amp; Slicing</h2>
+    <p>A string is a sequence of characters, so it behaves like an array. Counting starts at <b>0</b>.</p>
+<pre><code>x = "Ansh"
+print(x[0])     # A   (first character)
+print(x[1])     # n</code></pre>
+    <h3>Slicing — <code>[start : stop]</code></h3>
+    <p>The <b>stop</b> index is <b>excluded</b> (goes up to n&minus;1):</p>
+<pre><code>name = "Anshlamba"
+print(name[0:4])   # Ansh  (indexes 0,1,2,3 -- 4 is excluded)
+print(name[3:7])   # hlam
+print(name[:])     # whole string (default start=0, stop=len)
+print(name[0:len(name)])  # same thing</code></pre>
+    <ul class="bullet">
+      <li>Omit <b>start</b> &rarr; defaults to <code>0</code>.</li>
+      <li>Omit <b>stop</b> &rarr; defaults to <code>n</code> (the length, found with <code>len()</code>).</li>
+    </ul>
+    <div class="alert warn"><strong>Remember:</strong> slicing always stops at <code>n &minus; 1</code>, so to
+      include index 6 you write <code>[3:7]</code>. This trips up everyone at first.</div>
+  </div>
+
+  <div class="section">
+    <h2>Essential String Methods</h2>
+    <p>You can't memorise every method (just Google "string methods Python") &mdash; but these are the ones
+       data engineers actually use:</p>
+    <table>
+      <tr><th>Method</th><th>What it does</th><th>Example</th></tr>
+      <tr><td><code>.upper()</code> / <code>.lower()</code></td><td>Change case (used a lot for normalising joining keys)</td><td><code>"Ansh".upper()</code> &rarr; <code>ANSH</code></td></tr>
+      <tr><td><code>.capitalize()</code></td><td>First letter uppercase</td><td><code>"ansh".capitalize()</code> &rarr; <code>Ansh</code></td></tr>
+      <tr><td><code>.replace(a, b)</code></td><td>Replace substring a with b</td><td><code>"Ansh".replace("sh","z")</code> &rarr; <code>Anz</code></td></tr>
+      <tr><td><code>.split(delim)</code></td><td>Split string into a <b>list</b> on a delimiter (space, comma...)</td><td><code>"a b c".split(" ")</code> &rarr; <code>['a','b','c']</code></td></tr>
+      <tr><td><code>.startswith()</code> / <code>.endswith()</code></td><td>Check prefix / suffix &mdash; perfect for file filtering</td><td><code>file.endswith(".csv")</code></td></tr>
+      <tr><td><code>.count(sub)</code></td><td>Count occurrences of a word/char</td><td><code>stmt.count("Ansh")</code> &rarr; <code>2</code></td></tr>
+    </table>
+
+    <h3>The <code>is*</code> validation methods</h3>
+    <p>These return <code>True</code>/<code>False</code> and let you validate data before processing &mdash; used
+       only on strings:</p>
+    <table>
+      <tr><th>Method</th><th>Returns True if the string is...</th></tr>
+      <tr><td><code>.isnumeric()</code></td><td>all digits</td></tr>
+      <tr><td><code>.isalpha()</code></td><td>all letters</td></tr>
+      <tr><td><code>.isalnum()</code></td><td>letters and/or numbers (alphanumeric)</td></tr>
+    </table>
+    <div class="alert success"><strong>DE use-case:</strong> only read a file if its name
+      <code>.endswith(".csv")</code>, or only process a value if it <code>.isalnum()</code>. These tiny checks
+      become powerful validation steps in a pipeline.</div>
+  </div>
+
+  <div class="section">
+    <h2>&#9989; Key Takeaways</h2>
+    <ul class="bullet">
+      <li>Python <b>compiles to bytecode</b>, then the <b>PVM interprets it line by line</b>.</li>
+      <li><code>print()</code> + commas + <code>sep=</code> combine values; triple quotes give multi-line text.</li>
+      <li>Variables are containers; you can't mix <code>int</code> + <code>str</code> without casting.</li>
+      <li><b>Indentation defines structure</b> in Python &mdash; it's mandatory, not cosmetic.</li>
+      <li>Strings act like arrays &mdash; master <b>indexing &amp; slicing</b> (stop is exclusive, stops at n&minus;1).</li>
+      <li>Know the <em>concept</em>; look up the exact method name when you need it.</li>
+    </ul>
+  </div>
+
+  <div class="pager">
+    <a class="prev" href="index.html"><div class="dir">&#8592; Index</div><div class="ttl">All parts</div></a>
+    <a class="next" href="02-control-flow.html"><div class="dir">Next &#8594;</div><div class="ttl">Part 2 · Conditionals &amp; Loops</div></a>
+  </div>
+
+  <footer>
+    Notes generated from the "Python Full Course For Data Engineers [6+ HOURS]" transcript ·
+    Source: youtube.com/watch?v=ZvU7lupoXQE
+  </footer>
+</div>
+</body>
+</html>

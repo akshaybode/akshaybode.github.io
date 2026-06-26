@@ -1,0 +1,1771 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Python for Data Engineers — Complete Guide</title>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #0b1020;
+    --bg-2: #131a2f;
+    --bg-3: #1f2a44;
+    --card: #131a2f;
+    --text: #e6edf6;
+    --text-dim: #93a4bf;
+    --accent: #fbbf24;
+    --accent-2: #60a5fa;
+    --accent-3: #34d399;
+    --success: #22c55e;
+    --warn: #fbbf24;
+    --danger: #f87171;
+    --border: #2a3553;
+    --code-bg: #0a0f1e;
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: linear-gradient(135deg, #0b1020 0%, #1a1a2e 100%); color: var(--text); line-height: 1.65; min-height: 100vh; }
+  .container { max-width: 1280px; margin: 0 auto; padding: 24px; }
+  header { background: linear-gradient(135deg, #f59e0b 0%, #ef4444 50%, #ec4899 100%); border-radius: 16px; padding: 32px; margin-bottom: 24px; box-shadow: 0 20px 60px rgba(239, 68, 68, 0.25); }
+  header h1 { font-size: 32px; margin-bottom: 8px; }
+  header p { opacity: 0.92; font-size: 16px; }
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; margin-top: 24px; }
+  .stat { background: rgba(255,255,255,0.13); backdrop-filter: blur(10px); padding: 14px 16px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.2); }
+  .stat-label { font-size: 11px; opacity: 0.85; text-transform: uppercase; letter-spacing: 1px; }
+  .stat-value { font-size: 22px; font-weight: 700; margin-top: 4px; }
+  .progress-section { background: var(--card); border-radius: 12px; padding: 18px; margin-bottom: 20px; border: 1px solid var(--border); }
+  .progress-bar { background: var(--bg); height: 14px; border-radius: 8px; overflow: hidden; margin-top: 8px; }
+  .progress-fill { background: linear-gradient(90deg, #22c55e, #fbbf24); height: 100%; width: 0%; transition: width 0.5s ease; display: flex; align-items: center; justify-content: flex-end; padding-right: 8px; font-size: 10px; color: #1a1500; font-weight: 700; }
+  .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 24px; background: var(--card); padding: 8px; border-radius: 12px; border: 1px solid var(--border); }
+  .tab { padding: 9px 16px; background: transparent; color: var(--text-dim); border: none; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600; transition: all 0.2s; }
+  .tab:hover { background: var(--bg-3); color: var(--text); }
+  .tab.active { background: linear-gradient(135deg, var(--accent), #f97316); color: #1a1500; }
+  .tab-content { display: none; animation: fadeIn 0.3s; }
+  .tab-content.active { display: block; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  .section { background: var(--card); border-radius: 12px; padding: 24px; margin-bottom: 18px; border: 1px solid var(--border); }
+  .section h2 { color: var(--accent); font-size: 22px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+  .section h3 { color: var(--accent-2); font-size: 17px; margin: 18px 0 10px 0; }
+  .section h4 { color: var(--accent-3); font-size: 15px; margin: 14px 0 8px 0; }
+  .section p { color: var(--text); margin-bottom: 10px; }
+  pre[class*="language-"] { border-radius: 8px; background: var(--code-bg) !important; padding: 14px !important; font-size: 13px; margin: 10px 0; border: 1px solid var(--border); overflow-x: auto; }
+  code[class*="language-"] { font-family: "Consolas", "Monaco", monospace; }
+  :not(pre) > code { background: var(--bg-3); padding: 2px 6px; border-radius: 4px; font-size: 13px; color: var(--accent-3); font-family: "Consolas", "Monaco", monospace; }
+  .check-row { display: flex; align-items: flex-start; gap: 10px; padding: 8px 12px; background: var(--bg); border-radius: 6px; margin: 6px 0; border-left: 3px solid var(--accent); }
+  .check-row input[type="checkbox"] { margin-top: 4px; width: 16px; height: 16px; accent-color: var(--success); cursor: pointer; flex-shrink: 0; }
+  .check-row label { flex: 1; cursor: pointer; color: var(--text); font-size: 13px; }
+  .check-row input:checked + label { text-decoration: line-through; color: var(--text-dim); }
+  .alert { padding: 12px 14px; border-radius: 8px; margin: 12px 0; border-left: 4px solid; font-size: 14px; }
+  .alert.warn { background: rgba(251, 191, 36, 0.1); border-color: var(--warn); }
+  .alert.danger { background: rgba(248, 113, 113, 0.1); border-color: var(--danger); }
+  .alert.success { background: rgba(34, 197, 94, 0.1); border-color: var(--success); }
+  .alert.info { background: rgba(96, 165, 250, 0.1); border-color: var(--accent-2); }
+  .alert strong { color: var(--text); }
+  .qa-card { background: var(--bg); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 8px; padding: 14px; margin: 12px 0; }
+  .qa-q { color: var(--accent); font-weight: 700; margin-bottom: 8px; }
+  .qa-a { color: var(--text-dim); font-size: 14px; }
+  table { width: 100%; border-collapse: collapse; background: var(--bg); border-radius: 8px; overflow: hidden; margin: 12px 0; font-size: 13px; }
+  th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); }
+  th { background: var(--bg-3); color: var(--accent); text-transform: uppercase; font-size: 11px; letter-spacing: 1px; }
+  tr:last-child td { border-bottom: none; }
+  .controls { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+  .btn { background: var(--bg-3); color: var(--text); border: 1px solid var(--border); padding: 8px 14px; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: 600; transition: all 0.2s; }
+  .btn:hover { background: var(--accent); color: #1a1500; border-color: var(--accent); }
+  .btn.danger:hover { background: var(--danger); border-color: var(--danger); color: white; }
+  .badge { font-size: 10px; padding: 2px 8px; border-radius: 10px; font-weight: 700; text-transform: uppercase; margin-left: 6px; }
+  .badge.must { background: var(--danger); color: white; }
+  .badge.tip { background: var(--accent-2); color: white; }
+  .badge.frequent { background: var(--warn); color: #1a1500; }
+  ul.bullet { padding-left: 20px; color: var(--text-dim); font-size: 14px; }
+  ul.bullet li { padding: 4px 0; }
+  .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 14px; }
+  footer { text-align: center; margin-top: 40px; padding: 20px; color: var(--text-dim); font-size: 13px; }
+  @media (max-width: 640px) { header h1 { font-size: 22px; } .container { padding: 12px; } .tab { padding: 7px 10px; font-size: 11px; } }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <h1>🐍 Python for Data Engineers — Complete Guide</h1>
+    <p>From fundamentals to advanced patterns — everything a DE needs to know.</p>
+    <div class="stats-grid">
+      <div class="stat"><div class="stat-label">Topics</div><div class="stat-value">12</div></div>
+      <div class="stat"><div class="stat-label">Code Examples</div><div class="stat-value">120+</div></div>
+      <div class="stat"><div class="stat-label">Interview Q&A</div><div class="stat-value">30+</div></div>
+      <div class="stat"><div class="stat-label">Level</div><div class="stat-value">Beginner → Pro</div></div>
+    </div>
+  </header>
+
+  <div class="progress-section">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <strong>📊 Your Progress</strong>
+      <span id="progress-text" style="color: var(--accent); font-weight: 700;">0 / 0</span>
+    </div>
+    <div class="progress-bar"><div class="progress-fill" id="progress-fill">0%</div></div>
+    <div class="controls">
+      <button class="btn" onclick="exportProgress()">💾 Export</button>
+      <button class="btn danger" onclick="resetProgress()">♻ Reset</button>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="showTab(event,'overview')">Overview</button>
+    <button class="tab" onclick="showTab(event,'fundamentals')">1. Fundamentals</button>
+    <button class="tab" onclick="showTab(event,'datastructures')">2. Data Structures</button>
+    <button class="tab" onclick="showTab(event,'functions')">3. Functions</button>
+    <button class="tab" onclick="showTab(event,'oop')">4. OOP</button>
+    <button class="tab" onclick="showTab(event,'fileio')">5. File I/O</button>
+    <button class="tab" onclick="showTab(event,'errors')">6. Errors & Logging</button>
+    <button class="tab" onclick="showTab(event,'advanced')">7. Iterators/Generators/Decorators</button>
+    <button class="tab" onclick="showTab(event,'stdlib')">8. Standard Library</button>
+    <button class="tab" onclick="showTab(event,'concurrency')">9. Concurrency</button>
+    <button class="tab" onclick="showTab(event,'depatterns')">10. DE Patterns</button>
+    <button class="tab" onclick="showTab(event,'interview')">11. Interview Q&A</button>
+  </div>
+
+  <!-- OVERVIEW -->
+  <div class="tab-content active" id="overview">
+    <div class="section">
+      <h2>🎯 Python for Data Engineering</h2>
+      <p>Python is the #1 language for Data Engineering — used in PySpark, Airflow, dbt, AWS Lambda, and almost every data pipeline. This guide covers what a DE actually needs.</p>
+
+      <h3>📋 Topic Map</h3>
+      <table>
+        <thead><tr><th>#</th><th>Topic</th><th>Why It Matters for DE</th><th>Interview Weight</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td>Fundamentals</td><td>Foundation for everything else</td><td>⭐⭐</td></tr>
+          <tr><td>2</td><td>Data Structures</td><td>Lists/dicts power 90% of data manipulation</td><td>⭐⭐⭐⭐⭐</td></tr>
+          <tr><td>3</td><td>Functions</td><td>*args/**kwargs, lambdas critical for Pandas/Spark</td><td>⭐⭐⭐⭐</td></tr>
+          <tr><td>4</td><td>OOP</td><td>Build reusable ETL components, custom classes</td><td>⭐⭐⭐</td></tr>
+          <tr><td>5</td><td>File I/O</td><td>Read CSV/JSON/Parquet from S3, FTP, local</td><td>⭐⭐⭐⭐</td></tr>
+          <tr><td>6</td><td>Errors & Logging</td><td>Production pipelines fail — handle gracefully</td><td>⭐⭐⭐⭐</td></tr>
+          <tr><td>7</td><td>Iterators / Generators / Decorators</td><td>Memory-efficient streaming, retry logic</td><td>⭐⭐⭐⭐⭐</td></tr>
+          <tr><td>8</td><td>Standard Library</td><td>datetime, collections, itertools, pathlib — daily use</td><td>⭐⭐⭐⭐</td></tr>
+          <tr><td>9</td><td>Concurrency</td><td>Parallel API calls, async ingestion</td><td>⭐⭐⭐</td></tr>
+          <tr><td>10</td><td>DE Patterns</td><td>Retry, config, secrets, API clients</td><td>⭐⭐⭐⭐⭐</td></tr>
+        </tbody>
+      </table>
+
+      <div class="alert info"><strong>💡 How to use this guide:</strong> Read sequentially, run every example in a Jupyter notebook or VS Code. Don't just read — type each example to build muscle memory.</div>
+      <div class="alert warn"><strong>⚠ Python version:</strong> Examples assume Python 3.10+ (match statement, type hints, walrus operator). Use Python 3.11 for best performance.</div>
+    </div>
+  </div>
+
+  <!-- FUNDAMENTALS -->
+  <div class="tab-content" id="fundamentals">
+    <div class="section">
+      <h2>1. Python Fundamentals</h2>
+
+      <h3>Variables & Data Types</h3>
+<pre><code class="language-python"># Numeric
+age = 30                  # int
+price = 99.99             # float
+complex_num = 3 + 4j
+
+# String
+name = "Asha"
+multi = """multi-line
+string"""
+f_string = f"{name} is {age}"   # f-string (preferred)
+
+# Boolean
+is_active = True
+
+# None
+result = None
+
+# Type checking
+type(age)                 # <class 'int'>
+isinstance(age, int)      # True
+isinstance(age, (int, float))  # multiple types
+
+# Type conversion
+int("42"), str(42), float("3.14"), bool(1)</code></pre>
+
+      <h3>Mutable vs Immutable</h3>
+<pre><code class="language-python"># IMMUTABLE: int, float, str, tuple, frozenset, bool
+x = "hello"
+x += " world"      # creates NEW string, doesn't modify original
+
+# MUTABLE: list, dict, set
+lst = [1, 2, 3]
+lst.append(4)      # modifies in place
+
+# Common bug: default mutable arguments
+def bad(items=[]):       # ❌ shared across calls!
+    items.append(1)
+    return items
+
+def good(items=None):    # ✅ correct pattern
+    if items is None:
+        items = []
+    items.append(1)
+    return items</code></pre>
+
+      <h3>Operators</h3>
+<pre><code class="language-python"># Arithmetic
+10 / 3       # 3.333 (float division)
+10 // 3      # 3     (floor/integer division)
+10 % 3       # 1     (modulo)
+2 ** 10      # 1024  (power)
+
+# Comparison
+==, !=, <, >, <=, >=
+is, is not   # identity (same object in memory)
+in, not in   # membership
+
+# Logical
+and, or, not
+
+# Walrus operator (3.8+)
+if (n := len(data)) > 100:
+    print(f"List is too long: {n}")
+
+# Ternary
+status = "adult" if age >= 18 else "minor"</code></pre>
+
+      <h3>Control Flow</h3>
+<pre><code class="language-python"># if/elif/else
+if score >= 90: grade = "A"
+elif score >= 75: grade = "B"
+else: grade = "C"
+
+# for loop
+for i in range(5):           # 0..4
+    print(i)
+for i, val in enumerate(["a","b","c"]):
+    print(i, val)
+for a, b in zip([1,2,3], [4,5,6]):
+    print(a, b)
+
+# while loop
+while x > 0:
+    x -= 1
+    if x == 5: continue
+    if x == 2: break
+
+# match (3.10+) — pattern matching
+def describe(x):
+    match x:
+        case 0: return "zero"
+        case int() if x > 0: return "positive int"
+        case [1, 2, *rest]: return f"list starting with 1,2 and {rest}"
+        case {"name": name}: return f"dict with name={name}"
+        case _: return "something else"</code></pre>
+
+      <h3>Concepts Checklist</h3>
+      <div class="check-row"><input type="checkbox" id="f1"><label for="f1">Variables, data types, type conversion</label></div>
+      <div class="check-row"><input type="checkbox" id="f2"><label for="f2">f-strings (formatting)</label></div>
+      <div class="check-row"><input type="checkbox" id="f3"><label for="f3">Mutable vs immutable types</label></div>
+      <div class="check-row"><input type="checkbox" id="f4"><label for="f4">Default argument mutability trap</label></div>
+      <div class="check-row"><input type="checkbox" id="f5"><label for="f5">== vs is (equality vs identity)</label></div>
+      <div class="check-row"><input type="checkbox" id="f6"><label for="f6">Walrus operator and ternary</label></div>
+      <div class="check-row"><input type="checkbox" id="f7"><label for="f7">for/while/match statements</label></div>
+      <div class="check-row"><input type="checkbox" id="f8"><label for="f8">enumerate, zip, range</label></div>
+    </div>
+  </div>
+
+  <!-- DATA STRUCTURES -->
+  <div class="tab-content" id="datastructures">
+    <div class="section">
+      <h2>2. Data Structures</h2>
+
+      <h3>Lists — Ordered, Mutable</h3>
+<pre><code class="language-python">lst = [1, 2, 3, "mix", True]
+lst.append(6)             # add to end
+lst.extend([7, 8])        # add multiple
+lst.insert(0, "first")    # insert at index
+lst.pop()                 # remove + return last
+lst.pop(0)                # remove at index
+lst.remove("mix")         # remove first match
+lst.sort()                # in place
+sorted_lst = sorted(lst)  # new list
+lst.reverse()
+lst.index(3)              # find index of value
+lst.count(3)              # count occurrences
+
+# Slicing
+lst[1:4]                  # index 1,2,3
+lst[::-1]                 # reverse
+lst[::2]                  # every 2nd
+
+# List comprehensions (CRITICAL FOR DE)
+squares = [x**2 for x in range(10)]
+evens = [x for x in range(20) if x % 2 == 0]
+matrix = [[i*j for j in range(3)] for i in range(3)]
+
+# Common pitfall: list shallow copy
+a = [1, 2, [3, 4]]
+b = a.copy()              # shallow — inner list shared!
+import copy
+c = copy.deepcopy(a)      # safe</code></pre>
+
+      <h3>Tuples — Ordered, Immutable</h3>
+<pre><code class="language-python">point = (3, 5)
+x, y = point              # unpacking
+a, *rest = (1, 2, 3, 4)   # a=1, rest=[2,3,4]
+
+# Named tuples
+from collections import namedtuple
+Point = namedtuple("Point", ["x", "y"])
+p = Point(3, 5)
+p.x, p.y</code></pre>
+
+      <h3>Dictionaries — Key-Value Pairs</h3>
+<pre><code class="language-python">d = {"name": "Asha", "age": 30}
+d["email"] = "a@x.com"    # add/update
+d.get("phone", "N/A")     # safe access with default
+del d["age"]
+d.pop("name")
+d.update({"city": "BLR"})
+
+# Iteration
+for key in d: ...
+for key, val in d.items(): ...
+for val in d.values(): ...
+
+# Dict comprehension
+sq = {x: x**2 for x in range(5)}
+
+# Merge (3.9+)
+a = {"x": 1}; b = {"y": 2}
+c = a | b                 # {'x': 1, 'y': 2}
+a |= b                    # in place
+
+# defaultdict — avoids KeyError
+from collections import defaultdict
+counts = defaultdict(int)
+for word in ["a", "b", "a"]:
+    counts[word] += 1     # no KeyError on missing
+
+# Counter
+from collections import Counter
+Counter("banana")         # {'a': 3, 'n': 2, 'b': 1}
+Counter(["x","y","x"]).most_common(2)</code></pre>
+
+      <h3>Sets — Unordered, Unique</h3>
+<pre><code class="language-python">s = {1, 2, 3, 3}          # {1, 2, 3}
+s.add(4)
+s.discard(2)              # no error if missing
+s.remove(2)               # KeyError if missing
+
+# Set operations
+a = {1, 2, 3}; b = {2, 3, 4}
+a | b                     # union {1,2,3,4}
+a & b                     # intersection {2,3}
+a - b                     # difference {1}
+a ^ b                     # symmetric diff {1,4}
+
+# frozenset (immutable, hashable)
+fs = frozenset([1, 2, 3])
+
+# Dedup a list while preserving order
+list(dict.fromkeys([1,2,2,3,1]))   # [1,2,3]</code></pre>
+
+      <h3>Strings (Detailed)</h3>
+<pre><code class="language-python">s = "Hello, World!"
+len(s)
+s.upper(), s.lower(), s.title()
+s.strip(), s.lstrip(), s.rstrip()
+s.replace("Hello", "Hi")
+s.split(",")              # ['Hello', ' World!']
+",".join(["a","b","c"])   # 'a,b,c'
+s.startswith("Hello"), s.endswith("!")
+s.find("World")           # -1 if not found
+s.count("l")
+s.zfill(5)                # pad with zeros
+
+# Format
+"{} is {}".format("Asha", 30)
+f"{name=}, {age=}"        # debug (3.8+): "name='Asha', age=30"
+f"{value:>10}"            # right-align width 10
+f"{pi:.2f}"               # 2 decimal places
+f"{n:,}"                  # thousands separator
+
+# Encoding
+b = "café".encode("utf-8")
+s = b.decode("utf-8")</code></pre>
+
+      <h3>Concepts Checklist</h3>
+      <div class="check-row"><input type="checkbox" id="ds1"><label for="ds1">List methods + slicing + comprehensions</label></div>
+      <div class="check-row"><input type="checkbox" id="ds2"><label for="ds2">Tuple unpacking + namedtuple</label></div>
+      <div class="check-row"><input type="checkbox" id="ds3"><label for="ds3">Dict operations + dict comprehension</label></div>
+      <div class="check-row"><input type="checkbox" id="ds4"><label for="ds4">defaultdict, Counter, OrderedDict</label></div>
+      <div class="check-row"><input type="checkbox" id="ds5"><label for="ds5">Set operations (union, intersection, difference)</label></div>
+      <div class="check-row"><input type="checkbox" id="ds6"><label for="ds6">String methods + f-strings + formatting</label></div>
+      <div class="check-row"><input type="checkbox" id="ds7"><label for="ds7">Shallow vs deep copy</label></div>
+    </div>
+  </div>
+
+  <!-- FUNCTIONS -->
+  <div class="tab-content" id="functions">
+    <div class="section">
+      <h2>3. Functions</h2>
+
+      <h3>Basics</h3>
+<pre><code class="language-python">def greet(name, greeting="Hello"):    # keyword default
+    return f"{greeting}, {name}"
+
+greet("Asha")
+greet("Asha", greeting="Hi")
+greet(name="Asha")
+
+# Multiple returns
+def divmod_custom(a, b):
+    return a // b, a % b
+q, r = divmod_custom(10, 3)
+
+# Type hints (recommended for DE code)
+def add(a: int, b: int) -> int:
+    return a + b
+
+from typing import List, Dict, Optional, Union
+def process(items: List[Dict[str, int]]) -> Optional[int]:
+    return sum(d.get("val", 0) for d in items)</code></pre>
+
+      <h3>*args and **kwargs</h3>
+<pre><code class="language-python">def sum_all(*args):           # variable positional
+    return sum(args)
+sum_all(1, 2, 3, 4)           # 10
+
+def show(**kwargs):           # variable keyword
+    for k, v in kwargs.items(): print(k, v)
+show(name="Asha", age=30)
+
+# Both
+def wrapper(*args, **kwargs):
+    return func(*args, **kwargs)
+
+# Unpacking
+nums = [1, 2, 3]
+sum_all(*nums)                # spreads as args
+params = {"name": "Asha", "age": 30}
+show(**params)                # spreads as kwargs
+
+# Positional-only and keyword-only (3.8+)
+def func(pos_only, /, normal, *, kw_only):
+    pass</code></pre>
+
+      <h3>Lambda Functions</h3>
+<pre><code class="language-python"># Inline anonymous functions
+square = lambda x: x ** 2
+add = lambda a, b: a + b
+
+# Common usage with sorted/map/filter
+data = [("a", 3), ("b", 1), ("c", 2)]
+sorted(data, key=lambda x: x[1])      # sort by 2nd item
+list(map(lambda x: x * 2, [1, 2, 3]))  # [2, 4, 6]
+list(filter(lambda x: x > 5, [1, 6, 2, 7]))  # [6, 7]
+
+# Lambdas in Pandas (you'll do this 1000x)
+df["new"] = df["price"].apply(lambda x: x * 1.18)</code></pre>
+
+      <h3>Closures</h3>
+<pre><code class="language-python">def make_multiplier(n):
+    def multiplier(x):
+        return x * n              # closes over n
+    return multiplier
+
+times3 = make_multiplier(3)
+times3(10)                        # 30
+
+# Counter using closure
+def make_counter():
+    count = 0
+    def increment():
+        nonlocal count
+        count += 1
+        return count
+    return increment</code></pre>
+
+      <h3>map, filter, reduce</h3>
+<pre><code class="language-python">from functools import reduce
+
+# map: apply function to each
+list(map(str.upper, ["a", "b", "c"]))    # ['A','B','C']
+
+# filter: keep matching items
+list(filter(lambda x: x % 2 == 0, range(10)))
+
+# reduce: accumulate
+reduce(lambda a, b: a + b, [1, 2, 3, 4])  # 10
+reduce(lambda a, b: a * b, [1, 2, 3, 4])  # 24
+
+# Comprehensions are usually more Pythonic
+[x.upper() for x in ["a", "b"]]
+[x for x in range(10) if x % 2 == 0]</code></pre>
+
+      <h3>Concepts Checklist</h3>
+      <div class="check-row"><input type="checkbox" id="fn1"><label for="fn1">Positional vs keyword arguments</label></div>
+      <div class="check-row"><input type="checkbox" id="fn2"><label for="fn2">*args and **kwargs (definition + unpacking)</label></div>
+      <div class="check-row"><input type="checkbox" id="fn3"><label for="fn3">Type hints (typing module)</label></div>
+      <div class="check-row"><input type="checkbox" id="fn4"><label for="fn4">Lambda functions</label></div>
+      <div class="check-row"><input type="checkbox" id="fn5"><label for="fn5">Closures and nonlocal</label></div>
+      <div class="check-row"><input type="checkbox" id="fn6"><label for="fn6">map / filter / reduce</label></div>
+    </div>
+  </div>
+
+  <!-- OOP -->
+  <div class="tab-content" id="oop">
+    <div class="section">
+      <h2>4. Object-Oriented Programming</h2>
+
+      <h3>Classes Basics</h3>
+<pre><code class="language-python">class Employee:
+    company = "Acme Corp"            # class attribute (shared)
+
+    def __init__(self, name, salary):
+        self.name = name             # instance attribute
+        self.salary = salary
+
+    def annual(self):                # instance method
+        return self.salary * 12
+
+    @classmethod
+    def from_dict(cls, data):        # alternative constructor
+        return cls(data["name"], data["salary"])
+
+    @staticmethod
+    def is_high_earner(salary):      # no self / cls
+        return salary > 100000
+
+    def __repr__(self):              # for debugging
+        return f"Employee({self.name!r}, {self.salary})"
+
+    def __str__(self):               # for users
+        return f"{self.name} earns {self.salary}"
+
+emp = Employee("Asha", 80000)
+emp.annual()
+Employee.from_dict({"name": "Ravi", "salary": 90000})
+Employee.is_high_earner(150000)</code></pre>
+
+      <h3>Inheritance</h3>
+<pre><code class="language-python">class Manager(Employee):
+    def __init__(self, name, salary, team_size):
+        super().__init__(name, salary)
+        self.team_size = team_size
+
+    def annual(self):                # override
+        base = super().annual()
+        bonus = self.team_size * 1000
+        return base + bonus
+
+# Multiple inheritance + MRO
+class A: pass
+class B(A): pass
+class C(A): pass
+class D(B, C): pass
+D.__mro__   # method resolution order</code></pre>
+
+      <h3>Dunder (Magic) Methods</h3>
+<pre><code class="language-python">class Money:
+    def __init__(self, amount, currency="INR"):
+        self.amount = amount
+        self.currency = currency
+
+    def __add__(self, other):        # m1 + m2
+        return Money(self.amount + other.amount, self.currency)
+
+    def __eq__(self, other):         # m1 == m2
+        return self.amount == other.amount and self.currency == other.currency
+
+    def __lt__(self, other):         # m1 < m2
+        return self.amount < other.amount
+
+    def __len__(self):               # len(m)
+        return int(self.amount)
+
+    def __getitem__(self, key):      # m[key]
+        return f"{key}: {self.amount}"
+
+    def __iter__(self):
+        yield self.amount; yield self.currency
+
+    def __enter__(self):             # with Money(100):
+        print("entering")
+        return self
+    def __exit__(self, *args):
+        print("exiting")
+
+# Most common dunders: __init__, __repr__, __str__, __eq__, __hash__,
+# __add__, __sub__, __lt__/__le__/__gt__/__ge__, __len__, __getitem__,
+# __iter__, __next__, __enter__/__exit__, __call__</code></pre>
+
+      <h3>Properties</h3>
+<pre><code class="language-python">class Circle:
+    def __init__(self, radius):
+        self._radius = radius
+
+    @property
+    def radius(self):
+        return self._radius
+
+    @radius.setter
+    def radius(self, value):
+        if value < 0:
+            raise ValueError("Radius must be positive")
+        self._radius = value
+
+    @property
+    def area(self):                  # computed, read-only
+        return 3.14159 * self._radius ** 2
+
+c = Circle(5)
+c.area          # access like attribute (no parens!)
+c.radius = 10   # uses setter
+c.area</code></pre>
+
+      <h3>Dataclasses (Modern Python)</h3>
+<pre><code class="language-python">from dataclasses import dataclass, field
+from typing import List
+
+@dataclass
+class Order:
+    id: int
+    customer: str
+    items: List[str] = field(default_factory=list)
+    total: float = 0.0
+
+    def __post_init__(self):
+        self.total = len(self.items) * 100
+
+o = Order(1, "Asha", ["pen", "book"])
+# Auto-generates __init__, __repr__, __eq__
+
+# Frozen (immutable)
+@dataclass(frozen=True)
+class Point:
+    x: float
+    y: float</code></pre>
+
+      <h3>Abstract Base Classes</h3>
+<pre><code class="language-python">from abc import ABC, abstractmethod
+
+class Pipeline(ABC):
+    @abstractmethod
+    def extract(self): pass
+
+    @abstractmethod
+    def transform(self, data): pass
+
+    @abstractmethod
+    def load(self, data): pass
+
+    def run(self):
+        data = self.extract()
+        transformed = self.transform(data)
+        self.load(transformed)
+
+class MyPipeline(Pipeline):
+    def extract(self): return [1, 2, 3]
+    def transform(self, data): return [x * 2 for x in data]
+    def load(self, data): print(data)
+
+MyPipeline().run()</code></pre>
+
+      <h3>Concepts Checklist</h3>
+      <div class="check-row"><input type="checkbox" id="oop1"><label for="oop1">Classes, instance vs class attributes</label></div>
+      <div class="check-row"><input type="checkbox" id="oop2"><label for="oop2">Instance, class, and static methods</label></div>
+      <div class="check-row"><input type="checkbox" id="oop3"><label for="oop3">Inheritance and super()</label></div>
+      <div class="check-row"><input type="checkbox" id="oop4"><label for="oop4">Multiple inheritance + MRO</label></div>
+      <div class="check-row"><input type="checkbox" id="oop5"><label for="oop5">Magic methods (__init__, __repr__, __eq__, __iter__)</label></div>
+      <div class="check-row"><input type="checkbox" id="oop6"><label for="oop6">Properties (@property, setter)</label></div>
+      <div class="check-row"><input type="checkbox" id="oop7"><label for="oop7">@dataclass</label></div>
+      <div class="check-row"><input type="checkbox" id="oop8"><label for="oop8">Abstract base classes (ABC)</label></div>
+    </div>
+  </div>
+
+  <!-- FILE I/O -->
+  <div class="tab-content" id="fileio">
+    <div class="section">
+      <h2>5. File I/O</h2>
+
+      <h3>Reading & Writing Files</h3>
+<pre><code class="language-python"># Read entire file
+with open("data.txt", "r") as f:
+    content = f.read()
+
+# Read line by line (memory-efficient)
+with open("huge.txt") as f:
+    for line in f:
+        process(line.strip())
+
+# Read all lines into list
+with open("data.txt") as f:
+    lines = f.readlines()
+
+# Write
+with open("out.txt", "w") as f:        # 'w' overwrites
+    f.write("hello\n")
+
+with open("out.txt", "a") as f:        # 'a' appends
+    f.write("more\n")
+
+# Binary
+with open("img.png", "rb") as f:
+    data = f.read()
+
+# Modes: r, w, a, x (create), r+ (read+write), b (binary), t (text)
+# Always use 'with' (context manager) — auto-closes</code></pre>
+
+      <h3>CSV Files</h3>
+<pre><code class="language-python">import csv
+
+# Read
+with open("data.csv") as f:
+    reader = csv.reader(f)
+    header = next(reader)
+    for row in reader:
+        print(row)
+
+# Read as dict (recommended)
+with open("data.csv") as f:
+    reader = csv.DictReader(f)
+    for row in reader:
+        print(row["name"], row["age"])
+
+# Write
+with open("out.csv", "w", newline="") as f:
+    writer = csv.writer(f)
+    writer.writerow(["name", "age"])
+    writer.writerows([["Asha", 30], ["Ravi", 25]])
+
+# Write as dict
+with open("out.csv", "w", newline="") as f:
+    writer = csv.DictWriter(f, fieldnames=["name", "age"])
+    writer.writeheader()
+    writer.writerow({"name": "Asha", "age": 30})</code></pre>
+
+      <h3>JSON</h3>
+<pre><code class="language-python">import json
+
+# Parse string to dict
+data = json.loads('{"name": "Asha", "age": 30}')
+
+# Dict to string
+text = json.dumps({"name": "Asha"}, indent=2)
+
+# Read from file
+with open("data.json") as f:
+    data = json.load(f)
+
+# Write to file
+with open("out.json", "w") as f:
+    json.dump(data, f, indent=2, default=str)   # default=str handles dates
+
+# JSON Lines (one object per line — common for streaming)
+with open("events.jsonl") as f:
+    for line in f:
+        event = json.loads(line)</code></pre>
+
+      <h3>pathlib (Modern Path Handling)</h3>
+<pre><code class="language-python">from pathlib import Path
+
+p = Path("data") / "input.csv"        # cross-platform
+p.exists(), p.is_file(), p.is_dir()
+p.suffix                              # '.csv'
+p.stem                                # 'input'
+p.name                                # 'input.csv'
+p.parent                              # PosixPath('data')
+
+# Read/write directly
+text = p.read_text()
+p.write_text("new content")
+
+# List files
+for csv_file in Path("data").glob("*.csv"):
+    print(csv_file)
+
+# Recursive
+for py_file in Path(".").rglob("*.py"):
+    print(py_file)
+
+# Create directories
+Path("output/data").mkdir(parents=True, exist_ok=True)</code></pre>
+
+      <h3>Pickle (Python-only Serialization)</h3>
+<pre><code class="language-python">import pickle
+
+# Save Python objects
+with open("model.pkl", "wb") as f:
+    pickle.dump(my_obj, f)
+
+with open("model.pkl", "rb") as f:
+    obj = pickle.load(f)
+# ⚠ Never unpickle untrusted data — security risk</code></pre>
+
+      <h3>YAML & Config</h3>
+<pre><code class="language-python">import yaml   # pip install pyyaml
+
+with open("config.yaml") as f:
+    config = yaml.safe_load(f)
+
+# Config example with environment override
+import os
+db_host = os.getenv("DB_HOST", config["db"]["host"])</code></pre>
+
+      <h3>Reading from URLs / APIs</h3>
+<pre><code class="language-python">import requests
+
+r = requests.get("https://api.example.com/data", timeout=10)
+r.raise_for_status()                  # raises if HTTP error
+data = r.json()
+
+# With auth + params
+r = requests.get(
+    "https://api.example.com/users",
+    params={"limit": 100},
+    headers={"Authorization": f"Bearer {token}"},
+    timeout=30
+)
+
+# Streaming download (big files)
+with requests.get(url, stream=True) as r:
+    with open("big.csv", "wb") as f:
+        for chunk in r.iter_content(chunk_size=8192):
+            f.write(chunk)</code></pre>
+
+      <h3>Concepts Checklist</h3>
+      <div class="check-row"><input type="checkbox" id="io1"><label for="io1">open() with context managers (with)</label></div>
+      <div class="check-row"><input type="checkbox" id="io2"><label for="io2">CSV reader/writer (incl. DictReader/DictWriter)</label></div>
+      <div class="check-row"><input type="checkbox" id="io3"><label for="io3">JSON load/dump + JSONL streaming</label></div>
+      <div class="check-row"><input type="checkbox" id="io4"><label for="io4">pathlib for cross-platform paths</label></div>
+      <div class="check-row"><input type="checkbox" id="io5"><label for="io5">requests for HTTP/API calls</label></div>
+      <div class="check-row"><input type="checkbox" id="io6"><label for="io6">YAML / TOML config files</label></div>
+    </div>
+  </div>
+
+  <!-- ERRORS -->
+  <div class="tab-content" id="errors">
+    <div class="section">
+      <h2>6. Error Handling & Logging</h2>
+
+      <h3>try / except / else / finally</h3>
+<pre><code class="language-python">try:
+    result = 10 / x
+except ZeroDivisionError:
+    print("Cannot divide by zero")
+except (TypeError, ValueError) as e:
+    print(f"Bad input: {e}")
+except Exception as e:               # catch-all (last resort)
+    print(f"Unexpected: {e}")
+else:
+    print("Success:", result)        # runs if no exception
+finally:
+    print("Always runs (cleanup)")
+
+# Re-raise after logging
+try:
+    risky_op()
+except Exception as e:
+    logger.error(f"Failed: {e}")
+    raise                            # re-raise original
+
+# Raise from (chain exceptions)
+try:
+    parse(data)
+except ValueError as e:
+    raise RuntimeError("Parse failed") from e</code></pre>
+
+      <h3>Custom Exceptions</h3>
+<pre><code class="language-python">class PipelineError(Exception):
+    """Base for pipeline errors."""
+
+class ExtractError(PipelineError):
+    def __init__(self, source, message):
+        super().__init__(f"Extract from {source}: {message}")
+        self.source = source
+
+raise ExtractError("api.foo.com", "timeout")</code></pre>
+
+      <h3>Common Exception Types</h3>
+      <table>
+        <thead><tr><th>Exception</th><th>When</th></tr></thead>
+        <tbody>
+          <tr><td>ValueError</td><td>Right type, wrong value (e.g., int("abc"))</td></tr>
+          <tr><td>TypeError</td><td>Wrong type (e.g., "a" + 1)</td></tr>
+          <tr><td>KeyError</td><td>Dict key missing</td></tr>
+          <tr><td>IndexError</td><td>List index out of range</td></tr>
+          <tr><td>FileNotFoundError</td><td>File doesn't exist</td></tr>
+          <tr><td>ConnectionError</td><td>Network failure</td></tr>
+          <tr><td>TimeoutError</td><td>Operation timed out</td></tr>
+          <tr><td>AttributeError</td><td>Object doesn't have attribute</td></tr>
+          <tr><td>StopIteration</td><td>Iterator exhausted</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Logging (NOT print!)</h3>
+<pre><code class="language-python">import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s - %(message)s",
+    handlers=[
+        logging.FileHandler("pipeline.log"),
+        logging.StreamHandler(),     # also print to console
+    ]
+)
+
+logger = logging.getLogger(__name__)
+
+logger.debug("Detailed info for diagnostics")
+logger.info("Pipeline started")
+logger.warning("Disk space at 80%")
+logger.error("Failed to load %s", filename)
+logger.critical("Database down!")
+logger.exception("Exception with traceback")   # use in except blocks
+
+# Structured logging (JSON) for production
+import json
+logger.info(json.dumps({"event": "etl_complete", "rows": 12345, "duration_s": 42}))</code></pre>
+
+      <div class="alert danger"><strong>⚠ Never use print() in production code.</strong> Use logging — controllable levels, timestamps, file outputs, and works with monitoring tools.</div>
+
+      <h3>Assertions (for development)</h3>
+<pre><code class="language-python">def process(items):
+    assert isinstance(items, list), "items must be a list"
+    assert len(items) > 0, "items cannot be empty"
+    # ... rest of code
+# Note: asserts can be disabled with python -O; don't use for validation</code></pre>
+
+      <h3>Concepts Checklist</h3>
+      <div class="check-row"><input type="checkbox" id="er1"><label for="er1">try/except/else/finally</label></div>
+      <div class="check-row"><input type="checkbox" id="er2"><label for="er2">Catching specific vs broad exceptions</label></div>
+      <div class="check-row"><input type="checkbox" id="er3"><label for="er3">Custom exception classes</label></div>
+      <div class="check-row"><input type="checkbox" id="er4"><label for="er4">Exception chaining (raise ... from)</label></div>
+      <div class="check-row"><input type="checkbox" id="er5"><label for="er5">logging module (levels, formats, handlers)</label></div>
+      <div class="check-row"><input type="checkbox" id="er6"><label for="er6">logger.exception() for tracebacks</label></div>
+    </div>
+  </div>
+
+  <!-- ADVANCED -->
+  <div class="tab-content" id="advanced">
+    <div class="section">
+      <h2>7. Iterators, Generators, Decorators <span class="badge frequent">High Interview Weight</span></h2>
+
+      <h3>Iterators</h3>
+<pre><code class="language-python"># Iterable: has __iter__ (list, dict, str, file)
+# Iterator: has __iter__ AND __next__
+
+class CountDown:
+    def __init__(self, start):
+        self.n = start
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self.n <= 0:
+            raise StopIteration
+        self.n -= 1
+        return self.n + 1
+
+for x in CountDown(5):
+    print(x)              # 5,4,3,2,1
+
+# Built-in iter() / next()
+it = iter([1, 2, 3])
+next(it), next(it), next(it)   # 1, 2, 3
+next(it)                       # StopIteration</code></pre>
+
+      <h3>Generators — Memory-Efficient <span class="badge tip">CRITICAL for DE</span></h3>
+<pre><code class="language-python"># Function with yield = generator
+def countdown(start):
+    while start > 0:
+        yield start
+        start -= 1
+
+for x in countdown(5):
+    print(x)
+
+# Generator expression (like list comp, with parens)
+gen = (x ** 2 for x in range(1_000_000))     # no memory used yet
+next(gen)                                     # produces one at a time
+
+# Lazy file reading
+def read_large_file(path):
+    with open(path) as f:
+        for line in f:
+            yield line.strip()
+
+for line in read_large_file("10gb.log"):     # never loads all 10GB
+    process(line)
+
+# yield from (delegate to another generator)
+def chained():
+    yield from range(5)
+    yield from "abc"
+list(chained())   # [0,1,2,3,4,'a','b','c']
+
+# send/throw/close (advanced)
+def coro():
+    val = yield "ready"
+    yield f"got {val}"
+
+c = coro(); next(c); c.send("hello")</code></pre>
+
+      <div class="alert info"><strong>Why generators matter in DE:</strong> Process 100GB files line-by-line with constant memory. Stream API responses page-by-page. Build data pipelines that pull data on demand.</div>
+
+      <h3>Decorators</h3>
+<pre><code class="language-python"># A decorator wraps a function with extra behavior
+
+def timer(func):
+    import time
+    def wrapper(*args, **kwargs):
+        start = time.time()
+        result = func(*args, **kwargs)
+        print(f"{func.__name__} took {time.time()-start:.3f}s")
+        return result
+    return wrapper
+
+@timer
+def slow_function():
+    import time; time.sleep(1)
+
+slow_function()   # prints timing
+
+# Equivalent to: slow_function = timer(slow_function)
+
+# Decorator with arguments
+def retry(max_attempts=3, delay=1):
+    def decorator(func):
+        import time
+        def wrapper(*args, **kwargs):
+            for attempt in range(max_attempts):
+                try:
+                    return func(*args, **kwargs)
+                except Exception as e:
+                    if attempt == max_attempts - 1:
+                        raise
+                    print(f"Attempt {attempt+1} failed: {e}")
+                    time.sleep(delay * (2 ** attempt))   # exponential backoff
+        return wrapper
+    return decorator
+
+@retry(max_attempts=5, delay=2)
+def fetch_data():
+    return requests.get(url).json()
+
+# Preserve original function metadata
+from functools import wraps
+
+def my_decorator(func):
+    @wraps(func)              # preserves __name__, __doc__
+    def wrapper(*args, **kwargs):
+        return func(*args, **kwargs)
+    return wrapper</code></pre>
+
+      <h3>Common Built-in Decorators</h3>
+<pre><code class="language-python"># @property, @classmethod, @staticmethod — covered in OOP
+
+# @functools.lru_cache — memoization
+from functools import lru_cache
+
+@lru_cache(maxsize=128)
+def expensive_call(n):
+    return slow_computation(n)
+
+# @functools.cache (3.9+) — unlimited cache
+from functools import cache
+
+@cache
+def fib(n):
+    return n if n < 2 else fib(n-1) + fib(n-2)
+
+# @dataclass — covered in OOP
+
+# Context managers via decorator
+from contextlib import contextmanager
+
+@contextmanager
+def db_transaction(conn):
+    try:
+        conn.begin()
+        yield conn
+        conn.commit()
+    except:
+        conn.rollback()
+        raise
+
+with db_transaction(conn) as c:
+    c.execute("INSERT ...")</code></pre>
+
+      <h3>Concepts Checklist</h3>
+      <div class="check-row"><input type="checkbox" id="adv1"><label for="adv1">Iterables vs Iterators</label></div>
+      <div class="check-row"><input type="checkbox" id="adv2"><label for="adv2">Generators with yield</label></div>
+      <div class="check-row"><input type="checkbox" id="adv3"><label for="adv3">Generator expressions</label></div>
+      <div class="check-row"><input type="checkbox" id="adv4"><label for="adv4">yield from</label></div>
+      <div class="check-row"><input type="checkbox" id="adv5"><label for="adv5">Decorators (basic, parameterized)</label></div>
+      <div class="check-row"><input type="checkbox" id="adv6"><label for="adv6">functools.wraps</label></div>
+      <div class="check-row"><input type="checkbox" id="adv7"><label for="adv7">lru_cache / cache</label></div>
+      <div class="check-row"><input type="checkbox" id="adv8"><label for="adv8">contextmanager decorator</label></div>
+    </div>
+  </div>
+
+  <!-- STDLIB -->
+  <div class="tab-content" id="stdlib">
+    <div class="section">
+      <h2>8. Standard Library Essentials (DE Daily Use)</h2>
+
+      <h3>datetime</h3>
+<pre><code class="language-python">from datetime import datetime, date, time, timedelta, timezone
+
+now = datetime.now()                           # local
+utc_now = datetime.now(timezone.utc)
+today = date.today()
+
+# Parsing
+dt = datetime.strptime("2026-05-23", "%Y-%m-%d")
+dt = datetime.fromisoformat("2026-05-23T14:30:00")
+
+# Formatting
+dt.strftime("%Y-%m-%d %H:%M:%S")
+dt.isoformat()
+
+# Arithmetic
+yesterday = today - timedelta(days=1)
+future = now + timedelta(hours=2, minutes=30)
+diff = dt2 - dt1                               # timedelta
+
+# Timezone
+import zoneinfo  # 3.9+
+ist = datetime.now(zoneinfo.ZoneInfo("Asia/Kolkata"))
+
+# Unix timestamp
+ts = dt.timestamp()
+dt = datetime.fromtimestamp(ts)</code></pre>
+
+      <h3>collections</h3>
+<pre><code class="language-python">from collections import defaultdict, Counter, OrderedDict, deque, namedtuple
+
+# deque — efficient append/pop from both ends
+dq = deque([1, 2, 3])
+dq.appendleft(0); dq.append(4)
+dq.popleft(); dq.pop()
+
+# Bounded deque (sliding window)
+recent = deque(maxlen=5)
+for i in range(10):
+    recent.append(i)
+# recent only holds last 5
+
+# Counter
+c = Counter(["a", "b", "a", "c", "a"])
+c.most_common(2)                     # [('a', 3), ('b', 1)]
+c + Counter("ab")                    # add counters</code></pre>
+
+      <h3>itertools</h3>
+<pre><code class="language-python">import itertools as it
+
+# Infinite iterators
+it.count(10, 2)              # 10, 12, 14, 16, ...
+it.cycle("abc")              # a, b, c, a, b, c, ...
+it.repeat("x", 3)            # x, x, x
+
+# Combinatorics
+list(it.combinations([1,2,3,4], 2))    # [(1,2),(1,3),...]
+list(it.permutations([1,2,3]))
+list(it.product([1,2], "ab"))          # [(1,'a'),(1,'b'),(2,'a'),(2,'b')]
+
+# Chaining
+list(it.chain([1,2,3], [4,5,6]))       # [1,2,3,4,5,6]
+
+# Group consecutive elements
+data = [1, 1, 2, 2, 2, 3, 1]
+for key, group in it.groupby(data):
+    print(key, list(group))
+
+# Slicing iterators
+list(it.islice(it.count(), 5, 15))     # 5..14
+
+# Batching (3.12+)
+list(it.batched("ABCDEFG", 3))         # [('A','B','C'), ('D','E','F'), ('G',)]</code></pre>
+
+      <h3>os / sys / subprocess</h3>
+<pre><code class="language-python">import os, sys, subprocess
+
+# Environment variables
+api_key = os.environ.get("API_KEY", "default")
+os.environ["VAR"] = "value"
+
+# Paths (prefer pathlib, but)
+os.path.join("data", "input.csv")
+os.path.exists(path)
+os.listdir(".")
+os.makedirs("a/b/c", exist_ok=True)
+
+# Command line args
+sys.argv                              # ['script.py', 'arg1', 'arg2']
+sys.exit(1)                           # exit with code
+
+# Run shell commands
+result = subprocess.run(["ls", "-la"], capture_output=True, text=True)
+print(result.stdout, result.returncode)
+
+# With shell
+subprocess.run("ls *.py | wc -l", shell=True)   # careful with user input!</code></pre>
+
+      <h3>argparse (CLI scripts)</h3>
+<pre><code class="language-python">import argparse
+
+parser = argparse.ArgumentParser(description="ETL runner")
+parser.add_argument("--source", required=True, help="Source path")
+parser.add_argument("--date", default="today")
+parser.add_argument("--limit", type=int, default=100)
+parser.add_argument("--dry-run", action="store_true")
+args = parser.parse_args()
+
+print(args.source, args.date, args.limit, args.dry_run)
+# Run: python script.py --source data.csv --limit 50 --dry-run</code></pre>
+
+      <h3>os.path vs pathlib (use pathlib)</h3>
+<pre><code class="language-python">from pathlib import Path
+
+# All the things — see File I/O tab
+Path.cwd()                            # current working dir
+Path.home()                           # user home
+Path(__file__).parent                 # current script's directory</code></pre>
+
+      <h3>Other Useful Modules</h3>
+<pre><code class="language-python"># hashlib — checksums, file fingerprints
+import hashlib
+hashlib.md5(b"hello").hexdigest()
+hashlib.sha256(open("file.bin","rb").read()).hexdigest()
+
+# uuid — unique IDs
+import uuid
+str(uuid.uuid4())                     # random
+uuid.uuid5(uuid.NAMESPACE_DNS, "example.com")   # deterministic
+
+# secrets — cryptographically secure random
+import secrets
+secrets.token_hex(16)                 # for API keys, tokens
+
+# functools — reduce, partial, lru_cache
+from functools import partial
+square = partial(pow, exp=2)
+# Wait, pow(base, exp) — partial freezes args left-to-right
+multiply_by_2 = partial(lambda x, y: x * y, 2)
+multiply_by_2(5)                      # 10
+
+# re — regex
+import re
+re.match(r"\d+", "123abc")            # match at start
+re.search(r"\d+", "abc 123")          # anywhere
+re.findall(r"\d+", "a1 b22 c333")     # ['1','22','333']
+re.sub(r"\s+", " ", "a   b   c")      # 'a b c'</code></pre>
+
+      <h3>Concepts Checklist</h3>
+      <div class="check-row"><input type="checkbox" id="sl1"><label for="sl1">datetime arithmetic + parsing/formatting</label></div>
+      <div class="check-row"><input type="checkbox" id="sl2"><label for="sl2">Timezones (zoneinfo)</label></div>
+      <div class="check-row"><input type="checkbox" id="sl3"><label for="sl3">collections (defaultdict, Counter, deque)</label></div>
+      <div class="check-row"><input type="checkbox" id="sl4"><label for="sl4">itertools (combinations, groupby, chain, islice)</label></div>
+      <div class="check-row"><input type="checkbox" id="sl5"><label for="sl5">os.environ for config</label></div>
+      <div class="check-row"><input type="checkbox" id="sl6"><label for="sl6">subprocess.run for shell commands</label></div>
+      <div class="check-row"><input type="checkbox" id="sl7"><label for="sl7">argparse for CLI scripts</label></div>
+      <div class="check-row"><input type="checkbox" id="sl8"><label for="sl8">hashlib + uuid + regex</label></div>
+    </div>
+  </div>
+
+  <!-- CONCURRENCY -->
+  <div class="tab-content" id="concurrency">
+    <div class="section">
+      <h2>9. Concurrency & Parallelism</h2>
+
+      <h3>The GIL (Global Interpreter Lock)</h3>
+      <p>Python (CPython) has a GIL: only one thread executes Python bytecode at a time. Implications:</p>
+      <ul class="bullet">
+        <li><strong>Threading</strong> good for I/O-bound work (network, files, DB) — GIL released during I/O</li>
+        <li><strong>Multiprocessing</strong> needed for CPU-bound work (heavy computation)</li>
+        <li><strong>asyncio</strong> single-threaded concurrency for I/O — most efficient for many concurrent network calls</li>
+      </ul>
+
+      <h3>concurrent.futures (Recommended for most cases)</h3>
+<pre><code class="language-python">from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
+
+# I/O bound — use threads
+def fetch(url):
+    return requests.get(url).json()
+
+urls = ["url1", "url2", "url3"]
+
+with ThreadPoolExecutor(max_workers=10) as executor:
+    results = list(executor.map(fetch, urls))
+
+# More control with submit / as_completed
+from concurrent.futures import as_completed
+
+with ThreadPoolExecutor(max_workers=10) as executor:
+    futures = {executor.submit(fetch, url): url for url in urls}
+    for future in as_completed(futures):
+        url = futures[future]
+        try:
+            print(url, future.result())
+        except Exception as e:
+            print(f"{url} failed: {e}")
+
+# CPU bound — use processes
+def cpu_heavy(n):
+    return sum(i*i for i in range(n))
+
+with ProcessPoolExecutor(max_workers=4) as executor:
+    results = list(executor.map(cpu_heavy, [10**7, 10**7, 10**7, 10**7]))</code></pre>
+
+      <h3>asyncio — Async/Await</h3>
+<pre><code class="language-python">import asyncio
+import aiohttp
+
+async def fetch(session, url):
+    async with session.get(url) as response:
+        return await response.json()
+
+async def fetch_all(urls):
+    async with aiohttp.ClientSession() as session:
+        tasks = [fetch(session, url) for url in urls]
+        return await asyncio.gather(*tasks)
+
+# Run
+results = asyncio.run(fetch_all(["url1", "url2", "url3"]))
+
+# Async generator
+async def stream_pages():
+    page = 1
+    while True:
+        data = await fetch_page(page)
+        if not data: break
+        yield data
+        page += 1
+
+async for page_data in stream_pages():
+    process(page_data)
+
+# When to use asyncio: 100+ concurrent network calls, websockets, real-time
+# When to use threads: small number of blocking I/O ops
+# When to use multiprocessing: CPU-bound work that benefits from cores</code></pre>
+
+      <h3>threading (Lower-level)</h3>
+<pre><code class="language-python">import threading
+
+def worker(name):
+    print(f"Worker {name}")
+
+threads = [threading.Thread(target=worker, args=(i,)) for i in range(5)]
+for t in threads: t.start()
+for t in threads: t.join()
+
+# Locks
+lock = threading.Lock()
+
+def safe_increment():
+    with lock:
+        global counter
+        counter += 1</code></pre>
+
+      <h3>multiprocessing</h3>
+<pre><code class="language-python">from multiprocessing import Pool
+
+def square(n):
+    return n * n
+
+with Pool(processes=4) as pool:
+    results = pool.map(square, range(100))</code></pre>
+
+      <div class="alert warn"><strong>For DE specifically:</strong> Use <code>ThreadPoolExecutor</code> for parallel API/DB calls, <code>asyncio + aiohttp</code> for very high-volume scraping/streaming, and <code>multiprocessing</code> only if you have heavy CPU work (rare in DE — use PySpark/Dask instead).</div>
+
+      <h3>Concepts Checklist</h3>
+      <div class="check-row"><input type="checkbox" id="cc1"><label for="cc1">GIL implications</label></div>
+      <div class="check-row"><input type="checkbox" id="cc2"><label for="cc2">ThreadPoolExecutor for I/O</label></div>
+      <div class="check-row"><input type="checkbox" id="cc3"><label for="cc3">ProcessPoolExecutor for CPU</label></div>
+      <div class="check-row"><input type="checkbox" id="cc4"><label for="cc4">asyncio + async/await + gather</label></div>
+      <div class="check-row"><input type="checkbox" id="cc5"><label for="cc5">When to choose threads vs async vs processes</label></div>
+    </div>
+  </div>
+
+  <!-- DE PATTERNS -->
+  <div class="tab-content" id="depatterns">
+    <div class="section">
+      <h2>10. Data Engineering Patterns <span class="badge must">Production-Ready</span></h2>
+
+      <h3>Pattern 1: Retry with Exponential Backoff</h3>
+<pre><code class="language-python">import time
+from functools import wraps
+
+def retry(max_attempts=3, base_delay=1, exceptions=(Exception,)):
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            for attempt in range(max_attempts):
+                try:
+                    return func(*args, **kwargs)
+                except exceptions as e:
+                    if attempt == max_attempts - 1:
+                        raise
+                    delay = base_delay * (2 ** attempt)
+                    print(f"Attempt {attempt+1} failed: {e}. Retrying in {delay}s")
+                    time.sleep(delay)
+        return wrapper
+    return decorator
+
+# Or use tenacity library (production-grade)
+from tenacity import retry, stop_after_attempt, wait_exponential
+
+@retry(stop=stop_after_attempt(5), wait=wait_exponential(min=2, max=60))
+def fetch_api():
+    return requests.get(url, timeout=30).json()</code></pre>
+
+      <h3>Pattern 2: Config Management</h3>
+<pre><code class="language-python"># Layered config: defaults → file → env vars
+import os
+from pathlib import Path
+import yaml
+
+class Config:
+    def __init__(self, env=None):
+        env = env or os.getenv("ENV", "dev")
+        with open(f"config/{env}.yaml") as f:
+            self._data = yaml.safe_load(f)
+
+    def get(self, key, default=None):
+        # Env var overrides config file
+        env_key = key.upper().replace(".", "_")
+        if env_val := os.getenv(env_key):
+            return env_val
+        # Nested keys: db.host
+        val = self._data
+        for k in key.split("."):
+            val = val.get(k) if val else None
+        return val or default
+
+cfg = Config()
+db_host = cfg.get("db.host", "localhost")
+# Override with: DB_HOST=prod-db.example.com python pipeline.py</code></pre>
+
+      <h3>Pattern 3: Secrets (Never hardcode!)</h3>
+<pre><code class="language-python">import os
+
+# Option 1: Environment variables
+api_key = os.environ["API_KEY"]   # raises KeyError if missing
+
+# Option 2: .env file (dev)
+from dotenv import load_dotenv
+load_dotenv()                      # loads .env into os.environ
+
+# Option 3: AWS Secrets Manager (prod)
+import boto3, json
+
+def get_secret(name, region="ap-south-1"):
+    client = boto3.client("secretsmanager", region_name=region)
+    response = client.get_secret_value(SecretId=name)
+    return json.loads(response["SecretString"])
+
+creds = get_secret("prod/db/postgres")
+db_password = creds["password"]</code></pre>
+
+      <h3>Pattern 4: API Client (Reusable)</h3>
+<pre><code class="language-python">import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
+class APIClient:
+    def __init__(self, base_url, token, timeout=30):
+        self.base_url = base_url.rstrip("/")
+        self.timeout = timeout
+
+        self.session = requests.Session()
+        self.session.headers.update({"Authorization": f"Bearer {token}"})
+
+        # Built-in retry
+        retry = Retry(
+            total=3, backoff_factor=2,
+            status_forcelist=[429, 500, 502, 503, 504]
+        )
+        self.session.mount("https://", HTTPAdapter(max_retries=retry))
+
+    def get(self, path, **kwargs):
+        url = f"{self.base_url}/{path.lstrip('/')}"
+        r = self.session.get(url, timeout=self.timeout, **kwargs)
+        r.raise_for_status()
+        return r.json()
+
+    def paginate(self, path, page_size=100):
+        """Yield all pages — generator!"""
+        page = 1
+        while True:
+            data = self.get(path, params={"page": page, "size": page_size})
+            if not data["items"]: break
+            yield from data["items"]
+            page += 1
+
+client = APIClient("https://api.example.com", os.environ["API_TOKEN"])
+for record in client.paginate("/users"):
+    process(record)</code></pre>
+
+      <h3>Pattern 5: Chunked Processing (Big Files)</h3>
+<pre><code class="language-python">def chunked_reader(path, chunk_size=10000):
+    """Yield chunks of lines for batch processing."""
+    chunk = []
+    with open(path) as f:
+        for line in f:
+            chunk.append(line.strip())
+            if len(chunk) >= chunk_size:
+                yield chunk
+                chunk = []
+        if chunk:
+            yield chunk
+
+for batch in chunked_reader("huge.csv", 5000):
+    upload_to_database(batch)</code></pre>
+
+      <h3>Pattern 6: Idempotent ETL (Safe Re-runs)</h3>
+<pre><code class="language-python">def load_with_idempotency(records, table, run_id):
+    """Use run_id to avoid duplicate inserts on retry."""
+    cursor.execute(
+        f"DELETE FROM {table} WHERE etl_run_id = %s", (run_id,)
+    )
+    cursor.executemany(
+        f"INSERT INTO {table} (..., etl_run_id) VALUES (..., %s)",
+        [(*r.values(), run_id) for r in records]
+    )
+    conn.commit()</code></pre>
+
+      <h3>Pattern 7: Connection Pooling</h3>
+<pre><code class="language-python">from sqlalchemy import create_engine
+from sqlalchemy.pool import QueuePool
+
+engine = create_engine(
+    "postgresql://user:pass@host/db",
+    poolclass=QueuePool,
+    pool_size=10,
+    max_overflow=20,
+    pool_pre_ping=True,    # check connection before using
+    pool_recycle=3600,     # recycle after 1 hour
+)
+
+with engine.connect() as conn:
+    result = conn.execute(text("SELECT 1"))</code></pre>
+
+      <h3>Pattern 8: Logging in Pipelines</h3>
+<pre><code class="language-python">import logging, json
+from datetime import datetime
+
+class JSONFormatter(logging.Formatter):
+    def format(self, record):
+        log = {
+            "timestamp": datetime.utcnow().isoformat(),
+            "level": record.levelname,
+            "logger": record.name,
+            "message": record.getMessage(),
+            "module": record.module,
+        }
+        if record.exc_info:
+            log["exception"] = self.formatException(record.exc_info)
+        return json.dumps(log)
+
+handler = logging.StreamHandler()
+handler.setFormatter(JSONFormatter())
+logging.basicConfig(level=logging.INFO, handlers=[handler])
+
+logger = logging.getLogger("etl")
+logger.info("pipeline_started", extra={"run_id": "abc123", "source": "api"})</code></pre>
+
+      <h3>Pattern 9: CLI for Pipelines</h3>
+<pre><code class="language-python"># Use click (cleaner than argparse)
+import click
+
+@click.command()
+@click.option("--source", required=True, help="Source path")
+@click.option("--date", default=None, help="Process date (YYYY-MM-DD)")
+@click.option("--dry-run", is_flag=True)
+def run(source, date, dry_run):
+    """Run the ETL pipeline."""
+    click.echo(f"Running for {date}, dry-run={dry_run}")
+    # ...
+
+if __name__ == "__main__":
+    run()
+# Invoke: python pipeline.py --source s3://bucket/data --date 2026-05-23</code></pre>
+
+      <h3>Concepts Checklist</h3>
+      <div class="check-row"><input type="checkbox" id="dp1"><label for="dp1">Retry decorator with backoff</label></div>
+      <div class="check-row"><input type="checkbox" id="dp2"><label for="dp2">tenacity library</label></div>
+      <div class="check-row"><input type="checkbox" id="dp3"><label for="dp3">Config management (file + env)</label></div>
+      <div class="check-row"><input type="checkbox" id="dp4"><label for="dp4">Secrets via env / AWS Secrets Manager</label></div>
+      <div class="check-row"><input type="checkbox" id="dp5"><label for="dp5">Reusable API client class</label></div>
+      <div class="check-row"><input type="checkbox" id="dp6"><label for="dp6">Chunked file processing</label></div>
+      <div class="check-row"><input type="checkbox" id="dp7"><label for="dp7">Idempotent loads</label></div>
+      <div class="check-row"><input type="checkbox" id="dp8"><label for="dp8">SQLAlchemy + connection pooling</label></div>
+      <div class="check-row"><input type="checkbox" id="dp9"><label for="dp9">JSON / structured logging</label></div>
+      <div class="check-row"><input type="checkbox" id="dp10"><label for="dp10">click for CLI commands</label></div>
+    </div>
+  </div>
+
+  <!-- INTERVIEW -->
+  <div class="tab-content" id="interview">
+    <div class="section">
+      <h2>11. Interview Questions & Practice</h2>
+
+      <h3>Top Conceptual Q&A</h3>
+
+      <div class="qa-card">
+        <div class="qa-q">Q1. Difference between list, tuple, set, dict?</div>
+        <div class="qa-a">List: ordered, mutable, allows duplicates, indexable. Tuple: ordered, immutable, allows duplicates. Set: unordered, mutable, unique items, no indexing. Dict: ordered (Python 3.7+), mutable, key-value pairs, keys must be hashable.</div>
+      </div>
+
+      <div class="qa-card">
+        <div class="qa-q">Q2. What is the difference between == and is?</div>
+        <div class="qa-a"><code>==</code> compares values (calls __eq__). <code>is</code> compares object identity (same memory address). Use <code>is</code> only for None: <code>x is None</code>.</div>
+      </div>
+
+      <div class="qa-card">
+        <div class="qa-q">Q3. Mutable vs immutable types — give examples and why it matters?</div>
+        <div class="qa-a">Immutable: int, float, str, tuple, frozenset. Mutable: list, dict, set. Matters because mutables can change in place (memory-efficient but can cause unexpected side effects when shared). Default mutable args are a common bug.</div>
+      </div>
+
+      <div class="qa-card">
+        <div class="qa-q">Q4. What is the GIL?</div>
+        <div class="qa-a">Global Interpreter Lock — only one thread executes Python bytecode at a time. Threading helps with I/O-bound work (GIL released during I/O). For CPU-bound parallelism use multiprocessing.</div>
+      </div>
+
+      <div class="qa-card">
+        <div class="qa-q">Q5. Generators vs Iterators?</div>
+        <div class="qa-a">All generators are iterators, not vice versa. Iterators implement __iter__ and __next__. Generators are a simpler way to create iterators using <code>yield</code>. Generators are lazy and memory-efficient.</div>
+      </div>
+
+      <div class="qa-card">
+        <div class="qa-q">Q6. List comprehension vs generator expression?</div>
+        <div class="qa-a">List comp <code>[x for x in y]</code> builds the entire list in memory. Generator exp <code>(x for x in y)</code> produces items one at a time — use for big data.</div>
+      </div>
+
+      <div class="qa-card">
+        <div class="qa-q">Q7. What's a decorator? Real-world example?</div>
+        <div class="qa-a">A function that wraps another function to add behavior without modifying it. Examples: <code>@retry</code> for resilience, <code>@cache</code> for memoization, <code>@property</code> for getters, Flask's <code>@app.route</code> for routes.</div>
+      </div>
+
+      <div class="qa-card">
+        <div class="qa-q">Q8. Shallow vs deep copy?</div>
+        <div class="qa-a">Shallow (<code>copy.copy</code> or <code>list.copy</code>) copies outer object but shares inner references. Deep (<code>copy.deepcopy</code>) recursively copies everything. For nested lists/dicts always deepcopy.</div>
+      </div>
+
+      <div class="qa-card">
+        <div class="qa-q">Q9. What is __init__ vs __new__?</div>
+        <div class="qa-a"><code>__new__</code> creates the instance (returns it). <code>__init__</code> initializes the already-created instance. You rarely override __new__ (only for metaclasses, singletons).</div>
+      </div>
+
+      <div class="qa-card">
+        <div class="qa-q">Q10. Difference between staticmethod, classmethod, and instance method?</div>
+        <div class="qa-a">Instance method: takes <code>self</code>, accesses instance. Classmethod: takes <code>cls</code>, accesses class (alternative constructors). Staticmethod: no self/cls, just a function in class namespace (utility).</div>
+      </div>
+
+      <div class="qa-card">
+        <div class="qa-q">Q11. How do you handle large files in Python?</div>
+        <div class="qa-a">Stream line-by-line with <code>for line in open(path)</code>, use generators for chunking, and read in binary chunks for non-text. Avoid <code>read()</code> on large files (loads everything to memory).</div>
+      </div>
+
+      <div class="qa-card">
+        <div class="qa-q">Q12. How do you make an HTTP request with retry?</div>
+        <div class="qa-a">Use <code>requests</code> with an <code>HTTPAdapter</code> mounting a <code>Retry</code> config, or use <code>tenacity</code> library with <code>@retry(stop=stop_after_attempt(5), wait=wait_exponential())</code>.</div>
+      </div>
+
+      <div class="qa-card">
+        <div class="qa-q">Q13. What is virtualenv? Why use it?</div>
+        <div class="qa-a">Virtual environment isolates Python packages per project so they don't conflict. Create with <code>python -m venv venv</code>, activate, then <code>pip install</code>. Pin versions in <code>requirements.txt</code>. Modern alternative: <code>poetry</code> or <code>uv</code>.</div>
+      </div>
+
+      <div class="qa-card">
+        <div class="qa-q">Q14. How do you write tests in Python?</div>
+        <div class="qa-a">Use <code>pytest</code> (industry standard). Write functions starting with <code>test_</code>. Use <code>assert</code>, fixtures for setup, <code>parametrize</code> for multiple cases, <code>unittest.mock</code> for mocking.</div>
+      </div>
+
+      <div class="qa-card">
+        <div class="qa-q">Q15. Difference between PEP8 and Black?</div>
+        <div class="qa-a">PEP8 is Python's style guide (recommendations). Black is an auto-formatter that enforces a consistent style. Most teams use Black + isort + ruff for linting.</div>
+      </div>
+
+      <h3>Coding Practice Topics</h3>
+      <ul class="bullet">
+        <li>Reverse a string / list (in place + new copy)</li>
+        <li>Check palindrome</li>
+        <li>Count word frequency in text</li>
+        <li>Find duplicates in a list</li>
+        <li>Flatten nested list</li>
+        <li>Find missing number in range 1..N</li>
+        <li>Two-sum (find pair summing to target)</li>
+        <li>Group anagrams</li>
+        <li>Implement LRU cache</li>
+        <li>Read a 10GB file and find top 10 words (use generator + Counter)</li>
+        <li>Make N parallel API calls and aggregate results</li>
+        <li>Implement retry decorator from scratch</li>
+        <li>Build a simple ETL: API → transform → CSV → load to Postgres</li>
+      </ul>
+
+      <h3>Resources</h3>
+      <ul class="bullet">
+        <li><a href="https://realpython.com" target="_blank" style="color: var(--accent);">Real Python</a> — best free articles</li>
+        <li><a href="https://www.youtube.com/@coreyms" target="_blank" style="color: var(--accent);">Corey Schafer YouTube</a> — clearest Python tutorials</li>
+        <li><a href="https://leetcode.com" target="_blank" style="color: var(--accent);">LeetCode</a> — coding practice</li>
+        <li><a href="https://www.hackerrank.com/domains/python" target="_blank" style="color: var(--accent);">HackerRank Python</a></li>
+        <li><a href="https://book.pythontips.com" target="_blank" style="color: var(--accent);">Intermediate Python</a> (free book)</li>
+        <li><strong>Book:</strong> Fluent Python by Luciano Ramalho (intermediate-advanced)</li>
+        <li><strong>Book:</strong> Effective Python by Brett Slatkin (90 essential tips)</li>
+      </ul>
+    </div>
+  </div>
+
+  <footer>🐍 Python for Data Engineers · Track your progress · Built for production-grade DE work</footer>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
+<script>
+  function showTab(evt, tabId) {
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.getElementById(tabId).classList.add('active');
+    evt.currentTarget.classList.add('active');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+  const STORAGE_KEY = 'python_guide_progress_v1';
+  function loadProgress() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+      document.querySelectorAll('input[type="checkbox"]').forEach(cb => { if (saved[cb.id]) cb.checked = true; });
+    } catch (e) { }
+    updateProgress();
+  }
+  function saveProgress() {
+    const state = {};
+    document.querySelectorAll('input[type="checkbox"]').forEach(cb => { if (cb.checked) state[cb.id] = true; });
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    updateProgress();
+  }
+  function updateProgress() {
+    const all = document.querySelectorAll('input[type="checkbox"]');
+    const done = document.querySelectorAll('input[type="checkbox"]:checked');
+    const pct = all.length ? Math.round((done.length / all.length) * 100) : 0;
+    const fill = document.getElementById('progress-fill');
+    fill.style.width = pct + '%';
+    fill.textContent = pct + '%';
+    document.getElementById('progress-text').textContent = done.length + ' / ' + all.length;
+  }
+  function resetProgress() {
+    if (!confirm('Reset all progress?')) return;
+    localStorage.removeItem(STORAGE_KEY);
+    document.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = false);
+    updateProgress();
+  }
+  function exportProgress() {
+    const state = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+    const blob = new Blob([JSON.stringify(state, null, 2)], {type: 'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'python_progress_' + new Date().toISOString().split('T')[0] + '.json';
+    a.click(); URL.revokeObjectURL(url);
+  }
+  document.addEventListener('change', e => { if (e.target.matches('input[type="checkbox"]')) saveProgress(); });
+  document.addEventListener('DOMContentLoaded', loadProgress);
+  if (document.readyState !== 'loading') loadProgress();
+</script>
+</body>
+</html>

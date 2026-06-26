@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Part 4 — Data Architecture | Data Engineering Notes</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #0b1020; --bg-2: #131a2f; --bg-3: #1f2a44; --card: #131a2f;
+    --text: #e6edf6; --text-dim: #93a4bf; --accent: #60a5fa; --accent-2: #c084fc;
+    --accent-3: #34d399; --success: #22c55e; --warn: #fbbf24; --danger: #f87171;
+    --border: #2a3553; --code-bg: #0a0f1e;
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: linear-gradient(135deg, #0b1020 0%, #1a0f2e 100%); color: var(--text); line-height: 1.65; min-height: 100vh; }
+  .container { max-width: 1100px; margin: 0 auto; padding: 24px; }
+  header { background: linear-gradient(135deg, #2563eb 0%, #7c3aed 50%, #db2777 100%);
+    border-radius: 16px; padding: 30px; margin-bottom: 18px; box-shadow: 0 20px 60px rgba(124,58,237,0.25); }
+  header .crumb { font-size: 12px; opacity: 0.85; text-transform: uppercase; letter-spacing: 1px; }
+  header h1 { font-size: 30px; margin: 6px 0 8px 0; }
+  header p { opacity: 0.92; font-size: 15px; max-width: 760px; }
+  nav.pager { display: flex; justify-content: space-between; gap: 10px; margin: 14px 0 22px 0; flex-wrap: wrap; }
+  nav.pager a { text-decoration: none; background: var(--card); border: 1px solid var(--border);
+    color: var(--text); padding: 10px 16px; border-radius: 10px; font-size: 13px; font-weight: 600; transition: all 0.2s; }
+  nav.pager a:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+  nav.pager a.home { border-color: var(--accent-2); }
+
+  .section { background: var(--card); border-radius: 12px; padding: 24px; margin-bottom: 18px; border: 1px solid var(--border); }
+  .section h2 { color: var(--accent); font-size: 22px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+  .section h3 { color: var(--accent-2); font-size: 18px; margin: 20px 0 10px 0; }
+  .section h4 { color: var(--accent-3); font-size: 15px; margin: 14px 0 8px 0; }
+  .section p { color: var(--text); margin-bottom: 10px; }
+  ul.bullet { padding-left: 22px; color: var(--text); font-size: 14.5px; margin: 6px 0 12px 0; }
+  ul.bullet li { padding: 4px 0; }
+  ul.bullet li b { color: var(--accent-3); }
+
+  table { width: 100%; border-collapse: collapse; background: var(--bg); border-radius: 8px; overflow: hidden; margin: 14px 0; font-size: 13.5px; }
+  th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { background: var(--bg-3); color: var(--accent); text-transform: uppercase; font-size: 11px; letter-spacing: 1px; }
+  tr:last-child td { border-bottom: none; }
+
+  .alert { padding: 12px 14px; border-radius: 8px; margin: 14px 0; border-left: 4px solid; font-size: 14px; }
+  .alert.warn { background: rgba(251,191,36,0.1); border-color: var(--warn); }
+  .alert.danger { background: rgba(248,113,113,0.1); border-color: var(--danger); }
+  .alert.success { background: rgba(34,197,94,0.1); border-color: var(--success); }
+  .alert.info { background: rgba(96,165,250,0.1); border-color: var(--accent); }
+  .alert strong { color: var(--text); }
+
+  .diagram { background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 22px; margin: 16px 0; overflow-x: auto; }
+  .diagram .title { text-align: center; color: var(--text-dim); font-size: 12px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 16px; }
+  .flow { display: flex; align-items: stretch; justify-content: center; flex-wrap: wrap; }
+  .flow-box { background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; min-width: 120px; text-align: center; font-size: 13px; font-weight: 600; display: flex; flex-direction: column; justify-content: center; }
+  .flow-box small { display: block; color: var(--text-dim); font-weight: 400; font-size: 11px; margin-top: 4px; }
+  .flow-arrow { display: flex; align-items: center; padding: 0 8px; color: var(--accent); font-size: 22px; font-weight: 700; }
+
+  .two-col { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+  .col-card { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  .col-card.why { border-top: 4px solid var(--accent-2); }
+  .col-card.how { border-top: 4px solid var(--accent-3); }
+  .col-card h3 { margin-top: 0; }
+
+  :not(pre) > code { background: var(--bg-3); padding: 2px 6px; border-radius: 4px; font-size: 13px; color: var(--accent-3); font-family: "Consolas","Monaco",monospace; }
+  footer { text-align: center; margin-top: 30px; padding: 20px; color: var(--text-dim); font-size: 13px; }
+  @media (max-width: 640px) { header h1 { font-size: 23px; } .container { padding: 12px; } }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <div class="crumb">Part 4 of 6</div>
+    <h1>Data Architecture</h1>
+    <p>How to think about designing data systems — the "why" (operational) and the "how" (technical) — with a
+       full end-to-end e-commerce example.</p>
+  </header>
+
+  <nav class="pager">
+    <a class="home" href="index.html">🏠 Home</a>
+    <a href="03-etl-warehouse.html">← Part 3</a>
+    <a href="05-cloud-realworld.html">Next → Part 5: Cloud</a>
+  </nav>
+
+  <div class="section">
+    <h2>1. What Is Data Architecture?</h2>
+    <p>From <em>Fundamentals of Data Engineering</em>: <em>"the design of systems to support the evolving data
+       needs of an enterprise, achieved by flexible and reversible decisions reached through careful evaluation
+       of trade-offs."</em></p>
+    <div class="alert info">
+      <strong>The building analogy:</strong> Before constructing a 12-floor building you draw a blueprint
+      (foundation, floor plans, elevators, stairs, restrooms). For a data system the blueprint covers
+      <b>storage, software, data flow, interfaces, transformations, staging areas, warehouses, reporting</b>.
+    </div>
+    <ul class="bullet">
+      <li><b>Flexible & reversible:</b> any component should be easy to swap if a decision turns out wrong.</li>
+      <li><b>Trade-offs:</b> choose technologies based on your actual requirements, not hype.</li>
+    </ul>
+  </div>
+
+  <div class="section">
+    <h2>2. Two Halves: Operational vs Technical</h2>
+    <div class="two-col">
+      <div class="col-card why">
+        <h3>🎯 Operational Architecture — the "WHY"</h3>
+        <p>Focus on <b>business goals & requirements</b>. Define what the business needs <em>before</em> touching
+           any technology.</p>
+        <h4>Example business questions</h4>
+        <ul class="bullet">
+          <li>What's the impact of product category XYZ?</li>
+          <li>Why is there a delay in product shipping?</li>
+          <li>How do we manage data quality from third-party vendors?</li>
+        </ul>
+      </div>
+      <div class="col-card how">
+        <h3>⚙️ Technical Architecture — the "HOW"</h3>
+        <p>Focus on the technology to <b>ingest, store, transform</b> data. Think about scale.</p>
+        <h4>Example technical questions</h4>
+        <ul class="bullet">
+          <li>How do we ingest and transform data?</li>
+          <li>What happens during a sudden order spike (festival)?</li>
+          <li>How do we scale the system?</li>
+        </ul>
+      </div>
+    </div>
+    <div class="alert success"><strong>Key:</strong> Technology is <em>easy</em> to build once you know what the business needs. If you don't define the business need first, you'll be stuck designing forever.</div>
+  </div>
+
+  <div class="section">
+    <h2>3. Operational Principles (Defining Business Goals)</h2>
+    <ul class="bullet">
+      <li><b>Start with the end in mind</b> — always begin from the business problem you're solving.</li>
+      <li><b>Iterate and evolve</b> — business changes every ~6 months (new products, new priorities); the architecture must adapt quickly.</li>
+      <li><b>Focus on impact</b> — every solution must have a clear line of sight to a measurable business outcome (customer satisfaction, streamlined ops, better decisions).</li>
+    </ul>
+  </div>
+
+  <div class="section">
+    <h2>4. Technical Principles (Building Blocks)</h2>
+    <ul class="bullet">
+      <li><b>Simplicity is key</b> — simpler systems are easier to maintain, scale, and debug.</li>
+      <li><b>Right tool for the job</b> — no one-size-fits-all. Structured data → warehouse; few million rows → maybe just Athena ad-hoc queries instead of expensive Snowflake.</li>
+      <li><b>Build for scale & flexibility</b> — plan for growth (e.g., Python now, Apache Spark cluster later). Start small, scale as you grow.</li>
+      <li><b>Embed automation</b> — automate pipelines & monitoring; get email/Slack alerts on errors instead of checking manually.</li>
+      <li><b>Prioritize security & governance</b> — encrypt data, secure the network, prevent data leakage.</li>
+    </ul>
+    <div class="alert warn"><strong>Trade-offs over hype:</strong> A simple Python script that solves the problem beats a fancy Snowflake + Spark stack that doesn't add value. Open-source or enterprise — whatever solves the business problem at the right cost wins.</div>
+  </div>
+
+  <div class="section">
+    <h2>5. Worked Example — E-commerce Platform</h2>
+
+    <h3>Step 1: Define business goals (operational)</h3>
+    <table>
+      <thead><tr><th>Goal</th><th>What it means</th></tr></thead>
+      <tbody>
+        <tr><td><b>Improve customer experience</b></td><td>Better site navigation, personalized recommendations, enhanced customer service.</td></tr>
+        <tr><td><b>Operational efficiency</b></td><td>Streamline inventory, order processing, shipping → reduce cost & delivery time.</td></tr>
+        <tr><td><b>Marketing insights</b></td><td>Understand customer behavior → improve product placement & sales.</td></tr>
+        <tr><td><b>Vendor management</b></td><td>Better availability, pricing strategy, quality control across vendors.</td></tr>
+        <tr><td><b>Compliance & security</b></td><td>Follow regulations (e.g., mask / don't store raw credit-card info).</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Step 2: Design technical layers</h3>
+    <table>
+      <thead><tr><th>Layer</th><th>Purpose</th><th>Example tools</th></tr></thead>
+      <tbody>
+        <tr><td><b>Data ingestion</b></td><td>Collect from site interactions, server logs, vendor systems, inventory, support</td><td>Apache Kafka (real-time streaming)</td></tr>
+        <tr><td><b>Storage</b></td><td>Store collected data for access & analysis</td><td>S3 (unstructured/lake), Snowflake / BigQuery / Redshift (structured)</td></tr>
+        <tr><td><b>Processing & transformation</b></td><td>Clean, validate, structure raw data</td><td>Apache Spark (large data) or Python (smaller data)</td></tr>
+        <tr><td><b>Analysis & business</b></td><td>Dashboards & ML for predictions</td><td>Tableau, Power BI; TensorFlow, PyTorch</td></tr>
+        <tr><td><b>Security & compliance</b></td><td>Meet GDPR/CCPA, encrypt/mask PII</td><td>Encryption, data masking</td></tr>
+        <tr><td><b>Integration & API</b></td><td>Move data between systems & vendors</td><td>Custom APIs</td></tr>
+      </tbody>
+    </table>
+
+    <div class="alert info"><strong>Choosing Snowflake vs Redshift?</strong> "It depends." Already on AWS → Redshift integrates well. Too expensive → Snowflake or open source. Always do a small <b>PoC</b> (proof of concept) with your real data size & frequency, then pick what works best.</div>
+
+    <h3>Step 3: Example final architecture (AWS)</h3>
+    <div class="diagram">
+      <div class="title">E-commerce reference architecture — maps to the DE lifecycle</div>
+      <div class="flow">
+        <div class="flow-box">Sources<small>On-prem, social media, streams</small></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-box" style="border-top:3px solid var(--accent-3);">S3<small>Data lake</small></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-box" style="border-top:3px solid var(--warn);">Glue / Lambda<small>Transform</small></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-box" style="border-top:3px solid var(--danger);">Redshift<small>Warehouse</small></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-box">Athena · SageMaker · Tableau<small>Query, ML, BI</small></div>
+      </div>
+    </div>
+    <div class="alert success">
+      <strong>Plug & play:</strong> Swap S3 → Google Cloud Storage, Redshift → Snowflake, Glue → Databricks.
+      The architecture mirrors the lifecycle (collect → ingest → store → transform → serve → end users).
+      Fundamentals stay the same; only tools change.
+    </div>
+  </div>
+
+  <nav class="pager">
+    <a class="home" href="index.html">🏠 Home</a>
+    <a href="03-etl-warehouse.html">← Part 3</a>
+    <a href="05-cloud-realworld.html">Next → Part 5: Cloud</a>
+  </nav>
+
+  <footer>Part 4 of 6 · Fundamentals of Data Engineering Masterclass notes</footer>
+</div>
+</body>
+</html>

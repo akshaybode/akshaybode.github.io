@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Part 7 — Glue, Athena &amp; the Pipeline | AWS for Data Engineers</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #0b1020; --bg-2: #131a2f; --bg-3: #1f2a44; --card: #131a2f;
+    --text: #e6edf6; --text-dim: #93a4bf; --accent: #60a5fa; --accent-2: #c084fc;
+    --accent-3: #34d399; --success: #22c55e; --warn: #fbbf24; --danger: #f87171;
+    --border: #2a3553; --code-bg: #0a0f1e; --aws: #ff9900;
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: linear-gradient(135deg, #0b1020 0%, #1a0f2e 100%); color: var(--text);
+    line-height: 1.65; min-height: 100vh; }
+  .container { max-width: 1100px; margin: 0 auto; padding: 24px; }
+  header { background: linear-gradient(135deg, #232f3e 0%, #ff9900 140%);
+    border-radius: 16px; padding: 30px; margin-bottom: 18px; box-shadow: 0 20px 60px rgba(255,153,0,0.2); }
+  header .crumb { font-size: 12px; opacity: 0.85; text-transform: uppercase; letter-spacing: 1px; }
+  header h1 { font-size: 30px; margin: 6px 0 8px 0; }
+  header p { opacity: 0.95; font-size: 15px; max-width: 760px; }
+  nav.pager { display: flex; justify-content: space-between; gap: 10px; margin: 14px 0 22px 0; flex-wrap: wrap; }
+  nav.pager a { text-decoration: none; background: var(--card); border: 1px solid var(--border);
+    color: var(--text); padding: 10px 16px; border-radius: 10px; font-size: 13px; font-weight: 600; transition: all 0.2s; }
+  nav.pager a:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+  nav.pager a.home { border-color: var(--accent-2); }
+  .section { background: var(--card); border-radius: 12px; padding: 24px; margin-bottom: 18px; border: 1px solid var(--border); }
+  .section h2 { color: var(--accent); font-size: 22px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+  .section h3 { color: var(--accent-2); font-size: 18px; margin: 20px 0 10px 0; }
+  .section h4 { color: var(--accent-3); font-size: 15px; margin: 14px 0 8px 0; }
+  .section p { color: var(--text); margin-bottom: 10px; }
+  ul.bullet { padding-left: 22px; color: var(--text); font-size: 14.5px; margin: 6px 0 12px 0; }
+  ul.bullet li { padding: 4px 0; }
+  ul.bullet li b { color: var(--accent-3); }
+  table { width: 100%; border-collapse: collapse; background: var(--bg); border-radius: 8px; overflow: hidden; margin: 14px 0; font-size: 13.5px; }
+  th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { background: var(--bg-3); color: var(--accent); text-transform: uppercase; font-size: 11px; letter-spacing: 1px; }
+  tr:last-child td { border-bottom: none; }
+  .alert { padding: 12px 14px; border-radius: 8px; margin: 14px 0; border-left: 4px solid; font-size: 14px; }
+  .alert.warn { background: rgba(251,191,36,0.1); border-color: var(--warn); }
+  .alert.danger { background: rgba(248,113,113,0.1); border-color: var(--danger); }
+  .alert.success { background: rgba(34,197,94,0.1); border-color: var(--success); }
+  .alert.info { background: rgba(96,165,250,0.1); border-color: var(--accent); }
+  .alert strong { color: var(--text); }
+  .diagram { background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 22px; margin: 16px 0; overflow-x: auto; }
+  .diagram .title { text-align: center; color: var(--text-dim); font-size: 12px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 16px; }
+  .flow { display: flex; align-items: stretch; justify-content: center; flex-wrap: wrap; }
+  .flow-box { background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px;
+    min-width: 130px; text-align: center; font-size: 13px; font-weight: 600; display: flex; flex-direction: column; justify-content: center; }
+  .flow-box small { display: block; color: var(--text-dim); font-weight: 400; font-size: 11px; margin-top: 4px; }
+  .flow-arrow { display: flex; align-items: center; padding: 0 8px; color: var(--accent); font-size: 22px; font-weight: 700; }
+  .flow-box.gen { border-top: 3px solid var(--accent); }
+  .flow-box.ing { border-top: 3px solid var(--accent-2); }
+  .flow-box.sto { border-top: 3px solid var(--accent-3); }
+  .flow-box.tra { border-top: 3px solid var(--warn); }
+  .flow-box.ser { border-top: 3px solid var(--danger); }
+  :not(pre) > code { background: var(--bg-3); padding: 2px 6px; border-radius: 4px; font-size: 13px; color: var(--accent-3); font-family: "Consolas","Monaco",monospace; }
+  pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; padding: 14px; overflow-x: auto; margin: 12px 0; font-size: 13px; line-height: 1.5; }
+  pre code { color: var(--text); font-family: "Consolas","Monaco",monospace; background: none; padding: 0; }
+  footer { text-align: center; margin-top: 30px; padding: 20px; color: var(--text-dim); font-size: 13px; }
+  @media (max-width: 640px) { header h1 { font-size: 23px; } .container { padding: 12px; } }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <div class="crumb">Part 7 of 7</div>
+    <h1>Glue, Athena &amp; the End-to-End Pipeline</h1>
+    <p>The grand finale: Glue's Data Catalog &amp; Crawlers, building a low/no-code ETL pipeline, querying with
+       Athena's serverless SQL, and wiring S3 &rarr; Lambda &rarr; Glue &rarr; Athena into one working flow.</p>
+  </header>
+
+  <nav class="pager">
+    <a class="home" href="index.html">&#127968; Home / Contents</a>
+    <a href="06-lambda.html">&#8592; Part 6</a>
+    <a href="index.html">&#127881; Finish &rarr; Back to Contents</a>
+  </nav>
+
+  <div class="section">
+    <h2>1. What is AWS Glue?</h2>
+    <p>As the name suggests, <b>Glue binds multiple components together</b>. A real data-engineering solution has
+       many isolated pieces — extract from source, transform with Spark, load to a warehouse, then report. Glue
+       manages the <b>order and dependencies</b> between those steps. That's why it's called an <strong>ETL
+       solution</strong>.</p>
+    <div class="diagram">
+      <div class="title">Glue orchestrates the ETL stages (in the right order)</div>
+      <div class="flow">
+        <div class="flow-box gen">Extract<small>from source</small></div>
+        <div class="flow-arrow">&#8594;</div>
+        <div class="flow-box tra">Transform<small>Spark / logic</small></div>
+        <div class="flow-arrow">&#8594;</div>
+        <div class="flow-box sto">Load<small>warehouse / lake</small></div>
+        <div class="flow-arrow">&#8594;</div>
+        <div class="flow-box ser">Report<small>BI / dashboards</small></div>
+      </div>
+    </div>
+    <div class="alert info"><strong>Best part: Glue is a low/no-code solution.</strong> Even without writing Spark, you can build an entire pipeline visually (and it generates the code for you).</div>
+    <h3>Glue's two components</h3>
+    <ul class="bullet">
+      <li><b>Data Catalog</b> — where you <b>register tables</b> (metadata: table/column names, data types) so the data can be queried with SQL.</li>
+      <li><b>Visual ETL</b> — build the actual pipeline using low/no-code (or notebooks / script editor).</li>
+    </ul>
+    <div class="alert warn"><strong>Glue isn't "created" like a bucket.</strong> It's a layer/component you <em>use</em> — you create objects (databases, tables, jobs) inside it.</div>
+  </div>
+
+  <div class="section">
+    <h2>2. Data Catalog &amp; Crawlers</h2>
+    <p>Why register tables at all? Your data sits in S3 as CSV/Parquet files. To let anyone <b>query</b> it with
+       SQL, you must register it as <b>tables</b> in the catalog. Two ways:</p>
+    <table>
+      <thead><tr><th>Option</th><th>How</th><th>Verdict</th></tr></thead>
+      <tbody>
+        <tr><td><b>Crawler (automatic)</b></td><td>Point a crawler at an S3 path; it walks every file/folder/subfolder, <b>infers</b> the schema, and registers tables automatically.</td><td>Fast &amp; preferred — especially for 50&ndash;100 column files.</td></tr>
+        <tr><td><b>Manual table</b></td><td>Define the schema yourself (column name + type, or JSON).</td><td>Error-prone for wide tables; fine for small/known schemas.</td></tr>
+      </tbody>
+    </table>
+    <div class="diagram">
+      <div class="title">A Crawler builds catalog tables from S3 automatically</div>
+      <div class="flow">
+        <div class="flow-box gen">&#128193; S3 data<small>CSV / Parquet</small></div>
+        <div class="flow-arrow">&#8594; crawls</div>
+        <div class="flow-box ing">&#128375;&#65039; Crawler<small>infers metadata</small></div>
+        <div class="flow-arrow">&#8594; registers</div>
+        <div class="flow-box ser">&#128202; Catalog tables<small>queryable schema</small></div>
+      </div>
+    </div>
+    <h3>Hands-on</h3>
+    <ul class="bullet">
+      <li>Glue &rarr; <b>Databases</b> &rarr; create one (e.g. <code>demo_db</code>).</li>
+      <li>Glue &rarr; <b>Crawlers</b> &rarr; <b>Create crawler</b> &rarr; name it &rarr; add <b>S3 data source</b> (e.g. the <code>raw/</code> folder) &rarr; "crawl all subfolders".</li>
+      <li><b>IAM role:</b> the crawler needs to read S3 — create/assign a role like <code>glue-access-s3</code> (Glue + S3 access).</li>
+      <li>Target database = <code>demo_db</code>; schedule = <b>on demand</b> (running it costs, since it crawls everything).</li>
+      <li><b>Run crawler</b> &rarr; in seconds it registers a <code>raw</code> table with the exact inferred schema. You can edit column data types (e.g. quantity &rarr; integer) afterward.</li>
+    </ul>
+  </div>
+
+  <div class="section">
+    <h2>3. Visual ETL — Build a Pipeline (low/no-code)</h2>
+    <p>Glue &rarr; <b>Visual ETL</b> &rarr; create job. The canvas uses <b>nodes</b>, where each node is one activity
+       (extract / transform / load). Example pipeline: read CSV from <code>raw/</code>, drop a column, write to
+       <code>processed/</code> in <b>Delta</b> format (a lakehouse).</p>
+    <div class="diagram">
+      <div class="title">Demo pipeline (each box = a node)</div>
+      <div class="flow">
+        <div class="flow-box gen">Source: S3<small>raw/ CSV</small></div>
+        <div class="flow-arrow">&#8594;</div>
+        <div class="flow-box tra">Transform<small>Select fields (drop order_date)</small></div>
+        <div class="flow-arrow">&#8594;</div>
+        <div class="flow-box ser">Target: S3<small>processed/ Delta</small></div>
+      </div>
+    </div>
+    <ul class="bullet">
+      <li><b>Source node (Amazon S3):</b> set the location (<code>raw/</code>), data format (CSV), and <b>enable "Infer schema"</b> so column names flow to later steps.</li>
+      <li><b>IAM role:</b> give the job S3 access (e.g. <code>glue-access-s3</code>). Start a session to use <b>Data preview</b> (runs Spark under the hood to show live output).</li>
+      <li><b>Transform node (Select fields):</b> pick the columns to keep (e.g. drop <code>order_date</code>).</li>
+      <li><b>Target node (Amazon S3):</b> choose plain "Amazon S3" (just dumps data) vs "S3 + Data Catalog" (dumps <em>and</em> registers). Set format = <b>Delta Lake</b>, target = <code>processed/</code>. Other targets available: Snowflake, BigQuery, etc.</li>
+    </ul>
+    <div class="alert warn"><strong>"Infer schema" matters.</strong> Without it, transformations can fail because the columns aren't known. The demo intentionally failed first, then succeeded after enabling Infer schema.</div>
+    <h4>Run, script &amp; monitor</h4>
+    <ul class="bullet">
+      <li><b>Run</b> the job; check <b>Job runs</b> to monitor success/failure (takes ~2 min).</li>
+      <li><b>Script tab:</b> the visual flow auto-generates the equivalent Glue/PySpark code — you can switch to script-only if you prefer code.</li>
+      <li><b>Version control:</b> connect Git (GitHub/GitLab/Bitbucket/Azure DevOps). <em>Git</em> is the technology; GitHub is a provider of it.</li>
+      <li>After success, <code>processed/</code> contains the Delta data (with a <code>_delta_log</code>).</li>
+    </ul>
+    <div class="alert info"><strong>Why low/no-code is trending:</strong> like a food chain (McDonald's) using templates vs a single chef's custom dish — templated pipelines are easier to manage, scale, and hand over when vendors leave. Anyone can follow the template.</div>
+  </div>
+
+  <div class="section">
+    <h2>4. AWS Athena — Serverless SQL</h2>
+    <p><strong>Athena</strong> is an interactive, serverless SQL query service over S3 (like Azure's serverless SQL
+       pool). You've stored, transformed, and cataloged data — now you <b>query</b> it. Athena is an
+       <b>abstraction layer</b>: you don't query S3 directly (it's unstructured/semi-structured), you query
+       Athena, and it runs SQL against the files.</p>
+    <div class="diagram">
+      <div class="title">Athena = SQL abstraction layer over S3</div>
+      <div class="flow">
+        <div class="flow-box gen">&#128100; User<small>writes SQL</small></div>
+        <div class="flow-arrow">&#8594;</div>
+        <div class="flow-box tra">&#128269; Athena<small>query engine</small></div>
+        <div class="flow-arrow">&#8594;</div>
+        <div class="flow-box sto">&#128193; S3 files<small>CSV / Parquet / Delta / JSON</small></div>
+      </div>
+    </div>
+    <h3>Glue and Athena share the same Data Catalog</h3>
+    <p>This is the key insight: <b>Glue and Athena are both connected to the same Data Catalog</b>. Register a
+       table via Glue's crawler, and Athena can immediately query it — and vice versa.</p>
+    <pre><code>-- Query the table the crawler registered
+SELECT * FROM demo_db.raw;</code></pre>
+    <h3>Creating tables in Athena (external tables)</h3>
+    <p>Athena &rarr; <b>Create</b> &rarr; "table from S3". Pick the database (<code>demo_db</code>), the S3 location,
+       and format:</p>
+    <ul class="bullet">
+      <li><b>CSV:</b> you must define columns (use <b>bulk add columns</b>, e.g. <code>order_id int, customer string, ...</code>).</li>
+      <li><b>Delta/Parquet:</b> Athena auto-generates the <code>CREATE EXTERNAL TABLE</code> for you.</li>
+    </ul>
+    <p>Athena creates an <b>external table</b> — just a <b>table definition / metadata</b> pointing at the real data
+       in S3. The actual data stays in the data lake; the table is only a schema on top of it. You can save queries
+       (e.g. <code>DDL_demo</code>) and reuse them.</p>
+    <div class="alert info"><strong>Crawler from Athena?</strong> Athena offers "create table using crawler", but clicking it just sends you to <b>Glue</b> — because crawlers live inside Glue. Preference: use <b>Athena</b> to create tables for Delta/lakehouse data, and <b>Crawler</b> for other formats.</div>
+  </div>
+
+  <div class="section">
+    <h2>5. The Complete End-to-End Pipeline</h2>
+    <p>Now glue everything together into one real-world mini use case: a user uploads a CSV to S3, which triggers
+       a Lambda that starts the Glue ETL pipeline, whose output is then queryable in Athena.</p>
+    <div class="diagram">
+      <div class="title">S3 &rarr; Lambda &rarr; Glue &rarr; Athena</div>
+      <div class="flow">
+        <div class="flow-box gen">&#128228; User uploads CSV<small>to S3</small></div>
+        <div class="flow-arrow">&#8594; trigger</div>
+        <div class="flow-box ing">&#9889; Lambda<small>starts Glue job</small></div>
+        <div class="flow-arrow">&#8594;</div>
+        <div class="flow-box tra">&#129083; Glue ETL<small>transform &rarr; Delta</small></div>
+        <div class="flow-arrow">&#8594;</div>
+        <div class="flow-box ser">&#128269; Athena<small>query results</small></div>
+      </div>
+    </div>
+    <h3>The Lambda that triggers the Glue job</h3>
+    <p>Create a new function (e.g. <code>trigger-lambda</code>) and give its role <b>three</b> permissions:
+       <code>AWSLambdaExecute</code> (basic), <b>S3 access</b> (to listen for uploads), and <b>Glue access</b>
+       (to start the job). The code creates a Glue client and calls <code>start_job_run</code>:</p>
+    <pre><code>import boto3
+
+def lambda_handler(event, context):
+    glue = boto3.client("glue")   # uses the function's IAM role
+    glue.start_job_run(JobName="demo-pipeline")
+    return {"statusCode": 200, "body": "pipeline triggered"}</code></pre>
+    <ul class="bullet">
+      <li><b>Deploy</b> &rarr; <b>Test</b>: response succeeds and the Glue job starts (check Glue &rarr; the job &rarr; Runs).</li>
+      <li>To fully automate, <b>add an S3 trigger</b> (PUT) just like in Part 6 — now any upload kicks off the whole pipeline.</li>
+      <li>Find the function name (e.g. <code>start_job_run</code>) in the boto3 docs under the <b>Glue</b> service — don't memorize it.</li>
+    </ul>
+    <div class="alert success">
+      <strong>Recap of Part 7 &amp; the whole masterclass:</strong> <b>Glue</b> is the ETL "glue" with a <b>Data
+      Catalog</b> (tables, populated fast by <b>Crawlers</b>) and a <b>Visual ETL</b> builder (low/no-code, auto-generates
+      Spark). <b>Athena</b> runs serverless SQL as an <b>abstraction layer</b> over S3 via <b>external tables</b>, sharing
+      the <em>same catalog</em> as Glue. Tie it together: an <b>S3 upload</b> triggers a <b>Lambda</b> that starts a
+      <b>Glue</b> job, and the transformed data is queried in <b>Athena</b> — a complete, real-world data pipeline. &#127881;
+    </div>
+  </div>
+
+  <nav class="pager">
+    <a class="home" href="index.html">&#127968; Home / Contents</a>
+    <a href="06-lambda.html">&#8592; Part 6</a>
+    <a href="index.html">&#127881; Finish &rarr; Back to Contents</a>
+  </nav>
+
+  <footer>Part 7 of 7 · AWS Fundamentals for Data Engineers · Source: youtube.com/watch?v=Ae3xyW2Ef0c</footer>
+</div>
+</body>
+</html>

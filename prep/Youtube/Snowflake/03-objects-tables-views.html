@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Part 3 — Databases, Tables & Views | Snowflake Notes</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #0b1020; --bg-2: #131a2f; --bg-3: #1f2a44; --card: #131a2f;
+    --text: #e6edf6; --text-dim: #93a4bf; --accent: #29b5e8; --accent-2: #c084fc;
+    --accent-3: #34d399; --success: #22c55e; --warn: #fbbf24; --danger: #f87171;
+    --border: #2a3553; --code-bg: #0a0f1e;
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: linear-gradient(135deg, #0b1020 0%, #0c2233 100%); color: var(--text);
+    line-height: 1.65; min-height: 100vh; }
+  .container { max-width: 1100px; margin: 0 auto; padding: 24px; }
+  header { background: linear-gradient(135deg, #29b5e8 0%, #2563eb 50%, #7c3aed 100%);
+    border-radius: 16px; padding: 30px; margin-bottom: 18px; box-shadow: 0 20px 60px rgba(41,181,232,0.25); }
+  header .crumb { font-size: 12px; opacity: 0.85; text-transform: uppercase; letter-spacing: 1px; }
+  header h1 { font-size: 30px; margin: 6px 0 8px 0; }
+  header p { opacity: 0.92; font-size: 15px; max-width: 760px; }
+  nav.pager { display: flex; justify-content: space-between; gap: 10px; margin: 14px 0 22px 0; flex-wrap: wrap; }
+  nav.pager a { text-decoration: none; background: var(--card); border: 1px solid var(--border);
+    color: var(--text); padding: 10px 16px; border-radius: 10px; font-size: 13px; font-weight: 600; transition: all 0.2s; }
+  nav.pager a:hover { background: var(--accent); color: #04121b; border-color: var(--accent); }
+  nav.pager a.home { border-color: var(--accent-2); }
+
+  .section { background: var(--card); border-radius: 12px; padding: 24px; margin-bottom: 18px; border: 1px solid var(--border); }
+  .section h2 { color: var(--accent); font-size: 22px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+  .section h3 { color: var(--accent-2); font-size: 18px; margin: 20px 0 10px 0; }
+  .section h4 { color: var(--accent-3); font-size: 15px; margin: 14px 0 8px 0; }
+  .section p { color: var(--text); margin-bottom: 10px; }
+  ul.bullet { padding-left: 22px; color: var(--text); font-size: 14.5px; margin: 6px 0 12px 0; }
+  ul.bullet li { padding: 4px 0; }
+  ul.bullet li b { color: var(--accent-3); }
+
+  table { width: 100%; border-collapse: collapse; background: var(--bg); border-radius: 8px;
+    overflow: hidden; margin: 14px 0; font-size: 13.5px; }
+  th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { background: var(--bg-3); color: var(--accent); text-transform: uppercase; font-size: 11px; letter-spacing: 1px; }
+  tr:last-child td { border-bottom: none; }
+
+  .alert { padding: 12px 14px; border-radius: 8px; margin: 14px 0; border-left: 4px solid; font-size: 14px; }
+  .alert.warn { background: rgba(251,191,36,0.1); border-color: var(--warn); }
+  .alert.danger { background: rgba(248,113,113,0.1); border-color: var(--danger); }
+  .alert.success { background: rgba(34,197,94,0.1); border-color: var(--success); }
+  .alert.info { background: rgba(41,181,232,0.1); border-color: var(--accent); }
+  .alert strong { color: var(--text); }
+
+  .diagram { background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 22px; margin: 16px 0; overflow-x: auto; }
+  .diagram .title { text-align: center; color: var(--text-dim); font-size: 12px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 16px; }
+  .flow { display: flex; align-items: stretch; justify-content: center; flex-wrap: wrap; }
+  .flow-box { background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px;
+    min-width: 120px; text-align: center; font-size: 13px; font-weight: 600; display: flex; flex-direction: column; justify-content: center; }
+  .flow-box small { display: block; color: var(--text-dim); font-weight: 400; font-size: 11px; margin-top: 4px; }
+  .flow-arrow { display: flex; align-items: center; padding: 0 8px; color: var(--accent); font-size: 22px; font-weight: 700; }
+
+  /* ---- animated pipeline (shared) ---- */
+  .apipe { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 0; margin: 4px 0; }
+  .anode { position: relative; z-index: 1; background: var(--bg-3); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 14px; min-width: 112px; text-align: center; font-size: 12.5px; font-weight: 700;
+    animation: aPulse 3s ease-in-out infinite; }
+  .anode small { display: block; font-weight: 400; color: var(--text-dim); font-size: 11px; margin-top: 4px; }
+  .anode.a { border-top: 3px solid var(--accent); }
+  .anode.b { border-top: 3px solid var(--accent-2); }
+  .anode.c { border-top: 3px solid var(--accent-3); }
+  .anode.d { border-top: 3px solid var(--warn); }
+  .anode.e { border-top: 3px solid var(--danger); }
+  .alink { position: relative; width: 50px; height: 3px; background: var(--border); margin: 0 1px; border-radius: 2px; flex: none; }
+  .alink .apkt { position: absolute; top: -3px; left: 0; width: 9px; height: 9px; border-radius: 50%;
+    background: var(--accent); box-shadow: 0 0 10px 1px var(--accent); animation: aMove 2.4s linear infinite; }
+  .alink .apkt.k2 { animation-delay: 1.2s; background: var(--accent-2); box-shadow: 0 0 10px 1px var(--accent-2); }
+  @keyframes aMove { 0% { left: 0; opacity: 0; } 12% { opacity: 1; } 88% { opacity: 1; } 100% { left: 100%; opacity: 0; } }
+  @keyframes aPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(41,181,232,0); } 50% { box-shadow: 0 0 16px 0 rgba(41,181,232,0.22); } }
+  @media (prefers-reduced-motion: reduce) { .alink .apkt { animation: none; opacity: .7; } .anode { animation: none; } }
+
+  pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px;
+    overflow-x: auto; margin: 12px 0; font-size: 13px; line-height: 1.55; }
+  pre code { color: #cfe3ff; font-family: "Consolas","Monaco",monospace; white-space: pre; }
+  pre .kw { color: #29b5e8; font-weight: 700; }
+  pre .cm { color: #6b7a99; font-style: italic; }
+  pre .st { color: #7ee787; }
+  :not(pre) > code { background: var(--bg-3); padding: 2px 6px; border-radius: 4px; font-size: 13px;
+    color: var(--accent-3); font-family: "Consolas","Monaco",monospace; }
+  footer { text-align: center; margin-top: 30px; padding: 20px; color: var(--text-dim); font-size: 13px; }
+  @media (max-width: 640px) { header h1 { font-size: 23px; } .container { padding: 12px; } }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <div class="crumb">Part 3 of 6</div>
+    <h1>Databases, Schemas, Tables & Views</h1>
+    <p>How Snowflake organizes objects, plus the different flavours of tables and views — and exactly when to use
+       each one.</p>
+  </header>
+
+  <nav class="pager">
+    <a class="home" href="index.html">🏠 Home / Contents</a>
+    <a href="04-stages-loading.html">Next → Part 4: Stages & Loading</a>
+  </nav>
+
+  <div class="section">
+    <h2>1. The Object Hierarchy</h2>
+    <p>Everything in Snowflake lives in a clean container hierarchy. The fully-qualified name of any object is
+       <code>database.schema.object</code>.</p>
+    <div class="diagram">
+      <div class="title">▶ Account → Database → Schema → Objects (animated drill-down)</div>
+      <div class="apipe">
+        <div class="anode e">🏢 Account</div>
+        <div class="alink"><span class="apkt"></span></div>
+        <div class="anode d">🗄️ Database<small>logical grouping</small></div>
+        <div class="alink"><span class="apkt"></span><span class="apkt k2"></span></div>
+        <div class="anode b">📂 Schema<small>groups related objects</small></div>
+        <div class="alink"><span class="apkt"></span></div>
+        <div class="anode c">📋 Tables, Views,<br/>Stages, File Formats…</div>
+      </div>
+    </div>
+    <pre><code><span class="kw">CREATE DATABASE</span> sales_db;
+<span class="kw">CREATE SCHEMA</span>  sales_db.raw;
+
+<span class="cm">-- every new database automatically gets two schemas:</span>
+<span class="cm">--   PUBLIC        -> default schema for your objects</span>
+<span class="cm">--   INFORMATION_SCHEMA -> read-only metadata/views about the DB</span>
+
+<span class="kw">SHOW DATABASES;</span>
+<span class="kw">SHOW SCHEMAS IN DATABASE</span> sales_db;</code></pre>
+  </div>
+
+  <div class="section">
+    <h2>2. Table Types</h2>
+    <p>The table type controls <b>how long data lives</b>, whether it's protected by <b>Time Travel</b> and
+       <b>Fail-safe</b>, and therefore its <b>storage cost</b>.</p>
+    <table>
+      <thead><tr><th>Type</th><th>Visibility / lifespan</th><th>Time Travel</th><th>Fail-safe</th><th>Use for</th></tr></thead>
+      <tbody>
+        <tr><td><b>Permanent</b><br/>(default)</td><td>Persists until dropped; visible to all sessions.</td><td>0–90 days*</td><td>✅ 7 days</td><td>Production data you must protect.</td></tr>
+        <tr><td><b>Transient</b></td><td>Persists until dropped, but <b>no Fail-safe</b>.</td><td>0–1 day</td><td>❌ none</td><td>Large, reproducible data where you want lower storage cost.</td></tr>
+        <tr><td><b>Temporary</b></td><td>Exists only for the <b>current session</b>; auto-dropped on logout.</td><td>0–1 day (within session)</td><td>❌ none</td><td>Scratch / staging data, ETL intermediates.</td></tr>
+        <tr><td><b>External</b></td><td>Data stays in an external stage (e.g. S3); Snowflake only reads it.</td><td>❌</td><td>❌</td><td>Querying data in a data lake without loading it.</td></tr>
+      </tbody>
+    </table>
+    <p style="font-size:12px;color:var(--text-dim);">* Up to 90 days requires Enterprise edition; Standard is up to 1 day.</p>
+    <pre><code><span class="kw">CREATE TABLE</span> customer (id <span class="kw">INT</span>, name <span class="kw">STRING</span>);            <span class="cm">-- permanent</span>
+<span class="kw">CREATE TRANSIENT TABLE</span> stg_customer (id <span class="kw">INT</span>, name <span class="kw">STRING</span>);   <span class="cm">-- no fail-safe</span>
+<span class="kw">CREATE TEMPORARY TABLE</span> tmp_customer (id <span class="kw">INT</span>, name <span class="kw">STRING</span>);   <span class="cm">-- session only</span></code></pre>
+    <div class="alert info"><strong>External tables</strong> are special: the data physically remains in your cloud
+      storage (an external stage). Snowflake stores only metadata and reads the files on demand — handy for a data
+      lake, but slower than native tables and not protected by Time Travel/Fail-safe.</div>
+    <div class="alert warn"><strong>Cost tip:</strong> Fail-safe storage is billed. For huge staging/landing tables
+      that you can always re-create from source, use <b>transient</b> tables to avoid paying for 7 days of Fail-safe.</div>
+  </div>
+
+  <div class="section">
+    <h2>3. View Types</h2>
+    <p>A <strong>view</strong> is a saved SQL query that behaves like a virtual table. It stores no data (except a
+       materialized view) — it runs its underlying query when accessed.</p>
+
+    <h3>① Standard (non-materialized) view</h3>
+    <ul class="bullet">
+      <li>Just a stored query. <b>No data stored</b>; runs every time it's queried (always fresh).</li>
+      <li>Use to simplify complex joins, rename/format columns, or expose a subset of data.</li>
+    </ul>
+    <pre><code><span class="kw">CREATE VIEW</span> active_customers <span class="kw">AS</span>
+  <span class="kw">SELECT</span> id, name <span class="kw">FROM</span> customer <span class="kw">WHERE</span> status = <span class="st">'ACTIVE'</span>;</code></pre>
+
+    <h3>② Secure view</h3>
+    <ul class="bullet">
+      <li>Like a standard view but the <b>definition is hidden</b> and the query optimizer won't expose internal
+          details — protects sensitive logic and underlying data.</li>
+      <li>Recommended whenever a view is used for <b>data privacy</b> or <b>secure data sharing</b>.</li>
+      <li>Trade-off: some optimizations are skipped, so it can be a bit slower.</li>
+    </ul>
+    <pre><code><span class="kw">CREATE SECURE VIEW</span> masked_customers <span class="kw">AS</span>
+  <span class="kw">SELECT</span> id, name <span class="kw">FROM</span> customer;</code></pre>
+
+    <h3>③ Materialized view</h3>
+    <ul class="bullet">
+      <li><b>Stores the precomputed results</b> physically and Snowflake keeps them <b>auto-refreshed</b> as the base
+          table changes.</li>
+      <li>Great for expensive aggregations queried often — fast reads at the cost of storage + maintenance compute.</li>
+      <li><b>Enterprise edition only.</b> Has restrictions (e.g., single table, no joins, limited functions).</li>
+    </ul>
+    <pre><code><span class="kw">CREATE MATERIALIZED VIEW</span> daily_sales <span class="kw">AS</span>
+  <span class="kw">SELECT</span> sale_date, <span class="kw">SUM</span>(amount) <span class="kw">AS</span> total
+  <span class="kw">FROM</span> sales
+  <span class="kw">GROUP BY</span> sale_date;</code></pre>
+
+    <h3>Quick comparison</h3>
+    <table>
+      <thead><tr><th>View type</th><th>Stores data?</th><th>Always fresh?</th><th>Best for</th></tr></thead>
+      <tbody>
+        <tr><td><b>Standard</b></td><td>No</td><td>Yes (recomputed)</td><td>Simplifying queries; lightweight abstraction.</td></tr>
+        <tr><td><b>Secure</b></td><td>No</td><td>Yes</td><td>Hiding logic; data privacy &amp; secure sharing.</td></tr>
+        <tr><td><b>Materialized</b></td><td>Yes</td><td>Auto-maintained</td><td>Expensive aggregations queried frequently (Enterprise).</td></tr>
+      </tbody>
+    </table>
+    <div class="alert success"><strong>Rule of thumb:</strong> default to a <b>standard view</b>; switch to
+      <b>secure</b> when privacy/sharing matters; use a <b>materialized view</b> only when a heavy query is run
+      often enough that the storage + refresh cost pays off.</div>
+  </div>
+
+  <nav class="pager">
+    <a class="home" href="index.html">🏠 Home / Contents</a>
+    <a href="04-stages-loading.html">Next → Part 4: Stages & Loading</a>
+  </nav>
+
+  <footer>Part 3 of 6 · Learn Snowflake in 2 Hours — study notes</footer>
+</div>
+</body>
+</html>

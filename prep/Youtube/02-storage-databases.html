@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Part 2 — Storage, Databases & Data Modeling | Data Engineering Notes</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #0b1020; --bg-2: #131a2f; --bg-3: #1f2a44; --card: #131a2f;
+    --text: #e6edf6; --text-dim: #93a4bf; --accent: #60a5fa; --accent-2: #c084fc;
+    --accent-3: #34d399; --success: #22c55e; --warn: #fbbf24; --danger: #f87171;
+    --border: #2a3553; --code-bg: #0a0f1e;
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: linear-gradient(135deg, #0b1020 0%, #1a0f2e 100%); color: var(--text); line-height: 1.65; min-height: 100vh; }
+  .container { max-width: 1100px; margin: 0 auto; padding: 24px; }
+  header { background: linear-gradient(135deg, #2563eb 0%, #7c3aed 50%, #db2777 100%);
+    border-radius: 16px; padding: 30px; margin-bottom: 18px; box-shadow: 0 20px 60px rgba(124,58,237,0.25); }
+  header .crumb { font-size: 12px; opacity: 0.85; text-transform: uppercase; letter-spacing: 1px; }
+  header h1 { font-size: 30px; margin: 6px 0 8px 0; }
+  header p { opacity: 0.92; font-size: 15px; max-width: 760px; }
+  nav.pager { display: flex; justify-content: space-between; gap: 10px; margin: 14px 0 22px 0; flex-wrap: wrap; }
+  nav.pager a { text-decoration: none; background: var(--card); border: 1px solid var(--border);
+    color: var(--text); padding: 10px 16px; border-radius: 10px; font-size: 13px; font-weight: 600; transition: all 0.2s; }
+  nav.pager a:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+  nav.pager a.home { border-color: var(--accent-2); }
+
+  .section { background: var(--card); border-radius: 12px; padding: 24px; margin-bottom: 18px; border: 1px solid var(--border); }
+  .section h2 { color: var(--accent); font-size: 22px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+  .section h3 { color: var(--accent-2); font-size: 18px; margin: 20px 0 10px 0; }
+  .section h4 { color: var(--accent-3); font-size: 15px; margin: 14px 0 8px 0; }
+  .section p { color: var(--text); margin-bottom: 10px; }
+  ul.bullet { padding-left: 22px; color: var(--text); font-size: 14.5px; margin: 6px 0 12px 0; }
+  ul.bullet li { padding: 4px 0; }
+  ul.bullet li b { color: var(--accent-3); }
+
+  table { width: 100%; border-collapse: collapse; background: var(--bg); border-radius: 8px; overflow: hidden; margin: 14px 0; font-size: 13.5px; }
+  th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { background: var(--bg-3); color: var(--accent); text-transform: uppercase; font-size: 11px; letter-spacing: 1px; }
+  tr:last-child td { border-bottom: none; }
+
+  .alert { padding: 12px 14px; border-radius: 8px; margin: 14px 0; border-left: 4px solid; font-size: 14px; }
+  .alert.warn { background: rgba(251,191,36,0.1); border-color: var(--warn); }
+  .alert.danger { background: rgba(248,113,113,0.1); border-color: var(--danger); }
+  .alert.success { background: rgba(34,197,94,0.1); border-color: var(--success); }
+  .alert.info { background: rgba(96,165,250,0.1); border-color: var(--accent); }
+  .alert strong { color: var(--text); }
+
+  .diagram { background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 22px; margin: 16px 0; overflow-x: auto; }
+  .diagram .title { text-align: center; color: var(--text-dim); font-size: 12px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 16px; }
+  .flow { display: flex; align-items: stretch; justify-content: center; flex-wrap: wrap; }
+  .flow-box { background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; min-width: 130px; text-align: center; font-size: 13px; font-weight: 600; display: flex; flex-direction: column; justify-content: center; }
+  .flow-box small { display: block; color: var(--text-dim); font-weight: 400; font-size: 11px; margin-top: 4px; }
+  .flow-arrow { display: flex; align-items: center; padding: 0 8px; color: var(--accent); font-size: 22px; font-weight: 700; }
+
+  /* mini ER table */
+  .ertables { display: flex; gap: 18px; flex-wrap: wrap; justify-content: center; }
+  .ertable { background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; min-width: 170px; overflow: hidden; }
+  .ertable .head { background: var(--accent); color: #06122a; font-weight: 700; padding: 8px 12px; font-size: 13px; }
+  .ertable ul { list-style: none; padding: 6px 0; }
+  .ertable li { padding: 4px 12px; font-size: 12.5px; color: var(--text); border-bottom: 1px dashed var(--border); }
+  .ertable li:last-child { border-bottom: none; }
+  .ertable li.pk { color: var(--warn); font-weight: 700; }
+  .ertable li.fk { color: var(--accent-2); }
+
+  /* row vs column visual */
+  .rc-wrap { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+  .rc { background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
+  .rc h4 { margin-bottom: 8px; }
+  .rc-cells { display: flex; flex-wrap: wrap; gap: 4px; }
+  .cell { font-size: 11px; padding: 4px 7px; border-radius: 5px; background: var(--bg); border: 1px solid var(--border); }
+  .cell.id { border-color: var(--accent); }
+  .cell.nm { border-color: var(--accent-2); }
+  .cell.pay { border-color: var(--accent-3); }
+
+  :not(pre) > code { background: var(--bg-3); padding: 2px 6px; border-radius: 4px; font-size: 13px; color: var(--accent-3); font-family: "Consolas","Monaco",monospace; }
+  pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; padding: 14px; overflow-x: auto; margin: 12px 0; font-size: 13px; }
+  pre code { color: #cdd9ee; font-family: "Consolas","Monaco",monospace; }
+  footer { text-align: center; margin-top: 30px; padding: 20px; color: var(--text-dim); font-size: 13px; }
+  @media (max-width: 640px) { header h1 { font-size: 23px; } .container { padding: 12px; } }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <div class="crumb">Part 2 of 6</div>
+    <h1>Storage, Databases & Data Modeling</h1>
+    <p>How data is generated and stored, what DBMS and SQL are, relational data modeling, NoSQL, and the
+       crucial OLTP vs OLAP distinction.</p>
+  </header>
+
+  <nav class="pager">
+    <a class="home" href="index.html">🏠 Home</a>
+    <a href="01-fundamentals.html">← Part 1</a>
+    <a href="03-etl-warehouse.html">Next → Part 3: ETL & Warehouse</a>
+  </nav>
+
+  <div class="section">
+    <h2>1. Data Generation & Storage</h2>
+    <p>Data is generated from many sources, then stored in storage systems.</p>
+    <div class="diagram">
+      <div class="title">Sources → Storage</div>
+      <div class="flow">
+        <div class="flow-box">Sources<small>Transactional (RDBMS), IoT devices, web/social media, logs &amp; machine data, APIs / 3rd-party</small></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-box">Storage<small>RDBMS, NoSQL, Data Warehouse, Object Storage (Data Lake)</small></div>
+      </div>
+    </div>
+    <div class="alert info"><strong>RDBMS is tricky:</strong> it's both <em>generation</em> (connected to the app) and <em>storage</em> (data lives there). From the DE point of view, treat RDBMS as a generation source; from the app point of view, it's a storage layer.</div>
+    <p><b>Object storage</b> = S3, Google Cloud Storage, Azure Blob Storage. When used to dump raw data, it's called a <b>data lake</b> (covered in Part 3).</p>
+  </div>
+
+  <div class="section">
+    <h2>2. DBMS & SQL</h2>
+    <p>A <strong>DBMS (Database Management System)</strong> is built to store data in a structured way so you can
+       query it fast. You <em>could</em> use Excel/Google Sheets, but finding one record in millions/billions of
+       rows would be impossible — DBMS is designed for exactly this workload.</p>
+    <h4>Popular DBMS</h4>
+    <ul class="bullet">
+      <li><b>PostgreSQL</b> — open source, easiest to start</li>
+      <li><b>MySQL</b> — open source</li>
+      <li><b>Microsoft SQL Server, Oracle</b> — enterprise-level</li>
+    </ul>
+    <h4>SQL — Structured Query Language</h4>
+    <p>The language used to communicate with a database. Core operations (CRUD):</p>
+    <pre><code>SELECT * FROM Student WHERE id = 2;          -- read
+INSERT INTO Student VALUES (3, 'Akash', 25, 'Delhi');  -- create
+UPDATE Student SET age = 27 WHERE id = 1;     -- update
+DELETE FROM Student WHERE id = 3;             -- delete</code></pre>
+    <p>Data lives in <b>tables</b> with column names and rows of actual data:</p>
+    <table>
+      <thead><tr><th>id</th><th>name</th><th>age</th><th>city</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>D</td><td>26</td><td>Mumbai</td></tr>
+        <tr><td>2</td><td>Akash</td><td>25</td><td>Delhi</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <h2>3. Data Modeling (Relational)</h2>
+    <p><strong>Data modeling</strong> is a <em>visual representation of how your data looks</em> and is stored in
+       an RDBMS. Imagine you're building Amazon from scratch. What would you store?</p>
+    <p>Tables: <b>Orders, Users, Products, Payments, Shipping, Sellers</b> (real Amazon has hundreds).</p>
+    <div class="diagram">
+      <div class="title">E-commerce data model (relationships via keys)</div>
+      <div class="ertables">
+        <div class="ertable">
+          <div class="head">Users</div>
+          <ul><li class="pk">user_id (PK)</li><li>name</li><li>age</li><li>address</li></ul>
+        </div>
+        <div class="ertable">
+          <div class="head">Orders</div>
+          <ul><li class="pk">order_id (PK)</li><li>order_name</li><li>order_date</li><li class="fk">user_id (FK)</li><li class="fk">product_id (FK)</li><li class="fk">payment_id (FK)</li></ul>
+        </div>
+        <div class="ertable">
+          <div class="head">Products</div>
+          <ul><li class="pk">product_id (PK)</li><li>name, category</li><li>description, weight</li><li>quantity, unit_size</li><li class="fk">seller_id (FK)</li></ul>
+        </div>
+        <div class="ertable">
+          <div class="head">Payments</div>
+          <ul><li class="pk">payment_id (PK)</li><li>amount</li><li>payment_date</li></ul>
+        </div>
+        <div class="ertable">
+          <div class="head">Shipping</div>
+          <ul><li class="pk">shipping_id (PK)</li><li>shipping_date</li><li class="fk">order_id (FK)</li></ul>
+        </div>
+        <div class="ertable">
+          <div class="head">Sellers</div>
+          <ul><li class="pk">seller_id (PK)</li><li>seller_name</li><li>age, location</li></ul>
+        </div>
+      </div>
+    </div>
+    <ul class="bullet">
+      <li><b>Primary Key (PK)</b> — uniquely identifies each row (e.g., <code>product_id</code>).</li>
+      <li><b>Foreign Key (FK)</b> — links one table to another (e.g., Orders.user_id → Users.user_id).</li>
+      <li>A user orders a product → Orders holds <code>user_id</code> + <code>product_id</code>; Shipping holds <code>order_id</code>; Products holds <code>seller_id</code>.</li>
+    </ul>
+    <p>Every column has a <b>schema / data type</b> (e.g., <code>order_id INT</code>, <code>order_name STRING</code>,
+       <code>order_date DATE</code>). Because it's strictly structured and queried with SQL, this is a
+       <strong>SQL / relational database table</strong>. Tools like <b>draw.io</b> are used to draw real models.</p>
+  </div>
+
+  <div class="section">
+    <h2>4. NoSQL Databases</h2>
+    <p>SQL stores data in rows & columns. <strong>NoSQL</strong> stores data in other formats for specific workloads.</p>
+    <table>
+      <thead><tr><th>NoSQL type</th><th>Idea</th></tr></thead>
+      <tbody>
+        <tr><td><b>Key-Value</b></td><td>Like JSON/Python dict: <code>{id:1, name:"D", age:26}</code>. Search by key.</td></tr>
+        <tr><td><b>Column family / Wide column</b></td><td>Data stored within columns (e.g., Cassandra).</td></tr>
+        <tr><td><b>Document</b></td><td>Document-oriented storage (e.g., MongoDB).</td></tr>
+        <tr><td><b>Graph</b></td><td>Used for representing relationships/networks.</td></tr>
+      </tbody>
+    </table>
+    <div class="alert info"><strong>Focus note:</strong> In the real world you'll mostly work with <b>SQL databases</b> and <b>data warehouses</b>, because most data is stored in SQL systems. NoSQL is good-to-know for specific use cases.</div>
+  </div>
+
+  <div class="section">
+    <h2>5. SQL vs NoSQL</h2>
+    <table>
+      <thead><tr><th></th><th>SQL</th><th>NoSQL</th></tr></thead>
+      <tbody>
+        <tr><td><b>Structure</b></td><td>Relational — tables linked by PK/FK</td><td>Graph, wide-column, document, key-value</td></tr>
+        <tr><td><b>Schema</b></td><td>Fixed, predefined</td><td>Flexible</td></tr>
+        <tr><td><b>Two SQL families</b></td><td>Relational (OLTP) &amp; Analytical (OLAP / data warehouse)</td><td>—</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <h2>6. OLTP vs OLAP (Row vs Column)</h2>
+    <p>The two data-processing systems a data engineer constantly juggles between.</p>
+    <div class="diagram">
+      <div class="title">As a Data Engineer, you move data OLTP → (transform) → OLAP</div>
+      <div class="flow">
+        <div class="flow-box" style="border-top:3px solid var(--accent);">OLTP<small>Online Transactional Processing<br/>Relational DB</small></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-box" style="border-top:3px solid var(--warn);">Transformation</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-box" style="border-top:3px solid var(--danger);">OLAP<small>Online Analytical Processing<br/>Data Warehouse</small></div>
+      </div>
+    </div>
+
+    <h3>OLTP — for transactions</h3>
+    <ul class="bullet">
+      <li>Handles individual <b>transactions</b>: send money, buy a product, return an item.</li>
+      <li>Optimized for fast <b>CRUD</b> (Create, Read, Update, Delete) at the row level.</li>
+      <li><b>Row-based</b> storage — every record stored together as a row.</li>
+    </ul>
+
+    <h3>OLAP — for analysis</h3>
+    <ul class="bullet">
+      <li>Built for <b>analytical</b> workloads — e.g., analyze the last 5 years of data.</li>
+      <li><b>Column-based</b> storage — each column stored together.</li>
+    </ul>
+
+    <h3>Why storage layout matters</h3>
+    <p>Run <code>SELECT SUM(payment) FROM users;</code> on each system:</p>
+    <div class="rc-wrap">
+      <div class="rc">
+        <h4 style="color:var(--accent);">OLTP — Row-based ❌ slow for analytics</h4>
+        <p style="font-size:12.5px; color:var(--text-dim);">Stored row by row. To sum payment, it must scan every full row (id, name, age, payment) then pick one column — wasteful.</p>
+        <div class="rc-cells">
+          <span class="cell id">id</span><span class="cell nm">name</span><span class="cell">age</span><span class="cell pay">pay</span>
+          <span class="cell id">id</span><span class="cell nm">name</span><span class="cell">age</span><span class="cell pay">pay</span>
+          <span class="cell id">id</span><span class="cell nm">name</span><span class="cell">age</span><span class="cell pay">pay</span>
+        </div>
+      </div>
+      <div class="rc">
+        <h4 style="color:var(--accent-3);">OLAP — Column-based ✅ fast for analytics</h4>
+        <p style="font-size:12.5px; color:var(--text-dim);">Stored column by column. To sum payment, it goes straight to the payment column — no wasted scanning.</p>
+        <div class="rc-cells">
+          <span class="cell id">id</span><span class="cell id">id</span><span class="cell id">id</span>
+          <span class="cell nm">name</span><span class="cell nm">name</span><span class="cell nm">name</span>
+          <span class="cell pay">pay</span><span class="cell pay">pay</span><span class="cell pay">pay</span>
+        </div>
+      </div>
+    </div>
+    <table>
+      <thead><tr><th></th><th>OLTP</th><th>OLAP</th></tr></thead>
+      <tbody>
+        <tr><td><b>Full name</b></td><td>Online Transactional Processing</td><td>Online Analytical Processing</td></tr>
+        <tr><td><b>Storage</b></td><td>Row-based</td><td>Column-based</td></tr>
+        <tr><td><b>Best for</b></td><td>Fast inserts/updates/reads at row level</td><td>Aggregations & analysis over huge data</td></tr>
+        <tr><td><b>Example system</b></td><td>Relational DB (Postgres, MySQL)</td><td>Data warehouse (Snowflake, BigQuery, Redshift)</td></tr>
+      </tbody>
+    </table>
+    <div class="alert success"><strong>Neither is "better":</strong> both have their place. OLTP is great for row-level transactions; OLAP is great for analysis. DE = take data from OLTP, transform, load into OLAP.</div>
+  </div>
+
+  <nav class="pager">
+    <a class="home" href="index.html">🏠 Home</a>
+    <a href="01-fundamentals.html">← Part 1</a>
+    <a href="03-etl-warehouse.html">Next → Part 3: ETL & Warehouse</a>
+  </nav>
+
+  <footer>Part 2 of 6 · Fundamentals of Data Engineering Masterclass notes</footer>
+</div>
+</body>
+</html>

@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Python for Data Engineers — Masterclass Notes</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #0b1020; --bg-2: #131a2f; --bg-3: #1f2a44; --card: #131a2f;
+    --text: #e6edf6; --text-dim: #93a4bf; --accent: #60a5fa; --accent-2: #c084fc;
+    --accent-3: #34d399; --success: #22c55e; --warn: #fbbf24; --danger: #f87171;
+    --border: #2a3553; --code-bg: #0a0f1e; --py: #ffd43b; --py-blue: #4584b6;
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: linear-gradient(135deg, #0b1020 0%, #1a0f2e 100%); color: var(--text);
+    line-height: 1.65; min-height: 100vh; }
+  .container { max-width: 1200px; margin: 0 auto; padding: 24px; }
+  header { background: linear-gradient(135deg, #4584b6 0%, #ffd43b 130%);
+    border-radius: 16px; padding: 36px; margin-bottom: 24px; color: #0b1020;
+    box-shadow: 0 20px 60px rgba(69, 132, 182, 0.25); }
+  header h1 { font-size: 34px; margin-bottom: 10px; }
+  header p { opacity: 0.95; font-size: 17px; max-width: 820px; }
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 16px; margin-top: 26px; }
+  .stat { background: rgba(0,0,0,0.18); backdrop-filter: blur(10px); padding: 14px 16px;
+    border-radius: 12px; border: 1px solid rgba(255,255,255,0.25); }
+  .stat-label { font-size: 11px; opacity: 0.8; text-transform: uppercase; letter-spacing: 1px; }
+  .stat-value { font-size: 22px; font-weight: 700; margin-top: 4px; }
+
+  .section { background: var(--card); border-radius: 12px; padding: 24px; margin-bottom: 18px;
+    border: 1px solid var(--border); }
+  .section h2 { color: var(--accent); font-size: 22px; margin-bottom: 12px; padding-bottom: 10px;
+    border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
+  .section p { color: var(--text); margin-bottom: 10px; }
+
+  .card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin-top: 12px; }
+  a.nav-card { display: block; text-decoration: none; background: var(--bg); border: 1px solid var(--border);
+    border-left: 4px solid var(--py); border-radius: 12px; padding: 18px; transition: all 0.2s; }
+  a.nav-card:hover { transform: translateY(-3px); border-left-color: var(--accent-2);
+    box-shadow: 0 10px 30px rgba(96,165,250,0.15); }
+  a.nav-card .num { font-size: 12px; color: var(--accent-3); font-weight: 700; letter-spacing: 1px; }
+  a.nav-card h4 { color: var(--text); font-size: 17px; margin: 6px 0 8px 0; }
+  a.nav-card p { color: var(--text-dim); font-size: 13px; margin: 0; }
+
+  .diagram { background: var(--bg); border: 1px solid var(--border); border-radius: 12px;
+    padding: 22px; margin: 16px 0; overflow-x: auto; }
+  .diagram .title { text-align: center; color: var(--text-dim); font-size: 12px;
+    text-transform: uppercase; letter-spacing: 1px; margin-bottom: 16px; }
+  .flow { display: flex; align-items: stretch; justify-content: center; gap: 0; flex-wrap: wrap; }
+  .flow-box { background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px 14px; min-width: 120px; text-align: center; font-size: 13px; font-weight: 600;
+    display: flex; flex-direction: column; justify-content: center; }
+  .flow-box small { display: block; color: var(--text-dim); font-weight: 400; font-size: 11px; margin-top: 4px; }
+  .flow-arrow { display: flex; align-items: center; padding: 0 8px; color: var(--accent); font-size: 22px; font-weight: 700; }
+  .flow-box.gen { border-top: 3px solid var(--accent); }
+  .flow-box.ing { border-top: 3px solid var(--accent-2); }
+  .flow-box.sto { border-top: 3px solid var(--accent-3); }
+  .flow-box.tra { border-top: 3px solid var(--warn); }
+  .flow-box.ser { border-top: 3px solid var(--danger); }
+
+  .alert { padding: 12px 14px; border-radius: 8px; margin: 12px 0; border-left: 4px solid; font-size: 14px; }
+  .alert.info { background: rgba(96,165,250,0.1); border-color: var(--accent); }
+  .alert.success { background: rgba(34,197,94,0.1); border-color: var(--success); }
+  .alert strong { color: var(--text); }
+  footer { text-align: center; margin-top: 40px; padding: 20px; color: var(--text-dim); font-size: 13px; }
+  @media (max-width: 640px) { header h1 { font-size: 24px; } .container { padding: 12px; } }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <h1>&#128013; Python for Data Engineers</h1>
+    <p>Complete study notes from the 5.5-hour Python masterclass by Ansh Lamba &mdash; from
+       <code>print("hello")</code> all the way to OOP, inheritance, multi-threading and API calls.
+       It deliberately covers only the Python that actually matters for <strong>data engineering</strong>,
+       reorganised into logical sections so you can revise fast.</p>
+    <div class="stats-grid">
+      <div class="stat"><div class="stat-label">Duration</div><div class="stat-value">~5.5 hrs</div></div>
+      <div class="stat"><div class="stat-label">Note Parts</div><div class="stat-value">8</div></div>
+      <div class="stat"><div class="stat-label">Core Topics</div><div class="stat-value">40+</div></div>
+      <div class="stat"><div class="stat-label">Level</div><div class="stat-value">Zero &rarr; Pro</div></div>
+    </div>
+  </header>
+
+  <div class="section">
+    <h2>&#129517; The Learning Path</h2>
+    <p>The course builds up exponentially: master the fundamentals, then data structures, then the three
+       pillars that show up in every real pipeline &mdash; <strong>functions</strong>, <strong>OOP</strong>,
+       and <strong>concurrency / APIs</strong>.</p>
+    <div class="diagram">
+      <div class="title">From basics to the data-engineering toolkit</div>
+      <div class="flow">
+        <div class="flow-box gen">Basics<small>print, strings, vars</small></div>
+        <div class="flow-arrow">&#8594;</div>
+        <div class="flow-box ing">Control Flow<small>if / loops</small></div>
+        <div class="flow-arrow">&#8594;</div>
+        <div class="flow-box sto">Data Structures<small>list, dict, set</small></div>
+        <div class="flow-arrow">&#8594;</div>
+        <div class="flow-box tra">Functions<small>lambda, map</small></div>
+        <div class="flow-arrow">&#8594;</div>
+        <div class="flow-box ser">OOP &amp; Concurrency<small>classes, threads, APIs</small></div>
+      </div>
+    </div>
+    <div class="alert info">
+      <strong>How to use these notes:</strong> read the parts in order. Each one teaches the concept with
+      the speaker's own analogies, adds diagrams and tables, ties everything back to data engineering, and
+      links to the next part.
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>&#128218; Notes &mdash; Read in Order</h2>
+    <p>Split into 8 parts so each topic gets room to breathe.</p>
+    <div class="card-grid">
+      <a class="nav-card" href="01-python-basics.html">
+        <div class="num">PART 1</div>
+        <h4>Python Basics &amp; Strings</h4>
+        <p>How Python runs (bytecode &amp; the PVM), <code>print</code>, strings, quotes, escaping, variables, comments, type casting, indexing &amp; slicing.</p>
+      </a>
+      <a class="nav-card" href="02-control-flow.html">
+        <div class="num">PART 2</div>
+        <h4>Conditionals &amp; Loops</h4>
+        <p>if / elif / else, nested conditions, <code>==</code> vs <code>=</code>, for loops, <code>range</code>, nested loops, <code>break</code> / <code>continue</code>, while loops.</p>
+      </a>
+      <a class="nav-card" href="03-data-structures.html">
+        <div class="num">PART 3</div>
+        <h4>Data Structures</h4>
+        <p>Lists (slicing, negative indexing, mutability), list comprehension, dictionaries, sets (union/intersection), and tuples.</p>
+      </a>
+      <a class="nav-card" href="04-functions.html">
+        <div class="num">PART 4</div>
+        <h4>Functions, Lambda &amp; map/filter/reduce</h4>
+        <p><code>def</code>, parameters, return vs print, default values, <code>*args</code> &amp; <code>**kwargs</code>, lambda functions, and map / filter / reduce.</p>
+      </a>
+      <a class="nav-card" href="05-exceptions-extras.html">
+        <div class="num">PART 5</div>
+        <h4>Exceptions &amp; Power-ups</h4>
+        <p>try / except / finally, raising custom errors, f-strings, <code>enumerate</code>, and global vs local variables.</p>
+      </a>
+      <a class="nav-card" href="06-oop.html">
+        <div class="num">PART 6</div>
+        <h4>Object-Oriented Programming</h4>
+        <p>Classes &amp; objects, <code>self</code>, the <code>__init__</code> constructor, class vs instance attributes, static &amp; class methods, getters &amp; setters.</p>
+      </a>
+      <a class="nav-card" href="07-inheritance.html">
+        <div class="num">PART 7</div>
+        <h4>Inheritance</h4>
+        <p>Single, multiple &amp; multi-level inheritance, passing constructor attributes, <code>super()</code>, and method priority (overriding).</p>
+      </a>
+      <a class="nav-card" href="08-concurrency-modules.html">
+        <div class="num">PART 8</div>
+        <h4>Multi-threading, Requests &amp; OS</h4>
+        <p>Parallel processing with <code>ThreadPoolExecutor</code> (map vs submit), the <code>requests</code> module for APIs, and the <code>os</code> module.</p>
+      </a>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>&#127919; Why Python for Data Engineering?</h2>
+    <p>Python is the #1 language for data engineering &mdash; not because it's the fastest, but because it's
+       readable, reliable, and integrates with every modern data &amp; AI tool. You don't need to memorise
+       every function; you need the <em>concepts</em> so you can look anything up and apply it.</p>
+    <div class="alert success">
+      <strong>The golden rule of this course:</strong> "You are a data engineer, not a web developer.
+      Learn Python <em>smartly</em> &mdash; the non-negotiables &mdash; and skip what you don't need."
+    </div>
+  </div>
+
+  <footer>
+    Notes generated from the "Python Full Course For Data Engineers [6+ HOURS]" masterclass by Ansh Lamba ·
+    Source video: youtube.com/watch?v=ZvU7lupoXQE
+  </footer>
+</div>
+</body>
+</html>

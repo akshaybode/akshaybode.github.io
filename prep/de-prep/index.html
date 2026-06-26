@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Data Engineer Prep | Snowflake + dbt + Airflow (1-Month Sprint)</title>
+<style>
+  :root{
+    --bg:#0b1020; --bg2:#101a33; --panel:#131d36; --panel2:#1a2745;
+    --text:#e6edf6; --muted:#9fb0c7; --line:#26365c;
+    --accent:#38bdf8; --accent2:#22d3ee; --green:#34d399; --amber:#fbbf24;
+    --red:#f87171; --purple:#a78bfa; --code:#0a0f1e; --sf:#29b5e8;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0; font-family:"Segoe UI",Roboto,system-ui,Arial,sans-serif;
+    background:linear-gradient(180deg,#090e1c,#0b1020); color:var(--text);
+    line-height:1.55; font-size:15px;}
+  a{color:var(--accent2); text-decoration:none}
+  a:hover{text-decoration:underline}
+  .wrap{max-width:1080px; margin:0 auto; padding:30px 22px 90px}
+  header.hero{
+    background:radial-gradient(900px 320px at 0% 0%,rgba(56,189,248,.20),transparent),
+               radial-gradient(700px 300px at 100% 0%,rgba(167,139,250,.14),transparent),
+               var(--panel);
+    border:1px solid var(--line); border-radius:18px; padding:30px 30px; margin-bottom:24px;}
+  header.hero h1{margin:0 0 8px; font-size:28px}
+  header.hero p{margin:5px 0; color:var(--muted)}
+  .pills{margin-top:16px; display:flex; gap:8px; flex-wrap:wrap}
+  .pill{background:var(--panel2); border:1px solid var(--line); padding:6px 12px;
+    border-radius:999px; font-size:12.5px}
+  .pill b{color:var(--accent2)}
+  .pill.sf b{color:var(--sf)}
+  section{margin:30px 0; scroll-margin-top:18px}
+  h2.sec{font-size:20px; margin:0 0 6px; display:flex; align-items:center; gap:10px}
+  h2.sec .tag{font-size:11px; padding:3px 9px; border-radius:6px; background:var(--accent); color:#04122e; font-weight:700}
+  .sec-sub{color:var(--muted); margin:0 0 16px; font-size:13.5px}
+  .card{background:var(--panel); border:1px solid var(--line); border-radius:13px; padding:18px 20px; margin:14px 0}
+  .grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:14px}
+  .tcard{display:block; background:var(--panel); border:1px solid var(--line);
+    border-radius:12px; padding:16px; transition:.15s}
+  .tcard:hover{border-color:var(--accent); transform:translateY(-2px); text-decoration:none}
+  .tcard .n{font-size:11px; color:var(--muted); letter-spacing:.5px}
+  .tcard .t{font-size:15.5px; font-weight:600; color:var(--text); margin-top:5px}
+  .tcard .d{font-size:12.5px; color:var(--muted); margin-top:7px}
+  table{width:100%; border-collapse:collapse; margin:10px 0; font-size:13.5px}
+  th,td{border:1px solid var(--line); padding:9px 11px; text-align:left; vertical-align:top}
+  th{background:var(--panel2); color:#dbe7ff}
+  tr:nth-child(even) td{background:rgba(255,255,255,.015)}
+  .week{display:grid; grid-template-columns:90px 1fr; gap:0; border:1px solid var(--line);
+    border-radius:12px; overflow:hidden; margin:12px 0}
+  .week .wk{background:var(--panel2); padding:16px; font-weight:700; color:var(--accent2);
+    display:flex; align-items:center; justify-content:center; text-align:center; font-size:14px}
+  .week .body{padding:14px 18px; background:var(--panel)}
+  .week .body b{color:#dbe7ff}
+  ul.tight{margin:8px 0; padding-left:20px}
+  ul.tight li{margin:5px 0}
+  .badge{display:inline-block; font-size:11px; padding:2px 8px; border-radius:999px;
+    background:rgba(52,211,153,.14); color:var(--green); border:1px solid rgba(52,211,153,.3); margin-left:8px}
+  .badge.red{background:rgba(248,113,113,.13); color:var(--red); border-color:rgba(248,113,113,.3)}
+  .badge.amber{background:rgba(251,191,36,.13); color:var(--amber); border-color:rgba(251,191,36,.3)}
+  .note{border-left:3px solid var(--amber); background:rgba(251,191,36,.06);
+    padding:12px 16px; border-radius:8px; margin:14px 0; color:#f3e6c2; font-size:13.5px}
+  .strength{border-left:3px solid var(--green); background:rgba(52,211,153,.06);
+    padding:12px 16px; border-radius:8px; margin:14px 0; font-size:13.5px}
+  footer{margin-top:40px; color:var(--muted); font-size:12.5px; text-align:center}
+  .kicker{font-size:12px; letter-spacing:1.5px; text-transform:uppercase; color:var(--accent); font-weight:700}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <div class="kicker">Career Switch · 1-Month Sprint</div>
+    <h1>Data Engineer Interview Prep</h1>
+    <p>From telecom billing developer → Data Engineer. Built around what you already know.</p>
+    <div class="pills">
+      <span class="pill">Target: <b>Mid-level DE (3–6 yrs)</b></span>
+      <span class="pill sf">Stack: <b>Snowflake</b></span>
+      <span class="pill">+ <b>dbt</b></span>
+      <span class="pill">+ <b>Airflow</b></span>
+      <span class="pill">+ <b>PySpark</b></span>
+    </div>
+  </header>
+
+  <div class="strength">
+    <b>You are not starting from zero.</b> Strong SQL / Oracle / PL-SQL · Java · telecom
+    billing &amp; ordering domain (Amdocs — real ETL/batch/data-modeling work) · Python in
+    progress. This kit closes the gaps and repackages your experience as data engineering.
+  </div>
+
+  <section id="plan">
+    <h2 class="sec"><span class="tag">PLAN</span> The 4-Week Sprint</h2>
+    <p class="sec-sub">~3 hrs/weekday, more on weekends. Apply from Week 1 — don't wait until you "feel ready."</p>
+
+    <div class="week"><div class="wk">Week 1</div><div class="body">
+      <b>Base + start Spark + START APPLYING</b>
+      <ul class="tight">
+        <li>Finish Python for DE; level up SQL the DE way (windows, dedupe, sessionization).</li>
+        <li>Begin PySpark fundamentals.</li>
+        <li><b>Rewrite resume in DE language &amp; start applying.</b> <span class="badge red">do today</span></li>
+      </ul>
+    </div></div>
+
+    <div class="week"><div class="wk">Week 2</div><div class="body">
+      <b>PySpark deep + modeling + warehousing</b>
+      <ul class="tight">
+        <li>PySpark DataFrame API + internals (shuffle, broadcast, skew, AQE).</li>
+        <li>Dimensional modeling (star, SCD2) + warehousing &amp; file formats.</li>
+        <li>Daily: 1–2 hard SQL queries.</li>
+      </ul>
+    </div></div>
+
+    <div class="week"><div class="wk">Week 3</div><div class="body">
+      <b>Snowflake + dbt + Airflow + build THE project</b>
+      <ul class="tight">
+        <li>Snowflake architecture, dbt models/tests, Airflow DAGs.</li>
+        <li>Build the end-to-end telecom pipeline. Push to GitHub with a diagram.</li>
+      </ul>
+    </div></div>
+
+    <div class="week"><div class="wk">Week 4</div><div class="body">
+      <b>Design + mocks + polish + apply hard</b>
+      <ul class="tight">
+        <li>DE system design + behavioral STAR.</li>
+        <li>Run all 4 mock rounds. Polish LinkedIn, chase referrals, final revision.</li>
+      </ul>
+    </div></div>
+
+    <div class="note"><b>2nd month (if you get it):</b> add a cert (SnowPro Core or
+      Databricks DE Associate), a streaming flavor (Kafka + Spark Structured Streaming),
+      and CI/CD + Docker around the pipeline.</div>
+  </section>
+
+  <section id="gaps">
+    <h2 class="sec"><span class="tag">GAPS</span> What to Close (priority order)</h2>
+    <div class="card">
+      <table>
+        <tr><th>#</th><th>Gap</th><th>Why it matters</th><th>Effort</th></tr>
+        <tr><td>1</td><td><b>PySpark / Spark</b></td><td>#1 hard skill in DE interviews</td><td><span class="badge red">High</span></td></tr>
+        <tr><td>2</td><td>Data warehousing &amp; modeling</td><td>Star schema, SCD, OLTP vs OLAP</td><td><span class="badge amber">Medium</span></td></tr>
+        <tr><td>3</td><td>File formats &amp; lakehouse</td><td>Parquet/Delta, partitioning</td><td><span class="badge">Low–Med</span></td></tr>
+        <tr><td>4</td><td>Orchestration (Airflow)</td><td>DAGs, idempotency, backfills</td><td><span class="badge amber">Medium</span></td></tr>
+        <tr><td>5</td><td>Snowflake + dbt</td><td>Your chosen platform + transform layer</td><td><span class="badge amber">Medium</span></td></tr>
+        <tr><td>6</td><td>DE system / pipeline design</td><td>"Design a pipeline for X" round</td><td><span class="badge amber">Medium</span></td></tr>
+      </table>
+      <p class="sec-sub" style="margin:6px 0 0">Streaming/Kafka &amp; dbt extras = nice-to-have (conceptual) for month 1.</p>
+    </div>
+  </section>
+
+  <section id="order">
+    <h2 class="sec"><span class="tag">ORDER</span> Learning Sequence (don't skip ahead)</h2>
+    <p class="sec-sub">Snowflake, dbt &amp; Airflow sit at the <b>top</b> of the stack — they're built on SQL &amp; Python. Learn the foundations first, then the engines, then orchestration.</p>
+
+    <div class="card">
+      <pre style="background:var(--code); border:1px solid var(--line); border-radius:10px; padding:16px 18px; overflow-x:auto; font-family:Consolas,'Courier New',monospace; font-size:13px; line-height:1.5; color:#cfe0f5; margin:0">
+        <span style="color:var(--purple)">Airflow</span>              orchestrates everything (needs Python)
+       /    |    \
+  <span style="color:var(--sf)">Snowflake</span>  <span style="color:var(--green)">dbt</span>  <span style="color:var(--amber)">PySpark</span>      the engines (need SQL / Python + modeling)
+       \    |    /
+     Data modeling          concepts: star schema, SCD
+       \    |    /
+     <span style="color:var(--accent2)">SQL</span>   +   <span style="color:var(--accent2)">Python</span>        FOUNDATIONS  — everything rests here</pre>
+    </div>
+
+    <div class="card">
+      <table>
+        <tr><th>Step</th><th>Learn</th><th>Why here</th><th>Sheet</th></tr>
+        <tr><td><b>1</b></td><td><b>SQL</b> <span class="badge">you're strong</span></td><td>The bedrock — Snowflake &amp; dbt literally <i>are</i> SQL</td><td><a href="cheatsheets/01-sql-for-de.html">01</a></td></tr>
+        <tr><td><b>2</b></td><td><b>Python</b></td><td>Powers Airflow (DAGs) and PySpark</td><td><a href="cheatsheets/02-python-for-de.html">02</a></td></tr>
+        <tr><td><b>3</b></td><td>Data modeling</td><td>Makes dbt meaningful (dims/facts, SCD2)</td><td><a href="cheatsheets/04-data-modeling.html">04</a> · <a href="cheatsheets/05-data-warehousing.html">05</a></td></tr>
+        <tr><td><b>4</b></td><td>Snowflake</td><td>Just SQL on a platform; gives you a sandbox to practice</td><td><a href="cheatsheets/06-snowflake.html">06</a></td></tr>
+        <tr><td><b>5</b></td><td>PySpark</td><td>Now that Python + SQL are in place</td><td><a href="cheatsheets/03-pyspark.html">03</a></td></tr>
+        <tr><td><b>6</b></td><td>dbt</td><td>Needs SQL + modeling + a warehouse (Snowflake)</td><td><a href="cheatsheets/07-dbt.html">07</a></td></tr>
+        <tr><td><b>7</b></td><td>Airflow</td><td>Orchestrates everything above — learn it last</td><td><a href="cheatsheets/08-airflow.html">08</a></td></tr>
+        <tr><td><b>+</b></td><td>System design + Behavioral</td><td>Final interview prep, once the stack makes sense</td><td><a href="cheatsheets/09-de-system-design.html">09</a> · <a href="cheatsheets/10-behavioral-star.html">10</a></td></tr>
+      </table>
+      <p class="sec-sub" style="margin:6px 0 0">Note: the cheat-sheet <b>numbers are file IDs by topic</b>, not the study order — follow the <b>Step</b> column above.</p>
+    </div>
+
+    <div class="note"><b>Only early exception:</b> you can open <b>Snowflake's web UI right after SQL</b> and run <code>SELECT</code>s — it reinforces SQL and gives you a sandbox. It's the only platform worth touching before the foundations are solid. dbt and Airflow truly need SQL/Python first.</div>
+  </section>
+
+  <section id="cheatsheets">
+    <h2 class="sec"><span class="tag">STUDY</span> Cheat Sheets</h2>
+    <p class="sec-sub">Numbered by topic (file IDs) — but study them in the <a href="#order">Learning Sequence</a> order above.</p>
+    <div class="grid">
+      <a class="tcard" href="cheatsheets/01-sql-for-de.html"><div class="n">01</div><div class="t">SQL for DE</div><div class="d">Windows, dedupe, sessionization, MERGE, optimization</div></a>
+      <a class="tcard" href="cheatsheets/02-python-for-de.html"><div class="n">02</div><div class="t">Python for DE</div><div class="d">Generators, pandas, file I/O, production patterns</div></a>
+      <a class="tcard" href="cheatsheets/03-pyspark.html"><div class="n">03</div><div class="t">PySpark</div><div class="d">DataFrame API + internals (the #1 skill)</div></a>
+      <a class="tcard" href="cheatsheets/04-data-modeling.html"><div class="n">04</div><div class="t">Data Modeling</div><div class="d">Star/snowflake, facts/dims, SCD types</div></a>
+      <a class="tcard" href="cheatsheets/05-data-warehousing.html"><div class="n">05</div><div class="t">Warehousing</div><div class="d">ETL vs ELT, lakehouse, Parquet, incremental</div></a>
+      <a class="tcard" href="cheatsheets/06-snowflake.html"><div class="n">06</div><div class="t">Snowflake</div><div class="d">Architecture, micro-partitions, warehouses, cost</div></a>
+      <a class="tcard" href="cheatsheets/07-dbt.html"><div class="n">07</div><div class="t">dbt</div><div class="d">Models, tests, snapshots, incremental</div></a>
+      <a class="tcard" href="cheatsheets/08-airflow.html"><div class="n">08</div><div class="t">Airflow</div><div class="d">DAGs, scheduling, idempotency, backfills</div></a>
+      <a class="tcard" href="cheatsheets/09-de-system-design.html"><div class="n">09</div><div class="t">System Design</div><div class="d">The "design a pipeline" framework</div></a>
+      <a class="tcard" href="cheatsheets/10-behavioral-star.html"><div class="n">10</div><div class="t">Behavioral / STAR</div><div class="d">Your Amdocs → DE story</div></a>
+    </div>
+  </section>
+
+  <section id="practice">
+    <h2 class="sec"><span class="tag">PRACTICE</span> Drill &amp; Build</h2>
+    <div class="grid">
+      <a class="tcard" href="qa-bank.html"><div class="n">~90 Q&amp;A</div><div class="t">Question Bank</div><div class="d">Tight model answers across every topic</div></a>
+      <a class="tcard" href="mock-drills.html"><div class="n">4 ROUNDS</div><div class="t">Mock Drills</div><div class="d">Timed mock interviews + grading rubric</div></a>
+      <a class="tcard" href="project/README.html"><div class="n">PORTFOLIO</div><div class="t">Telecom Billing Pipeline</div><div class="d">End-to-end project = your interview story</div></a>
+      <a class="tcard" href="snowflake-7day-sprint.html"><div class="n">INTENSIVE</div><div class="t">Snowflake 7-Day Sprint</div><div class="d">Fast-track Snowflake + project + SnowPro Core, with a progress tracker</div></a>
+    </div>
+  </section>
+
+  <section id="today">
+    <h2 class="sec"><span class="tag">URGENT</span> Do Today (the layoff clock)</h2>
+    <div class="card">
+      <ul class="tight">
+        <li><b>Apply now, prep in parallel.</b> Pipelines take 2–4 weeks; your SQL + Java + telecom background already clears many screens.</li>
+        <li><b>Reframe your resume to DE.</b> "Amdocs billing batch / extract tool / data models" → "designed &amp; maintained ETL pipelines over high-volume telecom billing data; data modeling across 1,600+ tables; SQL/PL-SQL optimization." All true.</li>
+        <li><b>Want a live mock?</b> In chat say <b>"Start DE Round 1"</b> or pick a topic for flashcards.</li>
+      </ul>
+    </div>
+  </section>
+
+  <footer>
+    Built for your 1-month DE sprint · Snowflake + dbt + Airflow · You've got this.
+  </footer>
+
+</div>
+</body>
+</html>

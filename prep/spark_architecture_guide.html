@@ -1,0 +1,777 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Apache Spark Architecture — Animated Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #0b1020;
+    --bg-2: #131a2f;
+    --bg-3: #1f2a44;
+    --card: #131a2f;
+    --text: #e6edf6;
+    --text-dim: #93a4bf;
+    --accent: #60a5fa;
+    --accent-2: #c084fc;
+    --accent-3: #34d399;
+    --spark: #e25a1c;
+    --spark-2: #f9a825;
+    --success: #22c55e;
+    --warn: #fbbf24;
+    --danger: #f87171;
+    --border: #2a3553;
+    --code-bg: #0a0f1e;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: linear-gradient(135deg, #0b1020 0%, #1a0f2e 100%);
+    color: var(--text);
+    line-height: 1.65;
+    min-height: 100vh;
+  }
+  .container { max-width: 1180px; margin: 0 auto; padding: 24px; }
+
+  header {
+    background: linear-gradient(135deg, #e25a1c 0%, #f9a825 50%, #db2777 100%);
+    border-radius: 16px;
+    padding: 34px;
+    margin-bottom: 24px;
+    box-shadow: 0 20px 60px rgba(226, 90, 28, 0.3);
+    position: relative;
+    overflow: hidden;
+  }
+  header::after {
+    content: "";
+    position: absolute;
+    top: -50%; right: -10%;
+    width: 320px; height: 320px;
+    background: radial-gradient(circle, rgba(255,255,255,0.25), transparent 70%);
+    border-radius: 50%;
+    animation: float 6s ease-in-out infinite;
+  }
+  @keyframes float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(20px); } }
+  header h1 { font-size: 34px; margin-bottom: 8px; display: flex; align-items: center; gap: 12px; }
+  header p { opacity: 0.95; font-size: 16px; max-width: 720px; }
+  .spark-logo {
+    display: inline-block;
+    font-size: 38px;
+    animation: spin-pulse 3s ease-in-out infinite;
+  }
+  @keyframes spin-pulse { 0%,100% { transform: scale(1) rotate(0); } 50% { transform: scale(1.15) rotate(8deg); } }
+
+  .tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 24px;
+    background: var(--card);
+    padding: 8px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    position: sticky;
+    top: 8px;
+    z-index: 50;
+  }
+  .tab {
+    padding: 9px 16px;
+    background: transparent;
+    color: var(--text-dim);
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    transition: all 0.2s;
+  }
+  .tab:hover { background: var(--bg-3); color: var(--text); }
+  .tab.active {
+    background: linear-gradient(135deg, var(--spark), var(--spark-2));
+    color: white;
+  }
+
+  .tab-content { display: none; animation: fadeIn 0.4s; }
+  .tab-content.active { display: block; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+  .section {
+    background: var(--card);
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 20px;
+    border: 1px solid var(--border);
+  }
+  .section h2 {
+    font-size: 23px;
+    margin-bottom: 14px;
+    color: var(--spark-2);
+    display: flex; align-items: center; gap: 10px;
+  }
+  .section h3 { font-size: 18px; margin: 18px 0 8px; color: var(--accent); }
+  .section p { margin-bottom: 12px; color: var(--text); }
+  .section ul, .section ol { margin: 8px 0 14px 22px; }
+  .section li { margin-bottom: 7px; }
+  .dim { color: var(--text-dim); }
+
+  .analogy {
+    background: linear-gradient(135deg, rgba(226,90,28,0.12), rgba(249,168,37,0.08));
+    border-left: 4px solid var(--spark);
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin: 14px 0;
+  }
+  .analogy strong { color: var(--spark-2); }
+
+  .note {
+    background: rgba(96,165,250,0.1);
+    border-left: 4px solid var(--accent);
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin: 12px 0;
+  }
+  .warn-box {
+    background: rgba(251,191,36,0.1);
+    border-left: 4px solid var(--warn);
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin: 12px 0;
+  }
+
+  code.inline {
+    background: var(--code-bg);
+    padding: 2px 7px;
+    border-radius: 5px;
+    font-family: "SF Mono", Consolas, monospace;
+    font-size: 13px;
+    color: var(--accent-3);
+    border: 1px solid var(--border);
+  }
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    overflow-x: auto;
+    margin: 12px 0;
+    font-family: "SF Mono", Consolas, monospace;
+    font-size: 13px;
+    line-height: 1.55;
+  }
+  pre .kw { color: #c084fc; }
+  pre .str { color: #34d399; }
+  pre .com { color: #64748b; font-style: italic; }
+  pre .fn { color: #60a5fa; }
+
+  .card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 14px;
+    margin: 16px 0;
+  }
+  .mini-card {
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    transition: transform 0.2s, border-color 0.2s;
+  }
+  .mini-card:hover { transform: translateY(-4px); border-color: var(--spark); }
+  .mini-card .icon { font-size: 26px; margin-bottom: 8px; }
+  .mini-card h4 { color: var(--spark-2); margin-bottom: 6px; font-size: 15px; }
+  .mini-card p { font-size: 13px; color: var(--text-dim); margin: 0; }
+
+  /* Animated architecture diagram */
+  .arch-stage {
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 28px 20px;
+    margin: 18px 0;
+    position: relative;
+    min-height: 360px;
+  }
+  .arch-row { display: flex; justify-content: center; gap: 40px; flex-wrap: wrap; position: relative; }
+  .node {
+    border-radius: 12px;
+    padding: 14px 18px;
+    text-align: center;
+    min-width: 130px;
+    border: 2px solid;
+    background: var(--bg-3);
+    position: relative;
+    z-index: 2;
+  }
+  .node .node-title { font-weight: 700; font-size: 14px; margin-bottom: 2px; }
+  .node .node-sub { font-size: 11px; color: var(--text-dim); }
+  .node.driver { border-color: var(--spark); box-shadow: 0 0 24px rgba(226,90,28,0.35); }
+  .node.cm { border-color: var(--accent-2); }
+  .node.executor { border-color: var(--accent-3); }
+  .node.task {
+    min-width: 56px; padding: 8px; font-size: 11px; border-color: var(--accent);
+    background: var(--bg);
+  }
+  .exec-wrap { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .task-row { display: flex; gap: 6px; }
+
+  /* moving packets */
+  .packet {
+    position: absolute;
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    background: var(--spark-2);
+    box-shadow: 0 0 12px var(--spark-2);
+    z-index: 3;
+    opacity: 0;
+  }
+  .play-btn {
+    background: linear-gradient(135deg, var(--spark), var(--spark-2));
+    color: white; border: none; padding: 10px 20px; border-radius: 8px;
+    font-weight: 700; cursor: pointer; font-size: 14px; margin-bottom: 8px;
+    transition: transform 0.15s;
+  }
+  .play-btn:hover { transform: scale(1.05); }
+
+  /* DAG diagram */
+  .dag { display:flex; align-items:center; justify-content:center; gap: 0; flex-wrap: wrap; padding: 10px 0; }
+  .dag-node {
+    width: 84px; height: 84px; border-radius: 12px;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    border: 2px solid var(--accent); background: var(--bg-3); font-size: 11px; text-align:center;
+    opacity: 0; transform: scale(0.5);
+    transition: all 0.5s;
+  }
+  .dag-node.show { opacity: 1; transform: scale(1); }
+  .dag-node.shuffle { border-color: var(--danger); }
+  .dag-arrow { width: 44px; height: 2px; background: var(--text-dim); position: relative; opacity:0; transition: opacity 0.5s; }
+  .dag-arrow.show { opacity: 1; }
+  .dag-arrow::after { content:""; position:absolute; right:0; top:-4px; border-left:8px solid var(--text-dim); border-top:5px solid transparent; border-bottom:5px solid transparent; }
+
+  table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 13px; }
+  th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); }
+  th { background: var(--bg-3); color: var(--spark-2); font-weight: 700; }
+  tr:hover td { background: rgba(255,255,255,0.03); }
+
+  /* Flashcards / interview */
+  .qa {
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 12px;
+    overflow: hidden;
+  }
+  .qa-q {
+    padding: 14px 18px;
+    cursor: pointer;
+    font-weight: 600;
+    display: flex; justify-content: space-between; align-items: center;
+    transition: background 0.2s;
+  }
+  .qa-q:hover { background: var(--bg-3); }
+  .qa-q .num { color: var(--spark); margin-right: 10px; font-weight: 800; }
+  .qa-a {
+    max-height: 0; overflow: hidden;
+    transition: max-height 0.35s ease, padding 0.35s ease;
+    padding: 0 18px;
+    color: var(--text-dim);
+    border-top: 1px solid transparent;
+  }
+  .qa.open .qa-a { max-height: 600px; padding: 14px 18px; border-top: 1px solid var(--border); }
+  .qa.open .chevron { transform: rotate(90deg); }
+  .chevron { transition: transform 0.3s; color: var(--spark); }
+
+  .flow-arrow { text-align:center; color: var(--spark); font-size: 22px; margin: 4px 0; }
+  .badge { display:inline-block; padding: 2px 9px; border-radius: 20px; font-size: 11px; font-weight: 700; }
+  .badge.narrow { background: rgba(52,211,153,0.18); color: var(--accent-3); }
+  .badge.wide { background: rgba(248,113,113,0.18); color: var(--danger); }
+  footer { text-align:center; color: var(--text-dim); padding: 24px; font-size: 13px; }
+  .legend { display:flex; gap:16px; flex-wrap:wrap; justify-content:center; margin-top:14px; font-size:12px; }
+  .legend span { display:flex; align-items:center; gap:6px; }
+  .dot { width:12px; height:12px; border-radius:3px; display:inline-block; }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <h1><span class="spark-logo">⚡</span> Apache Spark Architecture</h1>
+    <p>A visual, animated guide that explains Spark in plain English — from "what is it" to how the Driver, Cluster Manager, and Executors work together — plus interview questions at the end.</p>
+  </header>
+
+  <div class="tabs">
+    <button class="tab active" data-tab="intro">1. What is Spark?</button>
+    <button class="tab" data-tab="arch">2. Architecture</button>
+    <button class="tab" data-tab="flow">3. How a Job Runs</button>
+    <button class="tab" data-tab="abstractions">4. RDD / DataFrame</button>
+    <button class="tab" data-tab="transforms">5. Lazy & Shuffle</button>
+    <button class="tab" data-tab="memory">6. Memory & Tuning</button>
+    <button class="tab" data-tab="interview">7. Interview Q&A</button>
+  </div>
+
+  <!-- ============ TAB 1: INTRO ============ -->
+  <div class="tab-content active" id="intro">
+    <div class="section">
+      <h2>🧠 What is Apache Spark? (Layman's terms)</h2>
+      <div class="analogy">
+        <p><strong>Imagine you have to count every word in a 10,000-page book.</strong></p>
+        <p>One person doing it alone (a normal program on one computer) would take forever. Instead, you tear the book into 100 chunks and give them to 100 friends. Each friend counts their chunk at the same time, then you add up the totals. You finish ~100× faster.</p>
+        <p>That's exactly what Spark does — it splits huge data into pieces, processes them <strong>in parallel across many computers</strong>, and combines the results. Spark is the "manager" that organizes all those friends (computers) efficiently.</p>
+      </div>
+
+      <p><strong>Apache Spark</strong> is an open-source <strong>distributed computing engine</strong> for processing very large amounts of data (gigabytes to petabytes) quickly, by spreading the work across a cluster of machines.</p>
+
+      <h3>Why was it created? (Spark vs old Hadoop MapReduce)</h3>
+      <p>Before Spark, people used Hadoop MapReduce. The big problem: after every step it wrote results to disk (hard drive), which is slow. Spark keeps data <strong>in memory (RAM)</strong> between steps, making it up to <strong>100× faster</strong> for many workloads.</p>
+      <div class="analogy">
+        <p><strong>Analogy:</strong> MapReduce is like a chef who washes and puts away every knife and bowl after each ingredient. Spark keeps the tools on the counter (in memory) until the whole dish is done — far less wasted time.</p>
+      </div>
+
+      <h3>What can Spark do? (One engine, many jobs)</h3>
+      <div class="card-grid">
+        <div class="mini-card"><div class="icon">🗃️</div><h4>Spark SQL</h4><p>Query structured data with SQL & DataFrames.</p></div>
+        <div class="mini-card"><div class="icon">🌊</div><h4>Structured Streaming</h4><p>Process live, real-time data streams.</p></div>
+        <div class="mini-card"><div class="icon">🤖</div><h4>MLlib</h4><p>Machine learning at scale.</p></div>
+        <div class="mini-card"><div class="icon">🕸️</div><h4>GraphX</h4><p>Graph and network analysis.</p></div>
+      </div>
+
+      <h3>Key things that make Spark special</h3>
+      <ul>
+        <li><strong>In-memory computing</strong> — keeps data in RAM for speed.</li>
+        <li><strong>Distributed</strong> — runs across many machines (a cluster).</li>
+        <li><strong>Fault-tolerant</strong> — if a machine dies, Spark rebuilds the lost work automatically.</li>
+        <li><strong>Lazy evaluation</strong> — it plans the whole recipe before cooking, so it can optimize.</li>
+        <li><strong>Polyglot</strong> — write code in Python (PySpark), Scala, Java, or R.</li>
+      </ul>
+
+      <div class="note">
+        <strong>One line to remember:</strong> Spark = a fast, in-memory engine that breaks big data into pieces and processes them in parallel across many computers, while automatically handling failures.
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ TAB 2: ARCHITECTURE ============ -->
+  <div class="tab-content" id="arch">
+    <div class="section">
+      <h2>🏗️ Spark Architecture (Master–Worker model)</h2>
+      <p>Spark uses a <strong>master–worker</strong> (also called manager–worker) architecture. There is one "brain" that plans and coordinates, and many "hands" that do the actual work.</p>
+
+      <div class="analogy">
+        <p><strong>Restaurant analogy:</strong> The <strong>Driver</strong> is the head chef who reads the order and creates a plan. The <strong>Cluster Manager</strong> is the restaurant manager who assigns kitchen stations (resources). The <strong>Executors</strong> are the line cooks who actually cook. Each <strong>Task</strong> is one small cooking step a cook performs.</p>
+      </div>
+
+      <button class="play-btn" onclick="playArch()">▶ Animate the data flow</button>
+      <div class="arch-stage" id="archStage">
+        <div class="arch-row" style="margin-bottom: 50px;">
+          <div class="node driver" id="n-driver">
+            <div class="node-title">🧠 Driver</div>
+            <div class="node-sub">SparkContext / SparkSession<br>Creates DAG &amp; schedules</div>
+          </div>
+          <div class="node cm" id="n-cm">
+            <div class="node-title">🗂️ Cluster Manager</div>
+            <div class="node-sub">YARN / K8s / Standalone<br>Allocates resources</div>
+          </div>
+        </div>
+        <div class="arch-row" id="execRow">
+          <div class="exec-wrap">
+            <div class="node executor" id="ex1">
+              <div class="node-title">⚙️ Executor 1</div>
+              <div class="node-sub">JVM • Cores + Memory</div>
+            </div>
+            <div class="task-row">
+              <div class="node task">Task</div><div class="node task">Task</div>
+            </div>
+          </div>
+          <div class="exec-wrap">
+            <div class="node executor" id="ex2">
+              <div class="node-title">⚙️ Executor 2</div>
+              <div class="node-sub">JVM • Cores + Memory</div>
+            </div>
+            <div class="task-row">
+              <div class="node task">Task</div><div class="node task">Task</div>
+            </div>
+          </div>
+          <div class="exec-wrap">
+            <div class="node executor" id="ex3">
+              <div class="node-title">⚙️ Executor 3</div>
+              <div class="node-sub">JVM • Cores + Memory</div>
+            </div>
+            <div class="task-row">
+              <div class="node task">Task</div><div class="node task">Task</div>
+            </div>
+          </div>
+        </div>
+        <div class="legend">
+          <span><span class="dot" style="background:var(--spark)"></span> Driver (brain)</span>
+          <span><span class="dot" style="background:var(--accent-2)"></span> Cluster Manager (resources)</span>
+          <span><span class="dot" style="background:var(--accent-3)"></span> Executor (worker)</span>
+          <span><span class="dot" style="background:var(--accent)"></span> Task (unit of work)</span>
+        </div>
+      </div>
+
+      <h3>The components, one by one</h3>
+
+      <h3>1. 🧠 Driver Program</h3>
+      <p>The <strong>master process</strong> and the brain of the application. It runs your <code class="inline">main()</code> function and does the planning:</p>
+      <ul>
+        <li>Creates the <strong>SparkSession / SparkContext</strong> (your entry point into Spark).</li>
+        <li>Converts your code into a <strong>DAG</strong> (a step-by-step execution plan).</li>
+        <li>Splits the work into <strong>Jobs → Stages → Tasks</strong>.</li>
+        <li>Schedules tasks onto executors and tracks their progress.</li>
+        <li>Collects final results.</li>
+      </ul>
+      <div class="warn-box">If the Driver dies, the <strong>whole application dies</strong>. It's the single point of coordination.</div>
+
+      <h3>2. 🗂️ Cluster Manager</h3>
+      <p>The <strong>resource negotiator</strong>. It owns the cluster's CPUs and memory, and hands out resources (containers/executors) to applications. Spark can use different ones:</p>
+      <table>
+        <tr><th>Cluster Manager</th><th>When used</th></tr>
+        <tr><td><strong>Standalone</strong></td><td>Spark's own simple built-in manager.</td></tr>
+        <tr><td><strong>YARN</strong></td><td>Most common in Hadoop ecosystems.</td></tr>
+        <tr><td><strong>Kubernetes</strong></td><td>Modern, container-based deployments.</td></tr>
+        <tr><td><strong>Mesos</strong></td><td>Older general-purpose manager (now rare).</td></tr>
+      </table>
+
+      <h3>3. ⚙️ Executors</h3>
+      <p>The <strong>worker processes</strong> (JVMs) that run on worker nodes. Each executor:</p>
+      <ul>
+        <li>Runs the actual <strong>Tasks</strong> assigned by the Driver.</li>
+        <li>Has its own <strong>CPU cores</strong> and <strong>memory</strong>.</li>
+        <li>Stores cached/persisted data in memory or disk.</li>
+        <li>Reports results and status back to the Driver.</li>
+      </ul>
+      <p class="dim">One executor can run multiple tasks at once — as many as it has cores.</p>
+
+      <h3>4. 🔧 Tasks, Cores & Slots</h3>
+      <p>A <strong>Task</strong> is the smallest unit of work — it processes <strong>one partition</strong> of data. The number of tasks an executor can run in parallel equals its number of <strong>cores</strong> (also called "slots").</p>
+
+      <h3>5. 🌐 Worker Node</h3>
+      <p>A physical/virtual machine in the cluster that hosts one or more executors.</p>
+
+      <div class="note"><strong>Hierarchy:</strong> Cluster → Worker Nodes → Executors → Cores → Tasks → Partitions.</div>
+    </div>
+  </div>
+
+  <!-- ============ TAB 3: HOW A JOB RUNS ============ -->
+  <div class="tab-content" id="flow">
+    <div class="section">
+      <h2>🔄 How a Spark Job Actually Runs</h2>
+      <p>When you run Spark code, here is the journey from your code to results:</p>
+
+      <ol>
+        <li><strong>You write code</strong> (transformations + an action).</li>
+        <li><strong>Driver builds a DAG</strong> — a logical graph of all operations.</li>
+        <li><strong>DAG Scheduler splits the DAG into Stages</strong> — boundaries happen at <em>shuffles</em>.</li>
+        <li><strong>Each Stage becomes a set of Tasks</strong> (one task per partition).</li>
+        <li><strong>Task Scheduler sends tasks to Executors</strong> via the Cluster Manager.</li>
+        <li><strong>Executors run tasks</strong> and return results to the Driver.</li>
+      </ol>
+
+      <div class="analogy">
+        <p><strong>Job vs Stage vs Task:</strong></p>
+        <ul>
+          <li><strong>Job</strong> = the whole assignment, triggered by one <em>action</em> (e.g. <code class="inline">count()</code>).</li>
+          <li><strong>Stage</strong> = a group of steps that can run without reshuffling data. A new stage starts at every shuffle.</li>
+          <li><strong>Task</strong> = one stage applied to one partition (the smallest unit).</li>
+        </ul>
+      </div>
+
+      <h3>🎬 Watch a DAG build into Stages</h3>
+      <button class="play-btn" onclick="playDag()">▶ Build the DAG</button>
+      <div class="arch-stage" style="min-height: 200px;">
+        <div class="dag" id="dagRow">
+          <div class="dag-node" data-i="0">read<br>📄</div>
+          <div class="dag-arrow" data-i="0"></div>
+          <div class="dag-node" data-i="1">filter<br><span class="badge narrow">narrow</span></div>
+          <div class="dag-arrow" data-i="1"></div>
+          <div class="dag-node" data-i="2">map<br><span class="badge narrow">narrow</span></div>
+          <div class="dag-arrow" data-i="2"></div>
+          <div class="dag-node shuffle" data-i="3">groupBy<br><span class="badge wide">shuffle</span></div>
+          <div class="dag-arrow" data-i="3"></div>
+          <div class="dag-node" data-i="4">count<br>✅ action</div>
+        </div>
+        <p style="text-align:center" class="dim" id="dagCaption">Press play. The red node is a <span class="badge wide">shuffle</span> — it splits the job into Stage 1 and Stage 2.</p>
+      </div>
+
+      <h3>Deploy modes: Client vs Cluster</h3>
+      <table>
+        <tr><th></th><th>Client mode</th><th>Cluster mode</th></tr>
+        <tr><td><strong>Driver runs</strong></td><td>On your local/gateway machine</td><td>Inside the cluster (on a worker)</td></tr>
+        <tr><td><strong>Best for</strong></td><td>Interactive work, notebooks, debugging</td><td>Production jobs (spark-submit)</td></tr>
+        <tr><td><strong>If client disconnects</strong></td><td>Job dies</td><td>Job keeps running</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <!-- ============ TAB 4: ABSTRACTIONS ============ -->
+  <div class="tab-content" id="abstractions">
+    <div class="section">
+      <h2>📦 RDD, DataFrame & Dataset</h2>
+      <p>These are the ways Spark represents your distributed data. All of them are split into <strong>partitions</strong> spread across executors.</p>
+
+      <div class="card-grid">
+        <div class="mini-card">
+          <div class="icon">🧱</div><h4>RDD</h4>
+          <p>Resilient Distributed Dataset. The original low-level API. Immutable, fault-tolerant collection. Full control, but no automatic optimization.</p>
+        </div>
+        <div class="mini-card">
+          <div class="icon">📊</div><h4>DataFrame</h4>
+          <p>Data organized into named columns (like a table). Optimized by Catalyst. The most-used API today.</p>
+        </div>
+        <div class="mini-card">
+          <div class="icon">🧩</div><h4>Dataset</h4>
+          <p>DataFrame + compile-time type safety (Scala/Java). Best of both worlds for typed languages.</p>
+        </div>
+      </div>
+
+      <h3>RDD — the foundation (and why it's "Resilient")</h3>
+      <ul>
+        <li><strong>Resilient</strong> → fault-tolerant; can rebuild lost partitions using <strong>lineage</strong> (the recipe of how it was built).</li>
+        <li><strong>Distributed</strong> → data is partitioned across the cluster.</li>
+        <li><strong>Dataset</strong> → a collection of records.</li>
+        <li><strong>Immutable</strong> → never changed in place; transformations create new RDDs.</li>
+      </ul>
+
+      <div class="analogy">
+        <strong>Lineage analogy:</strong> Spark doesn't back up your data like photocopies. Instead it remembers the <em>recipe</em> ("read file → filter → map"). If a partition is lost, it just re-runs the recipe for that piece. That's fault tolerance without expensive replication.
+      </div>
+
+      <h3>Partitions</h3>
+      <p>A <strong>partition</strong> is a chunk of the data. It is the unit of parallelism — one task processes one partition. More partitions = more parallelism (up to the number of cores available).</p>
+
+      <pre><span class="com"># PySpark example</span>
+<span class="kw">from</span> pyspark.sql <span class="kw">import</span> SparkSession
+
+spark = SparkSession.builder.appName(<span class="str">"Demo"</span>).getOrCreate()
+
+df = spark.read.csv(<span class="str">"sales.csv"</span>, header=<span class="kw">True</span>)   <span class="com"># DataFrame</span>
+result = (df
+    .<span class="fn">filter</span>(df.amount &gt; <span class="str">100</span>)               <span class="com"># transformation (lazy)</span>
+    .<span class="fn">groupBy</span>(<span class="str">"region"</span>)                    <span class="com"># transformation (lazy)</span>
+    .<span class="fn">count</span>())                              <span class="com"># transformation (lazy)</span>
+
+result.<span class="fn">show</span>()   <span class="com"># ACTION → now Spark actually runs everything</span></pre>
+
+      <h3>Catalyst & Tungsten (why DataFrames are fast)</h3>
+      <ul>
+        <li><strong>Catalyst Optimizer</strong> — automatically rewrites your query plan to be more efficient (predicate pushdown, reordering, etc.).</li>
+        <li><strong>Tungsten</strong> — optimizes memory and CPU usage with off-heap memory and code generation.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ============ TAB 5: TRANSFORMS ============ -->
+  <div class="tab-content" id="transforms">
+    <div class="section">
+      <h2>🐢 Lazy Evaluation, Transformations & Actions</h2>
+
+      <h3>Transformations vs Actions</h3>
+      <table>
+        <tr><th>Transformation (lazy)</th><th>Action (triggers execution)</th></tr>
+        <tr><td>Builds the plan, runs nothing yet</td><td>Forces Spark to actually compute</td></tr>
+        <tr><td><code class="inline">map</code>, <code class="inline">filter</code>, <code class="inline">groupBy</code>, <code class="inline">join</code>, <code class="inline">select</code></td><td><code class="inline">count</code>, <code class="inline">collect</code>, <code class="inline">show</code>, <code class="inline">save</code>, <code class="inline">take</code></td></tr>
+        <tr><td>Returns a new RDD/DataFrame</td><td>Returns a value or writes output</td></tr>
+      </table>
+
+      <div class="analogy">
+        <strong>Lazy evaluation analogy:</strong> It's like writing a shopping list (transformations) but not actually going to the store until someone says "go buy it" (an action). Because Spark sees the whole list first, it can plan the most efficient trip.
+      </div>
+
+      <h3>Narrow vs Wide Transformations</h3>
+      <div class="card-grid">
+        <div class="mini-card" style="border-color: var(--accent-3)">
+          <div class="icon">➡️</div><h4>Narrow <span class="badge narrow">fast</span></h4>
+          <p>Each input partition feeds exactly one output partition. <strong>No data moves between machines.</strong> e.g. <code class="inline">map</code>, <code class="inline">filter</code>.</p>
+        </div>
+        <div class="mini-card" style="border-color: var(--danger)">
+          <div class="icon">🔀</div><h4>Wide <span class="badge wide">shuffle</span></h4>
+          <p>Data must be redistributed across partitions/machines. <strong>Causes a shuffle (expensive).</strong> e.g. <code class="inline">groupBy</code>, <code class="inline">join</code>, <code class="inline">reduceByKey</code>.</p>
+        </div>
+      </div>
+
+      <h3>🔀 What is a Shuffle?</h3>
+      <p>A <strong>shuffle</strong> is when Spark moves data across the network so that related records (e.g. same key) end up on the same machine. It involves disk I/O, serialization, and network transfer — so it's the <strong>most expensive operation</strong> and a common cause of slow jobs.</p>
+      <div class="warn-box"><strong>Performance tip:</strong> Minimize shuffles. Filter early, use <code class="inline">reduceByKey</code> instead of <code class="inline">groupByKey</code>, and broadcast small tables in joins.</div>
+
+      <h3>Persistence: cache() & persist()</h3>
+      <p>If you reuse a DataFrame multiple times, <code class="inline">cache()</code> keeps it in memory so Spark doesn't recompute it from scratch every time.</p>
+      <pre>df.<span class="fn">cache</span>()        <span class="com"># keep in memory (MEMORY_AND_DISK by default for DataFrames)</span>
+df.<span class="fn">persist</span>(StorageLevel.MEMORY_AND_DISK)
+df.<span class="fn">unpersist</span>()     <span class="com"># free it when done</span></pre>
+    </div>
+  </div>
+
+  <!-- ============ TAB 6: MEMORY ============ -->
+  <div class="tab-content" id="memory">
+    <div class="section">
+      <h2>🧮 Executor Memory & Tuning Basics</h2>
+      <p>Each executor's memory is divided into regions. Understanding this helps avoid the dreaded <code class="inline">OutOfMemoryError</code>.</p>
+
+      <table>
+        <tr><th>Region</th><th>Used for</th></tr>
+        <tr><td><strong>Execution memory</strong></td><td>Shuffles, joins, sorts, aggregations.</td></tr>
+        <tr><td><strong>Storage memory</strong></td><td>Cached/persisted data &amp; broadcast variables.</td></tr>
+        <tr><td><strong>User memory</strong></td><td>Your data structures, UDF state.</td></tr>
+        <tr><td><strong>Reserved memory</strong></td><td>Spark internal objects.</td></tr>
+      </table>
+      <p class="dim">Execution and Storage share a "unified" pool and can borrow from each other.</p>
+
+      <h3>Key configs you'll set</h3>
+      <pre>spark-submit \
+  --num-executors 10 \        <span class="com"># how many executors</span>
+  --executor-cores 4 \        <span class="com"># cores (parallel tasks) per executor</span>
+  --executor-memory 8g \      <span class="com"># RAM per executor</span>
+  --driver-memory 4g \        <span class="com"># RAM for the driver</span>
+  my_app.py</pre>
+
+      <h3>Common performance levers</h3>
+      <ul>
+        <li><strong>Partitioning</strong> — too few = underuse cluster; too many = scheduling overhead. <code class="inline">spark.sql.shuffle.partitions</code> defaults to 200.</li>
+        <li><strong>Broadcast joins</strong> — send a small table to every executor to avoid shuffling a big one.</li>
+        <li><strong>Avoid <code class="inline">collect()</code> on big data</strong> — it pulls everything to the driver and can crash it.</li>
+        <li><strong>Cache wisely</strong> — only what you reuse.</li>
+        <li><strong>Adaptive Query Execution (AQE)</strong> — Spark 3+ auto-tunes partitions and joins at runtime.</li>
+        <li><strong>Data skew</strong> — uneven keys overload one task; fix with salting or AQE skew handling.</li>
+      </ul>
+
+      <div class="note"><strong>Rule of thumb:</strong> aim for partitions of ~128 MB and keep executors at 4–5 cores for good throughput without too much GC pressure.</div>
+    </div>
+  </div>
+
+  <!-- ============ TAB 7: INTERVIEW ============ -->
+  <div class="tab-content" id="interview">
+    <div class="section">
+      <h2>🎯 Interview Questions &amp; Answers</h2>
+      <p class="dim">Click any question to reveal the answer.</p>
+      <div id="qaList"></div>
+    </div>
+  </div>
+
+  <footer>⚡ Apache Spark Architecture — Animated Guide • Open in any browser, no internet needed.</footer>
+</div>
+
+<script>
+  // ---- Tabs ----
+  document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+      tab.classList.add('active');
+      document.getElementById(tab.dataset.tab).classList.add('active');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+  });
+
+  // ---- Architecture animation: send packets Driver -> CM -> Executors ----
+  function sendPacket(fromEl, toEl, delay, color) {
+    const stage = document.getElementById('archStage');
+    const sRect = stage.getBoundingClientRect();
+    const a = fromEl.getBoundingClientRect();
+    const b = toEl.getBoundingClientRect();
+    const startX = a.left + a.width/2 - sRect.left;
+    const startY = a.top + a.height/2 - sRect.top;
+    const endX = b.left + b.width/2 - sRect.left;
+    const endY = b.top + b.height/2 - sRect.top;
+    const p = document.createElement('div');
+    p.className = 'packet';
+    if (color) { p.style.background = color; p.style.boxShadow = '0 0 12px ' + color; }
+    p.style.left = startX + 'px';
+    p.style.top = startY + 'px';
+    stage.appendChild(p);
+    setTimeout(() => {
+      p.style.transition = 'all 0.9s ease';
+      p.style.opacity = '1';
+      p.style.left = endX + 'px';
+      p.style.top = endY + 'px';
+    }, delay);
+    setTimeout(() => { p.style.opacity = '0'; }, delay + 900);
+    setTimeout(() => { p.remove(); }, delay + 1300);
+  }
+
+  function pulse(el, delay) {
+    setTimeout(() => {
+      el.style.transition = 'transform 0.3s, box-shadow 0.3s';
+      el.style.transform = 'scale(1.08)';
+      el.style.boxShadow = '0 0 26px rgba(249,168,37,0.7)';
+      setTimeout(() => { el.style.transform = 'scale(1)'; el.style.boxShadow = ''; }, 400);
+    }, delay);
+  }
+
+  function playArch() {
+    const driver = document.getElementById('n-driver');
+    const cm = document.getElementById('n-cm');
+    const ex = [document.getElementById('ex1'), document.getElementById('ex2'), document.getElementById('ex3')];
+    // Step 1: Driver asks Cluster Manager for resources
+    pulse(driver, 0);
+    sendPacket(driver, cm, 200, '#e25a1c');
+    pulse(cm, 1100);
+    // Step 2: CM launches executors
+    ex.forEach((e, i) => { sendPacket(cm, e, 1300 + i*150, '#c084fc'); pulse(e, 2300 + i*150); });
+    // Step 3: Driver sends tasks to executors
+    ex.forEach((e, i) => { sendPacket(driver, e, 2600 + i*150, '#60a5fa'); });
+    // Step 4: Executors return results to driver
+    ex.forEach((e, i) => { sendPacket(e, driver, 3800 + i*150, '#34d399'); });
+    pulse(driver, 5000);
+  }
+
+  // ---- DAG build animation ----
+  function playDag() {
+    const nodes = document.querySelectorAll('#dagRow .dag-node');
+    const arrows = document.querySelectorAll('#dagRow .dag-arrow');
+    nodes.forEach(n => n.classList.remove('show'));
+    arrows.forEach(a => a.classList.remove('show'));
+    const caption = document.getElementById('dagCaption');
+    caption.innerHTML = 'Building plan…';
+    let order = [
+      {node:0}, {arrow:0}, {node:1}, {arrow:1}, {node:2}, {arrow:2}, {node:3}, {arrow:3}, {node:4}
+    ];
+    order.forEach((step, i) => {
+      setTimeout(() => {
+        if (step.node !== undefined) nodes[step.node].classList.add('show');
+        if (step.arrow !== undefined) arrows[step.arrow].classList.add('show');
+      }, i * 450);
+    });
+    setTimeout(() => {
+      caption.innerHTML = '<b>Stage 1</b> = read → filter → map (no shuffle). The red <span class="badge wide">groupBy</span> shuffle starts <b>Stage 2</b>, ending with the <b>count</b> action.';
+    }, order.length * 450 + 300);
+  }
+
+  // ---- Interview Q&A ----
+  const qa = [
+    ["What is Apache Spark?", "An open-source, distributed, in-memory data processing engine that runs workloads in parallel across a cluster. It's up to 100× faster than Hadoop MapReduce for many jobs because it keeps intermediate data in memory instead of writing to disk."],
+    ["Spark vs Hadoop MapReduce — key difference?", "MapReduce writes intermediate results to disk after each step; Spark keeps them in memory (RAM). Spark also offers a richer API (SQL, streaming, ML, graph), lazy evaluation, and a DAG-based execution engine, making it faster and more flexible."],
+    ["Explain the Spark architecture.", "It's a master–worker model: the Driver (master) plans the work and builds a DAG; the Cluster Manager allocates resources; Executors (workers) run the tasks. The Driver splits work into Jobs → Stages → Tasks and schedules tasks onto executors."],
+    ["What is the Driver and what does it do?", "The master process that runs main(), creates the SparkSession, builds the DAG, divides work into stages and tasks, schedules them on executors, and collects results. If the driver fails, the whole application fails."],
+    ["What are Executors?", "Worker JVM processes that run on worker nodes. They execute tasks, store cached/persisted data, and report results back to the driver. Each executor has dedicated cores and memory; cores determine how many tasks run in parallel."],
+    ["What is a Cluster Manager? Name a few.", "It allocates cluster resources to Spark applications. Options: Standalone (built-in), YARN, Kubernetes, and (legacy) Mesos."],
+    ["Difference between Job, Stage, and Task?", "A Job is triggered by one action. A Job is split into Stages at shuffle boundaries. Each Stage is split into Tasks — one task per partition. Task is the smallest unit of execution."],
+    ["What is an RDD?", "Resilient Distributed Dataset — Spark's core abstraction. It's an immutable, partitioned, fault-tolerant collection. Resilient because lost partitions are rebuilt using lineage; distributed because data is split across the cluster."],
+    ["RDD vs DataFrame vs Dataset?", "RDD = low-level, no auto-optimization, full control. DataFrame = data in named columns, optimized by Catalyst, most used. Dataset = DataFrame + compile-time type safety (Scala/Java)."],
+    ["What is lazy evaluation?", "Transformations don't execute immediately; Spark just records them in a DAG. Execution only happens when an action is called. This lets Spark see the full plan and optimize it before running."],
+    ["Transformation vs Action — give examples.", "Transformations are lazy and return a new RDD/DataFrame: map, filter, groupBy, join, select. Actions trigger execution and return a value or write output: count, collect, show, take, save."],
+    ["Narrow vs Wide transformations?", "Narrow: each input partition maps to one output partition with no data movement (map, filter) — fast. Wide: data is redistributed across partitions, causing a shuffle (groupBy, join, reduceByKey) — expensive."],
+    ["What is a shuffle and why is it costly?", "A shuffle redistributes data across the network so related records land on the same partition/machine. It involves disk I/O, serialization, and network transfer, making it the most expensive operation and a frequent performance bottleneck."],
+    ["What is the DAG and DAG Scheduler?", "The DAG (Directed Acyclic Graph) is the logical plan of all operations. The DAG Scheduler splits it into stages at shuffle boundaries and submits them as TaskSets to the Task Scheduler."],
+    ["How does Spark achieve fault tolerance?", "Through RDD lineage — Spark records how each dataset was derived. If a partition is lost, Spark recomputes it from the lineage instead of replicating data. For streaming, checkpointing and write-ahead logs are also used."],
+    ["What is a partition?", "A logical chunk of the distributed data. It's the unit of parallelism — one task processes one partition. More partitions allow more parallel tasks (bounded by available cores)."],
+    ["cache() vs persist()?", "Both store a dataset for reuse to avoid recomputation. cache() uses the default storage level (MEMORY_AND_DISK for DataFrames). persist() lets you choose the storage level (memory only, disk, off-heap, serialized, etc.)."],
+    ["Client mode vs Cluster mode?", "In client mode the driver runs on the submitting machine (good for interactive/debug). In cluster mode the driver runs inside the cluster (good for production); if the client disconnects, the job keeps running."],
+    ["What is a broadcast join / broadcast variable?", "When one table is small, Spark can broadcast (copy) it to every executor so the large table doesn't need shuffling. Broadcast variables are read-only shared data cached on each node to avoid repeated transfer."],
+    ["What is Catalyst and Tungsten?", "Catalyst is Spark SQL's query optimizer that rewrites logical plans for efficiency (predicate pushdown, reordering). Tungsten optimizes execution at the hardware level with off-heap memory management and whole-stage code generation."],
+    ["What is data skew and how do you fix it?", "Skew happens when some keys have far more data than others, overloading a few tasks. Fixes: salting keys, increasing partitions, broadcast joins for small tables, or enabling AQE skew-join handling in Spark 3+."],
+    ["What is Adaptive Query Execution (AQE)?", "A Spark 3+ feature that re-optimizes query plans at runtime using actual statistics — coalescing shuffle partitions, switching join strategies, and handling skew dynamically."],
+    ["What is SparkSession vs SparkContext?", "SparkContext is the original entry point to Spark Core (RDDs). SparkSession (Spark 2+) is the unified entry point that wraps SparkContext, SQLContext, and HiveContext for DataFrames, SQL, and streaming."],
+    ["Why avoid collect() on large datasets?", "collect() brings all data to the driver's memory. On large datasets this can cause the driver to run out of memory and crash. Use take(n), show(), or write to storage instead."]
+  ];
+  const qaList = document.getElementById('qaList');
+  qa.forEach((item, i) => {
+    const div = document.createElement('div');
+    div.className = 'qa';
+    div.innerHTML = `
+      <div class="qa-q"><span><span class="num">Q${i+1}.</span>${item[0]}</span><span class="chevron">▶</span></div>
+      <div class="qa-a">${item[1]}</div>`;
+    div.querySelector('.qa-q').addEventListener('click', () => div.classList.toggle('open'));
+    qaList.appendChild(div);
+  });
+</script>
+</body>
+</html>

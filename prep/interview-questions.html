@@ -1,0 +1,1602 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Data Engineer Interview Questions (5+ Yrs) | SQL · Python · Spark · AWS · Snowflake · System Design</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #0f172a;
+    --bg-2: #1e293b;
+    --bg-3: #334155;
+    --card: #1e293b;
+    --text: #e2e8f0;
+    --text-dim: #94a3b8;
+    --accent: #38bdf8;
+    --accent-2: #a78bfa;
+    --success: #22c55e;
+    --warn: #f59e0b;
+    --danger: #ef4444;
+    --border: #334155;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+    color: var(--text);
+    line-height: 1.65;
+    min-height: 100vh;
+  }
+  .container { max-width: 1200px; margin: 0 auto; padding: 24px; }
+
+  header {
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%);
+    border-radius: 16px;
+    padding: 32px;
+    margin-bottom: 24px;
+    box-shadow: 0 20px 60px rgba(99, 102, 241, 0.3);
+  }
+  header h1 { font-size: 30px; margin-bottom: 8px; }
+  header p { opacity: 0.95; font-size: 16px; }
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px;
+    margin-top: 24px;
+  }
+  .stat {
+    background: rgba(255,255,255,0.15);
+    backdrop-filter: blur(10px);
+    padding: 16px;
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.2);
+  }
+  .stat-label { font-size: 12px; opacity: 0.85; text-transform: uppercase; letter-spacing: 1px; }
+  .stat-value { font-size: 20px; font-weight: 700; margin-top: 4px; }
+
+  .tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 24px;
+    background: var(--card);
+    padding: 8px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    z-index: 50;
+  }
+  .tab {
+    padding: 9px 14px;
+    background: transparent;
+    color: var(--text-dim);
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    transition: all 0.2s;
+  }
+  .tab:hover { background: var(--bg-3); color: var(--text); }
+  .tab.active {
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    color: white;
+  }
+
+  .tab-content { display: none; animation: fadeIn 0.3s; }
+  .tab-content.active { display: block; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+  .section-card {
+    background: var(--card);
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 20px;
+    border: 1px solid var(--border);
+  }
+  .section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .section-title { font-size: 22px; color: var(--accent); }
+  .section-tag {
+    background: var(--accent-2);
+    color: white;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .subsection {
+    background: var(--bg);
+    border-left: 4px solid var(--accent);
+    border-radius: 8px;
+    padding: 16px 18px;
+    margin-bottom: 16px;
+  }
+  .subsection h3 {
+    color: var(--accent);
+    margin-bottom: 10px;
+    font-size: 16px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .subsection.hot { border-left-color: var(--danger); }
+  .subsection.hot h3 { color: var(--danger); }
+  .subsection.advanced { border-left-color: var(--accent-2); }
+  .subsection.advanced h3 { color: var(--accent-2); }
+  .subsection.scenario { border-left-color: var(--warn); }
+  .subsection.scenario h3 { color: var(--warn); }
+  .subsection.behavioral { border-left-color: var(--success); }
+  .subsection.behavioral h3 { color: var(--success); }
+
+  ol.q-list, ul.q-list { list-style: none; counter-reset: q; padding-left: 0; }
+  ol.q-list > li, ul.q-list > li {
+    padding: 8px 0 8px 36px;
+    border-bottom: 1px dashed rgba(255,255,255,0.06);
+    position: relative;
+    font-size: 14.5px;
+    color: var(--text);
+  }
+  ol.q-list > li:last-child, ul.q-list > li:last-child { border-bottom: none; }
+  ol.q-list > li::before {
+    counter-increment: q;
+    content: "Q" counter(q);
+    position: absolute;
+    left: 0;
+    top: 8px;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--accent);
+    background: rgba(56, 189, 248, 0.12);
+    padding: 2px 6px;
+    border-radius: 6px;
+    min-width: 30px;
+    text-align: center;
+  }
+  ul.q-list > li::before {
+    content: "▸";
+    position: absolute;
+    left: 12px;
+    top: 8px;
+    color: var(--accent);
+    font-size: 14px;
+  }
+
+  .pill-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .pill {
+    background: var(--bg-3);
+    color: var(--text-dim);
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-weight: 600;
+  }
+  .pill.hot { background: rgba(239, 68, 68, 0.2); color: #fca5a5; }
+  .pill.must { background: rgba(245, 158, 11, 0.2); color: #fcd34d; }
+  .pill.adv { background: rgba(167, 139, 250, 0.2); color: #c4b5fd; }
+
+  .info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+  .info-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px;
+  }
+  .info-card h3 {
+    color: var(--accent);
+    margin-bottom: 10px;
+    font-size: 15px;
+  }
+  .info-card ul { list-style: none; }
+  .info-card li {
+    padding: 5px 0;
+    color: var(--text-dim);
+    font-size: 13.5px;
+    padding-left: 18px;
+    position: relative;
+  }
+  .info-card li::before {
+    content: "→";
+    color: var(--accent);
+    position: absolute;
+    left: 0;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--bg);
+    border-radius: 8px;
+    overflow: hidden;
+    margin: 12px 0;
+  }
+  th, td {
+    padding: 10px 12px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    font-size: 13.5px;
+  }
+  th {
+    background: var(--bg-3);
+    color: var(--accent);
+    text-transform: uppercase;
+    font-size: 11px;
+    letter-spacing: 1px;
+  }
+  tr:last-child td { border-bottom: none; }
+
+  .alert {
+    padding: 14px 16px;
+    border-radius: 8px;
+    margin: 16px 0;
+    border-left: 4px solid;
+    font-size: 14px;
+  }
+  .alert.warn { background: rgba(245, 158, 11, 0.1); border-color: var(--warn); }
+  .alert.success { background: rgba(34, 197, 94, 0.1); border-color: var(--success); }
+  .alert.info { background: rgba(56, 189, 248, 0.1); border-color: var(--accent); }
+  .alert.danger { background: rgba(239, 68, 68, 0.1); border-color: var(--danger); }
+  .alert strong { color: var(--text); }
+
+  code {
+    background: var(--bg);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 13px;
+    color: #fcd34d;
+    font-family: 'Consolas', 'Monaco', monospace;
+  }
+
+  .search-box {
+    width: 100%;
+    padding: 12px 16px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 14px;
+    margin-bottom: 16px;
+  }
+  .search-box:focus { outline: none; border-color: var(--accent); }
+
+  footer {
+    text-align: center;
+    margin-top: 40px;
+    padding: 20px;
+    color: var(--text-dim);
+    font-size: 13px;
+  }
+
+  @media (max-width: 640px) {
+    header h1 { font-size: 22px; }
+    .container { padding: 12px; }
+    .tab { padding: 7px 10px; font-size: 11.5px; }
+    .section-title { font-size: 18px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <h1>🎯 Data Engineer Interview Question Bank</h1>
+    <p>Comprehensive question set for 5+ years experienced Data Engineers · SQL · Python · PySpark · AWS · Snowflake · Airflow · dbt · Kafka · Data Modeling · System Design · Scenario · Behavioral</p>
+    <div class="stats-grid">
+      <div class="stat"><div class="stat-label">Target Level</div><div class="stat-value">5+ Years</div></div>
+      <div class="stat"><div class="stat-label">Categories</div><div class="stat-value">15</div></div>
+      <div class="stat"><div class="stat-label">Total Questions</div><div class="stat-value">500+</div></div>
+      <div class="stat"><div class="stat-label">Stack</div><div class="stat-value">AWS + Snowflake</div></div>
+    </div>
+  </header>
+
+  <input type="text" id="searchBox" class="search-box" placeholder="🔍 Type to filter questions across all tabs (e.g., 'window function', 'partition', 'SCD2', 'broadcast join')..." />
+
+  <div class="tabs">
+    <button class="tab active" onclick="showTab(event,'common')">⭐ Top Common</button>
+    <button class="tab" onclick="showTab(event,'sql')">SQL</button>
+    <button class="tab" onclick="showTab(event,'python')">Python</button>
+    <button class="tab" onclick="showTab(event,'spark')">PySpark</button>
+    <button class="tab" onclick="showTab(event,'aws')">AWS</button>
+    <button class="tab" onclick="showTab(event,'snowflake')">Snowflake</button>
+    <button class="tab" onclick="showTab(event,'airflow')">Airflow</button>
+    <button class="tab" onclick="showTab(event,'dbt')">dbt</button>
+    <button class="tab" onclick="showTab(event,'kafka')">Kafka / Streaming</button>
+    <button class="tab" onclick="showTab(event,'modeling')">Data Modeling</button>
+    <button class="tab" onclick="showTab(event,'design')">🏗 System Design</button>
+    <button class="tab" onclick="showTab(event,'scenario')">Scenario / Troubleshooting</button>
+    <button class="tab" onclick="showTab(event,'devops')">DevOps / CI-CD</button>
+    <button class="tab" onclick="showTab(event,'coding')">Coding / DSA</button>
+    <button class="tab" onclick="showTab(event,'behavioral')">Behavioral / HR</button>
+  </div>
+
+  <!-- ============ TOP COMMON ============ -->
+  <div class="tab-content active" id="common">
+    <div class="section-card">
+      <div class="section-header">
+        <h2 class="section-title">⭐ Top Common Questions (Asked in 80%+ Interviews)</h2>
+        <span class="section-tag">Must Prepare</span>
+      </div>
+
+      <div class="alert info">
+        <strong>Strategy:</strong> These questions appear in nearly every Data Engineer round (TCS / Infosys / Accenture / Cognizant / Tiger Analytics / Mu Sigma / EXL / Fractal / product companies). Prepare crisp 2–3 minute answers with one project example each.
+      </div>
+
+      <div class="subsection hot">
+        <h3>🔥 Introduction & Resume-Based</h3>
+        <ol class="q-list">
+          <li>Walk me through your resume / Tell me about yourself.</li>
+          <li>Explain your current project — architecture end to end.</li>
+          <li>What is your day-to-day role as a Data Engineer?</li>
+          <li>What was the most challenging problem you solved in your last project?</li>
+          <li>Why are you switching from SAP / Support / Testing to Data Engineering?</li>
+          <li>Which tools and technologies are you most comfortable with?</li>
+          <li>What does a typical data pipeline look like in your project?</li>
+          <li>Draw the architecture diagram of your most recent pipeline on the whiteboard.</li>
+          <li>How big is your data (volume / velocity / variety)?</li>
+          <li>What is the team size and how is work divided?</li>
+          <li>What is your role in design vs development vs production support?</li>
+          <li>Describe a production incident you handled and the RCA.</li>
+          <li>What new technology have you learned in the last 6 months?</li>
+          <li>Have you worked on real-time pipelines or only batch?</li>
+          <li>Where do you see yourself in 3 years?</li>
+        </ol>
+      </div>
+
+      <div class="subsection hot">
+        <h3>🔥 Concept Fundamentals (Every Interview)</h3>
+        <ol class="q-list">
+          <li>What is the difference between ETL and ELT? Which one is preferred today and why?</li>
+          <li>What is a data lake vs data warehouse vs data lakehouse vs data mart?</li>
+          <li>Explain OLTP vs OLAP with examples.</li>
+          <li>What is a star schema vs snowflake schema? Which do you prefer and why?</li>
+          <li>What are SCD types 1, 2, 3, 4, 6? Write SQL for SCD Type 2.</li>
+          <li>What is a fact table vs dimension table? Types of fact tables?</li>
+          <li>What is partitioning vs bucketing vs clustering? When to use each?</li>
+          <li>Difference between RDBMS and NoSQL — and when to choose which?</li>
+          <li>What is normalization vs denormalization? Why do warehouses denormalize?</li>
+          <li>What is data modeling? Walk through your modeling approach for a new domain.</li>
+          <li>Batch vs micro-batch vs streaming — give use cases for each.</li>
+          <li>What is idempotency in a data pipeline and how do you achieve it?</li>
+          <li>What is at-least-once, at-most-once, exactly-once delivery?</li>
+          <li>How do you handle late-arriving data?</li>
+          <li>How do you handle schema evolution / schema drift in pipelines?</li>
+          <li>What is data lineage and why does it matter?</li>
+          <li>What is the difference between row-based and columnar storage?</li>
+          <li>Why is Parquet preferred over CSV for big data?</li>
+          <li>Compare Parquet vs ORC vs Avro vs JSON vs CSV.</li>
+          <li>What is the CAP theorem? Apply it to a system you have built.</li>
+        </ol>
+      </div>
+
+      <div class="subsection">
+        <h3>🏆 Quick-Fire Mixed</h3>
+        <ol class="q-list">
+          <li>Difference between WHERE and HAVING.</li>
+          <li>What is the difference between RANK, DENSE_RANK and ROW_NUMBER?</li>
+          <li>Difference between UNION and UNION ALL.</li>
+          <li>What is the difference between coalesce and repartition in Spark?</li>
+          <li>Difference between cache and persist in Spark.</li>
+          <li>Difference between map and flatMap.</li>
+          <li>Difference between DataFrame, Dataset and RDD.</li>
+          <li>What is a broadcast join? When does Spark do it automatically?</li>
+          <li>Difference between narrow vs wide transformations.</li>
+          <li>Difference between Snowpipe and a COPY INTO statement.</li>
+          <li>Difference between Snowflake Streams and Tasks.</li>
+          <li>Difference between Airflow operators, sensors and hooks.</li>
+          <li>What is the difference between S3 Standard, IA, Glacier?</li>
+          <li>Difference between Glue Crawler and Glue Job.</li>
+          <li>Difference between dbt seed, source, model, snapshot, test.</li>
+        </ol>
+      </div>
+
+      <div class="subsection advanced">
+        <h3>🎓 5+ Years Specific Signals</h3>
+        <ol class="q-list">
+          <li>How do you decide when to introduce a new tool in your stack?</li>
+          <li>How do you do cost optimisation for a cloud data platform?</li>
+          <li>How do you onboard a new data source from scratch?</li>
+          <li>How do you handle stakeholder requirements that keep changing mid-sprint?</li>
+          <li>Walk me through a migration you led (on-prem → cloud, or one stack → another).</li>
+          <li>How have you mentored juniors / done code reviews?</li>
+          <li>What is your definition of "production-ready" pipeline?</li>
+          <li>How do you write a design document before building a pipeline?</li>
+          <li>What metrics do you track to know a pipeline is healthy?</li>
+          <li>How do you handle on-call and PagerDuty / alert fatigue?</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ SQL ============ -->
+  <div class="tab-content" id="sql">
+    <div class="section-card">
+      <div class="section-header">
+        <h2 class="section-title">📊 SQL & Advanced SQL</h2>
+        <span class="section-tag">Hot Round — Always Asked</span>
+      </div>
+
+      <div class="alert warn">
+        <strong>Reality:</strong> SQL is the #1 round that filters candidates. For 5+ years, expect <strong>4–6 hands-on queries</strong> on window functions, joins, CTEs, and tricky aggregation. Practice on real datasets (StrataScratch, LeetCode SQL, DataLemur).
+      </div>
+
+      <div class="subsection hot">
+        <h3>🔥 SQL Concepts (Theory)</h3>
+        <ol class="q-list">
+          <li>Difference between INNER, LEFT, RIGHT, FULL OUTER, CROSS and SELF JOIN.</li>
+          <li>Difference between WHERE and HAVING clause.</li>
+          <li>Difference between GROUP BY and PARTITION BY.</li>
+          <li>What is the execution order of an SQL query (FROM, WHERE, GROUP BY, HAVING, SELECT, ORDER BY, LIMIT)?</li>
+          <li>What is a CTE? Difference between CTE, subquery, temp table, view, materialized view.</li>
+          <li>What is a recursive CTE? Give a real use case.</li>
+          <li>Difference between RANK, DENSE_RANK, ROW_NUMBER, NTILE, PERCENT_RANK.</li>
+          <li>Explain LEAD, LAG, FIRST_VALUE, LAST_VALUE with examples.</li>
+          <li>What is a window function frame (ROWS vs RANGE, UNBOUNDED PRECEDING)?</li>
+          <li>What is the difference between DELETE, TRUNCATE and DROP?</li>
+          <li>Difference between primary key, unique key, candidate key, surrogate key, natural key.</li>
+          <li>What are ACID properties? Explain with a banking example.</li>
+          <li>What is normalisation? Explain 1NF, 2NF, 3NF, BCNF.</li>
+          <li>What is denormalisation? Why is it used in warehouses?</li>
+          <li>What are indexes? Difference between clustered and non-clustered.</li>
+          <li>How does an index affect insert/update/delete performance?</li>
+          <li>What is the difference between EXISTS and IN? Which is faster?</li>
+          <li>What is a correlated subquery? Why is it expensive?</li>
+          <li>Difference between UNION and UNION ALL.</li>
+          <li>What is COALESCE vs NVL vs ISNULL vs NULLIF?</li>
+          <li>What is the difference between CHAR, VARCHAR, VARCHAR2, TEXT?</li>
+          <li>What is the difference between CAST and CONVERT?</li>
+          <li>What is a stored procedure vs function vs trigger?</li>
+          <li>What are pivot and unpivot operations?</li>
+          <li>What is a query plan / explain plan? How do you read it?</li>
+        </ol>
+      </div>
+
+      <div class="subsection hot">
+        <h3>🔥 Hands-On SQL Problems (Most Asked)</h3>
+        <ol class="q-list">
+          <li>Find the Nth highest salary in each department (multiple ways — window, subquery, DENSE_RANK).</li>
+          <li>Find employees who earn more than their manager.</li>
+          <li>Find duplicate rows in a table and delete duplicates keeping the latest.</li>
+          <li>Find consecutive login days for each user (gaps and islands problem).</li>
+          <li>Find users who logged in for 3 consecutive days.</li>
+          <li>Calculate running total / cumulative sum per customer.</li>
+          <li>Calculate 7-day moving average of sales.</li>
+          <li>Find the second highest salary department-wise without using LIMIT/OFFSET.</li>
+          <li>Pivot monthly sales data into columns for each month.</li>
+          <li>Unpivot a wide table into long format.</li>
+          <li>Find customers who placed orders in 2024 but not in 2025.</li>
+          <li>Calculate month-over-month growth and YoY growth.</li>
+          <li>Find the top 3 products per category by revenue.</li>
+          <li>Split a comma-separated string into rows (STRING_SPLIT / SPLIT_TO_TABLE / LATERAL).</li>
+          <li>Find the percentage of total per row (window without partition).</li>
+          <li>Identify sessions: group events that are within 30 minutes of each other.</li>
+          <li>Find first and last event per user in a single query.</li>
+          <li>Compute median salary without using PERCENTILE_CONT.</li>
+          <li>Find customers whose order amount increased in 3 consecutive orders.</li>
+          <li>Build a calendar table and use it to fill missing dates.</li>
+          <li>Find employees who never took leave (anti-join).</li>
+          <li>Identify overlapping date ranges from a table of bookings.</li>
+          <li>Find products that were sold every month in 2025.</li>
+          <li>Detect price changes — get previous price vs current price using LAG.</li>
+          <li>Write SQL for SCD Type 2 implementation (insert new + close old version).</li>
+          <li>Identify the longest streak of wins for each player.</li>
+          <li>Find the department with highest average salary.</li>
+          <li>Calculate retention: % of users from Jan who came back in Feb.</li>
+          <li>Detect duplicate records across two tables.</li>
+          <li>Write a query to find friends-of-friends (graph-like in SQL).</li>
+        </ol>
+      </div>
+
+      <div class="subsection advanced">
+        <h3>🎓 Performance Tuning (5+ Years)</h3>
+        <ol class="q-list">
+          <li>How do you optimise a slow SQL query? Walk through your approach.</li>
+          <li>How do you read an EXPLAIN plan? What do you look for first?</li>
+          <li>When does an index hurt performance?</li>
+          <li>Difference between full table scan, index scan, index seek.</li>
+          <li>What is a covering index?</li>
+          <li>How do you reduce shuffle in a large join?</li>
+          <li>Why are correlated subqueries slow and how do you rewrite them?</li>
+          <li>How does the database choose join order? Can you force it?</li>
+          <li>What are statistics on a table and how do they affect query plans?</li>
+          <li>Difference between hash join, merge join, and nested loop join.</li>
+          <li>What is predicate pushdown? Give an example with Parquet.</li>
+          <li>How do you handle parameter sniffing issues?</li>
+          <li>How do you optimise GROUP BY on a 1 billion row table?</li>
+          <li>When should you partition vs index a table?</li>
+          <li>What is a materialised view? How is it different from a view? Refresh strategies?</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ PYTHON ============ -->
+  <div class="tab-content" id="python">
+    <div class="section-card">
+      <div class="section-header">
+        <h2 class="section-title">🐍 Python & Pandas</h2>
+        <span class="section-tag">Coding Round</span>
+      </div>
+
+      <div class="subsection hot">
+        <h3>🔥 Python Core</h3>
+        <ol class="q-list">
+          <li>Difference between list, tuple, set, dict — and when to use each.</li>
+          <li>What is mutable vs immutable in Python? Give examples.</li>
+          <li>Explain shallow copy vs deep copy.</li>
+          <li>What are *args and **kwargs?</li>
+          <li>What is a generator? Difference between yield and return.</li>
+          <li>What is the difference between iterator and iterable?</li>
+          <li>Explain list / dict / set comprehensions.</li>
+          <li>What is a decorator? Write one that times a function.</li>
+          <li>What are lambda functions? Why use them?</li>
+          <li>Difference between map(), filter(), reduce().</li>
+          <li>What is the GIL (Global Interpreter Lock)? Implications for multithreading?</li>
+          <li>Difference between multithreading and multiprocessing in Python.</li>
+          <li>What is asyncio? When would you use it in DE pipelines?</li>
+          <li>How does Python handle memory management and garbage collection?</li>
+          <li>What is __init__ vs __new__ vs __call__?</li>
+          <li>What is a class method vs static method vs instance method?</li>
+          <li>What is inheritance, polymorphism, encapsulation — give code examples.</li>
+          <li>Difference between is and == operators.</li>
+          <li>How do you handle exceptions? try/except/else/finally — when does else run?</li>
+          <li>Custom exception class — how to write one and why.</li>
+          <li>What are context managers? Write one using __enter__/__exit__ or @contextmanager.</li>
+          <li>Difference between pickle and json for serialisation.</li>
+          <li>How do you read a 10 GB CSV in Python without OOM?</li>
+          <li>What is the difference between requests.get vs urllib?</li>
+          <li>How do you parallelise an API call across 1000 URLs?</li>
+        </ol>
+      </div>
+
+      <div class="subsection">
+        <h3>🐼 Pandas</h3>
+        <ol class="q-list">
+          <li>Difference between Series and DataFrame.</li>
+          <li>Difference between loc, iloc, at, iat.</li>
+          <li>How to merge two DataFrames — types of merges?</li>
+          <li>Difference between merge, join, concat.</li>
+          <li>How do you handle nulls in Pandas (fillna, dropna, interpolate)?</li>
+          <li>How to group by multiple columns and aggregate with multiple functions?</li>
+          <li>Apply vs map vs applymap — when to use each?</li>
+          <li>Why is apply slow? How do you vectorise instead?</li>
+          <li>How to read CSV in chunks and process?</li>
+          <li>Pivot vs pivot_table vs crosstab — differences?</li>
+          <li>How to detect and remove duplicates?</li>
+          <li>How to convert column dtypes? Why is it important?</li>
+          <li>How to handle datetime columns and timezones?</li>
+          <li>Difference between Pandas DataFrame and Spark DataFrame — when to choose which?</li>
+          <li>What are Pandas UDFs in Spark? Why are they faster than regular Python UDFs?</li>
+        </ol>
+      </div>
+
+      <div class="subsection advanced">
+        <h3>🎓 Python for Data Engineering (Advanced)</h3>
+        <ol class="q-list">
+          <li>How do you structure a Python ETL project? (folders, configs, logging, tests)</li>
+          <li>How do you handle secrets in Python code? (env vars, Secrets Manager, Vault)</li>
+          <li>How do you write retries with exponential backoff?</li>
+          <li>How do you implement a singleton DB connection pool?</li>
+          <li>Walk through a Python script you wrote to call an API, paginate, retry, dedupe, and load to S3 / Postgres.</li>
+          <li>What is dependency injection in Python? Why use it?</li>
+          <li>How do you write unit tests with pytest? What about fixtures and mocks?</li>
+          <li>How do you test code that touches S3 / Snowflake / a DB?</li>
+          <li>What linters / formatters do you use (black, isort, flake8, ruff, mypy)?</li>
+          <li>How do you package a Python project (pyproject.toml, setup.py, poetry)?</li>
+          <li>Difference between virtualenv, venv, conda, poetry, uv.</li>
+          <li>How do you containerise a Python ETL job in Docker?</li>
+          <li>How do you schedule a Python job — cron vs Airflow vs Lambda?</li>
+          <li>How do you profile a slow Python script? cProfile, line_profiler, memory_profiler.</li>
+          <li>What is logging best practice in production (handlers, levels, JSON logs)?</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ SPARK ============ -->
+  <div class="tab-content" id="spark">
+    <div class="section-card">
+      <div class="section-header">
+        <h2 class="section-title">⚡ PySpark / Apache Spark</h2>
+        <span class="section-tag">Heavy Weight Round</span>
+      </div>
+
+      <div class="alert info">
+        <strong>Why important:</strong> Spark is asked in ~90% of DE interviews. Know <strong>architecture, transformations, optimisation, joins, partitioning</strong> deeply. Be ready to explain a Spark UI.
+      </div>
+
+      <div class="subsection hot">
+        <h3>🔥 Architecture & Internals</h3>
+        <ol class="q-list">
+          <li>Explain Spark architecture — Driver, Executors, Cluster Manager, Workers.</li>
+          <li>What happens internally when you run <code>df.show()</code>?</li>
+          <li>What is a Spark Job vs Stage vs Task?</li>
+          <li>How does Spark decide stages? (Wide vs narrow transformations.)</li>
+          <li>What is lazy evaluation in Spark? Why is it powerful?</li>
+          <li>Difference between RDD, DataFrame, Dataset. Which do you use and why?</li>
+          <li>What is Catalyst Optimiser? Walk through its phases.</li>
+          <li>What is Tungsten engine?</li>
+          <li>What is Adaptive Query Execution (AQE)? Which configs enable it?</li>
+          <li>Explain DAG and DAG scheduler.</li>
+          <li>What is the difference between client mode and cluster mode?</li>
+          <li>How does Spark handle fault tolerance? (Lineage + RDD recomputation.)</li>
+          <li>What is checkpointing? Difference between persist and checkpoint.</li>
+          <li>Difference between cache() and persist(). What storage levels exist?</li>
+          <li>What happens when you call collect() on a 1 TB DataFrame?</li>
+        </ol>
+      </div>
+
+      <div class="subsection hot">
+        <h3>🔥 Transformations & Actions</h3>
+        <ol class="q-list">
+          <li>List 10 common transformations and 5 actions.</li>
+          <li>Difference between map and flatMap with code example.</li>
+          <li>Difference between reduce and reduceByKey.</li>
+          <li>Difference between groupByKey and reduceByKey — why is reduceByKey better?</li>
+          <li>Difference between coalesce and repartition.</li>
+          <li>How does repartition(10) work internally? Does it cause shuffle?</li>
+          <li>What are window functions in Spark? Give an example.</li>
+          <li>How to use <code>when/otherwise</code> for case-style logic?</li>
+          <li>What is the difference between <code>filter()</code> and <code>where()</code>?</li>
+          <li>How do you drop duplicates considering only some columns?</li>
+          <li>How do you write a Spark UDF? Why are UDFs discouraged?</li>
+          <li>Difference between Python UDF, Pandas UDF, Scala UDF — performance order.</li>
+          <li>How do you handle nulls in joins?</li>
+          <li>How do you flatten a nested JSON / array column?</li>
+          <li>How do you explode and pivot in Spark?</li>
+        </ol>
+      </div>
+
+      <div class="subsection advanced">
+        <h3>🎓 Joins & Shuffles (5+ Years Hot Topic)</h3>
+        <ol class="q-list">
+          <li>What types of joins exist in Spark? (Shuffle hash, sort-merge, broadcast, BNLJ.)</li>
+          <li>How does Spark choose a join strategy?</li>
+          <li>What is a broadcast join? Threshold config (<code>spark.sql.autoBroadcastJoinThreshold</code>)?</li>
+          <li>How to broadcast a DataFrame manually?</li>
+          <li>What is data skew? How do you detect it from Spark UI?</li>
+          <li>How to handle skew — salting, AQE skew join, isolated processing?</li>
+          <li>Why is GROUP BY on a high-cardinality skewed key slow?</li>
+          <li>What is partition pruning? Predicate pushdown? Projection pushdown?</li>
+          <li>How does Spark handle wide rows / very small files (small files problem)?</li>
+          <li>What is bucketing? When is it useful vs partitioning?</li>
+          <li>How to repartition before a join to avoid shuffle?</li>
+          <li>What is <code>spark.sql.shuffle.partitions</code>? Default? How to tune?</li>
+          <li>How do you handle a join where one side is 5 TB and other is 50 GB?</li>
+          <li>What is dynamic partition pruning?</li>
+          <li>What is the cost of a sort-merge join vs broadcast join?</li>
+        </ol>
+      </div>
+
+      <div class="subsection advanced">
+        <h3>🎓 Performance Tuning</h3>
+        <ol class="q-list">
+          <li>What configs do you usually tune? (executor memory, cores, parallelism, AQE, broadcast threshold.)</li>
+          <li>How do you decide number of executors, executor cores, executor memory?</li>
+          <li>What is the formula for executor sizing?</li>
+          <li>What is off-heap memory in Spark? When to enable?</li>
+          <li>What causes <code>OutOfMemoryError</code> in driver vs executor?</li>
+          <li>How do you fix an OOM in the executor?</li>
+          <li>What is spill to disk? How to reduce it?</li>
+          <li>What is the small files problem and how to fix it?</li>
+          <li>How do you read 10,000 small JSON files efficiently?</li>
+          <li>Difference between <code>coalesce</code> before write vs <code>repartition</code> before write.</li>
+          <li>How do you write Parquet partitioned by date efficiently?</li>
+          <li>What is <code>maxRecordsPerFile</code> when writing?</li>
+          <li>How do you read Spark UI to debug a slow job?</li>
+          <li>What do you look at in the SQL tab, Stages tab, Storage tab?</li>
+          <li>How do you debug GC pressure?</li>
+        </ol>
+      </div>
+
+      <div class="subsection">
+        <h3>🌊 Structured Streaming</h3>
+        <ol class="q-list">
+          <li>What is Structured Streaming? How is it different from Spark Streaming (DStream)?</li>
+          <li>What is the micro-batch model?</li>
+          <li>What output modes exist? (append, update, complete.)</li>
+          <li>What is a watermark? How does it help in late data?</li>
+          <li>How do you handle stateful aggregations?</li>
+          <li>Trigger types — default, fixed interval, once, available-now, continuous.</li>
+          <li>What are checkpoints in streaming and why are they critical?</li>
+          <li>How do you achieve exactly-once with Spark + Kafka + S3?</li>
+          <li>How do you handle schema evolution in a streaming job?</li>
+          <li>How do you join streams with static tables / two streams?</li>
+        </ol>
+      </div>
+
+      <div class="subsection">
+        <h3>📦 Delta Lake / Lakehouse</h3>
+        <ol class="q-list">
+          <li>What is Delta Lake? Why use it over plain Parquet?</li>
+          <li>What is the transaction log (<code>_delta_log</code>)?</li>
+          <li>What is time travel? Give a syntax example.</li>
+          <li>Difference between OPTIMIZE, VACUUM, ZORDER.</li>
+          <li>How does Delta handle ACID transactions?</li>
+          <li>What is MERGE INTO? Write a SCD2 using MERGE.</li>
+          <li>What are Delta liquid clustering / generated columns?</li>
+          <li>Difference between Delta Lake, Iceberg and Hudi.</li>
+          <li>How does Delta avoid the small files problem?</li>
+          <li>What is Change Data Feed (CDF) in Delta?</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ AWS ============ -->
+  <div class="tab-content" id="aws">
+    <div class="section-card">
+      <div class="section-header">
+        <h2 class="section-title">☁️ AWS for Data Engineers</h2>
+        <span class="section-tag">Cloud Round</span>
+      </div>
+
+      <div class="subsection hot">
+        <h3>🔥 S3 (Storage)</h3>
+        <ol class="q-list">
+          <li>Explain S3 architecture — buckets, objects, keys.</li>
+          <li>What is S3 storage class? When to use Standard, IA, One Zone-IA, Glacier, Deep Archive?</li>
+          <li>What is S3 lifecycle policy? Give an example.</li>
+          <li>How do you secure an S3 bucket? (bucket policy, ACL, IAM, encryption.)</li>
+          <li>Server-side encryption — SSE-S3, SSE-KMS, SSE-C differences.</li>
+          <li>What is S3 versioning? When is it useful for data engineers?</li>
+          <li>What is S3 Object Lock?</li>
+          <li>How does S3 consistency model work today (strong read-after-write)?</li>
+          <li>What is S3 Select and Athena Select? When to use it?</li>
+          <li>What is S3 Event Notification? Use case with Lambda / SQS / EventBridge.</li>
+          <li>How do you copy 100 TB into S3? (DataSync, Snowball, Snowmobile, parallel multipart upload.)</li>
+          <li>What is multipart upload?</li>
+          <li>How do you partition data in S3 for Athena? (Hive-style folders.)</li>
+          <li>How do you organise a data lake on S3 — bronze/silver/gold or raw/curated/refined?</li>
+          <li>S3 cross-region replication vs same-region replication — use cases.</li>
+        </ol>
+      </div>
+
+      <div class="subsection hot">
+        <h3>🔥 Glue, EMR, Lambda</h3>
+        <ol class="q-list">
+          <li>What is AWS Glue? Components — crawler, catalog, jobs, triggers, workflows.</li>
+          <li>Difference between Glue Crawler and Glue Job.</li>
+          <li>What is Glue Data Catalog? How is it different from Hive Metastore?</li>
+          <li>Difference between Glue ETL and Glue Studio.</li>
+          <li>What are bookmarks in Glue? How do they help with incremental loads?</li>
+          <li>What is a DPU? How do you size a Glue job?</li>
+          <li>Glue vs EMR vs Lambda — when to pick each.</li>
+          <li>What is Glue Spark vs Glue Python Shell?</li>
+          <li>How do you debug a failing Glue job?</li>
+          <li>What is EMR? Differences between EMR on EC2, EMR Serverless, EMR on EKS.</li>
+          <li>How do you submit a Spark job on EMR? (step API, EMR Steps, livy.)</li>
+          <li>How do you handle EMR cluster autoscaling?</li>
+          <li>What is Lambda? Limitations (15 min, 10 GB ephemeral, payload).</li>
+          <li>Use case of Lambda in a DE pipeline (S3 trigger → tiny transform → SNS/SQS).</li>
+          <li>Lambda vs Step Functions vs MWAA — when to use each.</li>
+        </ol>
+      </div>
+
+      <div class="subsection">
+        <h3>📂 Athena, Redshift, Lake Formation</h3>
+        <ol class="q-list">
+          <li>What is Athena? How is it priced?</li>
+          <li>How do you reduce Athena cost? (Partitioning, columnar, compression, projection.)</li>
+          <li>What are partition projections in Athena?</li>
+          <li>Difference between Athena and Redshift Spectrum.</li>
+          <li>What is Redshift? RA3 vs DC2 — differences.</li>
+          <li>What is distribution style in Redshift? (KEY, ALL, EVEN, AUTO.)</li>
+          <li>What is sort key? Compound vs interleaved.</li>
+          <li>How do you load data into Redshift efficiently? (COPY from S3, manifest, max compression.)</li>
+          <li>What are materialised views in Redshift?</li>
+          <li>What is Redshift Spectrum? When is it useful?</li>
+          <li>How does Redshift handle concurrent workloads (WLM, queues)?</li>
+          <li>What is Lake Formation? When to use it?</li>
+          <li>How do you implement row-level / column-level security on a data lake?</li>
+          <li>How do you grant fine-grained permissions via Lake Formation tags?</li>
+          <li>Difference between Redshift, Snowflake, BigQuery for an analyst workload.</li>
+        </ol>
+      </div>
+
+      <div class="subsection">
+        <h3>📡 Streaming on AWS</h3>
+        <ol class="q-list">
+          <li>What is Kinesis Data Streams vs Firehose vs Data Analytics?</li>
+          <li>Difference between Kinesis and MSK (Managed Kafka).</li>
+          <li>What is a shard in Kinesis? Throughput per shard?</li>
+          <li>How do you scale a Kinesis stream?</li>
+          <li>Use case: ingest 1 million events/sec — Kinesis vs MSK?</li>
+          <li>Difference between SQS, SNS, EventBridge.</li>
+          <li>What is Step Functions? When do you use it instead of Airflow?</li>
+          <li>How do you design a CDC pipeline on AWS? (DMS → Kinesis/S3 → Glue/Spark → Snowflake/Redshift.)</li>
+          <li>What is AWS DMS? Full load vs CDC mode.</li>
+          <li>How do you handle DMS schema changes?</li>
+        </ol>
+      </div>
+
+      <div class="subsection advanced">
+        <h3>🎓 IAM, Networking, Cost (Senior)</h3>
+        <ol class="q-list">
+          <li>What is the principle of least privilege? How do you apply it in IAM?</li>
+          <li>Difference between IAM user, group, role, policy.</li>
+          <li>What is an instance profile?</li>
+          <li>What is cross-account access? How do you set it up?</li>
+          <li>What is a VPC endpoint? Why is it important for S3 access from EMR/Glue?</li>
+          <li>Difference between Security Group and NACL.</li>
+          <li>How do you connect Glue to an on-prem database? (Connections, JDBC, VPC.)</li>
+          <li>What is KMS? Customer-managed vs AWS-managed keys.</li>
+          <li>How do you monitor a data pipeline? (CloudWatch metrics, logs, alarms, X-Ray.)</li>
+          <li>How do you set up alerts when a Glue job fails?</li>
+          <li>How do you optimise cost on a data platform? (S3 lifecycle, spot instances, right-sizing, reserved capacity, query cost.)</li>
+          <li>What is AWS Budget and Cost Explorer?</li>
+          <li>What is a Service Control Policy (SCP) in AWS Organisations?</li>
+          <li>How do you handle multi-account architecture for data? (Landing zone, Control Tower.)</li>
+          <li>How do you do disaster recovery for a data lake on S3?</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ SNOWFLAKE ============ -->
+  <div class="tab-content" id="snowflake">
+    <div class="section-card">
+      <div class="section-header">
+        <h2 class="section-title">❄️ Snowflake</h2>
+        <span class="section-tag">Warehouse Round</span>
+      </div>
+
+      <div class="subsection hot">
+        <h3>🔥 Architecture & Core</h3>
+        <ol class="q-list">
+          <li>Explain Snowflake's three-layer architecture (storage, compute, cloud services).</li>
+          <li>Why is Snowflake called "decoupled storage and compute"?</li>
+          <li>What is a virtual warehouse? Sizes (XS to 6XL)?</li>
+          <li>What is multi-cluster warehouse? Auto-scaling policies?</li>
+          <li>Difference between scale up and scale out in Snowflake.</li>
+          <li>What is a micro-partition? Average size? Are they user-controlled?</li>
+          <li>What is clustering vs partitioning in Snowflake?</li>
+          <li>What is a clustering key? When should you define one?</li>
+          <li>What is automatic clustering? Cost implications?</li>
+          <li>What is Time Travel? Default retention? Max?</li>
+          <li>What is Fail-safe? Difference from Time Travel.</li>
+          <li>What is Zero-Copy Cloning? Cost implications.</li>
+          <li>What are the types of tables in Snowflake — permanent, transient, temporary, external?</li>
+          <li>Difference between SECURE and regular view.</li>
+          <li>What is a materialised view in Snowflake? Limitations?</li>
+        </ol>
+      </div>
+
+      <div class="subsection hot">
+        <h3>🔥 Data Loading & Streaming</h3>
+        <ol class="q-list">
+          <li>How do you load data into Snowflake? COPY INTO vs Snowpipe vs Snowpipe Streaming vs Kafka Connector.</li>
+          <li>What is a stage in Snowflake? Internal vs external (S3/Azure/GCS).</li>
+          <li>How does Snowpipe work? Auto-ingest with S3 event notifications.</li>
+          <li>What is Snowpipe Streaming? Latency expectations?</li>
+          <li>What is a Stream? Standard vs Append-only vs Insert-only stream.</li>
+          <li>What is a Task? How do you chain tasks (DAG of tasks)?</li>
+          <li>How do you build a CDC pipeline inside Snowflake using Streams + Tasks?</li>
+          <li>How do you handle late-arriving / out-of-order data?</li>
+          <li>How do you load semi-structured data (JSON, XML, Parquet)?</li>
+          <li>What is the VARIANT data type? How do you query nested JSON?</li>
+          <li>What is FLATTEN function?</li>
+          <li>Difference between COPY INTO and INSERT.</li>
+          <li>What is a file format object?</li>
+          <li>How do you handle bad rows during COPY? ON_ERROR options.</li>
+          <li>How do you reload only failed files? (FORCE, VALIDATION_MODE.)</li>
+        </ol>
+      </div>
+
+      <div class="subsection advanced">
+        <h3>🎓 Performance, Cost, Security</h3>
+        <ol class="q-list">
+          <li>How do you tune a slow Snowflake query? (Query profile, clustering, warehouse size, result cache.)</li>
+          <li>What are the three caches in Snowflake? (Result, local disk, remote/metadata.)</li>
+          <li>What is search optimization service? When is it useful?</li>
+          <li>What is query acceleration service?</li>
+          <li>How does Snowflake bill compute? Per-second after first 60s.</li>
+          <li>How do you control cost? (Resource monitors, auto-suspend, right-size warehouses.)</li>
+          <li>What is a resource monitor?</li>
+          <li>How do you set up RBAC properly? (Account → role → user; future grants.)</li>
+          <li>Difference between SYSADMIN, SECURITYADMIN, USERADMIN, ACCOUNTADMIN.</li>
+          <li>What is row access policy? Column masking policy?</li>
+          <li>What is dynamic data masking?</li>
+          <li>How do you do data sharing in Snowflake? (Secure share, reader account, marketplace.)</li>
+          <li>What is a replication group and failover group?</li>
+          <li>How do you achieve DR across regions / clouds?</li>
+          <li>What is Snowpark? When would you use it instead of Spark?</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ AIRFLOW ============ -->
+  <div class="tab-content" id="airflow">
+    <div class="section-card">
+      <div class="section-header">
+        <h2 class="section-title">🌀 Apache Airflow</h2>
+        <span class="section-tag">Orchestration Round</span>
+      </div>
+
+      <div class="subsection hot">
+        <h3>🔥 Concepts</h3>
+        <ol class="q-list">
+          <li>What is Airflow? Why orchestration matters in DE.</li>
+          <li>Explain Airflow architecture (Scheduler, Webserver, Worker, Metadata DB, Executor, Triggerer).</li>
+          <li>What is a DAG? Difference between DAG and pipeline.</li>
+          <li>What are the executors? (Local, Sequential, Celery, Kubernetes, CeleryKubernetes.)</li>
+          <li>Difference between Operator, Sensor, Hook.</li>
+          <li>List 10 common operators (PythonOperator, BashOperator, EmailOperator, S3KeySensor, SnowflakeOperator, etc.).</li>
+          <li>What is XCom? Limitations and best practices.</li>
+          <li>What is a TaskGroup vs SubDAG? Why is SubDAG deprecated?</li>
+          <li>What is a Variable, Connection, Pool?</li>
+          <li>What are Jinja templates / macros? Give examples.</li>
+          <li>Difference between <code>execution_date</code>, <code>data_interval_start</code>, <code>logical_date</code>.</li>
+          <li>How does Airflow handle catchup and backfill?</li>
+          <li>What is <code>depends_on_past</code> and <code>wait_for_downstream</code>?</li>
+          <li>What is task retry, retry_delay, exponential backoff?</li>
+          <li>What is SLA in Airflow?</li>
+        </ol>
+      </div>
+
+      <div class="subsection advanced">
+        <h3>🎓 Advanced Patterns</h3>
+        <ol class="q-list">
+          <li>How do you build dynamic DAGs (generated at parse time)?</li>
+          <li>Dynamic Task Mapping (Airflow 2.3+) — give an example.</li>
+          <li>How do you pass large data between tasks? (Hint: not XCom — use S3.)</li>
+          <li>How do you implement idempotent tasks?</li>
+          <li>How do you handle data quality checks inside a DAG?</li>
+          <li>How do you trigger one DAG from another? (TriggerDagRunOperator, ExternalTaskSensor, datasets.)</li>
+          <li>What are Airflow Datasets (data-aware scheduling)?</li>
+          <li>How do you secure Airflow connections / secrets? (Secrets backend: AWS Secrets Manager, Vault.)</li>
+          <li>How do you scale Airflow? (More workers, KubernetesExecutor, multiple schedulers.)</li>
+          <li>How do you monitor Airflow? (Statsd, Prometheus, Datadog, Grafana.)</li>
+          <li>How do you handle DAG failures gracefully? (Callbacks: on_failure_callback, on_retry_callback.)</li>
+          <li>What is a sensor reschedule mode vs poke mode?</li>
+          <li>How do you write custom operators / hooks?</li>
+          <li>What are best practices for DAG file structure?</li>
+          <li>What is MWAA vs Astronomer vs self-managed Airflow? Trade-offs.</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ DBT ============ -->
+  <div class="tab-content" id="dbt">
+    <div class="section-card">
+      <div class="section-header">
+        <h2 class="section-title">🔧 dbt (Data Build Tool)</h2>
+        <span class="section-tag">Transformation Round</span>
+      </div>
+
+      <div class="subsection hot">
+        <h3>🔥 Core Concepts</h3>
+        <ol class="q-list">
+          <li>What is dbt? ELT vs ETL — where does dbt fit?</li>
+          <li>Difference between dbt Core and dbt Cloud.</li>
+          <li>What are models, sources, seeds, snapshots, tests, macros, analyses?</li>
+          <li>What are materialisations? (table, view, incremental, ephemeral.)</li>
+          <li>When do you use incremental vs table materialisation?</li>
+          <li>What is an incremental model? <code>is_incremental()</code> usage.</li>
+          <li>Incremental strategies — append, merge, delete+insert, insert_overwrite.</li>
+          <li>What is a snapshot? How does dbt implement SCD2?</li>
+          <li>What is <code>ref()</code> vs <code>source()</code>? Why is it important?</li>
+          <li>What is the staging / intermediate / marts layer pattern?</li>
+          <li>What are dbt tests? Built-in vs generic vs singular vs custom.</li>
+          <li>How do you write a custom test?</li>
+          <li>What are macros? Write one for "current timestamp in UTC".</li>
+          <li>What is a Jinja loop in dbt?</li>
+          <li>What is <code>{{ config() }}</code>? Give 3 useful configs.</li>
+        </ol>
+      </div>
+
+      <div class="subsection advanced">
+        <h3>🎓 Advanced</h3>
+        <ol class="q-list">
+          <li>How does dbt build the DAG?</li>
+          <li>Difference between <code>dbt run</code>, <code>dbt build</code>, <code>dbt test</code>, <code>dbt compile</code>.</li>
+          <li>What is <code>dbt deps</code>? How do packages work?</li>
+          <li>What is dbt_utils? Name 5 useful macros.</li>
+          <li>What is exposure, metric, semantic layer in dbt?</li>
+          <li>How do you implement environment separation (dev / staging / prod)?</li>
+          <li>How do you do CI/CD with dbt? (Slim CI, state:modified+.)</li>
+          <li>What is a defer flag in dbt?</li>
+          <li>How do you handle PII / column-level docs / access?</li>
+          <li>How do you orchestrate dbt — Airflow, dbt Cloud, GitHub Actions? Pros & cons.</li>
+          <li>How do you debug a failing dbt model?</li>
+          <li>What is <code>elementary</code> / <code>re_data</code> / <code>great_expectations</code> integration?</li>
+          <li>How do you write a dbt model that does upsert into Snowflake?</li>
+          <li>Difference between dbt snapshot and SCD Type 2 in Snowflake Streams + Tasks.</li>
+          <li>What are the trade-offs of dbt vs Stored Procedures?</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ KAFKA ============ -->
+  <div class="tab-content" id="kafka">
+    <div class="section-card">
+      <div class="section-header">
+        <h2 class="section-title">📡 Kafka & Streaming</h2>
+        <span class="section-tag">Streaming Round</span>
+      </div>
+
+      <div class="subsection hot">
+        <h3>🔥 Kafka Core</h3>
+        <ol class="q-list">
+          <li>What is Kafka? Why use it instead of a queue (RabbitMQ/SQS)?</li>
+          <li>Explain Kafka architecture (Producer, Broker, Consumer, ZooKeeper / KRaft).</li>
+          <li>What is a topic, partition, offset, replica, leader, follower?</li>
+          <li>How is data ordered in Kafka? Per partition guarantee.</li>
+          <li>What is a consumer group? How does rebalancing work?</li>
+          <li>What is ISR (in-sync replicas)?</li>
+          <li>What is acks=0/1/all? Trade-offs.</li>
+          <li>What is exactly-once semantics in Kafka? (Idempotent producer + transactions.)</li>
+          <li>How do you choose number of partitions for a topic?</li>
+          <li>What is retention policy? Log compaction vs time-based.</li>
+          <li>How do you handle schema evolution in Kafka? (Schema Registry, Avro, backward/forward compatibility.)</li>
+          <li>Difference between Avro, Protobuf, JSON Schema.</li>
+          <li>What is Kafka Connect? Source vs Sink connectors.</li>
+          <li>What is Kafka Streams vs ksqlDB?</li>
+          <li>Difference between Kafka and Kinesis.</li>
+        </ol>
+      </div>
+
+      <div class="subsection advanced">
+        <h3>🎓 Streaming Patterns</h3>
+        <ol class="q-list">
+          <li>How do you design a Kafka + Spark Streaming pipeline?</li>
+          <li>How do you achieve exactly-once from Kafka → S3 → Snowflake?</li>
+          <li>How do you handle out-of-order events?</li>
+          <li>What are watermarks in streaming?</li>
+          <li>How do you handle a poison message?</li>
+          <li>How do you backfill a streaming pipeline?</li>
+          <li>How do you reprocess from a specific offset?</li>
+          <li>Tumbling vs sliding vs session window — examples.</li>
+          <li>What is dead letter queue?</li>
+          <li>How do you size a Kafka cluster? (Throughput, retention, partition count.)</li>
+          <li>How do you monitor Kafka lag?</li>
+          <li>How do you handle a consumer that is constantly behind?</li>
+          <li>How do you guarantee ordering when you need it per user?</li>
+          <li>What is CDC via Debezium → Kafka → Snowflake / Redshift?</li>
+          <li>How do you design retries in a streaming consumer?</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ DATA MODELING ============ -->
+  <div class="tab-content" id="modeling">
+    <div class="section-card">
+      <div class="section-header">
+        <h2 class="section-title">🧱 Data Modeling & Warehousing</h2>
+        <span class="section-tag">Design Round</span>
+      </div>
+
+      <div class="subsection hot">
+        <h3>🔥 Modeling Concepts</h3>
+        <ol class="q-list">
+          <li>OLTP vs OLAP — characteristics and example systems.</li>
+          <li>Star schema vs Snowflake schema vs Galaxy schema — pros/cons.</li>
+          <li>Fact table vs Dimension table.</li>
+          <li>Types of fact tables — transactional, periodic snapshot, accumulating snapshot, factless.</li>
+          <li>Types of dimensions — conformed, junk, degenerate, role-playing, slowly changing.</li>
+          <li>Explain all SCD types (0, 1, 2, 3, 4, 6) with examples.</li>
+          <li>Surrogate key vs natural key — why surrogate is preferred.</li>
+          <li>What is a bridge table?</li>
+          <li>What is a date dimension? Why mandatory?</li>
+          <li>Kimball vs Inmon vs Data Vault — when to choose each.</li>
+          <li>What is Data Vault 2.0? (Hubs, Links, Satellites.)</li>
+          <li>What is One Big Table (OBT) / wide tables? Pros & cons.</li>
+          <li>What is medallion architecture (bronze/silver/gold)?</li>
+          <li>What is a semantic layer?</li>
+          <li>How do you design a slowly evolving multi-source dimension?</li>
+        </ol>
+      </div>
+
+      <div class="subsection scenario">
+        <h3>📐 Modeling Scenarios</h3>
+        <ol class="q-list">
+          <li>Design a data model for an e-commerce platform (orders, customers, products, returns, promotions).</li>
+          <li>Design a model for ride-sharing (Uber-like): trips, drivers, riders, surge pricing, ratings.</li>
+          <li>Design a model for banking transactions with multi-currency and reversals.</li>
+          <li>Design a model for SAP PP (production orders, routings, work centres) into Snowflake.</li>
+          <li>Design a model for SaaS subscriptions (sign-ups, plans, renewals, churn, MRR/ARR).</li>
+          <li>How would you track currency conversion historical FX rates? (Type 2 dimension.)</li>
+          <li>Model a clickstream pipeline (events, sessions, users, pages).</li>
+          <li>Design a slowly changing customer dimension with multiple addresses.</li>
+          <li>Design data model for IoT sensors (millions of devices, telemetry every second).</li>
+          <li>Design a model for a healthcare claims processing system.</li>
+          <li>How do you model many-to-many relationships in a star schema?</li>
+          <li>How do you handle event-level vs aggregated facts in the same warehouse?</li>
+          <li>How do you handle product hierarchy changes over time?</li>
+          <li>Design a model where granularity differs between facts.</li>
+          <li>Design a model for a BI dashboard with sub-second response time on a billion rows.</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ SYSTEM DESIGN ============ -->
+  <div class="tab-content" id="design">
+    <div class="section-card">
+      <div class="section-header">
+        <h2 class="section-title">🏗 System Design — Data Engineering</h2>
+        <span class="section-tag">Senior / Lead Round</span>
+      </div>
+
+      <div class="alert danger">
+        <strong>How to answer:</strong> Use a 6-step framework — <strong>(1) Clarify requirements</strong> (functional + non-functional, volume, latency, SLA) → <strong>(2) High-level architecture</strong> (ingest → store → process → serve) → <strong>(3) Storage choice</strong> (S3, Snowflake, OLTP, KV) → <strong>(4) Processing</strong> (batch / stream / micro-batch) → <strong>(5) Quality, monitoring, security, cost</strong> → <strong>(6) Trade-offs &amp; bottlenecks</strong>.
+      </div>
+
+      <div class="info-grid">
+        <div class="info-card">
+          <h3>Always Discuss</h3>
+          <ul>
+            <li>Functional + non-functional requirements</li>
+            <li>Volume, velocity, variety</li>
+            <li>Latency SLA (real-time vs batch)</li>
+            <li>Schema and data contracts</li>
+            <li>Idempotency and exactly-once</li>
+            <li>Backfill and replay strategy</li>
+            <li>Data quality &amp; observability</li>
+            <li>Security (PII, encryption, RBAC)</li>
+            <li>Cost &amp; right-sizing</li>
+            <li>DR &amp; disaster recovery</li>
+          </ul>
+        </div>
+        <div class="info-card">
+          <h3>Common Building Blocks</h3>
+          <ul>
+            <li>Source: RDBMS, API, files, Kafka, IoT</li>
+            <li>CDC: Debezium / AWS DMS</li>
+            <li>Queue: Kafka / Kinesis / SQS</li>
+            <li>Lake: S3 (raw / curated / refined)</li>
+            <li>Process: Spark / Glue / EMR / Flink</li>
+            <li>Warehouse: Snowflake / Redshift</li>
+            <li>Transform: dbt</li>
+            <li>Orchestrate: Airflow / Step Functions</li>
+            <li>Serve: BI, API, ML feature store</li>
+            <li>Monitor: CloudWatch / Datadog / Grafana</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="subsection hot">
+        <h3>🔥 Classic DE System Design Problems</h3>
+        <ol class="q-list">
+          <li><strong>Design an end-to-end batch pipeline:</strong> ingest 100 GB/day from MySQL → S3 → transform → Snowflake → BI tool.</li>
+          <li><strong>Design a real-time streaming pipeline:</strong> 1 M events/sec clickstream → process → serve dashboards with &lt; 5 s latency.</li>
+          <li><strong>Design a CDC pipeline:</strong> capture changes from 50 production tables and replicate to Snowflake with &lt; 1 min lag.</li>
+          <li><strong>Design a data lake</strong> on S3 with bronze/silver/gold layers, partitioning, file size targets, and access patterns.</li>
+          <li><strong>Design a data warehouse</strong> on Snowflake/Redshift for an e-commerce platform (orders, returns, inventory, marketing).</li>
+          <li><strong>Design an ingestion framework</strong> that onboards a new source in &lt; 1 day via config (no code).</li>
+          <li><strong>Design a metadata / data catalog</strong> with lineage and ownership.</li>
+          <li><strong>Design a data quality framework</strong> with rules, dashboards, alerts, and SLAs.</li>
+          <li><strong>Design SCD Type 2 at scale</strong> for a 100M-row dimension with hourly updates.</li>
+          <li><strong>Design exactly-once pipeline:</strong> Kafka → Spark Structured Streaming → S3 (Delta) → Snowflake.</li>
+        </ol>
+      </div>
+
+      <div class="subsection advanced">
+        <h3>🎓 Advanced / Senior Problems</h3>
+        <ol class="q-list">
+          <li><strong>Design a multi-tenant data platform</strong> with logical isolation and shared compute.</li>
+          <li><strong>Design a feature store</strong> (online + offline) for ML.</li>
+          <li><strong>Design a GDPR-compliant pipeline:</strong> right-to-be-forgotten, encryption, audit log.</li>
+          <li><strong>Design a streaming join</strong> of two unbounded streams (e.g., order events + payment events).</li>
+          <li><strong>Design a self-service analytics layer</strong> for analysts using dbt + BI tool.</li>
+          <li><strong>Design a migration</strong> from on-prem Hadoop/Hive to AWS + Snowflake — phased rollout, validation, cutover.</li>
+          <li><strong>Design a cost-optimisation framework</strong> across S3, Snowflake, EMR — measure ROI.</li>
+          <li><strong>Design data observability:</strong> freshness, volume, schema, distribution, lineage monitoring.</li>
+          <li><strong>Design a backfill system</strong> that can reprocess 1 year of data without breaking incremental loads.</li>
+          <li><strong>Design a fraud detection pipeline</strong> with &lt; 100 ms inference latency.</li>
+          <li><strong>Design an ad-impressions pipeline</strong> handling 10 B events/day with deduplication.</li>
+          <li><strong>Design a marketplace order pipeline</strong> (Uber/Swiggy) — order → assignment → delivery → settlement.</li>
+          <li><strong>Design an IoT data platform</strong> for 10 M devices reporting every 10 seconds.</li>
+          <li><strong>Design a near-real-time inventory system</strong> across 500 warehouses.</li>
+          <li><strong>Design an A/B testing analytics pipeline</strong> with statistical significance computation.</li>
+        </ol>
+      </div>
+
+      <div class="subsection scenario">
+        <h3>📐 Non-Functional Deep-Dives</h3>
+        <ol class="q-list">
+          <li>How would you handle 10x growth in data volume next year?</li>
+          <li>What is your strategy if the warehouse is becoming the bottleneck?</li>
+          <li>How would you reduce monthly cloud bill by 30% without compromising SLAs?</li>
+          <li>How would you migrate a critical pipeline with zero downtime?</li>
+          <li>How would you design DR with RPO = 15 min and RTO = 1 hour?</li>
+          <li>How would you handle PII across the whole platform?</li>
+          <li>How would you implement role-based access on 5000 tables across 200 teams?</li>
+          <li>How would you do tenant-level chargeback in a shared warehouse?</li>
+          <li>How would you set up automated data contracts between producer and consumer teams?</li>
+          <li>How would you implement a data mesh in a 1000-employee org?</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ SCENARIO ============ -->
+  <div class="tab-content" id="scenario">
+    <div class="section-card">
+      <div class="section-header">
+        <h2 class="section-title">🧩 Scenario-Based / Troubleshooting</h2>
+        <span class="section-tag">Real-World Round</span>
+      </div>
+
+      <div class="subsection scenario">
+        <h3>📞 Production Incidents</h3>
+        <ol class="q-list">
+          <li>Your daily pipeline missed SLA and stakeholders are angry — what do you do in the next 30 minutes?</li>
+          <li>A Spark job that ran in 1 hour yesterday is taking 5 hours today. How do you debug?</li>
+          <li>You see duplicate rows in the final fact table. Walk through your investigation.</li>
+          <li>The source system started sending an extra column. Pipeline silently failed. What's wrong with your design? How do you fix it?</li>
+          <li>Snowflake bill spiked 3x last month. How do you investigate and fix?</li>
+          <li>Airflow scheduler is unresponsive in production. What checks do you run?</li>
+          <li>A consumer in Kafka is lagging by 1 hour. How do you triage?</li>
+          <li>Glue job fails intermittently with timeout — what could be wrong?</li>
+          <li>Data quality dashboard shows row count dropped by 20% today. What do you check?</li>
+          <li>Reports show wrong numbers but pipeline succeeded. What's the playbook?</li>
+          <li>The data lake on S3 grew from 50 TB to 500 TB in 6 months. How do you control it?</li>
+          <li>A Redshift query is taking 30 minutes — same query was 30 seconds a week ago. Steps?</li>
+          <li>A dbt model is producing NULLs in primary key column. Where do you start?</li>
+          <li>Snowflake task chain stops mid-way every 3rd day. Investigation?</li>
+          <li>Lambda function processing S3 events is throttling. Why and how to fix?</li>
+        </ol>
+      </div>
+
+      <div class="subsection scenario">
+        <h3>⚙️ Design Trade-Offs</h3>
+        <ol class="q-list">
+          <li>Should I use Snowflake or Redshift for this workload?</li>
+          <li>Should this be batch or streaming?</li>
+          <li>Should I store this in S3 or in Snowflake directly?</li>
+          <li>Should I write this transformation in Spark or in dbt + Snowflake SQL?</li>
+          <li>Should I use Glue or EMR for this ETL?</li>
+          <li>Should I use Airflow or Step Functions?</li>
+          <li>Should I use Kafka or Kinesis?</li>
+          <li>Should I do CDC via DMS, Debezium, or hand-rolled?</li>
+          <li>Should I use Iceberg, Hudi, or Delta?</li>
+          <li>Should I partition by date or by customer_id?</li>
+          <li>Should the warehouse use SCD2 or daily snapshots?</li>
+          <li>Should I de-duplicate at ingest or at transformation?</li>
+          <li>Should we centralise transformations or push down to source?</li>
+          <li>Should the team adopt data mesh or stay centralised?</li>
+          <li>Should we adopt dbt Cloud, dbt Core on Airflow, or stored procedures?</li>
+        </ol>
+      </div>
+
+      <div class="subsection scenario">
+        <h3>🚨 Edge Cases & Gotchas</h3>
+        <ol class="q-list">
+          <li>How do you handle timezone differences across multiple source systems?</li>
+          <li>How do you handle UTF-8 vs Latin-1 / weird characters in CSV?</li>
+          <li>How do you handle nested JSON with arrays of objects?</li>
+          <li>How do you handle PII columns that need to be hashed?</li>
+          <li>How do you reprocess only one day of data without breaking history?</li>
+          <li>How do you handle a producer that occasionally sends bad schema?</li>
+          <li>How do you detect a silent failure where pipeline runs but data is wrong?</li>
+          <li>How do you handle a slowly evolving dimension whose key is reused?</li>
+          <li>How do you handle delete events in CDC?</li>
+          <li>How do you handle clock skew between source and target?</li>
+          <li>How do you handle currency rounding in financial pipelines?</li>
+          <li>How do you handle GDPR right-to-be-forgotten request for a record in 100 places?</li>
+          <li>How do you handle file size of 10 MB vs 10 GB in the same job?</li>
+          <li>How do you handle a source that disappears for 3 days then sends backlog?</li>
+          <li>How do you handle two pipelines writing to the same Snowflake table?</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ DEVOPS ============ -->
+  <div class="tab-content" id="devops">
+    <div class="section-card">
+      <div class="section-header">
+        <h2 class="section-title">🛠 DevOps · CI/CD · Docker · Git · Terraform</h2>
+        <span class="section-tag">Engineering Hygiene</span>
+      </div>
+
+      <div class="subsection hot">
+        <h3>🔥 Git</h3>
+        <ol class="q-list">
+          <li>Explain Git branching strategies: Git Flow, GitHub Flow, Trunk-based.</li>
+          <li>Difference between merge and rebase. When to use each?</li>
+          <li>What is a fast-forward merge?</li>
+          <li>How do you resolve merge conflicts?</li>
+          <li>Difference between <code>git fetch</code> and <code>git pull</code>.</li>
+          <li>How to undo the last commit? (reset, revert, checkout.)</li>
+          <li>What is <code>git cherry-pick</code>?</li>
+          <li>What is a detached HEAD?</li>
+          <li>How do you handle a large binary file in Git? (Git LFS.)</li>
+          <li>How do you squash multiple commits before PR?</li>
+          <li>What is rebase --interactive?</li>
+          <li>How do you set up pre-commit hooks?</li>
+          <li>What's a good PR review checklist?</li>
+          <li>What is semantic commit message style?</li>
+          <li>How do you handle secrets accidentally committed?</li>
+        </ol>
+      </div>
+
+      <div class="subsection">
+        <h3>🐳 Docker & Containers</h3>
+        <ol class="q-list">
+          <li>What is Docker? Image vs container vs Dockerfile vs registry.</li>
+          <li>Difference between <code>CMD</code> and <code>ENTRYPOINT</code>.</li>
+          <li>What is multi-stage build? Why use it?</li>
+          <li>How do you reduce image size?</li>
+          <li>What is .dockerignore?</li>
+          <li>How do you pass secrets to a container? (env, build secrets, mount.)</li>
+          <li>What is Docker Compose? Use case in DE.</li>
+          <li>Difference between Docker volumes and bind mounts.</li>
+          <li>How do you debug a container that exits immediately?</li>
+          <li>How do you run a Spark / Airflow / dbt project locally with Docker?</li>
+        </ol>
+      </div>
+
+      <div class="subsection">
+        <h3>⚙️ CI/CD</h3>
+        <ol class="q-list">
+          <li>What is CI vs CD vs CD (delivery vs deployment)?</li>
+          <li>How do you set up CI for a dbt project? (GitHub Actions / GitLab CI.)</li>
+          <li>How do you do CI for an Airflow DAG repo?</li>
+          <li>What is Slim CI in dbt?</li>
+          <li>How do you do environment promotion (dev → staging → prod)?</li>
+          <li>How do you test SQL pipelines automatically?</li>
+          <li>What is feature branching vs trunk-based deployment for DE?</li>
+          <li>How do you do blue-green deployment for a data pipeline?</li>
+          <li>How do you roll back a bad deployment?</li>
+          <li>How do you handle pipeline migrations / schema migrations safely?</li>
+        </ol>
+      </div>
+
+      <div class="subsection advanced">
+        <h3>🎓 Terraform / IaC & Kubernetes (Bonus)</h3>
+        <ol class="q-list">
+          <li>What is IaC? Why is it important for data platforms?</li>
+          <li>What is the Terraform state file? Where do you store it for a team?</li>
+          <li>Difference between <code>terraform plan</code> and <code>apply</code>.</li>
+          <li>How do you handle multiple environments in Terraform? (workspaces vs folders.)</li>
+          <li>What is a Terraform module? When to write one?</li>
+          <li>What is drift in Terraform?</li>
+          <li>What is Kubernetes? Pod vs Deployment vs Service.</li>
+          <li>What is the role of Helm?</li>
+          <li>What is a CronJob in Kubernetes? Use case for DE.</li>
+          <li>How do you run Spark on Kubernetes?</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ CODING ============ -->
+  <div class="tab-content" id="coding">
+    <div class="section-card">
+      <div class="section-header">
+        <h2 class="section-title">💻 Coding / DSA (Mostly Python)</h2>
+        <span class="section-tag">Coding Round</span>
+      </div>
+
+      <div class="alert info">
+        <strong>What to expect:</strong> Data Engineer coding rounds are <em>not</em> hard algorithm rounds like SDE. Expect easy–medium problems on strings, lists, dicts, files, and one or two design-coding questions. Master string manipulation, deduplication, frequency counts, sorting, sliding window, two-pointer.
+      </div>
+
+      <div class="subsection hot">
+        <h3>🔥 Most Asked Coding Problems</h3>
+        <ol class="q-list">
+          <li>Reverse a string / sentence / linked list.</li>
+          <li>Find the first non-repeating character in a string.</li>
+          <li>Check if two strings are anagrams.</li>
+          <li>Find all anagrams of a word in a list.</li>
+          <li>Find duplicates in a list / array.</li>
+          <li>Remove duplicates while preserving order.</li>
+          <li>Two sum / three sum problem.</li>
+          <li>Find longest substring without repeating characters.</li>
+          <li>Find the missing number in a list of 1..n.</li>
+          <li>Find the most frequent element / top-k frequent words.</li>
+          <li>Merge two sorted lists / arrays.</li>
+          <li>Implement word count for a 100 GB log file (chunked reading).</li>
+          <li>Flatten a nested dictionary / JSON.</li>
+          <li>Group anagrams.</li>
+          <li>FizzBuzz with twist.</li>
+          <li>Find pairs of elements that sum to K (single pass).</li>
+          <li>Compute the moving average of a stream.</li>
+          <li>Implement LRU cache.</li>
+          <li>Validate parentheses / balanced brackets.</li>
+          <li>Rotate a list / array by K positions.</li>
+          <li>Find the intersection / union of two arrays / lists.</li>
+          <li>Reverse words in a sentence in-place.</li>
+          <li>Find the kth largest element (heap).</li>
+          <li>Compress a string (aaabb → a3b2).</li>
+          <li>Implement an iterator class (or generator) over a paginated API.</li>
+        </ol>
+      </div>
+
+      <div class="subsection">
+        <h3>🐍 Python-Heavy DE Coding</h3>
+        <ol class="q-list">
+          <li>Read a JSON file line by line and aggregate counts by field X.</li>
+          <li>Given two CSV files (orders, customers), join them in Python without Pandas.</li>
+          <li>Compute SCD Type 2 for a small dataset in Pandas / Python.</li>
+          <li>Detect schema drift between two JSONs (added/removed/changed keys).</li>
+          <li>Parse a deeply nested JSON and flatten to a single-level dict.</li>
+          <li>Compute top 10 customers by revenue from a 5 GB CSV (chunked).</li>
+          <li>Implement an idempotent retry decorator with exponential backoff.</li>
+          <li>Write a function that detects duplicates across millions of rows efficiently (hash, Bloom filter).</li>
+          <li>Implement a producer-consumer pattern with <code>queue.Queue</code> and threads.</li>
+          <li>Implement a generator that paginates an API and yields records.</li>
+          <li>Parse a CSV with quoted commas correctly (csv module nuances).</li>
+          <li>Compute the percentile of a list without numpy.</li>
+          <li>Find the shortest path / dependencies in a DAG of tasks (topological sort).</li>
+          <li>Implement rate-limited API client (token bucket).</li>
+          <li>Build a small ETL framework class with <code>extract / transform / load</code> methods.</li>
+        </ol>
+      </div>
+
+      <div class="subsection advanced">
+        <h3>🎓 PySpark Coding Snippets</h3>
+        <ol class="q-list">
+          <li>Read all CSVs in a folder, union them, dedupe on a key (latest), write Parquet partitioned by date.</li>
+          <li>Implement SCD Type 2 in PySpark using MERGE on a Delta table.</li>
+          <li>Compute 7-day rolling average per user using window functions.</li>
+          <li>Handle skew on join — implement salting.</li>
+          <li>Read JSON with nested arrays, explode, flatten and write as Parquet.</li>
+          <li>Group by user and collect last 5 events as an array.</li>
+          <li>Compute the difference between consecutive timestamps per user.</li>
+          <li>Pivot a DataFrame: from long to wide.</li>
+          <li>Read from Kafka, transform, write to Snowflake (Structured Streaming).</li>
+          <li>Implement de-duplication on a stream using <code>dropDuplicatesWithinWatermark</code>.</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ BEHAVIORAL ============ -->
+  <div class="tab-content" id="behavioral">
+    <div class="section-card">
+      <div class="section-header">
+        <h2 class="section-title">🤝 Behavioral / HR / Managerial</h2>
+        <span class="section-tag">Final Round</span>
+      </div>
+
+      <div class="alert info">
+        <strong>Framework:</strong> Use <strong>STAR</strong> — Situation, Task, Action, Result. Keep stories crisp (90 seconds). Have at least 5 reusable stories: one about ownership, one about failure, one about conflict, one about scale/impact, one about learning.
+      </div>
+
+      <div class="subsection behavioral">
+        <h3>🟢 Leadership & Ownership</h3>
+        <ol class="q-list">
+          <li>Tell me about a time you led a project end-to-end.</li>
+          <li>Describe a time you took ownership beyond your role.</li>
+          <li>How do you handle ambiguous requirements?</li>
+          <li>How do you mentor / onboard a junior?</li>
+          <li>Describe a decision you made that significantly impacted the business.</li>
+          <li>Tell me about a time you influenced without authority.</li>
+          <li>Describe how you drive a cross-team initiative.</li>
+          <li>What's the biggest improvement you brought to your team's processes?</li>
+          <li>Tell me a time you owned a production incident from detection to RCA.</li>
+          <li>How do you balance tech debt vs new features?</li>
+        </ol>
+      </div>
+
+      <div class="subsection behavioral">
+        <h3>🟢 Conflict, Failure, Learning</h3>
+        <ol class="q-list">
+          <li>Tell me about a disagreement with your manager / peer. How did you resolve it?</li>
+          <li>Describe a project that failed. What did you learn?</li>
+          <li>Tell me about feedback you received that was hard to hear.</li>
+          <li>A time when you missed a deadline — what happened, what did you change?</li>
+          <li>A time you made a major production mistake — how did you recover?</li>
+          <li>How do you handle a stakeholder who keeps changing scope?</li>
+          <li>Tell me about a time you had to push back on a request.</li>
+          <li>Describe a peer code review that turned into a conflict.</li>
+          <li>How do you handle being on call?</li>
+          <li>How do you handle stress / tight deadlines?</li>
+        </ol>
+      </div>
+
+      <div class="subsection behavioral">
+        <h3>🟢 Scale, Impact, Growth</h3>
+        <ol class="q-list">
+          <li>Tell me about the biggest project you worked on by data volume / impact.</li>
+          <li>How did you measure success of a pipeline you built?</li>
+          <li>How have you saved cost / time / effort in past role?</li>
+          <li>What is the most innovative thing you have built?</li>
+          <li>Tell me about a time you simplified a complex process.</li>
+          <li>What's your approach to continuous learning?</li>
+          <li>What new tool did you introduce in your team — how did it go?</li>
+          <li>How do you prioritise when everything is "P1"?</li>
+          <li>What is your long-term career goal?</li>
+          <li>Why are you leaving your current company?</li>
+        </ol>
+      </div>
+
+      <div class="subsection behavioral">
+        <h3>🟢 HR & Closing</h3>
+        <ol class="q-list">
+          <li>Why do you want to join our company?</li>
+          <li>What do you know about our team / product?</li>
+          <li>Why should we hire you?</li>
+          <li>Why this role vs your current job?</li>
+          <li>What are your strengths and weaknesses (3 each, with examples)?</li>
+          <li>What is your expected salary / current CTC / notice period?</li>
+          <li>Are you interviewing elsewhere? What stage?</li>
+          <li>How do you keep yourself updated on data engineering trends?</li>
+          <li>What books / blogs / podcasts do you follow?</li>
+          <li>Do you have any questions for us? (Always have 3 ready.)</li>
+        </ol>
+      </div>
+
+      <div class="alert success">
+        <strong>3 Smart Questions to Ask the Interviewer:</strong><br>
+        1. What does success in this role look like in 6 months?<br>
+        2. What is the biggest data engineering challenge the team is facing right now?<br>
+        3. What does the data stack look like, and what are you considering changing?
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    Comprehensive interview prep · 5+ years Data Engineer · AWS + Snowflake · India 2026<br>
+    Tip: practice answering aloud, time yourself, and pair-mock with a peer for system design.
+  </footer>
+</div>
+
+<script>
+  function showTab(evt, tabId) {
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.getElementById(tabId).classList.add('active');
+    if (evt && evt.currentTarget) evt.currentTarget.classList.add('active');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  const searchBox = document.getElementById('searchBox');
+  searchBox.addEventListener('input', () => {
+    const q = searchBox.value.trim().toLowerCase();
+    const allItems = document.querySelectorAll('ol.q-list > li, ul.q-list > li');
+
+    if (!q) {
+      allItems.forEach(li => li.style.display = '');
+      document.querySelectorAll('.subsection').forEach(s => s.style.display = '');
+      document.querySelectorAll('.section-card').forEach(s => s.style.display = '');
+      document.querySelectorAll('.tab-content').forEach(t => {
+        t.classList.remove('active');
+      });
+      document.getElementById('common').classList.add('active');
+      document.querySelectorAll('.tab').forEach((t, i) => {
+        t.classList.toggle('active', i === 0);
+      });
+      return;
+    }
+
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.add('active'));
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+
+    allItems.forEach(li => {
+      const text = li.textContent.toLowerCase();
+      li.style.display = text.includes(q) ? '' : 'none';
+    });
+
+    document.querySelectorAll('.subsection').forEach(s => {
+      const visible = s.querySelectorAll('ol.q-list > li:not([style*="display: none"]), ul.q-list > li:not([style*="display: none"])');
+      s.style.display = visible.length ? '' : 'none';
+    });
+    document.querySelectorAll('.section-card').forEach(s => {
+      const visible = s.querySelectorAll('.subsection:not([style*="display: none"])');
+      s.style.display = visible.length ? '' : 'none';
+    });
+  });
+</script>
+</body>
+</html>

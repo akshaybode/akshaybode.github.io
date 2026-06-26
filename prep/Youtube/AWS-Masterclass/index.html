@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AWS Fundamentals for Data Engineers — Masterclass Notes</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #0b1020; --bg-2: #131a2f; --bg-3: #1f2a44; --card: #131a2f;
+    --text: #e6edf6; --text-dim: #93a4bf; --accent: #60a5fa; --accent-2: #c084fc;
+    --accent-3: #34d399; --success: #22c55e; --warn: #fbbf24; --danger: #f87171;
+    --border: #2a3553; --code-bg: #0a0f1e; --aws: #ff9900;
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: linear-gradient(135deg, #0b1020 0%, #1a0f2e 100%); color: var(--text);
+    line-height: 1.65; min-height: 100vh; }
+  .container { max-width: 1200px; margin: 0 auto; padding: 24px; }
+  header { background: linear-gradient(135deg, #232f3e 0%, #ff9900 130%);
+    border-radius: 16px; padding: 36px; margin-bottom: 24px;
+    box-shadow: 0 20px 60px rgba(255, 153, 0, 0.2); }
+  header h1 { font-size: 34px; margin-bottom: 10px; }
+  header p { opacity: 0.95; font-size: 17px; max-width: 800px; }
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 16px; margin-top: 26px; }
+  .stat { background: rgba(0,0,0,0.25); backdrop-filter: blur(10px); padding: 14px 16px;
+    border-radius: 12px; border: 1px solid rgba(255,255,255,0.18); }
+  .stat-label { font-size: 11px; opacity: 0.85; text-transform: uppercase; letter-spacing: 1px; }
+  .stat-value { font-size: 22px; font-weight: 700; margin-top: 4px; }
+
+  .section { background: var(--card); border-radius: 12px; padding: 24px; margin-bottom: 18px;
+    border: 1px solid var(--border); }
+  .section h2 { color: var(--accent); font-size: 22px; margin-bottom: 12px; padding-bottom: 10px;
+    border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
+  .section h3 { color: var(--accent-2); font-size: 17px; margin: 18px 0 10px 0; }
+  .section p { color: var(--text); margin-bottom: 10px; }
+
+  .card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin-top: 12px; }
+  a.nav-card { display: block; text-decoration: none; background: var(--bg); border: 1px solid var(--border);
+    border-left: 4px solid var(--aws); border-radius: 12px; padding: 18px; transition: all 0.2s; }
+  a.nav-card:hover { transform: translateY(-3px); border-left-color: var(--accent-2);
+    box-shadow: 0 10px 30px rgba(96,165,250,0.15); }
+  a.nav-card .num { font-size: 12px; color: var(--accent-3); font-weight: 700; letter-spacing: 1px; }
+  a.nav-card h4 { color: var(--text); font-size: 17px; margin: 6px 0 8px 0; }
+  a.nav-card p { color: var(--text-dim); font-size: 13px; margin: 0; }
+
+  .diagram { background: var(--bg); border: 1px solid var(--border); border-radius: 12px;
+    padding: 22px; margin: 16px 0; overflow-x: auto; }
+  .diagram .title { text-align: center; color: var(--text-dim); font-size: 12px;
+    text-transform: uppercase; letter-spacing: 1px; margin-bottom: 16px; }
+  .flow { display: flex; align-items: stretch; justify-content: center; gap: 0; flex-wrap: wrap; }
+  .flow-box { background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px 14px; min-width: 120px; text-align: center; font-size: 13px; font-weight: 600;
+    display: flex; flex-direction: column; justify-content: center; }
+  .flow-box small { display: block; color: var(--text-dim); font-weight: 400; font-size: 11px; margin-top: 4px; }
+  .flow-arrow { display: flex; align-items: center; padding: 0 8px; color: var(--accent); font-size: 22px; font-weight: 700; }
+  .flow-box.gen { border-top: 3px solid var(--accent); }
+  .flow-box.ing { border-top: 3px solid var(--accent-2); }
+  .flow-box.sto { border-top: 3px solid var(--accent-3); }
+  .flow-box.tra { border-top: 3px solid var(--warn); }
+  .flow-box.ser { border-top: 3px solid var(--danger); }
+
+  .alert { padding: 12px 14px; border-radius: 8px; margin: 12px 0; border-left: 4px solid; font-size: 14px; }
+  .alert.info { background: rgba(96,165,250,0.1); border-color: var(--accent); }
+  .alert strong { color: var(--text); }
+  footer { text-align: center; margin-top: 40px; padding: 20px; color: var(--text-dim); font-size: 13px; }
+  @media (max-width: 640px) { header h1 { font-size: 24px; } .container { padding: 12px; } }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <h1>&#9729;&#65039; AWS Fundamentals for Data Engineers</h1>
+    <p>Complete study notes from the 6-hour AWS Masterclass — from "what is cloud computing"
+       all the way to building an end-to-end pipeline with S3, Lambda, Glue & Athena. Covers only
+       the services that actually matter for data engineering, in the right order.</p>
+    <div class="stats-grid">
+      <div class="stat"><div class="stat-label">Duration</div><div class="stat-value">~6 hrs</div></div>
+      <div class="stat"><div class="stat-label">Note Parts</div><div class="stat-value">7</div></div>
+      <div class="stat"><div class="stat-label">Core Services</div><div class="stat-value">10+</div></div>
+      <div class="stat"><div class="stat-label">Level</div><div class="stat-value">Absolute Beginner</div></div>
+    </div>
+  </header>
+
+  <div class="section">
+    <h2>&#129517; The Big Picture</h2>
+    <p>AWS has <strong>200+ services</strong>, and beginners burn out trying to learn all of them.
+       As a data engineer you only need a focused set. These notes teach the <em>why</em> behind each
+       service first, then the <em>what</em>, then the hands-on <em>how</em> — and finish by gluing
+       everything into one working pipeline.</p>
+    <div class="diagram">
+      <div class="title">The data engineering services you'll master</div>
+      <div class="flow">
+        <div class="flow-box gen">&#128193; S3<small>Data lake / storage</small></div>
+        <div class="flow-arrow">&#8594;</div>
+        <div class="flow-box ing">&#9889; Lambda<small>Serverless trigger</small></div>
+        <div class="flow-arrow">&#8594;</div>
+        <div class="flow-box tra">&#129083; Glue<small>ETL + Crawler + Catalog</small></div>
+        <div class="flow-arrow">&#8594;</div>
+        <div class="flow-box ser">&#128269; Athena<small>Serverless SQL query</small></div>
+      </div>
+    </div>
+    <div class="alert info">
+      <strong>How to use these notes:</strong> read the parts in order. Each part links to the next,
+      explains every concept with diagrams and analogies from the video, and ends with a recap.
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>&#128218; Notes — Read in Order</h2>
+    <p>Split into 7 parts so each topic gets room to breathe. Each part links to the next.</p>
+    <div class="card-grid">
+      <a class="nav-card" href="01-cloud-fundamentals.html">
+        <div class="num">PART 1</div>
+        <h4>Cloud Fundamentals</h4>
+        <p>What cloud computing is, what AWS is, why companies use cloud, the 200+ services, IaaS/PaaS/SaaS, and public/private/hybrid models.</p>
+      </a>
+      <a class="nav-card" href="02-account-regions-iam.html">
+        <div class="num">PART 2</div>
+        <h4>Account, Regions & IAM</h4>
+        <p>Creating a free account, console tour, Regions vs Availability Zones, data redundancy, and IAM (users, policies, groups, roles).</p>
+      </a>
+      <a class="nav-card" href="03-virtualization-ec2-ebs.html">
+        <div class="num">PART 3</div>
+        <h4>Virtualization, EC2 & EBS</h4>
+        <p>Virtualization & hypervisors (type 1/2), launching Linux & Windows EC2 instances, connecting to them, and Elastic Block Storage.</p>
+      </a>
+      <a class="nav-card" href="04-s3-datalake.html">
+        <div class="num">PART 4</div>
+        <h4>S3 & the Data Lake</h4>
+        <p>Block vs blob storage, what a data lake really is, creating buckets, versioning, and S3 storage classes (hot &rarr; glacier).</p>
+      </a>
+      <a class="nav-card" href="05-sdk-boto3.html">
+        <div class="num">PART 5</div>
+        <h4>Accessing AWS: CLI & SDK</h4>
+        <p>Portal vs CloudShell vs local CLI vs SDK, why REST API is the base, boto3 clients, access keys, and the <code>.env</code> pattern.</p>
+      </a>
+      <a class="nav-card" href="06-lambda.html">
+        <div class="num">PART 6</div>
+        <h4>Lambda &amp; Triggers</h4>
+        <p>Serverless compute, the handler (event/context), S3 triggers, CloudWatch logs, IAM execution roles, and a file-mover function.</p>
+      </a>
+      <a class="nav-card" href="07-glue-athena.html">
+        <div class="num">PART 7</div>
+        <h4>Glue, Athena &amp; the Pipeline</h4>
+        <p>Glue Data Catalog & Crawlers, Visual ETL (low/no-code), Athena serverless SQL, external tables, and the full S3&rarr;Lambda&rarr;Glue&rarr;Athena pipeline.</p>
+      </a>
+    </div>
+  </div>
+
+  <footer>
+    Notes generated from the "AWS Tutorial For Beginners (2026 Guide) | AWS Data Engineer" masterclass ·
+    Source video: youtube.com/watch?v=Ae3xyW2Ef0c
+  </footer>
+</div>
+</body>
+</html>

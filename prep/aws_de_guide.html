@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AWS for Data Engineers — Complete Guide</title>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  :root{--bg:#0b1020;--card:#131a2f;--bg-3:#1f2a44;--text:#e6edf6;--dim:#93a4bf;--accent:#ff9900;--accent2:#fbbf24;--border:#2a3553;--code:#0a0f1e}
+  body{font-family:system-ui,sans-serif;background:linear-gradient(135deg,#0b1020,#1a1205);color:var(--text);line-height:1.65}
+  .container{max-width:1280px;margin:0 auto;padding:24px}
+  header{background:linear-gradient(135deg,#ff9900,#f59e0b,#d97706);border-radius:16px;padding:32px;margin-bottom:24px;color:#1a1008}
+  header h1{font-size:30px}
+  .tabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:20px;background:var(--card);padding:8px;border-radius:12px;border:1px solid var(--border)}
+  .tab{padding:9px 14px;background:transparent;color:var(--dim);border:none;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600}
+  .tab.active{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#1a1008}
+  .tab-content{display:none}.tab-content.active{display:block}
+  .section{background:var(--card);border-radius:12px;padding:22px;margin-bottom:16px;border:1px solid var(--border)}
+  .section h2{color:var(--accent);font-size:20px;margin-bottom:10px;border-bottom:1px solid var(--border);padding-bottom:8px}
+  .section h3{color:var(--accent2);font-size:16px;margin:14px 0 8px}
+  pre[class*="language-"]{background:var(--code)!important;padding:12px!important;border-radius:8px;font-size:12px;border:1px solid var(--border);overflow-x:auto}
+  :not(pre)>code{background:var(--bg-3);padding:2px 6px;border-radius:4px;color:var(--accent);font-size:12px}
+  .check-row{display:flex;gap:10px;padding:8px;background:#0a0f1e;border-radius:6px;margin:4px 0;border-left:3px solid var(--accent)}
+  .check-row label{font-size:13px;cursor:pointer}
+  .alert{padding:12px;border-radius:8px;margin:10px 0;border-left:4px solid;font-size:14px}
+  .alert.info{background:rgba(255,153,0,.1);border-color:var(--accent)}
+  .alert.warn{background:rgba(251,191,36,.15);border-color:var(--accent2)}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin:10px 0}
+  th,td{padding:8px 10px;border-bottom:1px solid var(--border)}
+  th{background:var(--bg-3);color:var(--accent);font-size:11px;text-transform:uppercase}
+  .btn{background:var(--bg-3);color:var(--text);border:1px solid var(--border);padding:8px 12px;border-radius:8px;cursor:pointer;font-size:12px;margin-right:8px}
+  .progress-section{background:var(--card);padding:16px;border-radius:12px;margin-bottom:16px;border:1px solid var(--border)}
+  .progress-bar{background:#0a0f1e;height:12px;border-radius:6px;overflow:hidden;margin-top:8px}
+  .progress-fill{background:linear-gradient(90deg,#22c55e,#ff9900);height:100%;width:0%;font-size:10px;text-align:right;padding-right:6px;color:#fff}
+</style>
+</head>
+<body>
+<div class="container">
+<header><h1>☁️ AWS for Data Engineers</h1><p>S3, IAM, Lambda, Glue, Athena, EMR, Redshift, CloudWatch — the DE services you must know.</p></header>
+<div class="progress-section"><strong>Progress</strong> <span id="progress-text"></span><div class="progress-bar"><div class="progress-fill" id="progress-fill">0%</div></div>
+<button class="btn" onclick="exportProgress()">Export</button><button class="btn" onclick="resetProgress()">Reset</button></div>
+<div class="tabs" id="tab-bar"></div>
+<div id="tab-panels"></div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-json.min.js"></script>
+<script>
+const TABS=[
+{id:"overview",label:"Overview",html:`<div class="section"><h2>DE services map</h2>
+<table><tr><th>Service</th><th>Purpose</th></tr>
+<tr><td>S3</td><td>Data lake storage (raw/curated)</td></tr>
+<tr><td>IAM</td><td>Permissions — who can access what</td></tr>
+<tr><td>Lambda</td><td>Serverless functions (ingest, triggers)</td></tr>
+<tr><td>Glue</td><td>Serverless Spark ETL + Data Catalog</td></tr>
+<tr><td>Athena</td><td>SQL on S3 (serverless)</td></tr>
+<tr><td>EMR</td><td>Managed Hadoop/Spark clusters</td></tr>
+<tr><td>Redshift</td><td>Data warehouse (alternative to Snowflake)</td></tr>
+<tr><td>Kinesis</td><td>Streaming ingestion</td></tr>
+<tr><td>DMS</td><td>DB replication to S3</td></tr>
+<tr><td>MWAA</td><td>Managed Airflow</td></tr>
+<tr><td>Secrets Manager</td><td>Store DB/API credentials</td></tr>
+<tr><td>CloudWatch</td><td>Logs, metrics, alarms</td></tr></table>
+<div class="alert warn">Set billing alarm at ₹500–1000 when learning. Free tier: 12 months for new accounts.</div></div>`},
+{id:"s3",label:"S3",html:`<div class="section"><h2>Amazon S3</h2>
+<pre><code class="language-python">import boto3
+s3 = boto3.client("s3", region_name="ap-south-1")
+
+s3.upload_file("local.csv", "my-bucket", "raw/orders/2026/05/23/data.csv")
+s3.download_file("my-bucket", "raw/orders/data.csv", "/tmp/data.csv")
+
+# List
+for obj in s3.list_objects_v2(Bucket="my-bucket", Prefix="raw/orders/")["Contents"]:
+    print(obj["Key"], obj["Size"])
+
+# Presigned URL (temporary access)
+url = s3.generate_presigned_url("get_object", Params={"Bucket":"my-bucket","Key":"path"}, ExpiresIn=3600)</code></pre>
+<h3>Best practices</h3>
+<ul style="color:var(--dim);padding-left:20px">
+<li>Layout: <code>s3://bucket/raw/source/table/year=YYYY/month=MM/day=DD/</code></li>
+<li>Format: Parquet + Snappy compression</li>
+<li>Lifecycle: move old data to Glacier</li>
+<li>Block public access (default ON)</li>
+</ul>
+<div class="check-row"><input type="checkbox" id="aw1"><label for="aw1">boto3 S3 upload/download/list</label></div></div>`},
+{id:"iam",label:"IAM",html:`<div class="section"><h2>IAM for DE</h2>
+<pre><code class="language-json">{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Action": ["s3:GetObject", "s3:PutObject", "s3:ListBucket"],
+    "Resource": [
+      "arn:aws:s3:::my-data-bucket",
+      "arn:aws:s3:::my-data-bucket/raw/*"
+    ]
+  }]
+}</code></pre>
+<ul style="color:var(--dim);padding-left:20px">
+<li><strong>User</strong> — human login (avoid for apps)</li>
+<li><strong>Role</strong> — assumed by Lambda, Glue, EC2 (preferred)</li>
+<li><strong>Policy</strong> — JSON permissions document</li>
+<li><strong>Least privilege</strong> — only required actions/resources</li>
+</ul>
+<p>Glue/Lambda jobs use <strong>IAM roles</strong>, not access keys in code.</p>
+<div class="check-row"><input type="checkbox" id="aw2"><label for="aw2">IAM role vs user, least privilege</label></div>
+<div class="check-row"><input type="checkbox" id="aw3"><label for="aw3">S3 bucket policy + role trust</label></div></div>`},
+{id:"lambda",label:"Lambda",html:`<div class="section"><h2>AWS Lambda</h2>
+<pre><code class="language-python"># lambda_function.py — triggered by S3 upload or EventBridge schedule
+import json, boto3, urllib.request
+from datetime import datetime
+
+s3 = boto3.client("s3")
+
+def lambda_handler(event, context):
+    # Example: API → S3 ingest
+    url = "https://api.example.com/orders"
+    data = urllib.request.urlopen(url, timeout=30).read()
+    key = f"raw/orders/{datetime.utcnow():%Y/%m/%d}/orders.json"
+    s3.put_object(Bucket="my-bucket", Key=key, Body=data)
+    return {"statusCode": 200, "body": json.dumps({"key": key})}</code></pre>
+<p>Limits: 15 min max, 10GB ephemeral storage. Good for: small ingest, S3 triggers, lightweight transforms.</p>
+<div class="check-row"><input type="checkbox" id="aw4"><label for="aw4">Lambda handler + S3 trigger</label></div></div>`},
+{id:"glue",label:"Glue",html:`<div class="section"><h2>AWS Glue</h2>
+<pre><code class="language-python"># Glue ETL script (PySpark) — runs on Glue 4.0 / Spark 3.3
+import sys
+from awsglue.utils import getResolvedOptions
+from awsglue.context import GlueContext
+from awsglue.job import Job
+from pyspark.context import SparkContext
+
+args = getResolvedOptions(sys.argv, ["JOB_NAME", "run_date"])
+sc = SparkContext()
+glueContext = GlueContext(sc)
+spark = glueContext.spark_session
+job = Job(glueContext)
+job.init(args["JOB_NAME"], args)
+
+df = spark.read.parquet(f"s3://my-bucket/raw/orders/run_date={args['run_date']}/")
+df = df.filter("amount > 0").groupBy("region").sum("amount")
+df.write.mode("overwrite").parquet(f"s3://my-bucket/curated/orders/run_date={args['run_date']}/")
+
+job.commit()</code></pre>
+<h3>Glue Data Catalog</h3>
+<p>Crawler scans S3 → creates Hive tables → query in Athena/Spark.</p>
+<div class="check-row"><input type="checkbox" id="aw5"><label for="aw5">Glue job PySpark script</label></div>
+<div class="check-row"><input type="checkbox" id="aw6"><label for="aw6">Crawler + Data Catalog</label></div></div>`},
+{id:"athena",label:"Athena & EMR",html:`<div class="section"><h2>Athena</h2>
+<pre><code class="language-sql">-- Serverless SQL on S3 (pay per TB scanned)
+SELECT region, SUM(amount) AS total
+FROM curated.orders
+WHERE year = '2026' AND month = '05'
+GROUP BY region;</code></pre>
+<p>Partition columns (year, month) reduce cost dramatically.</p>
+<h3>EMR (when Glue isn't enough)</h3>
+<ul style="color:var(--dim);padding-left:20px">
+<li>Long-running Spark jobs, custom cluster config</li>
+<li>More control, more ops overhead</li>
+<li>Use Spot instances for cost savings</li>
+</ul>
+<div class="check-row"><input type="checkbox" id="aw7"><label for="aw7">Athena partitioned queries</label></div></div>`},
+{id:"pipeline",label:"End-to-End Pipeline",html:`<div class="section"><h2>Reference architecture</h2>
+<pre><code>API / DB → Lambda (ingest) → S3 raw/
+                ↓
+         Glue Spark job → S3 curated/
+                ↓
+    Snowpipe / COPY → Snowflake
+                ↓
+              dbt marts
+                ↓
+         Airflow orchestrates all steps</code></pre>
+<p>See also: <a href="snowflake_guide.html" style="color:var(--accent)">Snowflake</a>, <a href="airflow_guide.html" style="color:var(--accent)">Airflow</a>, <a href="pyspark_guide.html" style="color:var(--accent)">PySpark</a>.</p>
+<div class="check-row"><input type="checkbox" id="aw8"><label for="aw8">Build one end-to-end AWS pipeline project</label></div></div>`},
+{id:"interview",label:"Interview",html:`<div class="section"><h2>Q&A</h2>
+<p><strong>S3 vs EBS?</strong> S3 = object storage, cheap, durable. EBS = block storage attached to EC2.</p>
+<p><strong>Glue vs EMR?</strong> Glue = serverless, less ops. EMR = full cluster control, heavy workloads.</p>
+<p><strong>How does Snowflake read S3?</strong> Storage integration + IAM role trust — Snowflake assumes role to read bucket.</p>
+<p>Cert: <strong>AWS Certified Data Engineer – Associate (DEA-C01)</strong></p>
+<p>Course: Stephane Maarek AWS DEA on Udemy, AWS Skill Builder labs.</p></div>`}
+];
+const STORAGE_KEY='aws_guide_v1';
+function buildTabs(){const bar=document.getElementById('tab-bar'),panels=document.getElementById('tab-panels');
+TABS.forEach((t,i)=>{const b=document.createElement('button');b.className='tab'+(i===0?' active':'');b.dataset.tab=t.id;b.textContent=t.label;b.onclick=e=>showTab(e,t.id);bar.appendChild(b);
+const d=document.createElement('div');d.className='tab-content'+(i===0?' active':'');d.id=t.id;d.innerHTML=t.html;panels.appendChild(d);});}
+function showTab(evt,id){document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+document.getElementById(id).classList.add('active');evt.currentTarget.classList.add('active');history.replaceState(null,'','#'+id);if(window.Prism)Prism.highlightAll();}
+function initHash(){const h=location.hash.slice(1);if(!h)return;const b=document.querySelector(`.tab[data-tab="${h}"]`);if(b)showTab({currentTarget:b},h);}
+function updateProgress(){const all=document.querySelectorAll('input[type=checkbox]'),done=document.querySelectorAll('input[type=checkbox]:checked');const p=all.length?Math.round(done.length/all.length*100):0;document.getElementById('progress-fill').style.width=p+'%';document.getElementById('progress-fill').textContent=p+'%';document.getElementById('progress-text').textContent=done.length+'/'+all.length;}
+function saveProgress(){const s={};document.querySelectorAll('input[type=checkbox]').forEach(c=>{if(c.checked)s[c.id]=1});localStorage.setItem(STORAGE_KEY,JSON.stringify(s));updateProgress();}
+function loadProgress(){try{const s=JSON.parse(localStorage.getItem(STORAGE_KEY)||'{}');document.querySelectorAll('input[type=checkbox]').forEach(c=>{if(s[c.id])c.checked=true});}catch(e){}updateProgress();}
+function resetProgress(){if(confirm('Reset?')){localStorage.removeItem(STORAGE_KEY);document.querySelectorAll('input[type=checkbox]').forEach(c=>c.checked=false);updateProgress();}}
+function exportProgress(){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([localStorage.getItem(STORAGE_KEY)||'{}']));a.download='aws_progress.json';a.click();}
+document.addEventListener('change',e=>{if(e.target.matches('input[type=checkbox]'))saveProgress();});
+buildTabs();loadProgress();initHash();window.addEventListener('hashchange',initHash);if(window.Prism)Prism.highlightAll();
+</script>
+</body>
+</html>

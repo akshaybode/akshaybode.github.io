@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Kafka for Data Engineers — Essentials</title>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  :root{--bg:#0b1020;--card:#131a2f;--text:#e6edf6;--dim:#93a4bf;--accent:#34d399;--border:#2a3553;--code:#0a0f1e}
+  body{font-family:system-ui,sans-serif;background:#0b1020;color:var(--text);line-height:1.65}
+  .container{max-width:900px;margin:0 auto;padding:24px}
+  header{background:linear-gradient(135deg,#059669,#10b981,#34d399);border-radius:16px;padding:28px;margin-bottom:20px}
+  .section{background:var(--card);border-radius:12px;padding:22px;margin-bottom:16px;border:1px solid var(--border)}
+  .section h2{color:var(--accent);font-size:20px;margin-bottom:10px}
+  pre[class*="language-"]{background:var(--code)!important;padding:12px!important;border-radius:8px;font-size:12px}
+  .check-row{display:flex;gap:10px;padding:8px;background:#0a0f1e;border-radius:6px;margin:4px 0}
+  .check-row label{font-size:13px;cursor:pointer}
+  a{color:var(--accent)}
+</style>
+</head>
+<body>
+<div class="container">
+<header><h1>📨 Apache Kafka — DE Essentials</h1><p>Enough for interviews + PySpark Structured Streaming integration. Deep dive: <a href="pyspark_guide.html#streaming" style="color:#fff">PySpark Streaming tab</a>.</p></header>
+<div class="section"><h2>Core concepts</h2>
+<table style="width:100%;font-size:13px;border-collapse:collapse"><tr><th style="text-align:left;padding:8px;border-bottom:1px solid #2a3553">Term</th><th style="padding:8px;border-bottom:1px solid #2a3553">Meaning</th></tr>
+<tr><td style="padding:8px">Topic</td><td style="padding:8px">Category of messages (e.g., orders)</td></tr>
+<tr><td style="padding:8px">Partition</td><td style="padding:8px">Ordered log shard — parallelism unit</td></tr>
+<tr><td style="padding:8px">Offset</td><td style="padding:8px">Position in partition</td></tr>
+<tr><td style="padding:8px">Producer</td><td style="padding:8px">Writes messages</td></tr>
+<tr><td style="padding:8px">Consumer</td><td style="padding:8px">Reads messages</td></tr>
+<tr><td style="padding:8px">Consumer group</td><td style="padding:8px">Consumers share load — each partition → one consumer in group</td></tr>
+<tr><td style="padding:8px">Broker</td><td style="padding:8px">Kafka server</td></tr></table></div>
+<div class="section"><h2>Python producer / consumer</h2>
+<pre><code class="language-python">from kafka import KafkaProducer, KafkaConsumer
+import json
+
+producer = KafkaProducer(
+    bootstrap_servers=["localhost:9092"],
+    value_serializer=lambda v: json.dumps(v).encode("utf-8"),
+)
+producer.send("orders", {"order_id": 1, "amount": 99.5})
+producer.flush()
+
+consumer = KafkaConsumer(
+    "orders",
+    bootstrap_servers=["localhost:9092"],
+    group_id="de_group",
+    auto_offset_reset="earliest",
+    value_deserializer=lambda m: json.loads(m.decode("utf-8")),
+)
+for msg in consumer:
+    print(msg.partition, msg.offset, msg.value)</code></pre>
+<pre><code class="language-bash"># Local: docker compose with bitnami/kafka or confluentinc/cp-kafka</code></pre>
+<div class="check-row"><input type="checkbox" id="k1"><label for="k1">Topic, partition, offset, consumer group</label></div>
+<div class="check-row"><input type="checkbox" id="k2"><label for="k2">Run producer + consumer locally</label></div>
+<div class="check-row"><input type="checkbox" id="k3"><label for="k3">PySpark read from Kafka (pyspark_guide)</label></div></div>
+<div class="section"><h2>DE patterns</h2>
+<ul style="color:var(--dim);padding-left:20px">
+<li><strong>Event streaming</strong> — clickstream, IoT, CDC from Debezium</li>
+<li><strong>Buffer</strong> — decouple producers from batch consumers</li>
+<li><strong>Exactly-once</strong> — transactional producers + idempotent sinks (advanced)</li>
+</ul>
+<p>Course: <a href="https://developer.confluent.io/learn-kafka/">Confluent Learn Kafka</a> (free)</p></div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
+<script>if(window.Prism)Prism.highlightAll();</script>
+</body>
+</html>

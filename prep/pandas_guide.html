@@ -1,0 +1,1234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Pandas for Data Engineers — Complete Guide</title>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #0b1020; --bg-2: #131a2f; --bg-3: #1f2a44; --card: #131a2f;
+    --text: #e6edf6; --text-dim: #93a4bf;
+    --accent: #34d399; --accent-2: #60a5fa; --accent-3: #fbbf24;
+    --success: #22c55e; --warn: #fbbf24; --danger: #f87171;
+    --border: #2a3553; --code-bg: #0a0f1e;
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: linear-gradient(135deg, #0b1020 0%, #0d2818 100%); color: var(--text); line-height: 1.65; min-height: 100vh; }
+  .container { max-width: 1280px; margin: 0 auto; padding: 24px; }
+  header { background: linear-gradient(135deg, #10b981 0%, #06b6d4 50%, #3b82f6 100%); border-radius: 16px; padding: 32px; margin-bottom: 24px; box-shadow: 0 20px 60px rgba(16, 185, 129, 0.25); }
+  header h1 { font-size: 32px; margin-bottom: 8px; }
+  header p { opacity: 0.92; font-size: 16px; }
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; margin-top: 24px; }
+  .stat { background: rgba(255,255,255,0.13); backdrop-filter: blur(10px); padding: 14px 16px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.2); }
+  .stat-label { font-size: 11px; opacity: 0.85; text-transform: uppercase; letter-spacing: 1px; }
+  .stat-value { font-size: 22px; font-weight: 700; margin-top: 4px; }
+  .progress-section { background: var(--card); border-radius: 12px; padding: 18px; margin-bottom: 20px; border: 1px solid var(--border); }
+  .progress-bar { background: var(--bg); height: 14px; border-radius: 8px; overflow: hidden; margin-top: 8px; }
+  .progress-fill { background: linear-gradient(90deg, #22c55e, #06b6d4); height: 100%; width: 0%; transition: width 0.5s ease; display: flex; align-items: center; justify-content: flex-end; padding-right: 8px; font-size: 10px; color: white; font-weight: 700; }
+  .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 24px; background: var(--card); padding: 8px; border-radius: 12px; border: 1px solid var(--border); }
+  .tab { padding: 9px 16px; background: transparent; color: var(--text-dim); border: none; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600; transition: all 0.2s; }
+  .tab:hover { background: var(--bg-3); color: var(--text); }
+  .tab.active { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: white; }
+  .tab-content { display: none; animation: fadeIn 0.3s; }
+  .tab-content.active { display: block; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  .section { background: var(--card); border-radius: 12px; padding: 24px; margin-bottom: 18px; border: 1px solid var(--border); }
+  .section h2 { color: var(--accent); font-size: 22px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+  .section h3 { color: var(--accent-2); font-size: 17px; margin: 18px 0 10px 0; }
+  .section h4 { color: var(--accent-3); font-size: 15px; margin: 14px 0 8px 0; }
+  .section p { color: var(--text); margin-bottom: 10px; }
+  pre[class*="language-"] { border-radius: 8px; background: var(--code-bg) !important; padding: 14px !important; font-size: 13px; margin: 10px 0; border: 1px solid var(--border); overflow-x: auto; }
+  code[class*="language-"] { font-family: "Consolas", "Monaco", monospace; }
+  :not(pre) > code { background: var(--bg-3); padding: 2px 6px; border-radius: 4px; font-size: 13px; color: var(--accent); font-family: "Consolas", "Monaco", monospace; }
+  .check-row { display: flex; align-items: flex-start; gap: 10px; padding: 8px 12px; background: var(--bg); border-radius: 6px; margin: 6px 0; border-left: 3px solid var(--accent); }
+  .check-row input[type="checkbox"] { margin-top: 4px; width: 16px; height: 16px; accent-color: var(--success); cursor: pointer; flex-shrink: 0; }
+  .check-row label { flex: 1; cursor: pointer; color: var(--text); font-size: 13px; }
+  .check-row input:checked + label { text-decoration: line-through; color: var(--text-dim); }
+  .alert { padding: 12px 14px; border-radius: 8px; margin: 12px 0; border-left: 4px solid; font-size: 14px; }
+  .alert.warn { background: rgba(251, 191, 36, 0.1); border-color: var(--warn); }
+  .alert.danger { background: rgba(248, 113, 113, 0.1); border-color: var(--danger); }
+  .alert.success { background: rgba(34, 197, 94, 0.1); border-color: var(--success); }
+  .alert.info { background: rgba(96, 165, 250, 0.1); border-color: var(--accent-2); }
+  .alert strong { color: var(--text); }
+  .qa-card { background: var(--bg); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 8px; padding: 14px; margin: 12px 0; }
+  .qa-q { color: var(--accent); font-weight: 700; margin-bottom: 8px; }
+  .qa-a { color: var(--text-dim); font-size: 14px; }
+  table { width: 100%; border-collapse: collapse; background: var(--bg); border-radius: 8px; overflow: hidden; margin: 12px 0; font-size: 13px; }
+  th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); }
+  th { background: var(--bg-3); color: var(--accent); text-transform: uppercase; font-size: 11px; letter-spacing: 1px; }
+  tr:last-child td { border-bottom: none; }
+  .controls { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+  .btn { background: var(--bg-3); color: var(--text); border: 1px solid var(--border); padding: 8px 14px; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: 600; transition: all 0.2s; }
+  .btn:hover { background: var(--accent); color: white; border-color: var(--accent); }
+  .btn.danger:hover { background: var(--danger); border-color: var(--danger); }
+  .badge { font-size: 10px; padding: 2px 8px; border-radius: 10px; font-weight: 700; text-transform: uppercase; margin-left: 6px; }
+  .badge.must { background: var(--danger); color: white; }
+  .badge.tip { background: var(--accent-2); color: white; }
+  .badge.frequent { background: var(--warn); color: #1a1500; }
+  ul.bullet { padding-left: 20px; color: var(--text-dim); font-size: 14px; }
+  ul.bullet li { padding: 4px 0; }
+  .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 14px; }
+  footer { text-align: center; margin-top: 40px; padding: 20px; color: var(--text-dim); font-size: 13px; }
+  @media (max-width: 640px) { header h1 { font-size: 22px; } .container { padding: 12px; } .tab { padding: 7px 10px; font-size: 11px; } }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <h1>🐼 Pandas for Data Engineers — Complete Guide</h1>
+    <p>From DataFrames to performance — everything you need for ETL, EDA, and data cleaning.</p>
+    <div class="stats-grid">
+      <div class="stat"><div class="stat-label">Topics</div><div class="stat-value">10</div></div>
+      <div class="stat"><div class="stat-label">Code Examples</div><div class="stat-value">100+</div></div>
+      <div class="stat"><div class="stat-label">Interview Q&A</div><div class="stat-value">25+</div></div>
+      <div class="stat"><div class="stat-label">Level</div><div class="stat-value">Beginner → Pro</div></div>
+    </div>
+  </header>
+
+  <div class="progress-section">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <strong>📊 Your Progress</strong>
+      <span id="progress-text" style="color: var(--accent); font-weight: 700;">0 / 0</span>
+    </div>
+    <div class="progress-bar"><div class="progress-fill" id="progress-fill">0%</div></div>
+    <div class="controls">
+      <button class="btn" onclick="exportProgress()">💾 Export</button>
+      <button class="btn danger" onclick="resetProgress()">♻ Reset</button>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="showTab(event,'overview')">Overview</button>
+    <button class="tab" onclick="showTab(event,'basics')">1. Series & DataFrame</button>
+    <button class="tab" onclick="showTab(event,'io')">2. I/O Operations</button>
+    <button class="tab" onclick="showTab(event,'select')">3. Selection & Indexing</button>
+    <button class="tab" onclick="showTab(event,'clean')">4. Data Cleaning</button>
+    <button class="tab" onclick="showTab(event,'groupby')">5. GroupBy & Aggregation</button>
+    <button class="tab" onclick="showTab(event,'merge')">6. Merge / Join / Concat</button>
+    <button class="tab" onclick="showTab(event,'reshape')">7. Reshape (Pivot/Melt)</button>
+    <button class="tab" onclick="showTab(event,'timeseries')">8. Time Series</button>
+    <button class="tab" onclick="showTab(event,'performance')">9. Performance</button>
+    <button class="tab" onclick="showTab(event,'interview')">10. Interview Q&A</button>
+  </div>
+
+  <!-- OVERVIEW -->
+  <div class="tab-content active" id="overview">
+    <div class="section">
+      <h2>🎯 Pandas for Data Engineering</h2>
+      <p>Pandas is THE Python library for tabular data manipulation. While PySpark handles big data, Pandas is essential for files under ~5GB, EDA, prototyping, and many DE pipelines.</p>
+
+      <h3>📋 Topic Map</h3>
+      <table>
+        <thead><tr><th>#</th><th>Topic</th><th>Why It Matters</th><th>Weight</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td>Series & DataFrame</td><td>The fundamental data structures</td><td>⭐⭐⭐⭐⭐</td></tr>
+          <tr><td>2</td><td>I/O Operations</td><td>CSV/JSON/Parquet/SQL/S3 reading</td><td>⭐⭐⭐⭐⭐</td></tr>
+          <tr><td>3</td><td>Selection & Indexing</td><td>loc, iloc, query, boolean indexing</td><td>⭐⭐⭐⭐⭐</td></tr>
+          <tr><td>4</td><td>Data Cleaning</td><td>Nulls, duplicates, types, validation</td><td>⭐⭐⭐⭐⭐</td></tr>
+          <tr><td>5</td><td>GroupBy & Aggregation</td><td>Core analytics pattern</td><td>⭐⭐⭐⭐⭐</td></tr>
+          <tr><td>6</td><td>Merge / Join / Concat</td><td>Combine multiple sources</td><td>⭐⭐⭐⭐</td></tr>
+          <tr><td>7</td><td>Reshape (Pivot/Melt)</td><td>Wide ↔ Long transformations</td><td>⭐⭐⭐</td></tr>
+          <tr><td>8</td><td>Time Series</td><td>Resample, rolling, datetime ops</td><td>⭐⭐⭐⭐</td></tr>
+          <tr><td>9</td><td>Performance</td><td>Vectorization, dtypes, chunks</td><td>⭐⭐⭐⭐</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Setup</h3>
+<pre><code class="language-python">pip install pandas pyarrow openpyxl s3fs sqlalchemy
+
+# Standard imports
+import pandas as pd
+import numpy as np
+
+# Display options (helpful in notebooks)
+pd.set_option("display.max_columns", 100)
+pd.set_option("display.max_rows", 100)
+pd.set_option("display.width", 200)
+pd.set_option("display.float_format", "{:.2f}".format)</code></pre>
+
+      <div class="alert info"><strong>💡 When to use Pandas vs PySpark:</strong> Pandas for &lt;5GB single-machine work; PySpark for distributed processing of larger data. For 5-50GB on one machine, consider Polars or Dask.</div>
+    </div>
+  </div>
+
+  <!-- BASICS -->
+  <div class="tab-content" id="basics">
+    <div class="section">
+      <h2>1. Series & DataFrame Fundamentals</h2>
+
+      <h3>Series — 1D Labeled Array</h3>
+<pre><code class="language-python">import pandas as pd
+
+# Create
+s = pd.Series([10, 20, 30, 40], index=["a", "b", "c", "d"], name="scores")
+s = pd.Series({"a": 10, "b": 20})
+
+# Attributes
+s.values        # numpy array
+s.index         # Index object
+s.dtype         # data type
+s.name
+s.shape, s.size
+
+# Access
+s["a"]; s[0]
+s[["a", "c"]]   # multiple
+s[s > 15]       # boolean mask
+
+# Operations (vectorized)
+s * 2
+s + s
+s.mean(), s.sum(), s.min(), s.max(), s.std()
+s.value_counts()</code></pre>
+
+      <h3>DataFrame — 2D Labeled Table</h3>
+<pre><code class="language-python"># Create from dict
+df = pd.DataFrame({
+    "name": ["Asha", "Ravi", "Priya"],
+    "age": [30, 25, 28],
+    "city": ["BLR", "HYD", "PUN"]
+})
+
+# From list of dicts
+records = [
+    {"name": "Asha", "age": 30},
+    {"name": "Ravi", "age": 25}
+]
+df = pd.DataFrame(records)
+
+# From list of tuples
+df = pd.DataFrame([("Asha", 30), ("Ravi", 25)], columns=["name", "age"])
+
+# From numpy
+df = pd.DataFrame(np.random.rand(5, 3), columns=["A", "B", "C"])</code></pre>
+
+      <h3>Inspection (First Things You Do)</h3>
+<pre><code class="language-python">df.head(10)              # first 10 rows (default 5)
+df.tail()                # last 5
+df.sample(5)             # random sample
+df.shape                 # (rows, cols)
+df.columns               # column names
+df.dtypes                # column data types
+df.info()                # types + non-null counts + memory
+df.describe()            # stats for numeric cols
+df.describe(include="all")  # all cols incl. categoricals
+df.memory_usage(deep=True)  # actual memory per col</code></pre>
+
+      <h3>Index Management</h3>
+<pre><code class="language-python">df.set_index("name")            # set column as index
+df.reset_index()                 # default integer index
+df.set_index(["region", "date"]) # multi-index
+
+df.index = ["a", "b", "c"]       # set manually
+df = df.sort_index()             # sort by index
+df = df.sort_values("age", ascending=False)</code></pre>
+
+      <h3>Concepts Checklist</h3>
+      <div class="check-row"><input type="checkbox" id="b1"><label for="b1">Create Series and DataFrame from various sources</label></div>
+      <div class="check-row"><input type="checkbox" id="b2"><label for="b2">head/tail/sample/info/describe</label></div>
+      <div class="check-row"><input type="checkbox" id="b3"><label for="b3">shape, dtypes, columns, index</label></div>
+      <div class="check-row"><input type="checkbox" id="b4"><label for="b4">set_index / reset_index / sort_index / sort_values</label></div>
+      <div class="check-row"><input type="checkbox" id="b5"><label for="b5">Vectorized arithmetic and aggregations</label></div>
+    </div>
+  </div>
+
+  <!-- IO -->
+  <div class="tab-content" id="io">
+    <div class="section">
+      <h2>2. I/O Operations <span class="badge must">Daily Use</span></h2>
+
+      <h3>CSV</h3>
+<pre><code class="language-python"># Read
+df = pd.read_csv("data.csv")
+df = pd.read_csv("data.csv",
+    sep="|",                          # custom delimiter
+    header=0,                         # row to use as header (None if no header)
+    names=["a","b","c"],              # column names
+    usecols=["a","b"],                # subset columns
+    dtype={"id": "int32", "name": "string"},
+    parse_dates=["date_col"],         # parse as datetime
+    na_values=["N/A", "missing", "-"],
+    nrows=1000,                       # only first N rows
+    skiprows=2,                       # skip rows
+    encoding="utf-8",
+    compression="gzip",               # auto: gzip, bz2, zip, xz
+)
+
+# Write
+df.to_csv("out.csv", index=False)
+df.to_csv("out.csv.gz", index=False, compression="gzip")
+
+# Chunked read (memory-efficient for big files)
+for chunk in pd.read_csv("huge.csv", chunksize=100000):
+    process(chunk)</code></pre>
+
+      <h3>JSON</h3>
+<pre><code class="language-python"># Standard JSON
+df = pd.read_json("data.json")
+df = pd.read_json("data.json", orient="records")
+
+# JSON Lines (NDJSON) — one object per line
+df = pd.read_json("events.jsonl", lines=True)
+
+# From dict/string
+data = '[{"a": 1, "b": 2}, {"a": 3, "b": 4}]'
+df = pd.read_json(data)
+
+# Nested JSON flattening
+from pandas import json_normalize
+data = [{"id": 1, "user": {"name": "Asha", "age": 30}}]
+df = json_normalize(data)
+# columns: id, user.name, user.age
+
+# Write
+df.to_json("out.json", orient="records", indent=2)
+df.to_json("out.jsonl", orient="records", lines=True)</code></pre>
+
+      <h3>Parquet (Preferred for DE!)</h3>
+<pre><code class="language-python"># Parquet = columnar, compressed, schema-preserved, FAST
+df.to_parquet("data.parquet", engine="pyarrow", compression="snappy")
+df = pd.read_parquet("data.parquet")
+
+# Read specific columns (column pruning — fast!)
+df = pd.read_parquet("data.parquet", columns=["id", "amount"])
+
+# Partitioned parquet (Hive-style)
+df.to_parquet("out/", partition_cols=["year", "month"])
+# Reads only relevant partitions
+df = pd.read_parquet("out/", filters=[("year", "=", 2026)])</code></pre>
+
+      <h3>Excel</h3>
+<pre><code class="language-python">df = pd.read_excel("file.xlsx", sheet_name="Sheet1")
+sheets = pd.read_excel("file.xlsx", sheet_name=None)   # all sheets as dict
+
+# Write multiple sheets
+with pd.ExcelWriter("out.xlsx") as writer:
+    df1.to_excel(writer, sheet_name="customers", index=False)
+    df2.to_excel(writer, sheet_name="orders", index=False)</code></pre>
+
+      <h3>SQL Databases</h3>
+<pre><code class="language-python">from sqlalchemy import create_engine
+
+engine = create_engine("postgresql://user:pass@host:5432/dbname")
+
+# Read
+df = pd.read_sql("SELECT * FROM orders WHERE date >= '2026-01-01'", engine)
+df = pd.read_sql_table("orders", engine, schema="public")
+
+# Chunked read for big tables
+for chunk in pd.read_sql("SELECT * FROM huge_table", engine, chunksize=10000):
+    process(chunk)
+
+# Write
+df.to_sql("orders_new", engine, if_exists="replace", index=False, method="multi")
+# if_exists: 'fail', 'replace', 'append'
+# method='multi' batches inserts (much faster)</code></pre>
+
+      <h3>Cloud Storage (S3, Azure, GCS)</h3>
+<pre><code class="language-python"># pip install s3fs
+
+df = pd.read_csv("s3://my-bucket/path/data.csv")
+df.to_parquet("s3://my-bucket/path/out.parquet")
+
+# With credentials
+df = pd.read_parquet("s3://bucket/file.parquet",
+    storage_options={"key": "AKIA...", "secret": "..."})
+
+# Azure: pip install adlfs → "abfs://container@account.dfs.core.windows.net/path"
+# GCS:   pip install gcsfs → "gs://bucket/path"</code></pre>
+
+      <h3>Other Formats</h3>
+<pre><code class="language-python">df.to_pickle("data.pkl"); pd.read_pickle("data.pkl")    # Python-only
+df.to_feather("data.feather"); pd.read_feather("data.feather")  # fast, Arrow
+df.to_hdf("data.h5", key="df")                          # HDF5
+df.to_html("table.html"); pd.read_html("page.html")     # HTML tables</code></pre>
+
+      <h3>Concepts Checklist</h3>
+      <div class="check-row"><input type="checkbox" id="io1"><label for="io1">read_csv with custom params (dtype, parse_dates, chunksize)</label></div>
+      <div class="check-row"><input type="checkbox" id="io2"><label for="io2">read_json + json_normalize for nested data</label></div>
+      <div class="check-row"><input type="checkbox" id="io3"><label for="io3">read_parquet / to_parquet (with partitions)</label></div>
+      <div class="check-row"><input type="checkbox" id="io4"><label for="io4">read_excel / to_excel (multi-sheet)</label></div>
+      <div class="check-row"><input type="checkbox" id="io5"><label for="io5">read_sql with SQLAlchemy</label></div>
+      <div class="check-row"><input type="checkbox" id="io6"><label for="io6">to_sql with method='multi' for performance</label></div>
+      <div class="check-row"><input type="checkbox" id="io7"><label for="io7">Reading from S3 with s3fs</label></div>
+    </div>
+  </div>
+
+  <!-- SELECT -->
+  <div class="tab-content" id="select">
+    <div class="section">
+      <h2>3. Selection & Indexing <span class="badge frequent">Most-Used Feature</span></h2>
+
+      <h3>Column Selection</h3>
+<pre><code class="language-python">df["name"]                  # single column → Series
+df[["name", "age"]]          # multiple columns → DataFrame
+df.name                      # attribute access (only valid Python names)</code></pre>
+
+      <h3>Row Selection — loc vs iloc</h3>
+<pre><code class="language-python"># .loc — LABEL-based (inclusive end)
+df.loc[0]                            # row with label 0
+df.loc[0:2]                          # labels 0,1,2 (INCLUSIVE)
+df.loc[[0, 2, 5]]                    # specific rows
+df.loc[df["age"] > 25]               # boolean mask
+df.loc[0, "name"]                    # single cell
+df.loc[0:2, ["name", "age"]]         # rows + columns
+df.loc[:, "age"]                     # all rows, one column
+
+# .iloc — POSITION-based (exclusive end, like Python slicing)
+df.iloc[0]                           # first row
+df.iloc[0:3]                         # first 3 rows (EXCLUSIVE)
+df.iloc[-1]                          # last row
+df.iloc[[0, 2, 5]]                   # specific positions
+df.iloc[0, 1]                        # first row, second column
+df.iloc[:, 0:3]                      # all rows, first 3 cols</code></pre>
+
+      <div class="alert warn"><strong>Key gotcha:</strong> <code>.loc</code> is INCLUSIVE of end (<code>df.loc[0:2]</code> → 3 rows). <code>.iloc</code> is EXCLUSIVE (<code>df.iloc[0:2]</code> → 2 rows).</div>
+
+      <h3>Boolean Indexing</h3>
+<pre><code class="language-python">df[df["age"] > 25]
+df[(df["age"] > 25) & (df["city"] == "BLR")]       # AND with &
+df[(df["age"] < 18) | (df["age"] > 65)]            # OR with |
+df[~(df["status"] == "inactive")]                  # NOT with ~
+
+# Multiple values
+df[df["city"].isin(["BLR", "HYD"])]
+df[~df["city"].isin(["BLR", "HYD"])]
+
+# String matching
+df[df["email"].str.contains("@gmail")]
+df[df["name"].str.startswith("A")]
+df[df["name"].str.match(r"^[A-M]")]                # regex
+
+# Between
+df[df["age"].between(25, 35)]                      # inclusive both ends
+
+# Null filtering
+df[df["email"].isna()]
+df[df["email"].notna()]</code></pre>
+
+      <h3>query() — SQL-like Filtering</h3>
+<pre><code class="language-python">df.query("age > 25 and city == 'BLR'")
+df.query("age in [25, 30, 35]")
+df.query("name.str.startswith('A')", engine="python")
+
+# Reference Python variables with @
+min_age = 25
+df.query("age > @min_age")</code></pre>
+
+      <h3>at / iat — Fastest single-cell access</h3>
+<pre><code class="language-python">df.at[0, "name"]            # label-based, single value
+df.iat[0, 1]                # position-based, single value
+# Much faster than loc/iloc for one cell</code></pre>
+
+      <h3>Setting Values (Avoid SettingWithCopyWarning)</h3>
+<pre><code class="language-python"># GOOD: use .loc for setting
+df.loc[df["age"] > 30, "category"] = "senior"
+df.loc[0, "name"] = "New Name"
+
+# BAD: chained assignment (warning + may not work)
+df[df["age"] > 30]["category"] = "senior"   # ❌
+
+# Creating new columns
+df["full_name"] = df["first"] + " " + df["last"]
+df["doubled_age"] = df["age"] * 2
+df = df.assign(new_col=lambda x: x["age"] * 2)   # chainable</code></pre>
+
+      <h3>Concepts Checklist</h3>
+      <div class="check-row"><input type="checkbox" id="sel1"><label for="sel1">Column selection (single, multiple)</label></div>
+      <div class="check-row"><input type="checkbox" id="sel2"><label for="sel2">.loc (label-based, inclusive end)</label></div>
+      <div class="check-row"><input type="checkbox" id="sel3"><label for="sel3">.iloc (position-based, exclusive end)</label></div>
+      <div class="check-row"><input type="checkbox" id="sel4"><label for="sel4">Boolean indexing with &, |, ~</label></div>
+      <div class="check-row"><input type="checkbox" id="sel5"><label for="sel5">isin / between / str methods</label></div>
+      <div class="check-row"><input type="checkbox" id="sel6"><label for="sel6">query() for SQL-like syntax</label></div>
+      <div class="check-row"><input type="checkbox" id="sel7"><label for="sel7">at / iat for single cells</label></div>
+      <div class="check-row"><input type="checkbox" id="sel8"><label for="sel8">Avoiding SettingWithCopyWarning</label></div>
+    </div>
+  </div>
+
+  <!-- CLEAN -->
+  <div class="tab-content" id="clean">
+    <div class="section">
+      <h2>4. Data Cleaning <span class="badge must">80% of DE Time</span></h2>
+
+      <h3>Handling Missing Data</h3>
+<pre><code class="language-python"># Check
+df.isna().sum()                      # nulls per column
+df.isna().sum().sum()                # total nulls
+df.isna().mean() * 100               # % nulls per column
+
+# Drop
+df.dropna()                                       # any null in row
+df.dropna(how="all")                              # all nulls in row
+df.dropna(subset=["email", "phone"])              # nulls in specific cols
+df.dropna(thresh=3)                               # need at least 3 non-null
+df.dropna(axis=1)                                 # drop columns with any null
+
+# Fill
+df.fillna(0)
+df.fillna({"age": 0, "name": "Unknown"})          # different per column
+df.fillna(method="ffill")                         # forward fill
+df.fillna(method="bfill")                         # backward fill
+df["age"].fillna(df["age"].median())              # impute with median
+
+# Interpolate (for numeric series)
+df["temperature"].interpolate(method="linear")</code></pre>
+
+      <h3>Duplicates</h3>
+<pre><code class="language-python">df.duplicated()                                   # boolean mask
+df.duplicated(subset=["email"])                   # consider specific cols
+df[df.duplicated(keep=False)]                     # show all duplicate rows
+
+df.drop_duplicates()                              # remove dups
+df.drop_duplicates(subset=["email"], keep="last") # keep last occurrence</code></pre>
+
+      <h3>Data Types</h3>
+<pre><code class="language-python">df.dtypes
+df["age"] = df["age"].astype("int32")             # downcast int
+df["price"] = df["price"].astype("float32")
+df["category"] = df["category"].astype("category")   # huge memory savings!
+df["date"] = pd.to_datetime(df["date"])
+df["date"] = pd.to_datetime(df["date"], format="%Y-%m-%d", errors="coerce")
+# errors='coerce' → bad values become NaT
+
+# Safe numeric conversion
+df["amount"] = pd.to_numeric(df["amount"], errors="coerce")
+
+# Convert dtypes intelligently
+df = df.convert_dtypes()                          # uses nullable types</code></pre>
+
+      <h3>String Operations</h3>
+<pre><code class="language-python">df["name"].str.upper()
+df["name"].str.lower()
+df["name"].str.title()
+df["name"].str.strip()
+df["name"].str.len()
+df["email"].str.contains("@gmail")
+df["email"].str.startswith("admin")
+df["email"].str.replace("@old.com", "@new.com")
+df["full_name"].str.split(" ", expand=True)       # returns DataFrame
+df["name"].str[0:3]                                # slice strings
+df["text"].str.extract(r"(\d+)")                  # regex group
+df["text"].str.findall(r"\d+")                    # all matches
+df["category"].str.cat(df["sub"], sep="-")        # concatenate columns</code></pre>
+
+      <h3>Renaming & Transforming</h3>
+<pre><code class="language-python"># Rename columns
+df = df.rename(columns={"old_name": "new_name"})
+df.columns = ["a", "b", "c"]                      # all at once
+df.columns = df.columns.str.lower().str.replace(" ", "_")   # clean
+
+# Drop columns/rows
+df = df.drop(columns=["temp_col"])
+df = df.drop(columns=["a", "b"])
+df = df.drop(index=[0, 5, 10])
+
+# Replace values
+df["status"] = df["status"].replace({"A": "Active", "I": "Inactive"})
+df = df.replace({"N/A": np.nan, "missing": np.nan})
+
+# Map (Series only)
+df["status_label"] = df["status"].map({"A": "Active", "I": "Inactive"})
+
+# Apply — element-wise or row/col-wise (slower than vectorized!)
+df["age_group"] = df["age"].apply(lambda x: "adult" if x >= 18 else "minor")
+df.apply(lambda row: row["price"] * row["qty"], axis=1)   # across rows
+
+# applymap (deprecated → use map)
+# Better: vectorize when possible
+
+# Cut / qcut (binning)
+df["age_bucket"] = pd.cut(df["age"], bins=[0, 18, 30, 60, 100],
+                          labels=["child", "young", "adult", "senior"])
+df["income_quartile"] = pd.qcut(df["income"], q=4, labels=["Q1","Q2","Q3","Q4"])</code></pre>
+
+      <h3>Validation Patterns</h3>
+<pre><code class="language-python"># Detect outliers (IQR method)
+Q1 = df["price"].quantile(0.25)
+Q3 = df["price"].quantile(0.75)
+IQR = Q3 - Q1
+outliers = df[(df["price"] < Q1 - 1.5*IQR) | (df["price"] > Q3 + 1.5*IQR)]
+
+# Range check
+assert df["age"].between(0, 150).all(), "Invalid ages found"
+
+# Unique constraint
+assert df["email"].is_unique, "Duplicate emails!"
+
+# Use pandera for production data quality
+# pip install pandera
+import pandera as pa
+schema = pa.DataFrameSchema({
+    "age": pa.Column(int, checks=pa.Check.in_range(0, 150)),
+    "email": pa.Column(str, checks=pa.Check.str_matches(r"^[\w\.]+@\w+\.\w+$")),
+})
+schema.validate(df)</code></pre>
+
+      <h3>Concepts Checklist</h3>
+      <div class="check-row"><input type="checkbox" id="cl1"><label for="cl1">isna / dropna / fillna patterns</label></div>
+      <div class="check-row"><input type="checkbox" id="cl2"><label for="cl2">drop_duplicates with keep options</label></div>
+      <div class="check-row"><input type="checkbox" id="cl3"><label for="cl3">astype + to_datetime + to_numeric (with errors='coerce')</label></div>
+      <div class="check-row"><input type="checkbox" id="cl4"><label for="cl4">category dtype for memory savings</label></div>
+      <div class="check-row"><input type="checkbox" id="cl5"><label for="cl5">.str accessor (contains, split, extract, replace)</label></div>
+      <div class="check-row"><input type="checkbox" id="cl6"><label for="cl6">rename / drop / replace / map / apply</label></div>
+      <div class="check-row"><input type="checkbox" id="cl7"><label for="cl7">cut / qcut for binning</label></div>
+      <div class="check-row"><input type="checkbox" id="cl8"><label for="cl8">Outlier detection (IQR)</label></div>
+      <div class="check-row"><input type="checkbox" id="cl9"><label for="cl9">Schema validation with pandera</label></div>
+    </div>
+  </div>
+
+  <!-- GROUPBY -->
+  <div class="tab-content" id="groupby">
+    <div class="section">
+      <h2>5. GroupBy & Aggregation</h2>
+
+      <h3>Basic GroupBy</h3>
+<pre><code class="language-python">df.groupby("region")["sales"].sum()
+df.groupby("region")["sales"].agg(["sum", "mean", "count"])
+
+# Multiple group keys
+df.groupby(["region", "product"])["sales"].sum()
+
+# Multiple aggregations per column
+df.groupby("region").agg({
+    "sales": ["sum", "mean"],
+    "quantity": "sum",
+    "customer_id": "nunique"
+})
+
+# Named aggregations (cleaner output)
+df.groupby("region").agg(
+    total_sales=("sales", "sum"),
+    avg_sales=("sales", "mean"),
+    unique_customers=("customer_id", "nunique"),
+    max_order=("sales", "max"),
+)</code></pre>
+
+      <h3>Common Aggregations</h3>
+      <table>
+        <thead><tr><th>Method</th><th>What</th></tr></thead>
+        <tbody>
+          <tr><td>sum()</td><td>Sum</td></tr>
+          <tr><td>mean() / median()</td><td>Average / Median</td></tr>
+          <tr><td>min() / max()</td><td>Min / Max</td></tr>
+          <tr><td>count()</td><td>Non-null count</td></tr>
+          <tr><td>size()</td><td>Total rows (incl. nulls)</td></tr>
+          <tr><td>nunique()</td><td>Unique value count</td></tr>
+          <tr><td>std() / var()</td><td>Standard deviation / Variance</td></tr>
+          <tr><td>first() / last()</td><td>First / Last value</td></tr>
+          <tr><td>quantile(0.95)</td><td>Percentile</td></tr>
+          <tr><td>describe()</td><td>Multiple stats at once</td></tr>
+        </tbody>
+      </table>
+
+      <h3>transform vs apply vs agg</h3>
+<pre><code class="language-python"># agg: returns ONE value per group → reduces rows
+df.groupby("region")["sales"].agg("sum")
+
+# transform: returns SAME shape as input → broadcast back to original rows
+df["sales_pct_of_region"] = df["sales"] / df.groupby("region")["sales"].transform("sum")
+df["region_mean"] = df.groupby("region")["sales"].transform("mean")
+df["zscore"] = df.groupby("region")["sales"].transform(lambda x: (x - x.mean()) / x.std())
+
+# apply: most flexible, returns anything
+def top_n(group, n=3):
+    return group.nlargest(n, "sales")
+df.groupby("region").apply(top_n, n=5)</code></pre>
+
+      <h3>Filter Groups</h3>
+<pre><code class="language-python"># Keep only groups with > 10 rows
+df.groupby("region").filter(lambda g: len(g) > 10)
+
+# Keep groups where total sales > 100000
+df.groupby("customer_id").filter(lambda g: g["sales"].sum() > 100000)</code></pre>
+
+      <h3>Iterate Over Groups</h3>
+<pre><code class="language-python">for name, group_df in df.groupby("region"):
+    print(name, group_df.shape)
+    # process each group</code></pre>
+
+      <h3>Cross-tabulation / Pivot</h3>
+<pre><code class="language-python"># Counts by two dimensions
+pd.crosstab(df["region"], df["product"])
+pd.crosstab(df["region"], df["product"], values=df["sales"], aggfunc="sum")
+pd.crosstab(df["region"], df["product"], normalize="index")   # row %s
+
+# pivot_table (same as Excel pivot)
+df.pivot_table(
+    index="region",
+    columns="product",
+    values="sales",
+    aggfunc="sum",
+    fill_value=0,
+    margins=True,                # add totals
+    margins_name="Total"
+)</code></pre>
+
+      <h3>Window-like Operations (Ranking, Top-N per Group)</h3>
+<pre><code class="language-python"># Rank within group
+df["rank"] = df.groupby("region")["sales"].rank(ascending=False, method="dense")
+
+# Top 3 per group
+df.sort_values(["region", "sales"], ascending=[True, False]) \
+  .groupby("region").head(3)
+
+# Cumulative sum within group
+df["cumsum"] = df.groupby("region")["sales"].cumsum()
+
+# Running mean (rolling)
+df["rolling_avg"] = df.groupby("region")["sales"].rolling(7).mean().values
+
+# Shift (LAG/LEAD)
+df["prev_sale"] = df.groupby("customer_id")["sales"].shift(1)
+df["next_sale"] = df.groupby("customer_id")["sales"].shift(-1)</code></pre>
+
+      <h3>Concepts Checklist</h3>
+      <div class="check-row"><input type="checkbox" id="gb1"><label for="gb1">Basic groupby + single/multiple aggregations</label></div>
+      <div class="check-row"><input type="checkbox" id="gb2"><label for="gb2">Named aggregations</label></div>
+      <div class="check-row"><input type="checkbox" id="gb3"><label for="gb3">transform vs apply vs agg distinction</label></div>
+      <div class="check-row"><input type="checkbox" id="gb4"><label for="gb4">filter() to keep matching groups</label></div>
+      <div class="check-row"><input type="checkbox" id="gb5"><label for="gb5">pivot_table and crosstab</label></div>
+      <div class="check-row"><input type="checkbox" id="gb6"><label for="gb6">rank / cumsum / shift within groups</label></div>
+      <div class="check-row"><input type="checkbox" id="gb7"><label for="gb7">Top-N per group pattern</label></div>
+    </div>
+  </div>
+
+  <!-- MERGE -->
+  <div class="tab-content" id="merge">
+    <div class="section">
+      <h2>6. Merge, Join & Concat</h2>
+
+      <h3>merge() — SQL-style joins</h3>
+<pre><code class="language-python"># Inner join (default)
+result = df1.merge(df2, on="customer_id")
+
+# Different column names
+result = df1.merge(df2, left_on="cust_id", right_on="id")
+
+# Outer joins
+result = df1.merge(df2, on="customer_id", how="left")
+result = df1.merge(df2, on="customer_id", how="right")
+result = df1.merge(df2, on="customer_id", how="outer")
+result = df1.merge(df2, on="customer_id", how="cross")        # cartesian
+
+# Multiple keys
+result = df1.merge(df2, on=["customer_id", "date"])
+
+# Suffixes for conflicting columns
+result = df1.merge(df2, on="id", suffixes=("_left", "_right"))
+
+# Indicator (where did each row come from?)
+result = df1.merge(df2, on="id", how="outer", indicator=True)
+# adds _merge column: 'left_only', 'right_only', 'both'
+
+# Anti-join (in df1 NOT in df2)
+result = df1.merge(df2, on="id", how="left", indicator=True)
+anti = result[result["_merge"] == "left_only"].drop(columns=["_merge"])</code></pre>
+
+      <h3>join() — Index-based join (less common)</h3>
+<pre><code class="language-python">df1.set_index("id").join(df2.set_index("id"), how="inner")</code></pre>
+
+      <h3>concat() — Stack DataFrames</h3>
+<pre><code class="language-python"># Vertical (stack rows) — like UNION ALL
+result = pd.concat([df1, df2], ignore_index=True)
+result = pd.concat([df1, df2], axis=0)                  # same thing
+
+# Horizontal (combine columns)
+result = pd.concat([df1, df2], axis=1)
+
+# Keep only common columns
+result = pd.concat([df1, df2], join="inner")
+
+# With keys (creates multi-index)
+result = pd.concat([df1, df2], keys=["jan", "feb"])
+
+# Read many files and combine
+import glob
+files = glob.glob("data/2026-*.csv")
+df = pd.concat([pd.read_csv(f) for f in files], ignore_index=True)</code></pre>
+
+      <h3>merge_asof() — Time-based fuzzy join</h3>
+<pre><code class="language-python"># Match each row in left with most recent row in right
+trades = pd.DataFrame({"time": [...], "ticker": [...], "price": [...]})
+quotes = pd.DataFrame({"time": [...], "ticker": [...], "bid": [...]})
+
+result = pd.merge_asof(
+    trades.sort_values("time"),
+    quotes.sort_values("time"),
+    on="time",
+    by="ticker",
+    tolerance=pd.Timedelta("2ms"),
+    direction="backward"           # 'backward', 'forward', 'nearest'
+)</code></pre>
+
+      <h3>combine_first() — Fill nulls from another DataFrame</h3>
+<pre><code class="language-python"># Like COALESCE — use df1 values, fall back to df2 for nulls
+result = df1.combine_first(df2)</code></pre>
+
+      <h3>Concepts Checklist</h3>
+      <div class="check-row"><input type="checkbox" id="mg1"><label for="mg1">merge with inner/left/right/outer/cross</label></div>
+      <div class="check-row"><input type="checkbox" id="mg2"><label for="mg2">Different column names (left_on / right_on)</label></div>
+      <div class="check-row"><input type="checkbox" id="mg3"><label for="mg3">suffixes for conflicting columns</label></div>
+      <div class="check-row"><input type="checkbox" id="mg4"><label for="mg4">indicator=True for source tracking</label></div>
+      <div class="check-row"><input type="checkbox" id="mg5"><label for="mg5">Anti-join pattern (left_only)</label></div>
+      <div class="check-row"><input type="checkbox" id="mg6"><label for="mg6">concat() vertical and horizontal</label></div>
+      <div class="check-row"><input type="checkbox" id="mg7"><label for="mg7">merge_asof for time-based joins</label></div>
+    </div>
+  </div>
+
+  <!-- RESHAPE -->
+  <div class="tab-content" id="reshape">
+    <div class="section">
+      <h2>7. Reshape — Pivot, Melt, Stack</h2>
+
+      <h3>pivot() — Long to Wide (no aggregation)</h3>
+<pre><code class="language-python"># Long format
+#  date        product  sales
+#  2026-01-01  A        100
+#  2026-01-01  B        200
+#  2026-01-02  A        150
+
+df.pivot(index="date", columns="product", values="sales")
+# Wide format:
+#               A     B
+#  2026-01-01  100   200
+#  2026-01-02  150  NaN
+# ⚠ pivot() fails if duplicates → use pivot_table()</code></pre>
+
+      <h3>pivot_table() — Long to Wide with aggregation</h3>
+<pre><code class="language-python">df.pivot_table(
+    index="region",
+    columns="product",
+    values="sales",
+    aggfunc="sum",                       # or 'mean', 'count', list of funcs
+    fill_value=0,
+    margins=True
+)</code></pre>
+
+      <h3>melt() — Wide to Long</h3>
+<pre><code class="language-python"># Wide format:
+#  date        prod_A  prod_B  prod_C
+#  2026-01-01    100     200     150
+
+df.melt(
+    id_vars=["date"],                    # keep as is
+    value_vars=["prod_A", "prod_B", "prod_C"],
+    var_name="product",
+    value_name="sales"
+)
+# Long format:
+#  date        product   sales
+#  2026-01-01  prod_A    100
+#  2026-01-01  prod_B    200
+#  ...</code></pre>
+
+      <h3>stack() / unstack()</h3>
+<pre><code class="language-python"># stack: columns → rows (creates multi-index)
+df.stack()
+
+# unstack: rows → columns (inverse of stack)
+df.unstack()
+df.unstack(level=0)                      # unstack specific level
+
+# Useful with groupby
+df.groupby(["region", "product"])["sales"].sum().unstack("product")</code></pre>
+
+      <h3>explode() — List values to rows</h3>
+<pre><code class="language-python">df = pd.DataFrame({"id": [1,2], "tags": [["a","b"], ["c","d","e"]]})
+df.explode("tags")
+# id   tags
+#  1    a
+#  1    b
+#  2    c
+#  2    d
+#  2    e</code></pre>
+
+      <h3>get_dummies() — One-hot encoding</h3>
+<pre><code class="language-python">pd.get_dummies(df["category"])
+pd.get_dummies(df, columns=["category", "region"], drop_first=True)</code></pre>
+
+      <h3>wide_to_long() — Complex pattern reshaping</h3>
+<pre><code class="language-python"># For columns like q1_sales, q2_sales, q1_profit, q2_profit
+pd.wide_to_long(df, stubnames=["sales", "profit"],
+                i="region", j="quarter", sep="_", suffix=r"q\d+")</code></pre>
+
+      <h3>Concepts Checklist</h3>
+      <div class="check-row"><input type="checkbox" id="rs1"><label for="rs1">pivot vs pivot_table (when to use each)</label></div>
+      <div class="check-row"><input type="checkbox" id="rs2"><label for="rs2">melt for wide → long</label></div>
+      <div class="check-row"><input type="checkbox" id="rs3"><label for="rs3">stack / unstack with multi-index</label></div>
+      <div class="check-row"><input type="checkbox" id="rs4"><label for="rs4">explode for list columns</label></div>
+      <div class="check-row"><input type="checkbox" id="rs5"><label for="rs5">get_dummies for categorical encoding</label></div>
+    </div>
+  </div>
+
+  <!-- TIME SERIES -->
+  <div class="tab-content" id="timeseries">
+    <div class="section">
+      <h2>8. Time Series Operations</h2>
+
+      <h3>Datetime Basics</h3>
+<pre><code class="language-python">df["date"] = pd.to_datetime(df["date"])
+
+# Extract components
+df["year"] = df["date"].dt.year
+df["month"] = df["date"].dt.month
+df["day"] = df["date"].dt.day
+df["weekday"] = df["date"].dt.day_name()
+df["quarter"] = df["date"].dt.quarter
+df["hour"] = df["date"].dt.hour
+df["is_weekend"] = df["date"].dt.weekday >= 5
+
+# Date arithmetic
+df["next_week"] = df["date"] + pd.Timedelta(days=7)
+df["age_days"] = (pd.Timestamp.now() - df["birth"]).dt.days
+
+# Date offsets (calendar-aware)
+df["next_month"] = df["date"] + pd.DateOffset(months=1)
+df["bday"] = df["date"] + pd.offsets.BDay(1)        # next business day</code></pre>
+
+      <h3>Date Range Generation</h3>
+<pre><code class="language-python">pd.date_range("2026-01-01", "2026-12-31", freq="D")           # daily
+pd.date_range("2026-01-01", periods=12, freq="MS")            # 12 month starts
+pd.date_range("2026-01-01", periods=10, freq="W-MON")         # Mondays
+pd.date_range("2026-01-01", periods=24, freq="H")             # hourly
+pd.bdate_range("2026-01-01", "2026-12-31")                    # business days
+
+# Common freq codes:
+# D, W, M, Q, Y / H, T (min), S, MS (month start), BM (biz month end)</code></pre>
+
+      <h3>Resampling (Time-based GroupBy)</h3>
+<pre><code class="language-python">df = df.set_index("date")
+
+# Downsample (e.g., daily → monthly)
+monthly = df.resample("M").sum()
+monthly = df.resample("M").agg({"sales": "sum", "orders": "count"})
+
+# Upsample (daily → hourly with fill)
+hourly = df.resample("H").ffill()
+
+# Custom periods
+df.resample("W-MON").sum()              # weekly starting Monday
+df.resample("Q").mean()                 # quarterly
+
+# OHLC for stock-like data
+df["price"].resample("D").ohlc()        # open, high, low, close</code></pre>
+
+      <h3>Rolling Windows</h3>
+<pre><code class="language-python">df["rolling_7d"] = df["sales"].rolling(window=7).mean()
+df["rolling_30d"] = df["sales"].rolling(window=30, min_periods=1).sum()
+df["rolling_std"] = df["sales"].rolling(7).std()
+
+# Time-based window (works on DatetimeIndex)
+df["sales"].rolling("7D").mean()        # last 7 days regardless of row count
+
+# Expanding (cumulative from start)
+df["cumulative_avg"] = df["sales"].expanding().mean()
+
+# Exponentially weighted
+df["ewm"] = df["sales"].ewm(span=10).mean()</code></pre>
+
+      <h3>Shifting (Lag/Lead)</h3>
+<pre><code class="language-python">df["prev_day"] = df["sales"].shift(1)              # LAG 1
+df["next_day"] = df["sales"].shift(-1)             # LEAD 1
+df["week_ago"] = df["sales"].shift(7)
+df["day_over_day"] = df["sales"] - df["sales"].shift(1)
+df["pct_change"] = df["sales"].pct_change()
+df["growth_yoy"] = df["sales"].pct_change(periods=365) * 100</code></pre>
+
+      <h3>Timezones</h3>
+<pre><code class="language-python">df["date"] = df["date"].dt.tz_localize("UTC")
+df["date_ist"] = df["date"].dt.tz_convert("Asia/Kolkata")
+df["date"] = df["date"].dt.tz_localize(None)        # remove tz</code></pre>
+
+      <h3>Filtering by Date</h3>
+<pre><code class="language-python">df["2026"]                              # all of 2026 (with DatetimeIndex)
+df["2026-05"]                           # May 2026
+df["2026-05-01":"2026-05-31"]
+df.loc[df["date"].between("2026-01-01", "2026-12-31")]</code></pre>
+
+      <h3>Concepts Checklist</h3>
+      <div class="check-row"><input type="checkbox" id="ts1"><label for="ts1">to_datetime + .dt accessor</label></div>
+      <div class="check-row"><input type="checkbox" id="ts2"><label for="ts2">date_range generation</label></div>
+      <div class="check-row"><input type="checkbox" id="ts3"><label for="ts3">resample for upsampling/downsampling</label></div>
+      <div class="check-row"><input type="checkbox" id="ts4"><label for="ts4">rolling windows (count and time-based)</label></div>
+      <div class="check-row"><input type="checkbox" id="ts5"><label for="ts5">shift / pct_change for comparisons</label></div>
+      <div class="check-row"><input type="checkbox" id="ts6"><label for="ts6">Timezone handling (localize / convert)</label></div>
+    </div>
+  </div>
+
+  <!-- PERFORMANCE -->
+  <div class="tab-content" id="performance">
+    <div class="section">
+      <h2>9. Performance & Best Practices</h2>
+
+      <h3>Vectorize, Don't Loop!</h3>
+<pre><code class="language-python"># ❌ SLOW (Python loop)
+for i, row in df.iterrows():
+    df.at[i, "new"] = row["a"] + row["b"]
+
+# ❌ SLOW (apply with lambda)
+df["new"] = df.apply(lambda row: row["a"] + row["b"], axis=1)
+
+# ✅ FAST (vectorized — 100-1000x faster!)
+df["new"] = df["a"] + df["b"]
+
+# ✅ FAST (numpy where for conditionals)
+import numpy as np
+df["status"] = np.where(df["age"] >= 18, "adult", "minor")
+
+# ✅ FAST (np.select for multi-condition)
+conditions = [df["age"] < 13, df["age"] < 20, df["age"] < 60]
+choices = ["child", "teen", "adult"]
+df["group"] = np.select(conditions, choices, default="senior")</code></pre>
+
+      <h3>Optimize Data Types (HUGE Memory Savings)</h3>
+<pre><code class="language-python"># Check current memory
+df.memory_usage(deep=True).sum() / 1024**2    # MB
+
+# Downcast numeric
+df["int_col"] = pd.to_numeric(df["int_col"], downcast="integer")
+df["float_col"] = pd.to_numeric(df["float_col"], downcast="float")
+
+# Convert strings to category (huge wins for low-cardinality)
+df["country"] = df["country"].astype("category")   # often 90% smaller
+
+# Manual dtype selection
+df = df.astype({"id": "int32", "age": "int8", "price": "float32"})
+
+# Read CSV with optimal types from the start
+df = pd.read_csv("data.csv", dtype={
+    "id": "int32",
+    "country": "category",
+    "price": "float32",
+})</code></pre>
+
+      <h3>Chunk Processing for Big Files</h3>
+<pre><code class="language-python">chunk_iter = pd.read_csv("huge.csv", chunksize=100_000)
+results = []
+for chunk in chunk_iter:
+    chunk = chunk[chunk["amount"] > 0]
+    chunk["doubled"] = chunk["amount"] * 2
+    results.append(chunk.groupby("region")["amount"].sum())
+
+final = pd.concat(results).groupby(level=0).sum()</code></pre>
+
+      <h3>Use eval / query for Speed</h3>
+<pre><code class="language-python"># For BIG dataframes (millions of rows), eval/query use numexpr internally
+df.eval("total = price * qty", inplace=True)
+df.query("price > 100 and qty > 5")</code></pre>
+
+      <h3>Avoid Common Anti-Patterns</h3>
+<pre><code class="language-python"># ❌ Growing DataFrames in a loop (O(n²))
+df = pd.DataFrame()
+for x in items:
+    df = pd.concat([df, transform(x)])
+
+# ✅ Collect then concat once
+parts = [transform(x) for x in items]
+df = pd.concat(parts, ignore_index=True)
+
+# ❌ Chained indexing (warning + slow)
+df[df["age"] > 30]["category"] = "senior"
+
+# ✅ Use .loc once
+df.loc[df["age"] > 30, "category"] = "senior"
+
+# ❌ apply when vectorization works
+df["sqrt"] = df["x"].apply(np.sqrt)
+
+# ✅ Direct vectorized
+df["sqrt"] = np.sqrt(df["x"])</code></pre>
+
+      <h3>Use Parquet, Not CSV</h3>
+<pre><code class="language-python"># Parquet vs CSV:
+#  - 5-10x smaller files
+#  - 10-100x faster reads (columnar)
+#  - Schema preserved (no parse_dates needed)
+#  - Column pruning (read only what you need)
+
+df.to_parquet("data.parquet", compression="snappy")
+df = pd.read_parquet("data.parquet", columns=["id", "amount"])  # only 2 cols</code></pre>
+
+      <h3>Profile Slow Code</h3>
+<pre><code class="language-python"># In Jupyter
+%timeit df["a"] + df["b"]
+%memit big_operation()              # pip install memory_profiler
+
+# In scripts
+import cProfile
+cProfile.run("process(df)")</code></pre>
+
+      <h3>Consider Alternatives for Big Data</h3>
+      <table>
+        <thead><tr><th>Library</th><th>When to Use</th></tr></thead>
+        <tbody>
+          <tr><td>Pandas</td><td>&lt;5GB, single machine</td></tr>
+          <tr><td>Polars</td><td>5-100GB, single machine, blazing fast</td></tr>
+          <tr><td>DuckDB</td><td>SQL on big files (Parquet), embedded</td></tr>
+          <tr><td>Dask</td><td>Pandas-like API, distributed</td></tr>
+          <tr><td>PySpark</td><td>TB-scale, cluster needed</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Best Practices Checklist</h3>
+      <div class="check-row"><input type="checkbox" id="pe1"><label for="pe1">Always prefer vectorization over apply/loops</label></div>
+      <div class="check-row"><input type="checkbox" id="pe2"><label for="pe2">Use np.where / np.select for conditionals</label></div>
+      <div class="check-row"><input type="checkbox" id="pe3"><label for="pe3">Downcast int/float dtypes</label></div>
+      <div class="check-row"><input type="checkbox" id="pe4"><label for="pe4">Use category for low-cardinality strings</label></div>
+      <div class="check-row"><input type="checkbox" id="pe5"><label for="pe5">Chunk-read big CSVs</label></div>
+      <div class="check-row"><input type="checkbox" id="pe6"><label for="pe6">Use Parquet instead of CSV</label></div>
+      <div class="check-row"><input type="checkbox" id="pe7"><label for="pe7">Collect-then-concat (avoid repeated concat)</label></div>
+      <div class="check-row"><input type="checkbox" id="pe8"><label for="pe8">Profile before optimizing</label></div>
+      <div class="check-row"><input type="checkbox" id="pe9"><label for="pe9">Know when to switch to Polars/Spark</label></div>
+    </div>
+  </div>
+
+  <!-- INTERVIEW -->
+  <div class="tab-content" id="interview">
+    <div class="section">
+      <h2>10. Interview Q&A</h2>
+
+      <div class="qa-card">
+        <div class="qa-q">Q1. Series vs DataFrame?</div>
+        <div class="qa-a">Series: 1D labeled array (one column). DataFrame: 2D labeled table (multiple Series sharing an index).</div>
+      </div>
+
+      <div class="qa-card">
+        <div class="qa-q">Q2. .loc vs .iloc?</div>
+        <div class="qa-a"><code>.loc</code>: label-based, INCLUSIVE end. <code>.iloc</code>: position-based, EXCLUSIVE end (Python-like slicing).</div>
+      </div>
+
+      <div class="qa-card">
+        <div class="qa-q">Q3. apply vs map vs applymap?</div>
+        <div class="qa-a">map: Series only, element-wise (use dict/Series for mapping). apply: Series (element-wise) or DataFrame (row/col-wise). applymap: deprecated → use DataFrame.map for element-wise on DataFrame.</div>
+      </div>
+
+      <div class="qa-card">
+        <div class="qa-q">Q4. merge vs join vs concat?</div>
+        <div class="qa-a">merge: SQL-style joins on columns or indexes. join: index-based join (convenience). concat: stacks DataFrames vertically or horizontally (like UNION ALL).</div>
+      </div>
+
+      <div class="qa-card">
+        <div class="qa-q">Q5. How to handle missing data?</div>
+        <div class="qa-a">Detect with isna(). Options: drop (dropna), fill with constant/method/statistic (fillna), interpolate, or model-based imputation. Choice depends on % missing and business context.</div>
+      </div>
+
+      <div class="qa-card">
+        <div class="qa-q">Q6. How to read a 50GB CSV?</div>
+        <div class="qa-a">Use chunksize: <code>pd.read_csv("file.csv", chunksize=100000)</code>. Or switch to Polars/Dask/Spark. Better: convert to Parquet once, then read columnar.</div>
+      </div>
+
+      <div class="qa-card">
+        <div class="qa-q">Q7. transform vs apply vs agg in groupby?</div>
+        <div class="qa-a">agg: returns one value per group (reduces). transform: returns same shape as input (broadcasts back). apply: most flexible, returns anything.</div>
+      </div>
+
+      <div class="qa-card">
+        <div class="qa-q">Q8. How do you optimize memory for a Pandas DataFrame?</div>
+        <div class="qa-a">Downcast numerics (int64→int8), convert low-cardinality strings to category, drop unused columns, use Parquet for storage, process in chunks.</div>
+      </div>
+
+      <div class="qa-card">
+        <div class="qa-q">Q9. What is the SettingWithCopyWarning?</div>
+        <div class="qa-a">Pandas warns when you set values on what might be a view vs copy. Fix by using <code>.loc</code> for setting in a single operation, or explicitly <code>.copy()</code> the slice.</div>
+      </div>
+
+      <div class="qa-card">
+        <div class="qa-q">Q10. Pivot vs Pivot Table?</div>
+        <div class="qa-a">pivot(): no aggregation, fails on duplicate keys. pivot_table(): with aggregation function, handles duplicates.</div>
+      </div>
+
+      <div class="qa-card">
+        <div class="qa-q">Q11. How to deduplicate keeping latest?</div>
+        <div class="qa-a"><code>df.sort_values("updated_at").drop_duplicates("id", keep="last")</code></div>
+      </div>
+
+      <div class="qa-card">
+        <div class="qa-q">Q12. Difference between merge how='left' and how='outer'?</div>
+        <div class="qa-a">'left': all rows from left + matching from right. 'outer': all rows from both.</div>
+      </div>
+
+      <div class="qa-card">
+        <div class="qa-q">Q13. How to find top 3 rows per group?</div>
+        <div class="qa-a"><code>df.sort_values(["grp","score"], ascending=[True,False]).groupby("grp").head(3)</code> or use <code>nlargest</code> within apply.</div>
+      </div>
+
+      <div class="qa-card">
+        <div class="qa-q">Q14. Pandas vs Spark — when to use which?</div>
+        <div class="qa-a">Pandas: data fits in memory (~5GB). Spark: distributed, terabytes, cluster available. PySpark also useful when integrating with Hadoop/Delta Lake ecosystem.</div>
+      </div>
+
+      <div class="qa-card">
+        <div class="qa-q">Q15. How to implement SCD Type 2 in Pandas?</div>
+        <div class="qa-a">Compare staging with current. For changed rows: update current's valid_to + is_current=False; insert new row with valid_from=today, is_current=True. Use merge with indicator to find new vs changed.</div>
+      </div>
+
+      <h3>Practice Resources</h3>
+      <ul class="bullet">
+        <li><a href="https://pandas.pydata.org/docs/getting_started/intro_tutorials/" target="_blank" style="color: var(--accent);">Official Pandas Tutorials</a></li>
+        <li><a href="https://github.com/guipsamora/pandas_exercises" target="_blank" style="color: var(--accent);">Pandas Exercises (GitHub) — 100+ problems</a></li>
+        <li><a href="https://www.kaggle.com/learn/pandas" target="_blank" style="color: var(--accent);">Kaggle Pandas Course (free)</a></li>
+        <li><a href="https://github.com/ajcr/100-pandas-puzzles" target="_blank" style="color: var(--accent);">100 Pandas Puzzles</a></li>
+        <li><a href="https://stratascratch.com" target="_blank" style="color: var(--accent);">StrataScratch — many Pandas problems</a></li>
+        <li><strong>Book:</strong> Python for Data Analysis by Wes McKinney (Pandas creator)</li>
+      </ul>
+    </div>
+  </div>
+
+  <footer>🐼 Pandas for Data Engineers · Track your progress · From DataFrames to performance optimization</footer>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
+<script>
+  function showTab(evt, tabId) {
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.getElementById(tabId).classList.add('active');
+    evt.currentTarget.classList.add('active');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+  const STORAGE_KEY = 'pandas_guide_progress_v1';
+  function loadProgress() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+      document.querySelectorAll('input[type="checkbox"]').forEach(cb => { if (saved[cb.id]) cb.checked = true; });
+    } catch (e) { }
+    updateProgress();
+  }
+  function saveProgress() {
+    const state = {};
+    document.querySelectorAll('input[type="checkbox"]').forEach(cb => { if (cb.checked) state[cb.id] = true; });
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    updateProgress();
+  }
+  function updateProgress() {
+    const all = document.querySelectorAll('input[type="checkbox"]');
+    const done = document.querySelectorAll('input[type="checkbox"]:checked');
+    const pct = all.length ? Math.round((done.length / all.length) * 100) : 0;
+    const fill = document.getElementById('progress-fill');
+    fill.style.width = pct + '%';
+    fill.textContent = pct + '%';
+    document.getElementById('progress-text').textContent = done.length + ' / ' + all.length;
+  }
+  function resetProgress() {
+    if (!confirm('Reset all progress?')) return;
+    localStorage.removeItem(STORAGE_KEY);
+    document.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = false);
+    updateProgress();
+  }
+  function exportProgress() {
+    const state = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+    const blob = new Blob([JSON.stringify(state, null, 2)], {type: 'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'pandas_progress_' + new Date().toISOString().split('T')[0] + '.json';
+    a.click(); URL.revokeObjectURL(url);
+  }
+  document.addEventListener('change', e => { if (e.target.matches('input[type="checkbox"]')) saveProgress(); });
+  document.addEventListener('DOMContentLoaded', loadProgress);
+  if (document.readyState !== 'loading') loadProgress();
+</script>
+</body>
+</html>

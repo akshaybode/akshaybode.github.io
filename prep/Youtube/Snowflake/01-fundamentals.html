@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Part 1 — Fundamentals, Editions & Architecture | Snowflake Notes</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #0b1020; --bg-2: #131a2f; --bg-3: #1f2a44; --card: #131a2f;
+    --text: #e6edf6; --text-dim: #93a4bf; --accent: #29b5e8; --accent-2: #c084fc;
+    --accent-3: #34d399; --success: #22c55e; --warn: #fbbf24; --danger: #f87171;
+    --border: #2a3553; --code-bg: #0a0f1e;
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: linear-gradient(135deg, #0b1020 0%, #0c2233 100%); color: var(--text);
+    line-height: 1.65; min-height: 100vh; }
+  .container { max-width: 1100px; margin: 0 auto; padding: 24px; }
+  header { background: linear-gradient(135deg, #29b5e8 0%, #2563eb 50%, #7c3aed 100%);
+    border-radius: 16px; padding: 30px; margin-bottom: 18px; box-shadow: 0 20px 60px rgba(41,181,232,0.25); }
+  header .crumb { font-size: 12px; opacity: 0.85; text-transform: uppercase; letter-spacing: 1px; }
+  header h1 { font-size: 30px; margin: 6px 0 8px 0; }
+  header p { opacity: 0.92; font-size: 15px; max-width: 760px; }
+  nav.pager { display: flex; justify-content: space-between; gap: 10px; margin: 14px 0 22px 0; flex-wrap: wrap; }
+  nav.pager a { text-decoration: none; background: var(--card); border: 1px solid var(--border);
+    color: var(--text); padding: 10px 16px; border-radius: 10px; font-size: 13px; font-weight: 600; transition: all 0.2s; }
+  nav.pager a:hover { background: var(--accent); color: #04121b; border-color: var(--accent); }
+  nav.pager a.home { border-color: var(--accent-2); }
+
+  .section { background: var(--card); border-radius: 12px; padding: 24px; margin-bottom: 18px; border: 1px solid var(--border); }
+  .section h2 { color: var(--accent); font-size: 22px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+  .section h3 { color: var(--accent-2); font-size: 18px; margin: 20px 0 10px 0; }
+  .section h4 { color: var(--accent-3); font-size: 15px; margin: 14px 0 8px 0; }
+  .section p { color: var(--text); margin-bottom: 10px; }
+  ul.bullet { padding-left: 22px; color: var(--text); font-size: 14.5px; margin: 6px 0 12px 0; }
+  ul.bullet li { padding: 4px 0; }
+  ul.bullet li b { color: var(--accent-3); }
+
+  table { width: 100%; border-collapse: collapse; background: var(--bg); border-radius: 8px;
+    overflow: hidden; margin: 14px 0; font-size: 13.5px; }
+  th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { background: var(--bg-3); color: var(--accent); text-transform: uppercase; font-size: 11px; letter-spacing: 1px; }
+  tr:last-child td { border-bottom: none; }
+
+  .alert { padding: 12px 14px; border-radius: 8px; margin: 14px 0; border-left: 4px solid; font-size: 14px; }
+  .alert.warn { background: rgba(251,191,36,0.1); border-color: var(--warn); }
+  .alert.danger { background: rgba(248,113,113,0.1); border-color: var(--danger); }
+  .alert.success { background: rgba(34,197,94,0.1); border-color: var(--success); }
+  .alert.info { background: rgba(41,181,232,0.1); border-color: var(--accent); }
+  .alert strong { color: var(--text); }
+
+  .diagram { background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 22px; margin: 16px 0; overflow-x: auto; }
+  .diagram .title { text-align: center; color: var(--text-dim); font-size: 12px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 16px; }
+  .flow { display: flex; align-items: stretch; justify-content: center; flex-wrap: wrap; }
+  .flow-box { background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px;
+    min-width: 130px; text-align: center; font-size: 13px; font-weight: 600; display: flex; flex-direction: column; justify-content: center; }
+  .flow-box small { display: block; color: var(--text-dim); font-weight: 400; font-size: 11px; margin-top: 4px; }
+  .flow-arrow { display: flex; align-items: center; padding: 0 8px; color: var(--accent); font-size: 22px; font-weight: 700; }
+  .flow-box.gen { border-top: 3px solid var(--accent); }
+  .flow-box.ing { border-top: 3px solid var(--accent-2); }
+  .flow-box.sto { border-top: 3px solid var(--accent-3); }
+  .flow-box.tra { border-top: 3px solid var(--warn); }
+  .flow-box.ser { border-top: 3px solid var(--danger); }
+
+  .stack { display: flex; flex-direction: column; gap: 10px; max-width: 760px; margin: 0 auto; }
+  .layer { border-radius: 10px; padding: 16px 18px; border: 1px solid var(--border); }
+  .layer h4 { margin-bottom: 4px; font-size: 15px; }
+  .layer p { font-size: 13px; color: var(--text-dim); margin: 0; }
+  .layer.l-svc { background: rgba(192,132,252,0.10); border-left: 4px solid var(--accent-2); }
+  .layer.l-cmp { background: rgba(251,191,36,0.10); border-left: 4px solid var(--warn); }
+  .layer.l-sto { background: rgba(52,211,153,0.10); border-left: 4px solid var(--accent-3); }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .chip { background: rgba(192,132,252,0.14); border: 1px solid var(--accent-2); color: #ecdcff;
+    font-size: 11px; padding: 3px 9px; border-radius: 999px; }
+
+  /* legacy/modern landscape */
+  .land { display: flex; align-items: stretch; justify-content: center; flex-wrap: wrap; gap: 0; }
+  .stage { background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; padding: 12px 12px;
+    min-width: 132px; max-width: 168px; text-align: center; font-size: 12.5px; font-weight: 700;
+    display: flex; flex-direction: column; justify-content: flex-start; gap: 6px; }
+  .stage small { font-weight: 400; color: var(--text-dim); font-size: 11px; display: block; }
+  .stage.src { border-top: 3px solid var(--accent); }
+  .stage.etl { border-top: 3px solid var(--warn); }
+  .stage.edw { border-top: 3px solid var(--accent-3); }
+  .stage.mart { border-top: 3px solid var(--accent-2); }
+  .stage.bi { border-top: 3px solid var(--danger); }
+  .stage.lake { border-top: 3px solid #38bdf8; }
+  .stage.snow { border: 1px solid var(--accent); background: linear-gradient(160deg, rgba(41,181,232,0.18), rgba(124,58,237,0.10)); border-top: 3px solid var(--accent); }
+
+  /* pillars */
+  .pillars { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; margin-top: 12px; }
+  .pillar { background: var(--bg); border: 1px solid var(--border); border-top: 3px solid var(--accent); border-radius: 12px; padding: 16px; }
+  .pillar .ic { font-size: 22px; }
+  .pillar h4 { color: var(--text); font-size: 14.5px; margin: 8px 0 6px 0; }
+  .pillar p { color: var(--text-dim); font-size: 12.5px; margin: 0; }
+
+  /* editions ladder */
+  .editions { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; align-items: end; margin: 16px 0; }
+  .ed { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 14px 13px; }
+  .ed.e1 { border-top: 4px solid #7dd3fc; }
+  .ed.e2 { border-top: 4px solid #38bdf8; }
+  .ed.e3 { border-top: 4px solid var(--accent); }
+  .ed.e4 { border-top: 4px solid #2563eb; }
+  .ed.e5 { border-top: 4px solid var(--accent-2); }
+  .ed h4 { font-size: 13.5px; color: var(--text); margin-bottom: 4px; }
+  .ed .plus { font-size: 11px; color: var(--accent-3); font-weight: 700; display: block; margin-bottom: 8px; }
+  .ed ul { list-style: none; padding: 0; margin: 0; }
+  .ed li { font-size: 11.3px; color: var(--text-dim); padding: 4px 0; border-bottom: 1px dashed var(--border); line-height: 1.4; }
+  .ed li:last-child { border-bottom: none; }
+
+  /* architecture comparison */
+  .compare { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin: 16px 0; }
+  .cmp { background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 16px; text-align: center; }
+  .cmp.hl { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; background: linear-gradient(160deg, rgba(41,181,232,0.12), transparent); }
+  .cmp h4 { color: var(--text); font-size: 15px; margin-bottom: 6px; }
+  .cmp .tag { display: inline-block; font-size: 10.5px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase;
+    padding: 2px 8px; border-radius: 999px; margin-bottom: 8px; background: rgba(41,181,232,0.15); color: var(--accent); }
+  .cmp p { font-size: 12.5px; color: var(--text-dim); margin: 4px 0 0 0; }
+  .nodes { display: flex; justify-content: center; gap: 6px; margin: 8px 0; }
+  .node { width: 26px; height: 18px; border-radius: 4px; background: var(--bg-3); border: 1px solid var(--border); }
+  .node.c { background: rgba(41,181,232,0.4); border-color: var(--accent); }
+
+  /* ---- animated pipeline (shared) ---- */
+  .apipe { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 0; margin: 4px 0; }
+  .anode { position: relative; z-index: 1; background: var(--bg-3); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 14px; min-width: 112px; text-align: center; font-size: 12.5px; font-weight: 700;
+    animation: aPulse 3s ease-in-out infinite; }
+  .anode small { display: block; font-weight: 400; color: var(--text-dim); font-size: 11px; margin-top: 4px; }
+  .anode.a { border-top: 3px solid var(--accent); }
+  .anode.b { border-top: 3px solid var(--accent-2); }
+  .anode.c { border-top: 3px solid var(--accent-3); }
+  .anode.d { border-top: 3px solid var(--warn); }
+  .anode.e { border-top: 3px solid var(--danger); }
+  .alink { position: relative; width: 50px; height: 3px; background: var(--border); margin: 0 1px; border-radius: 2px; flex: none; }
+  .alink .apkt { position: absolute; top: -3px; left: 0; width: 9px; height: 9px; border-radius: 50%;
+    background: var(--accent); box-shadow: 0 0 10px 1px var(--accent); animation: aMove 2.4s linear infinite; }
+  .alink .apkt.k2 { animation-delay: 1.2s; background: var(--accent-2); box-shadow: 0 0 10px 1px var(--accent-2); }
+  @keyframes aMove { 0% { left: 0; opacity: 0; } 12% { opacity: 1; } 88% { opacity: 1; } 100% { left: 100%; opacity: 0; } }
+  @keyframes aPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(41,181,232,0); } 50% { box-shadow: 0 0 16px 0 rgba(41,181,232,0.22); } }
+  @media (prefers-reduced-motion: reduce) { .alink .apkt { animation: none; opacity: .7; } .anode { animation: none; } }
+
+  pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px;
+    overflow-x: auto; margin: 12px 0; font-size: 13px; line-height: 1.55; }
+  pre code { color: #cfe3ff; font-family: "Consolas","Monaco",monospace; white-space: pre; }
+  pre .kw { color: #29b5e8; font-weight: 700; }
+  pre .cm { color: #6b7a99; font-style: italic; }
+  pre .st { color: #7ee787; }
+  :not(pre) > code { background: var(--bg-3); padding: 2px 6px; border-radius: 4px; font-size: 13px;
+    color: var(--accent-3); font-family: "Consolas","Monaco",monospace; }
+  footer { text-align: center; margin-top: 30px; padding: 20px; color: var(--text-dim); font-size: 13px; }
+  @media (max-width: 760px) {
+    header h1 { font-size: 23px; } .container { padding: 12px; }
+    .editions { grid-template-columns: 1fr 1fr; } .compare { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <div class="crumb">Part 1 of 6</div>
+    <h1>Fundamentals, Editions & Architecture</h1>
+    <p>Why Snowflake exists (the legacy vs modern data landscape), what makes it "built for the cloud," the five
+       editions, and the famous three-layer architecture that makes it scale and bill the way it does.</p>
+  </header>
+
+  <nav class="pager">
+    <a class="home" href="index.html">🏠 Home / Contents</a>
+    <a href="02-account-ui-security.html">Next → Part 2: Account, UI & Security</a>
+  </nav>
+
+  <div class="section">
+    <h2>1. What is Snowflake?</h2>
+    <p>Snowflake is a <strong>full data warehouse built for the cloud</strong>. Its vision: let every customer
+       access all their data in one place to make actionable decisions <em>anytime, anywhere, with any number of
+       users</em>. It's a "next-generation" warehouse built from the ground up for the cloud to solve today's data
+       and analytical challenges.</p>
+    <h3>The 3 defining features</h3>
+    <div class="diagram">
+      <div class="flow">
+        <div class="flow-box gen">① SQL Data Warehouse<small>Anyone who knows SQL can use it</small></div>
+        <div class="flow-arrow">+</div>
+        <div class="flow-box sto">② Built for Cloud<small>Runs on AWS / Azure / GCP</small></div>
+        <div class="flow-arrow">+</div>
+        <div class="flow-box ser">③ Delivered as a Service<small>No infra setup or management</small></div>
+      </div>
+    </div>
+    <div class="alert info"><strong>SaaS, not software you install.</strong> There's nothing to download.
+      Snowflake runs entirely in the cloud and manages all hardware, software, upgrades, and tuning for you.
+      You interact with it through a browser UI (Snowsight) or a SQL client.</div>
+  </div>
+
+  <div class="section">
+    <h2>2. Why Snowflake? The Legacy vs Modern Data Landscape</h2>
+    <p>To understand <em>why</em> Snowflake matters, the course first shows what data teams used <strong>before</strong>
+       it — a sprawl of separate tools stitched together.</p>
+
+    <h3>🏚️ The legacy data landscape</h3>
+    <div class="diagram">
+      <div class="title">Old world — many tools bolted together</div>
+      <div class="land">
+        <div class="stage src">Data Sources<small>OLTP DBs, enterprise apps, third-party, web apps</small></div>
+        <div class="flow-arrow">→</div>
+        <div class="stage etl">ETL<small>Move &amp; transform · Informatica, SSIS</small></div>
+        <div class="flow-arrow">→</div>
+        <div class="stage edw">EDW<small>Enterprise Data Warehouse · Oracle, SQL Server, Teradata</small></div>
+        <div class="flow-arrow">→</div>
+        <div class="stage mart">Data Marts<small>Dept. subsets · Oracle / SQL Server / Teradata</small></div>
+        <div class="flow-arrow">→</div>
+        <div class="stage bi">BI / Analytics<small>Dashboards &amp; reports</small></div>
+      </div>
+      <div class="title" style="margin-top:18px;">Unstructured / semi-structured side-path</div>
+      <div class="land">
+        <div class="stage src">Web apps / Other<small>Semi- &amp; unstructured data</small></div>
+        <div class="flow-arrow">→</div>
+        <div class="stage lake">Data Lake / Hadoop<small>Cheap raw storage · S3, Azure Blob</small></div>
+        <div class="flow-arrow">→</div>
+        <div class="stage edw">into the EDW<small>after processing</small></div>
+      </div>
+    </div>
+    <ul class="bullet">
+      <li>To move data into the <b>EDW</b> you needed a separate <b>ETL tool</b> (Informatica, SSIS, …).</li>
+      <li>Source systems mostly produce <b>structured</b> data; <b>unstructured/semi-structured</b> data (from web apps,
+          logs, etc.) had to land first in a <b>data lake</b> (S3, Azure Blob) before it could be used.</li>
+      <li>The <b>EDW</b> ran on Oracle / SQL Server / Teradata; <b>data marts</b> (smaller, department-specific subsets)
+          ran on yet more engines.</li>
+      <li><b>The pain:</b> many different tools and technologies to buy, integrate, secure, and tune — expensive,
+          complex, and hard to scale.</li>
+    </ul>
+
+    <h3>❄️ The modern data landscape with Snowflake</h3>
+    <div class="diagram">
+      <div class="title">New world — one platform replaces the stack</div>
+      <div class="land">
+        <div class="stage src">Data Sources<small>OLTP, apps, third-party, web apps, other</small></div>
+        <div class="flow-arrow">→</div>
+        <div class="stage etl">ETL <em>or</em> ELT<small>Load first, transform inside Snowflake</small></div>
+        <div class="flow-arrow">→</div>
+        <div class="stage snow">❄️ Snowflake<small>EDW + <b>logical</b> data marts + data-lake workloads, all in one</small></div>
+        <div class="flow-arrow">→</div>
+        <div class="stage bi">BI / Analytics<small>Dashboards, apps, data sharing</small></div>
+      </div>
+    </div>
+    <ul class="bullet">
+      <li>Snowflake <b>replaces the legacy landscape</b> — EDW, data marts, and much of the data-lake role collapse
+          into a <b>single platform</b>.</li>
+      <li>Because storage is cheap and compute is elastic, you can switch from <b>ETL to ELT</b>: load raw data first,
+          then transform it <em>inside</em> Snowflake with SQL.</li>
+      <li>Data marts become <b>logical</b> (views / schemas over the same data) instead of separate physical systems.</li>
+      <li>Snowflake natively handles <b>structured and semi-structured</b> data (JSON, Avro, Parquet via the
+          <code>VARIANT</code> type), so the separate data-lake step is often unnecessary.</li>
+    </ul>
+    <div class="alert success"><strong>One-line takeaway:</strong> the legacy world needed a different tool for every
+      stage; Snowflake unifies ingestion, the warehouse, marts, and sharing into one cloud service.</div>
+  </div>
+
+  <div class="section">
+    <h2>3. A Data Warehouse Built for the Cloud</h2>
+    <p>The course frames Snowflake's value as <strong>six pillars</strong> — what you get because it was designed
+       only for the cloud.</p>
+    <div class="diagram">
+      <div class="title">The 6 pillars</div>
+      <div class="pillars">
+        <div class="pillar"><div class="ic">🗄️</div><h4>Complete SQL Database</h4><p>A full relational warehouse — DDL, DML, joins, transactions. If you know SQL, you're productive on day one.</p></div>
+        <div class="pillar"><div class="ic">⚡</div><h4>Self-Tuning</h4><p>No indexes, partitions, or stats to manage by hand. Snowflake optimizes storage and queries automatically.</p></div>
+        <div class="pillar"><div class="ic">🌐</div><h4>All Your Data</h4><p>Structured and semi-structured (JSON, Avro, Parquet, XML) together in one place — no separate systems.</p></div>
+        <div class="pillar"><div class="ic">👥</div><h4>All Your Users</h4><p>Many teams and tools query the same data at once — each on its own compute — with no contention.</p></div>
+        <div class="pillar"><div class="ic">💳</div><h4>Pay Only for What You Use</h4><p>Per-second compute billing; warehouses auto-suspend when idle. Storage billed separately by volume.</p></div>
+        <div class="pillar"><div class="ic">🔗</div><h4>Live Data Sharing</h4><p>Share live, read-only data with other accounts instantly — no copying, no ETL, always up to date.</p></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>4. Snowflake Editions</h2>
+    <p>Editions are pricing/feature tiers. They <strong>stack</strong> — each higher edition includes everything in
+       the one before it and adds more support, security, compliance, and data-protection capabilities.</p>
+    <div class="diagram">
+      <div class="title">The 5 editions — each builds on the previous (＋)</div>
+      <div class="editions">
+        <div class="ed e1">
+          <h4>Standard</h4>
+          <span class="plus">Entry level</span>
+          <ul>
+            <li>Complete SQL Data Warehouse</li>
+            <li>Secure Data Sharing across regions / clouds</li>
+            <li>Business-hour support (M–F)</li>
+            <li>1 day of Time Travel</li>
+            <li>Always-on encryption in transit &amp; at rest</li>
+            <li>Customer-dedicated virtual warehouses</li>
+            <li>Federated authentication</li>
+            <li>Database replication</li>
+          </ul>
+        </div>
+        <div class="ed e2">
+          <h4>Premier</h4>
+          <span class="plus">＋ Standard</span>
+          <ul>
+            <li>Premier support 24 × 365</li>
+            <li>Faster response time</li>
+            <li>SLA with refund for outage</li>
+          </ul>
+        </div>
+        <div class="ed e3">
+          <h4>Enterprise</h4>
+          <span class="plus">＋ Premier</span>
+          <ul>
+            <li>Multi-cluster warehouses</li>
+            <li>Up to 90 days of Time Travel</li>
+            <li>Annual rekey of all encrypted data</li>
+            <li>Materialized views</li>
+            <li>AWS PrivateLink (extra fee)</li>
+          </ul>
+        </div>
+        <div class="ed e4">
+          <h4>Business Critical</h4>
+          <span class="plus">＋ Enterprise</span>
+          <ul>
+            <li>HIPAA support</li>
+            <li>PCI compliance</li>
+            <li>Data encryption everywhere</li>
+            <li>Tri-Secret Secure (customer-managed keys, AWS)</li>
+            <li>AWS PrivateLink support</li>
+            <li>Enhanced security policy</li>
+            <li>Database failover / failback (BCDR)</li>
+          </ul>
+        </div>
+        <div class="ed e5">
+          <h4>Virtual Private Snowflake (VPS)</h4>
+          <span class="plus">＋ Business Critical</span>
+          <ul>
+            <li>Customer-dedicated virtual servers (where the encryption key lives in memory)</li>
+            <li>Customer-dedicated metadata store</li>
+            <li>Additional operational visibility</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+    <div class="alert warn"><strong>Remember the gating features:</strong> <b>multi-cluster warehouses</b>,
+      <b>materialized views</b>, and <b>up to 90 days of Time Travel</b> need <b>Enterprise</b> or higher. The free
+      trial usually runs on <b>Enterprise</b> so you can try them. HIPAA/PCI &amp; tri-secret secure need
+      <b>Business Critical</b>; full isolation needs <b>VPS</b>.</div>
+  </div>
+
+  <div class="section">
+    <h2>5. A New Architecture for Data Warehousing</h2>
+    <p>To appreciate Snowflake's design, compare the three classic ways to build a warehouse —
+       <strong>multi-cluster, shared data, in the cloud</strong> is the one Snowflake pioneered.</p>
+    <div class="diagram">
+      <div class="title">Shared-disk vs Shared-nothing vs Multi-cluster shared data</div>
+      <div class="compare">
+        <div class="cmp">
+          <span class="tag">Traditional</span>
+          <h4>Shared-disk</h4>
+          <div class="nodes"><div class="node c"></div><div class="node c"></div><div class="node c"></div></div>
+          <p><b>Shared storage, single cluster.</b> All compute nodes read one central disk. Simple data management,
+             but the shared disk becomes a bottleneck and it's hard to scale.</p>
+        </div>
+        <div class="cmp">
+          <span class="tag">Traditional</span>
+          <h4>Shared-nothing (MPP)</h4>
+          <div class="nodes"><div class="node"></div><div class="node"></div><div class="node"></div></div>
+          <p><b>Decentralized, local storage, single cluster.</b> Each node owns a slice of the data — fast parallelism,
+             but storage and compute are coupled, so scaling one means scaling both.</p>
+        </div>
+        <div class="cmp hl">
+          <span class="tag" style="background:rgba(192,132,252,0.18); color:var(--accent-2);">Snowflake</span>
+          <h4>Multi-cluster, shared data</h4>
+          <div class="nodes"><div class="node c"></div><div class="node c"></div><div class="node"></div><div class="node"></div></div>
+          <p><b>Centralized, scale-out storage + multiple independent compute clusters.</b> One copy of the data,
+             many warehouses reading it at once. Scale storage and compute <em>separately</em>.</p>
+        </div>
+      </div>
+    </div>
+    <p>Snowflake is a <strong>hybrid</strong> of the two traditional models: a <b>central data repository</b> like
+       shared-disk (one source of truth), processed by <b>massively parallel compute clusters</b> like shared-nothing
+       (each node works on part of the data) — but with compute clusters that are independent and elastic.</p>
+  </div>
+
+  <div class="section">
+    <h2>6. The Three-Layer Architecture</h2>
+    <p>That hybrid design is implemented as <strong>three independent layers</strong>. This separation is the single
+       most important idea in Snowflake — it's why it scales and bills the way it does.</p>
+
+    <div class="diagram">
+      <div class="title">The 3 layers (top → bottom)</div>
+      <div class="stack">
+        <div class="layer l-svc">
+          <h4>☁️ Cloud Services Layer — "the brain"</h4>
+          <p>Coordinates everything across the platform. Runs on Snowflake-managed compute.</p>
+          <div class="chips">
+            <span class="chip">Authentication &amp; access</span>
+            <span class="chip">Infrastructure mgmt</span>
+            <span class="chip">Query parsing &amp; optimization</span>
+            <span class="chip">Metadata management</span>
+            <span class="chip">Transactions</span>
+            <span class="chip">Security</span>
+            <span class="chip">Result cache</span>
+          </div>
+        </div>
+        <div class="layer l-cmp">
+          <h4>⚙️ Compute Layer — Virtual Warehouses ("the muscle")</h4>
+          <p>One or more MPP clusters that actually execute queries. Each warehouse is independent and sized
+             X-Small → 4X-Large. Many can run at once on the same data without competing.</p>
+        </div>
+        <div class="layer l-sto">
+          <h4>🗄️ Storage Layer — "the disk" (centralized)</h4>
+          <p>All your data stored compressed &amp; columnar in cloud object storage (S3 / Blob / GCS) as
+             <b>micro-partitions</b>. Snowflake fully manages organization, compression, and metadata.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="alert success"><strong>The key idea — storage and compute are separated.</strong>
+      Storage scales on its own (pay for what you store). Compute (virtual warehouses) scales on its own (pay only
+      while a warehouse runs). Multiple warehouses can read the same data simultaneously without slowing each other
+      down. This is the practical payoff of "multi-cluster, shared data."</div>
+
+    <div class="diagram">
+      <div class="title">▶ How a query flows through the 3 layers (animated)</div>
+      <div class="apipe">
+        <div class="anode e">🧑‍💻 Client<small>submits SQL</small></div>
+        <div class="alink"><span class="apkt"></span></div>
+        <div class="anode b">☁️ Cloud Services<small>parse · optimize · plan</small></div>
+        <div class="alink"><span class="apkt"></span><span class="apkt k2"></span></div>
+        <div class="anode d">⚙️ Compute<small>warehouse executes</small></div>
+        <div class="alink"><span class="apkt"></span></div>
+        <div class="anode c">🗄️ Storage<small>scan / prune micro-partitions</small></div>
+        <div class="alink"><span class="apkt k2"></span></div>
+        <div class="anode a">📊 Results<small>cached in services layer</small></div>
+      </div>
+    </div>
+
+    <h3>Layer 1 — Database Storage</h3>
+    <ul class="bullet">
+      <li>When you load data, Snowflake reorganizes it into its own optimized, <b>compressed, columnar</b> format.</li>
+      <li>Data is stored as <b>micro-partitions</b> — small (≈50–500 MB uncompressed) contiguous units of storage.</li>
+      <li>Snowflake keeps rich <b>metadata</b> per micro-partition (min/max values, distinct counts, etc.) so it can
+          <b>prune</b> partitions and skip data that can't match a query — this is what makes it fast (no manual indexes).</li>
+      <li>You never access storage files directly — only through SQL.</li>
+    </ul>
+
+    <h3>Layer 2 — Compute (Virtual Warehouses)</h3>
+    <ul class="bullet">
+      <li>A <b>virtual warehouse</b> is a cluster of compute resources (CPU, memory, temp storage) that runs queries.</li>
+      <li>Sizes go X-Small, Small, Medium, Large … 4X-Large — each size up roughly <b>doubles</b> the compute (and credits/hour).</li>
+      <li><b>Scale up</b> (bigger warehouse) for heavy queries; <b>scale out</b> (multi-cluster, Enterprise+) for more concurrent users.</li>
+      <li>Warehouses can <b>auto-suspend</b> when idle (stop billing) and <b>auto-resume</b> when a query arrives.</li>
+      <li>Different teams can each get their own warehouse on the <em>same data</em> — no contention.</li>
+    </ul>
+    <pre><code><span class="cm">-- create a small warehouse that pauses after 60s idle</span>
+<span class="kw">CREATE WAREHOUSE</span> my_wh
+  <span class="kw">WITH</span> WAREHOUSE_SIZE = <span class="st">'XSMALL'</span>
+       AUTO_SUSPEND = 60
+       AUTO_RESUME = <span class="kw">TRUE</span>
+       INITIALLY_SUSPENDED = <span class="kw">TRUE</span>;</code></pre>
+
+    <h3>Layer 3 — Cloud Services</h3>
+    <p>The coordination layer that ties storage and compute together. It runs on Snowflake-managed compute (you
+       generally don't pay extra unless its usage is heavy relative to compute). It handles authentication &amp; access
+       control, infrastructure management, the query optimizer, metadata (which also powers result caching),
+       transactions, and security.</p>
+
+    <div class="alert info"><strong>Why this matters:</strong> because the brain (cloud services), muscle (compute),
+      and disk (storage) are independent, Snowflake can cache results, scale a single team's queries instantly, and
+      bill storage and compute separately — the core advantages you'll see repeatedly through the rest of the course.</div>
+  </div>
+
+  <nav class="pager">
+    <a class="home" href="index.html">🏠 Home / Contents</a>
+    <a href="02-account-ui-security.html">Next → Part 2: Account, UI & Security</a>
+  </nav>
+
+  <footer>Part 1 of 6 · Learn Snowflake in 2 Hours — study notes</footer>
+</div>
+</body>
+</html>

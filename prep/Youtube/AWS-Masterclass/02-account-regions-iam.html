@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Part 2 — Account, Regions &amp; IAM | AWS for Data Engineers</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #0b1020; --bg-2: #131a2f; --bg-3: #1f2a44; --card: #131a2f;
+    --text: #e6edf6; --text-dim: #93a4bf; --accent: #60a5fa; --accent-2: #c084fc;
+    --accent-3: #34d399; --success: #22c55e; --warn: #fbbf24; --danger: #f87171;
+    --border: #2a3553; --code-bg: #0a0f1e; --aws: #ff9900;
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: linear-gradient(135deg, #0b1020 0%, #1a0f2e 100%); color: var(--text);
+    line-height: 1.65; min-height: 100vh; }
+  .container { max-width: 1100px; margin: 0 auto; padding: 24px; }
+  header { background: linear-gradient(135deg, #232f3e 0%, #ff9900 140%);
+    border-radius: 16px; padding: 30px; margin-bottom: 18px; box-shadow: 0 20px 60px rgba(255,153,0,0.2); }
+  header .crumb { font-size: 12px; opacity: 0.85; text-transform: uppercase; letter-spacing: 1px; }
+  header h1 { font-size: 30px; margin: 6px 0 8px 0; }
+  header p { opacity: 0.95; font-size: 15px; max-width: 760px; }
+  nav.pager { display: flex; justify-content: space-between; gap: 10px; margin: 14px 0 22px 0; flex-wrap: wrap; }
+  nav.pager a { text-decoration: none; background: var(--card); border: 1px solid var(--border);
+    color: var(--text); padding: 10px 16px; border-radius: 10px; font-size: 13px; font-weight: 600; transition: all 0.2s; }
+  nav.pager a:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+  nav.pager a.home { border-color: var(--accent-2); }
+  .section { background: var(--card); border-radius: 12px; padding: 24px; margin-bottom: 18px; border: 1px solid var(--border); }
+  .section h2 { color: var(--accent); font-size: 22px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+  .section h3 { color: var(--accent-2); font-size: 18px; margin: 20px 0 10px 0; }
+  .section h4 { color: var(--accent-3); font-size: 15px; margin: 14px 0 8px 0; }
+  .section p { color: var(--text); margin-bottom: 10px; }
+  ul.bullet { padding-left: 22px; color: var(--text); font-size: 14.5px; margin: 6px 0 12px 0; }
+  ul.bullet li { padding: 4px 0; }
+  ul.bullet li b { color: var(--accent-3); }
+  table { width: 100%; border-collapse: collapse; background: var(--bg); border-radius: 8px; overflow: hidden; margin: 14px 0; font-size: 13.5px; }
+  th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { background: var(--bg-3); color: var(--accent); text-transform: uppercase; font-size: 11px; letter-spacing: 1px; }
+  tr:last-child td { border-bottom: none; }
+  .alert { padding: 12px 14px; border-radius: 8px; margin: 14px 0; border-left: 4px solid; font-size: 14px; }
+  .alert.warn { background: rgba(251,191,36,0.1); border-color: var(--warn); }
+  .alert.danger { background: rgba(248,113,113,0.1); border-color: var(--danger); }
+  .alert.success { background: rgba(34,197,94,0.1); border-color: var(--success); }
+  .alert.info { background: rgba(96,165,250,0.1); border-color: var(--accent); }
+  .alert strong { color: var(--text); }
+  .diagram { background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 22px; margin: 16px 0; overflow-x: auto; }
+  .diagram .title { text-align: center; color: var(--text-dim); font-size: 12px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 16px; }
+  .flow { display: flex; align-items: stretch; justify-content: center; flex-wrap: wrap; }
+  .flow-box { background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px;
+    min-width: 130px; text-align: center; font-size: 13px; font-weight: 600; display: flex; flex-direction: column; justify-content: center; }
+  .flow-box small { display: block; color: var(--text-dim); font-weight: 400; font-size: 11px; margin-top: 4px; }
+  .flow-arrow { display: flex; align-items: center; padding: 0 8px; color: var(--accent); font-size: 22px; font-weight: 700; }
+  .flow-box.gen { border-top: 3px solid var(--accent); }
+  .flow-box.ing { border-top: 3px solid var(--accent-2); }
+  .flow-box.sto { border-top: 3px solid var(--accent-3); }
+  .flow-box.tra { border-top: 3px solid var(--warn); }
+  .flow-box.ser { border-top: 3px solid var(--danger); }
+  .region-box { border: 2px dashed var(--accent); border-radius: 12px; padding: 16px; margin: 8px; background: rgba(96,165,250,0.05); }
+  .region-box .rtitle { color: var(--accent); font-weight: 700; font-size: 13px; margin-bottom: 10px; text-align: center; }
+  .az-row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+  .role-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin: 12px 0; }
+  .role { background: var(--bg); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 10px; padding: 14px; }
+  .role h4 { color: var(--accent); margin-bottom: 6px; }
+  .role p { font-size: 13px; color: var(--text-dim); margin: 0; }
+  :not(pre) > code { background: var(--bg-3); padding: 2px 6px; border-radius: 4px; font-size: 13px; color: var(--accent-3); font-family: "Consolas","Monaco",monospace; }
+  footer { text-align: center; margin-top: 30px; padding: 20px; color: var(--text-dim); font-size: 13px; }
+  @media (max-width: 640px) { header h1 { font-size: 23px; } .container { padding: 12px; } }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <div class="crumb">Part 2 of 7</div>
+    <h1>Account, Regions &amp; IAM</h1>
+    <p>Get a free account, learn how AWS physically organizes the world (Regions &amp; Availability Zones),
+       and master IAM — the security backbone every data engineer must own.</p>
+  </header>
+
+  <nav class="pager">
+    <a class="home" href="index.html">&#127968; Home / Contents</a>
+    <a href="01-cloud-fundamentals.html">&#8592; Part 1</a>
+    <a href="03-virtualization-ec2-ebs.html">Next &#8594; Part 3: Virtualization, EC2 &amp; EBS</a>
+  </nav>
+
+  <div class="section">
+    <h2>1. Creating a Free AWS Account</h2>
+    <p>AWS gives new learners a generous <strong>free tier for 6 months</strong> (Azure gives only 30 days).
+       You also start with <strong>~$100 in credits</strong>, plus more credits as you complete activities
+       (building services for learning). Some services — like IAM — are <em>always free</em>.</p>
+    <ul class="bullet">
+      <li>Go to the AWS site &rarr; <b>Create account</b> &rarr; <b>Sign up</b>.</li>
+      <li>Provide your <b>root user email</b> (creates the all-powerful root user).</li>
+      <li>Provide an account name and <b>card details</b> — this stops people creating infinite free accounts.</li>
+      <li>Sign in to the console with <b>root user email</b>, password, and <b>MFA</b> (e.g. an authenticator app).</li>
+    </ul>
+    <div class="alert warn">
+      <strong>Best practice:</strong> Don't keep logging in as the root user. Create an IAM user for yourself
+      (covered below) and use that day-to-day.
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>2. Console Walkthrough</h2>
+    <ul class="bullet">
+      <li><b>Top-right corner:</b> your account name + <b>12-digit Account ID</b> (note it down — you'll need it).</li>
+      <li><b>Console Home:</b> recently visited apps, applications, cost &amp; usage, and free-tier days remaining.</li>
+      <li><b>Menu (&#9776;) &rarr; All services:</b> the full 200+ list — compute, containers, storage, databases, migration, networking, ML, IoT, blockchain&hellip;</li>
+      <li><b>Search bar:</b> the fastest way to open a service. Type <code>EC2</code>, <code>S3</code>, <code>Athena</code>, etc. Forgot a name? Google it — you'll memorize them after a few uses.</li>
+    </ul>
+    <div class="alert info"><strong>Region selector:</strong> Notice the region dropdown in the top bar (e.g. <em>CA Central 1</em>). It controls <em>where</em> your resources are deployed — which leads to the next topic.</div>
+  </div>
+
+  <div class="section">
+    <h2>3. Regions &amp; Availability Zones</h2>
+    <h3>What is a Region?</h3>
+    <p>A <b>Region</b> is a specific geographic area in the world (Mumbai, Bangalore, Dubai, Canada Central, US-East&hellip;).
+       When you create a resource (say a virtual machine), AWS asks <em>where</em> to deploy it. Key rules:</p>
+    <ul class="bullet">
+      <li><b>Deploy close to your users</b> &rarr; lower latency, lower egress cost, faster transactions.</li>
+      <li>You <em>can</em> still use a far region — it just won't be as fast.</li>
+      <li>Each region is <b>isolated</b> — it has its own zones and depends on no other region.</li>
+    </ul>
+    <h3>What is an Availability Zone (AZ)?</h3>
+    <p>Within each region there are multiple <b>Availability Zones</b>. Each AZ = one (or more) physical
+       <b>data center</b> (where your real resources live), wrapped in an isolated boundary.</p>
+    <div class="diagram">
+      <div class="title">One region contains multiple isolated AZs (data centers)</div>
+      <div class="az-row">
+        <div class="region-box">
+          <div class="rtitle">&#127757; Region: Mumbai (ap-south-1)</div>
+          <div class="az-row">
+            <div class="flow-box sto">AZ 1<small>Data center + copy</small></div>
+            <div class="flow-box sto">AZ 2<small>Data center + copy</small></div>
+            <div class="flow-box sto">AZ 3<small>Data center + copy</small></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <h3>Why multiple AZs? Redundancy.</h3>
+    <p>When you ask AWS to create a resource, it doesn't make just one copy — it creates <strong>three copies
+       across three AZs</strong>. You connect to the region; under the hood it routes to AZ 1 by default. If
+       AZ 1 goes down (power outage, disaster), AZ 2 takes over, then AZ 3.</p>
+    <div class="diagram">
+      <div class="title">Failover chain (automatic)</div>
+      <div class="flow">
+        <div class="flow-box gen">AZ 1<small>default</small></div>
+        <div class="flow-arrow">&#8594; if down</div>
+        <div class="flow-box ing">AZ 2<small>backup</small></div>
+        <div class="flow-arrow">&#8594; if down</div>
+        <div class="flow-box ser">AZ 3<small>backup</small></div>
+      </div>
+    </div>
+    <h3>Multi-Region Redundancy &amp; Local Zones</h3>
+    <ul class="bullet">
+      <li><b>Multi-region redundancy:</b> if an entire region fails (rare, but nature happens), you can opt in to deploy resources across multiple regions (e.g. Bangalore + Canada Central).</li>
+      <li><b>Local Zones:</b> an extension of a region placed closer to a dense population center (e.g. inside US-West-2, an extension in Los Angeles) to give single-digit-millisecond latency.</li>
+    </ul>
+  </div>
+
+  <div class="section">
+    <h2>4. IAM — Identity &amp; Access Management</h2>
+    <p>IAM was added relatively late but is now <strong>non-negotiable</strong>, especially for data engineers
+       who wire many services together. Search <code>IAM</code> in the console to open its dashboard.</p>
+    <p>The problem IAM solves: in an organization you create services for many teams (web dev, ML, data
+       engineering). Should everyone access everything? No — you must <strong>restrict access</strong>. That's
+       identity (who you are) + access management (what you can do). IAM has 4 core concepts:</p>
+    <div class="diagram">
+      <div class="title">The 4 IAM building blocks</div>
+      <div class="flow">
+        <div class="flow-box gen">&#128100; Users<small>Individual identities</small></div>
+        <div class="flow-arrow">+</div>
+        <div class="flow-box ing">&#128220; Policies<small>Permissions</small></div>
+        <div class="flow-arrow">+</div>
+        <div class="flow-box sto">&#128101; Groups<small>Users sharing policies</small></div>
+        <div class="flow-arrow">+</div>
+        <div class="flow-box ser">&#127919; Roles<small>Service-to-service access</small></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>5. Users</h2>
+    <p>The first step in IAM: register people as <b>users</b> so they can access your AWS account. Example: a
+       new joiner "Anna". In IAM &rarr; <b>Users</b> &rarr; <b>Create user</b>:</p>
+    <ul class="bullet">
+      <li>Set username (<code>Anna</code>), enable <b>console access</b>, set/auto-generate a password.</li>
+      <li>Anna signs in using the <b>Account ID</b> (or alias) + username + password, then resets the password.</li>
+      <li><b>Important:</b> a brand-new user has <em>no permissions</em> &rarr; Anna sees <span style="color:var(--danger)">Access Denied</span> everywhere until you attach a policy.</li>
+    </ul>
+  </div>
+
+  <div class="section">
+    <h2>6. Policies (Permissions)</h2>
+    <p>A <b>policy</b> is just a fancy word for <strong>permissions</strong>. To let Anna do things, attach a
+       policy. AWS ships <strong>1,400+ pre-built policies</strong> so you rarely write your own — but you can
+       create <b>custom policies</b> when you need very fine-grained control.</p>
+    <p>Example: attach <code>AdministratorAccess</code> (the most privileged policy). Its rule says <em>Allow</em>
+       every <b>action</b> on every <b>resource</b>:</p>
+    <div class="diagram">
+      <div class="title">Attaching a policy unlocks access</div>
+      <div class="flow">
+        <div class="flow-box gen">&#128100; Anna<small>no access</small></div>
+        <div class="flow-arrow">+ policy &#8594;</div>
+        <div class="flow-box tra">AdministratorAccess<small>Allow all actions on all resources</small></div>
+        <div class="flow-arrow">&#8594;</div>
+        <div class="flow-box ser">&#9989; Anna can do everything</div>
+      </div>
+    </div>
+    <p>In IAM &rarr; Users &rarr; Anna &rarr; <b>Add permissions</b> &rarr; <b>Attach policies directly</b> &rarr;
+       pick the policy &rarr; <b>Add permissions</b>. Refresh Anna's account and she now sees everything.</p>
+  </div>
+
+  <div class="section">
+    <h2>7. User Groups</h2>
+    <p>In real life we use <b>groups 99% of the time</b> instead of attaching policies to individuals. As the
+       team grows, attaching the same policies to each person one-by-one is painful and repetitive.</p>
+    <p>Instead, create a group, attach policies <b>once</b> to the group, then just drop users into it — they
+       inherit all the group's permissions automatically.</p>
+    <div class="diagram">
+      <div class="title">Define permissions once per group, then add people</div>
+      <div class="flow">
+        <div class="flow-box ing">Analytics Group<small>S3, Athena policies</small></div>
+        <div class="flow-arrow">&#8592; add users</div>
+        <div class="flow-box gen">&#128101; Analysts</div>
+      </div>
+      <div class="flow" style="margin-top:12px">
+        <div class="flow-box tra">Data Science Group<small>S3, SageMaker policies</small></div>
+        <div class="flow-arrow">&#8592; add users</div>
+        <div class="flow-box gen">&#128101; Data Scientists</div>
+      </div>
+    </div>
+    <p>Create via IAM &rarr; <b>User groups</b> &rarr; name it (e.g. <code>analytics-group</code>) &rarr; attach a
+       policy (e.g. <code>AmazonS3FullAccess</code>) &rarr; create &rarr; then add users into it.</p>
+    <div class="alert info"><strong>DE relevance:</strong> Data engineers are the upstream for analytics &amp; data-science teams, so they typically manage these permissions. With AI's rise, senior DEs often absorb the old "cloud admin" duties — it's a quick group-management task.</div>
+  </div>
+
+  <div class="section">
+    <h2>8. Roles (the DE favorite)</h2>
+    <p>Users/groups answer "how can a <em>person</em> access services?". <b>Roles</b> answer "how can a
+       <em>service</em> access another service?". This is what data engineers manage ~90% of the time, because
+       DEs constantly move data between services.</p>
+    <p>Example: AWS <b>Glue</b> wants to read/write <b>S3</b>. S3 is secured, so it asks "who are you? do you
+       have permission?" Without a role, Glue's request takes a <b>U-turn</b> — denied.</p>
+    <div class="diagram">
+      <div class="title">No role = denied · With role = allowed</div>
+      <div class="flow">
+        <div class="flow-box tra">&#129083; Glue<small>no role</small></div>
+        <div class="flow-arrow">&#8617;&#65039; U-turn</div>
+        <div class="flow-box ser">&#128274; S3<small>access denied</small></div>
+      </div>
+      <div class="flow" style="margin-top:12px">
+        <div class="flow-box tra">&#129083; Glue<small>+ role: "any Glue can access any S3"</small></div>
+        <div class="flow-arrow">&#8594;</div>
+        <div class="flow-box ser">&#9989; S3<small>access allowed</small></div>
+      </div>
+    </div>
+    <h4>Creating a role</h4>
+    <p>IAM &rarr; <b>Roles</b> &rarr; <b>Create role</b> &rarr; trusted entity = <b>AWS service</b> &rarr; choose the
+       service (e.g. <code>Glue</code>) &rarr; attach permission (e.g. <code>AmazonS3FullAccess</code>) &rarr; name it
+       (e.g. <code>glue-access-s3</code>) &rarr; create. Later, when you create a Glue instance that talks to S3,
+       you <b>attach this role</b> to it. The same idea applies to Lambda, etc.</p>
+    <div class="alert success">
+      <strong>Recap of Part 2:</strong> Free tier gives 6 months + ~$100 credits. Regions are geographic areas;
+      each contains isolated AZs (data centers) and AWS keeps 3 redundant copies for failover. IAM is the
+      security core: <b>Users</b> (identities) get <b>Policies</b> (permissions), managed at scale via
+      <b>Groups</b>, while <b>Roles</b> grant service-to-service access (Glue&rarr;S3, Lambda&rarr;S3).
+    </div>
+  </div>
+
+  <nav class="pager">
+    <a class="home" href="index.html">&#127968; Home / Contents</a>
+    <a href="01-cloud-fundamentals.html">&#8592; Part 1</a>
+    <a href="03-virtualization-ec2-ebs.html">Next &#8594; Part 3: Virtualization, EC2 &amp; EBS</a>
+  </nav>
+
+  <footer>Part 2 of 7 · AWS Fundamentals for Data Engineers · Source: youtube.com/watch?v=Ae3xyW2Ef0c</footer>
+</div>
+</body>
+</html>

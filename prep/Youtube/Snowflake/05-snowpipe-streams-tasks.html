@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Part 5 — Snowpipe, Streams & Tasks | Snowflake Notes</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #0b1020; --bg-2: #131a2f; --bg-3: #1f2a44; --card: #131a2f;
+    --text: #e6edf6; --text-dim: #93a4bf; --accent: #29b5e8; --accent-2: #c084fc;
+    --accent-3: #34d399; --success: #22c55e; --warn: #fbbf24; --danger: #f87171;
+    --border: #2a3553; --code-bg: #0a0f1e;
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: linear-gradient(135deg, #0b1020 0%, #0c2233 100%); color: var(--text);
+    line-height: 1.65; min-height: 100vh; }
+  .container { max-width: 1100px; margin: 0 auto; padding: 24px; }
+  header { background: linear-gradient(135deg, #29b5e8 0%, #2563eb 50%, #7c3aed 100%);
+    border-radius: 16px; padding: 30px; margin-bottom: 18px; box-shadow: 0 20px 60px rgba(41,181,232,0.25); }
+  header .crumb { font-size: 12px; opacity: 0.85; text-transform: uppercase; letter-spacing: 1px; }
+  header h1 { font-size: 30px; margin: 6px 0 8px 0; }
+  header p { opacity: 0.92; font-size: 15px; max-width: 760px; }
+  nav.pager { display: flex; justify-content: space-between; gap: 10px; margin: 14px 0 22px 0; flex-wrap: wrap; }
+  nav.pager a { text-decoration: none; background: var(--card); border: 1px solid var(--border);
+    color: var(--text); padding: 10px 16px; border-radius: 10px; font-size: 13px; font-weight: 600; transition: all 0.2s; }
+  nav.pager a:hover { background: var(--accent); color: #04121b; border-color: var(--accent); }
+  nav.pager a.home { border-color: var(--accent-2); }
+
+  .section { background: var(--card); border-radius: 12px; padding: 24px; margin-bottom: 18px; border: 1px solid var(--border); }
+  .section h2 { color: var(--accent); font-size: 22px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+  .section h3 { color: var(--accent-2); font-size: 18px; margin: 20px 0 10px 0; }
+  .section h4 { color: var(--accent-3); font-size: 15px; margin: 14px 0 8px 0; }
+  .section p { color: var(--text); margin-bottom: 10px; }
+  ul.bullet { padding-left: 22px; color: var(--text); font-size: 14.5px; margin: 6px 0 12px 0; }
+  ul.bullet li { padding: 4px 0; }
+  ul.bullet li b { color: var(--accent-3); }
+
+  table { width: 100%; border-collapse: collapse; background: var(--bg); border-radius: 8px;
+    overflow: hidden; margin: 14px 0; font-size: 13.5px; }
+  th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { background: var(--bg-3); color: var(--accent); text-transform: uppercase; font-size: 11px; letter-spacing: 1px; }
+  tr:last-child td { border-bottom: none; }
+
+  .alert { padding: 12px 14px; border-radius: 8px; margin: 14px 0; border-left: 4px solid; font-size: 14px; }
+  .alert.warn { background: rgba(251,191,36,0.1); border-color: var(--warn); }
+  .alert.danger { background: rgba(248,113,113,0.1); border-color: var(--danger); }
+  .alert.success { background: rgba(34,197,94,0.1); border-color: var(--success); }
+  .alert.info { background: rgba(41,181,232,0.1); border-color: var(--accent); }
+  .alert strong { color: var(--text); }
+
+  .diagram { background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 22px; margin: 16px 0; overflow-x: auto; }
+  .diagram .title { text-align: center; color: var(--text-dim); font-size: 12px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 16px; }
+  .flow { display: flex; align-items: stretch; justify-content: center; flex-wrap: wrap; }
+  .flow-box { background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px;
+    min-width: 120px; text-align: center; font-size: 13px; font-weight: 600; display: flex; flex-direction: column; justify-content: center; }
+  .flow-box small { display: block; color: var(--text-dim); font-weight: 400; font-size: 11px; margin-top: 4px; }
+  .flow-arrow { display: flex; align-items: center; padding: 0 8px; color: var(--accent); font-size: 22px; font-weight: 700; }
+  .flow-box.gen { border-top: 3px solid var(--accent); }
+  .flow-box.ing { border-top: 3px solid var(--accent-2); }
+  .flow-box.sto { border-top: 3px solid var(--accent-3); }
+  .flow-box.tra { border-top: 3px solid var(--warn); }
+  .flow-box.ser { border-top: 3px solid var(--danger); }
+
+  /* ---- animated pipeline (shared) ---- */
+  .apipe { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 0; margin: 4px 0; }
+  .anode { position: relative; z-index: 1; background: var(--bg-3); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 14px; min-width: 112px; text-align: center; font-size: 12.5px; font-weight: 700;
+    animation: aPulse 3s ease-in-out infinite; }
+  .anode small { display: block; font-weight: 400; color: var(--text-dim); font-size: 11px; margin-top: 4px; }
+  .anode.a { border-top: 3px solid var(--accent); }
+  .anode.b { border-top: 3px solid var(--accent-2); }
+  .anode.c { border-top: 3px solid var(--accent-3); }
+  .anode.d { border-top: 3px solid var(--warn); }
+  .anode.e { border-top: 3px solid var(--danger); }
+  .alink { position: relative; width: 50px; height: 3px; background: var(--border); margin: 0 1px; border-radius: 2px; flex: none; }
+  .alink .apkt { position: absolute; top: -3px; left: 0; width: 9px; height: 9px; border-radius: 50%;
+    background: var(--accent); box-shadow: 0 0 10px 1px var(--accent); animation: aMove 2.4s linear infinite; }
+  .alink .apkt.k2 { animation-delay: 1.2s; background: var(--accent-2); box-shadow: 0 0 10px 1px var(--accent-2); }
+  @keyframes aMove { 0% { left: 0; opacity: 0; } 12% { opacity: 1; } 88% { opacity: 1; } 100% { left: 100%; opacity: 0; } }
+  @keyframes aPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(41,181,232,0); } 50% { box-shadow: 0 0 16px 0 rgba(41,181,232,0.22); } }
+  @media (prefers-reduced-motion: reduce) { .alink .apkt { animation: none; opacity: .7; } .anode { animation: none; } }
+
+  pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px;
+    overflow-x: auto; margin: 12px 0; font-size: 13px; line-height: 1.55; }
+  pre code { color: #cfe3ff; font-family: "Consolas","Monaco",monospace; white-space: pre; }
+  pre .kw { color: #29b5e8; font-weight: 700; }
+  pre .cm { color: #6b7a99; font-style: italic; }
+  pre .st { color: #7ee787; }
+  :not(pre) > code { background: var(--bg-3); padding: 2px 6px; border-radius: 4px; font-size: 13px;
+    color: var(--accent-3); font-family: "Consolas","Monaco",monospace; }
+  footer { text-align: center; margin-top: 30px; padding: 20px; color: var(--text-dim); font-size: 13px; }
+  @media (max-width: 640px) { header h1 { font-size: 23px; } .container { padding: 12px; } }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <div class="crumb">Part 5 of 6</div>
+    <h1>Snowpipe, Streams & Tasks</h1>
+    <p>The automation trio: load files continuously (Snowpipe), capture what changed (Streams), and run work on a
+       schedule (Tasks) — combine them to build a hands-off pipeline.</p>
+  </header>
+
+  <nav class="pager">
+    <a class="home" href="index.html">🏠 Home / Contents</a>
+    <a href="06-timetravel-cloning.html">Next → Part 6: Time Travel & Cloning</a>
+  </nav>
+
+  <div class="section">
+    <h2>1. Snowpipe — Continuous Data Loading</h2>
+    <p><strong>Snowpipe</strong> automates loading of files <b>as soon as they land</b> in a stage, in small
+       micro-batches, using <b>Snowflake-managed serverless compute</b> (no warehouse to size or pay for idle time).</p>
+    <p>A <b>pipe</b> is an object that wraps a <code>COPY INTO</code> statement. Two ways to trigger it:</p>
+    <ul class="bullet">
+      <li><b>Auto-ingest</b> — cloud event notifications (e.g. AWS S3 → SQS/SNS) tell the pipe a new file arrived.</li>
+      <li><b>REST API</b> — your app calls <code>insertFiles</code> to notify Snowpipe.</li>
+    </ul>
+    <div class="diagram">
+      <div class="title">▶ Auto-ingest flow (animated — files trigger loads automatically)</div>
+      <div class="apipe">
+        <div class="anode a">📄 New file → bucket</div>
+        <div class="alink"><span class="apkt"></span></div>
+        <div class="anode b">🔔 Event notification<small>SQS / SNS / Event Grid</small></div>
+        <div class="alink"><span class="apkt"></span><span class="apkt k2"></span></div>
+        <div class="anode d">🚿 Snowpipe<small>runs the pipe's COPY</small></div>
+        <div class="alink"><span class="apkt"></span></div>
+        <div class="anode c">📋 Table<small>rows appear automatically</small></div>
+      </div>
+    </div>
+    <pre><code><span class="kw">CREATE PIPE</span> customer_pipe
+  AUTO_INGEST = <span class="kw">TRUE</span>
+  <span class="kw">AS</span>
+  <span class="kw">COPY INTO</span> customer
+  <span class="kw">FROM</span> @my_ext_stage
+  FILE_FORMAT = (FORMAT_NAME = my_csv_format);
+
+<span class="cm">-- get the notification channel (ARN) to wire up the bucket event</span>
+<span class="kw">SHOW PIPES;</span>
+<span class="cm">-- check the pipe's status / backlog</span>
+<span class="kw">SELECT SYSTEM$PIPE_STATUS(</span><span class="st">'customer_pipe'</span><span class="kw">);</span></code></pre>
+    <table>
+      <thead><tr><th></th><th>Bulk load (COPY)</th><th>Snowpipe</th></tr></thead>
+      <tbody>
+        <tr><td>Trigger</td><td>You run it (manual/scheduled)</td><td>Automatic on file arrival</td></tr>
+        <tr><td>Compute</td><td>Your virtual warehouse</td><td>Serverless, Snowflake-managed</td></tr>
+        <tr><td>Latency</td><td>Batch</td><td>Seconds–minutes (near real-time)</td></tr>
+        <tr><td>Cost model</td><td>Warehouse credits/second</td><td>Per-file overhead + compute used</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <h2>2. Streams — Change Data Capture (CDC)</h2>
+    <p>A <strong>stream</strong> records <b>row-level changes</b> (inserts, updates, deletes) made to a table since the
+       last time the stream was read. It's how Snowflake does <b>CDC</b> — process only what changed instead of the
+       whole table.</p>
+    <p>A stream doesn't store a copy of the data. It stores an <b>offset</b> (a point in time) plus metadata columns:</p>
+    <table>
+      <thead><tr><th>Metadata column</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><code>METADATA$ACTION</code></td><td><b>INSERT</b> or <b>DELETE</b> — the change type.</td></tr>
+        <tr><td><code>METADATA$ISUPDATE</code></td><td><b>TRUE</b> if the row is part of an UPDATE (shown as a DELETE + INSERT pair).</td></tr>
+        <tr><td><code>METADATA$ROW_ID</code></td><td>Unique id for the row, stable across changes.</td></tr>
+      </tbody>
+    </table>
+    <pre><code><span class="cm">-- create a stream on a table</span>
+<span class="kw">CREATE STREAM</span> customer_stream <span class="kw">ON TABLE</span> customer;
+
+<span class="cm">-- now do some DML on the base table</span>
+<span class="kw">INSERT INTO</span> customer <span class="kw">VALUES</span> (101, <span class="st">'Asha'</span>, <span class="st">'asha@x.com'</span>, <span class="st">'IN'</span>);
+
+<span class="cm">-- the stream shows only the change since last read</span>
+<span class="kw">SELECT</span> *, METADATA$ACTION, METADATA$ISUPDATE
+<span class="kw">FROM</span> customer_stream;</code></pre>
+    <div class="alert info"><strong>Key behaviour:</strong> reading a stream in a query does <em>not</em> advance it.
+      The offset only moves forward when the stream is <b>consumed inside a DML statement</b> (e.g. an
+      <code>INSERT … SELECT FROM stream</code> or <code>MERGE</code>). After consumption, the stream is "empty" until
+      new changes occur.</div>
+    <p>Stream types: <b>standard</b> (tracks all DML), <b>append-only</b> (tracks inserts only — cheaper for
+       append-heavy tables), and <b>insert-only</b> (for external tables).</p>
+  </div>
+
+  <div class="section">
+    <h2>3. Tasks — Scheduling & Automation</h2>
+    <p>A <strong>task</strong> runs a single SQL statement (or a call to a stored procedure) on a <b>schedule</b> or
+       when a <b>predecessor task</b> finishes. Tasks are how you orchestrate work inside Snowflake without an
+       external scheduler.</p>
+    <pre><code><span class="kw">CREATE TASK</span> load_customer_task
+  WAREHOUSE = COMPUTE_WH
+  SCHEDULE = <span class="st">'5 MINUTE'</span>          <span class="cm">-- or a CRON expression</span>
+  <span class="kw">AS</span>
+  <span class="kw">INSERT INTO</span> customer_history
+  <span class="kw">SELECT</span> * <span class="kw">FROM</span> customer_stream;
+
+<span class="cm">-- tasks are created SUSPENDED; you must resume them</span>
+<span class="kw">ALTER TASK</span> load_customer_task <span class="kw">RESUME</span>;
+
+<span class="cm">-- CRON example: 8:00 AM every day, IST</span>
+<span class="cm">-- SCHEDULE = 'USING CRON 0 8 * * * Asia/Kolkata'</span></code></pre>
+    <ul class="bullet">
+      <li>Tasks can run on a <b>warehouse</b> you choose, or use <b>serverless</b> compute.</li>
+      <li>Chain tasks into a <b>DAG</b> with <code>AFTER &lt;parent_task&gt;</code> to build dependencies.</li>
+      <li>New tasks start <b>suspended</b> — remember to <code>RESUME</code> them.</li>
+    </ul>
+  </div>
+
+  <div class="section">
+    <h2>4. Putting it together — Stream + Task pipeline</h2>
+    <p>The classic pattern: Snowpipe lands data → a <b>stream</b> captures the new rows → a <b>task</b> runs on a
+       schedule and processes only those changes (often with <code>MERGE</code>) into a target table.</p>
+    <div class="diagram">
+      <div class="title">▶ Hands-off incremental pipeline (animated, near real-time)</div>
+      <div class="apipe">
+        <div class="anode b">🚿 Snowpipe<small>loads raw table</small></div>
+        <div class="alink"><span class="apkt"></span><span class="apkt k2"></span></div>
+        <div class="anode d">🔁 Stream<small>captures changes (CDC)</small></div>
+        <div class="alink"><span class="apkt"></span></div>
+        <div class="anode e">⏰ Task<small>scheduled MERGE</small></div>
+        <div class="alink"><span class="apkt"></span><span class="apkt k2"></span></div>
+        <div class="anode c">🎯 Target table<small>clean / curated</small></div>
+      </div>
+    </div>
+    <pre><code><span class="cm">-- a task that only fires when the stream has new data</span>
+<span class="kw">CREATE TASK</span> merge_customer_task
+  WAREHOUSE = COMPUTE_WH
+  SCHEDULE = <span class="st">'5 MINUTE'</span>
+  <span class="kw">WHEN</span> SYSTEM$STREAM_HAS_DATA(<span class="st">'customer_stream'</span>)
+  <span class="kw">AS</span>
+  <span class="kw">MERGE INTO</span> customer_target t
+  <span class="kw">USING</span> customer_stream s <span class="kw">ON</span> t.id = s.id
+  <span class="kw">WHEN MATCHED</span> <span class="kw">THEN UPDATE SET</span> t.name = s.name
+  <span class="kw">WHEN NOT MATCHED</span> <span class="kw">THEN INSERT</span> (id, name) <span class="kw">VALUES</span> (s.id, s.name);
+
+<span class="kw">ALTER TASK</span> merge_customer_task <span class="kw">RESUME</span>;</code></pre>
+    <div class="alert success"><strong>Why this is powerful:</strong> the <code>WHEN SYSTEM$STREAM_HAS_DATA</code>
+      guard means the task skips (and you don't pay for) runs when nothing changed. Snowpipe + Streams + Tasks gives
+      you a fully automated, near-real-time, incremental ELT pipeline entirely inside Snowflake.</div>
+  </div>
+
+  <nav class="pager">
+    <a class="home" href="index.html">🏠 Home / Contents</a>
+    <a href="06-timetravel-cloning.html">Next → Part 6: Time Travel & Cloning</a>
+  </nav>
+
+  <footer>Part 5 of 6 · Learn Snowflake in 2 Hours — study notes</footer>
+</div>
+</body>
+</html>

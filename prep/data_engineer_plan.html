@@ -1,0 +1,1102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>4-Month Data Engineer Roadmap | AWS + Snowflake</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #0f172a;
+    --bg-2: #1e293b;
+    --bg-3: #334155;
+    --card: #1e293b;
+    --text: #e2e8f0;
+    --text-dim: #94a3b8;
+    --accent: #38bdf8;
+    --accent-2: #a78bfa;
+    --success: #22c55e;
+    --warn: #f59e0b;
+    --danger: #ef4444;
+    --border: #334155;
+    --free: #22c55e;
+    --paid: #f59e0b;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+    color: var(--text);
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+  .container { max-width: 1200px; margin: 0 auto; padding: 24px; }
+  header {
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%);
+    border-radius: 16px;
+    padding: 32px;
+    margin-bottom: 24px;
+    box-shadow: 0 20px 60px rgba(99, 102, 241, 0.3);
+  }
+  header h1 { font-size: 32px; margin-bottom: 8px; }
+  header p { opacity: 0.9; font-size: 16px; }
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px;
+    margin-top: 24px;
+  }
+  .stat {
+    background: rgba(255,255,255,0.15);
+    backdrop-filter: blur(10px);
+    padding: 16px;
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.2);
+  }
+  .stat-label { font-size: 12px; opacity: 0.85; text-transform: uppercase; letter-spacing: 1px; }
+  .stat-value { font-size: 22px; font-weight: 700; margin-top: 4px; }
+
+  .progress-section {
+    background: var(--card);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 24px;
+    border: 1px solid var(--border);
+  }
+  .progress-bar {
+    background: var(--bg);
+    height: 16px;
+    border-radius: 8px;
+    overflow: hidden;
+    margin-top: 8px;
+  }
+  .progress-fill {
+    background: linear-gradient(90deg, #22c55e, #38bdf8);
+    height: 100%;
+    width: 0%;
+    transition: width 0.5s ease;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding-right: 8px;
+    font-size: 11px;
+    color: white;
+    font-weight: 700;
+  }
+
+  .tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 24px;
+    background: var(--card);
+    padding: 8px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+  }
+  .tab {
+    padding: 10px 20px;
+    background: transparent;
+    color: var(--text-dim);
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    transition: all 0.2s;
+  }
+  .tab:hover { background: var(--bg-3); color: var(--text); }
+  .tab.active {
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    color: white;
+  }
+
+  .tab-content { display: none; animation: fadeIn 0.3s; }
+  .tab-content.active { display: block; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+  .month-card {
+    background: var(--card);
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 20px;
+    border: 1px solid var(--border);
+  }
+  .month-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .month-title { font-size: 22px; color: var(--accent); }
+  .month-tag {
+    background: var(--accent-2);
+    color: white;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .week-card {
+    background: var(--bg);
+    border-left: 4px solid var(--accent);
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+  .week-title {
+    font-size: 16px;
+    color: var(--text);
+    margin-bottom: 12px;
+    font-weight: 700;
+  }
+  .task-list { list-style: none; }
+  .task-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+  }
+  .task-item:last-child { border-bottom: none; }
+  .task-item input[type="checkbox"] {
+    margin-top: 4px;
+    width: 18px;
+    height: 18px;
+    accent-color: var(--success);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .task-item label {
+    flex: 1;
+    cursor: pointer;
+    color: var(--text);
+    font-size: 14px;
+  }
+  .task-item input:checked + label {
+    text-decoration: line-through;
+    color: var(--text-dim);
+  }
+
+  .resources-section {
+    margin-top: 12px;
+    background: rgba(56, 189, 248, 0.05);
+    border: 1px solid rgba(56, 189, 248, 0.2);
+    border-radius: 8px;
+    padding: 12px;
+  }
+  .resources-title {
+    font-size: 12px;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 8px;
+    letter-spacing: 1px;
+    font-weight: 700;
+  }
+  .resource-list { list-style: none; }
+  .resource-item {
+    padding: 6px 0;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .resource-item a {
+    color: var(--accent);
+    text-decoration: none;
+  }
+  .resource-item a:hover { text-decoration: underline; }
+  .badge {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+  .badge.free { background: var(--free); color: white; }
+  .badge.paid { background: var(--paid); color: white; }
+  .badge.must { background: var(--danger); color: white; }
+
+  .project-card {
+    background: linear-gradient(135deg, rgba(167, 139, 250, 0.1), rgba(56, 189, 248, 0.1));
+    border: 1px solid var(--accent-2);
+    border-radius: 8px;
+    padding: 16px;
+    margin-top: 12px;
+  }
+  .project-title {
+    color: var(--accent-2);
+    font-weight: 700;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .project-title::before { content: "🛠"; }
+
+  .info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+  .info-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+  }
+  .info-card h3 {
+    color: var(--accent);
+    margin-bottom: 12px;
+    font-size: 16px;
+  }
+  .info-card ul { list-style: none; }
+  .info-card li {
+    padding: 6px 0;
+    color: var(--text-dim);
+    font-size: 14px;
+    padding-left: 20px;
+    position: relative;
+  }
+  .info-card li::before {
+    content: "→";
+    color: var(--accent);
+    position: absolute;
+    left: 0;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--card);
+    border-radius: 8px;
+    overflow: hidden;
+    margin: 12px 0;
+  }
+  th, td {
+    padding: 12px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    font-size: 14px;
+  }
+  th {
+    background: var(--bg);
+    color: var(--accent);
+    text-transform: uppercase;
+    font-size: 12px;
+    letter-spacing: 1px;
+  }
+  tr:last-child td { border-bottom: none; }
+
+  .alert {
+    padding: 16px;
+    border-radius: 8px;
+    margin: 16px 0;
+    border-left: 4px solid;
+  }
+  .alert.warn { background: rgba(245, 158, 11, 0.1); border-color: var(--warn); }
+  .alert.success { background: rgba(34, 197, 94, 0.1); border-color: var(--success); }
+  .alert.info { background: rgba(56, 189, 248, 0.1); border-color: var(--accent); }
+  .alert strong { color: var(--text); }
+
+  .controls {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+  .btn {
+    background: var(--bg-3);
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 8px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    transition: all 0.2s;
+  }
+  .btn:hover { background: var(--accent); color: white; border-color: var(--accent); }
+  .btn.danger:hover { background: var(--danger); border-color: var(--danger); }
+
+  footer {
+    text-align: center;
+    margin-top: 40px;
+    padding: 20px;
+    color: var(--text-dim);
+    font-size: 13px;
+  }
+
+  @media (max-width: 640px) {
+    header h1 { font-size: 22px; }
+    .container { padding: 12px; }
+    .tab { padding: 8px 12px; font-size: 12px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <h1>🚀 4-Month Data Engineer Roadmap</h1>
+    <p>From SAP PP + Support Engineer → Mid-Level Data Engineer (AWS + Snowflake stack, India market)</p>
+    <div class="stats-grid">
+      <div class="stat"><div class="stat-label">Your Experience</div><div class="stat-value">5.5 years</div></div>
+      <div class="stat"><div class="stat-label">Duration</div><div class="stat-value">4 Months</div></div>
+      <div class="stat"><div class="stat-label">Effort</div><div class="stat-value">~40 hrs/wk</div></div>
+      <div class="stat"><div class="stat-label">Target Role</div><div class="stat-value">Data Engineer</div></div>
+    </div>
+  </header>
+
+  <div class="progress-section">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
+      <strong>📊 Your Overall Progress</strong>
+      <span id="progress-text" style="color: var(--accent); font-weight: 700;">0 / 0 tasks</span>
+    </div>
+    <div class="progress-bar"><div class="progress-fill" id="progress-fill">0%</div></div>
+    <div class="controls" style="margin-top: 16px;">
+      <button class="btn" onclick="exportProgress()">💾 Export Progress</button>
+      <button class="btn danger" onclick="resetProgress()">♻ Reset All Progress</button>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="showTab(event,'overview')">Overview</button>
+    <button class="tab" onclick="showTab(event,'month1')">Month 1: Foundation</button>
+    <button class="tab" onclick="showTab(event,'month2')">Month 2: Big Data</button>
+    <button class="tab" onclick="showTab(event,'month3')">Month 3: AWS + Snowflake</button>
+    <button class="tab" onclick="showTab(event,'month4')">Month 4: Polish + Jobs</button>
+    <button class="tab" onclick="showTab(event,'projects')">Projects</button>
+    <button class="tab" onclick="showTab(event,'jobhunt')">Job Hunt</button>
+    <button class="tab" onclick="showTab(event,'tips')">Tips & Pitfalls</button>
+  </div>
+
+  <!-- OVERVIEW -->
+  <div class="tab-content active" id="overview">
+    <div class="month-card">
+      <h2 class="month-title">🎯 Plan at a Glance</h2>
+      <p style="color: var(--text-dim); margin-bottom: 16px;">An aggressive 4-month plan to transition into Data Engineering, leveraging your existing SQL, Shell scripting, and Core Java experience.</p>
+
+      <table>
+        <thead>
+          <tr><th>Month</th><th>Focus</th><th>Key Deliverable</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><strong>Month 1</strong></td><td>Python, Advanced SQL, Linux, Git</td><td>Project 1: ETL with Python + PostgreSQL</td></tr>
+          <tr><td><strong>Month 2</strong></td><td>PySpark, Kafka, Hadoop concepts</td><td>Project 2: Streaming pipeline with Kafka + Spark</td></tr>
+          <tr><td><strong>Month 3</strong></td><td>AWS deep dive, Snowflake, Airflow, dbt</td><td>Project 3: End-to-end cloud pipeline</td></tr>
+          <tr><td><strong>Month 4</strong></td><td>Data modeling, CI/CD, Interview prep, Job applications</td><td>Capstone + 50+ job applications</td></tr>
+        </tbody>
+      </table>
+
+      <div class="alert info">
+        <strong>📌 Your Advantage:</strong> Your 5.5 years experience in SQL, Shell, and Core Java will save you 1-2 years of learning. Frame your support experience as <em>"production data operations"</em> and shell scripts as <em>"ETL automation"</em>.
+      </div>
+    </div>
+
+    <div class="info-grid">
+      <div class="info-card">
+        <h3>🎓 Skills You'll Master</h3>
+        <ul>
+          <li>Python (Pandas, OOP, APIs)</li>
+          <li>Advanced SQL + Query Optimization</li>
+          <li>PySpark + Spark SQL</li>
+          <li>Apache Airflow</li>
+          <li>Apache Kafka</li>
+          <li>AWS (S3, Glue, Lambda, EMR, Redshift, Athena, IAM)</li>
+          <li>Snowflake (Warehouses, Streams, Tasks, Snowpipe)</li>
+          <li>dbt (data build tool)</li>
+          <li>Data Modeling (Kimball, SCD)</li>
+          <li>CI/CD for data pipelines</li>
+        </ul>
+      </div>
+      <div class="info-card">
+        <h3>💼 Target Companies (India)</h3>
+        <ul>
+          <li>Product: Flipkart, PhonePe, Razorpay, Zomato, Swiggy, Meesho</li>
+          <li>FinTech: Cred, Groww, Paytm, Navi</li>
+          <li>MNC Captives: Walmart Labs, Target, Lowes, JPMC, Goldman</li>
+          <li>Consulting: Deloitte, Accenture, EY, ZS Associates</li>
+          <li>Services (Senior tags): TCS, Infosys, Wipro, Cognizant, LTIMindtree</li>
+          <li>SAP-adjacent: Deloitte SAP, IBM, Capgemini (SAP-to-cloud projects)</li>
+        </ul>
+      </div>
+      <div class="info-card">
+        <h3>💰 Realistic Salary Bands</h3>
+        <ul>
+          <li>Services (TCS/Infy) Senior DE: ₹14-20 LPA</li>
+          <li>MNC Captives DE: ₹18-28 LPA</li>
+          <li>Product Cos DE-2: ₹22-35 LPA</li>
+          <li>+ Joining bonus: ₹1-5 L typical</li>
+          <li>+ Stocks at product cos: ₹5-15 L vested</li>
+        </ul>
+      </div>
+      <div class="info-card">
+        <h3>🏅 Certifications (Optional but useful)</h3>
+        <ul>
+          <li>AWS Certified Data Engineer Associate (₹13,000) — high ROI</li>
+          <li>Snowflake SnowPro Core (₹15,000) — medium ROI</li>
+          <li>Databricks Data Engineer Associate (free voucher available) — high ROI</li>
+          <li>Skip: AWS Solutions Architect (less relevant for DE)</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="alert warn">
+      <strong>⚠ Reality Check:</strong> "Senior Data Engineer" title in 4 months is unrealistic. Target "Data Engineer" role first. With 5.5 yrs of total experience, services companies (TCS/Infy) may give you Senior tag, but product companies will hire you as DE-2 or DE based on skills. Senior DE comes naturally in 12-18 months.
+    </div>
+  </div>
+
+  <!-- MONTH 1 -->
+  <div class="tab-content" id="month1">
+    <div class="month-card">
+      <div class="month-header">
+        <h2 class="month-title">Month 1: Foundation Sprint</h2>
+        <span class="month-tag">Python · SQL · Linux · Git</span>
+      </div>
+
+      <div class="week-card">
+        <div class="week-title">Week 1: Python Fundamentals</div>
+        <ul class="task-list">
+          <li class="task-item"><input type="checkbox" id="m1w1-1"><label for="m1w1-1">Variables, data types, control flow, functions</label></li>
+          <li class="task-item"><input type="checkbox" id="m1w1-2"><label for="m1w1-2">Lists, dicts, sets, tuples, comprehensions</label></li>
+          <li class="task-item"><input type="checkbox" id="m1w1-3"><label for="m1w1-3">OOP: classes, inheritance, dunder methods</label></li>
+          <li class="task-item"><input type="checkbox" id="m1w1-4"><label for="m1w1-4">File handling (CSV, JSON, txt)</label></li>
+          <li class="task-item"><input type="checkbox" id="m1w1-5"><label for="m1w1-5">Exception handling, logging module</label></li>
+          <li class="task-item"><input type="checkbox" id="m1w1-6"><label for="m1w1-6">Virtual environments (venv), pip, requirements.txt</label></li>
+        </ul>
+        <div class="resources-section">
+          <div class="resources-title">📚 Resources</div>
+          <ul class="resource-list">
+            <li class="resource-item"><span class="badge free">Free</span> <a href="https://www.youtube.com/watch?v=eWRfhZUzrAc" target="_blank">Corey Schafer — Python Tutorials (YouTube)</a></li>
+            <li class="resource-item"><span class="badge free">Free</span> <a href="https://www.kaggle.com/learn/python" target="_blank">Kaggle Python micro-course (7 hrs)</a></li>
+            <li class="resource-item"><span class="badge paid">Paid</span> <a href="https://www.udemy.com/course/100-days-of-code/" target="_blank">100 Days of Python — Angela Yu (Udemy, ~₹500)</a></li>
+            <li class="resource-item"><span class="badge free">Free</span> <a href="https://realpython.com/" target="_blank">Real Python (articles)</a></li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="week-card">
+        <div class="week-title">Week 2: Python for Data + Pandas</div>
+        <ul class="task-list">
+          <li class="task-item"><input type="checkbox" id="m1w2-1"><label for="m1w2-1">NumPy basics (arrays, vectorization)</label></li>
+          <li class="task-item"><input type="checkbox" id="m1w2-2"><label for="m1w2-2">Pandas: DataFrames, Series, indexing</label></li>
+          <li class="task-item"><input type="checkbox" id="m1w2-3"><label for="m1w2-3">groupby, merge, joins, pivot tables</label></li>
+          <li class="task-item"><input type="checkbox" id="m1w2-4"><label for="m1w2-4">Reading from APIs (requests library)</label></li>
+          <li class="task-item"><input type="checkbox" id="m1w2-5"><label for="m1w2-5">SQLAlchemy basics — connecting Python to databases</label></li>
+          <li class="task-item"><input type="checkbox" id="m1w2-6"><label for="m1w2-6">psycopg2 for PostgreSQL</label></li>
+        </ul>
+        <div class="resources-section">
+          <div class="resources-title">📚 Resources</div>
+          <ul class="resource-list">
+            <li class="resource-item"><span class="badge free">Free</span> <a href="https://www.kaggle.com/learn/pandas" target="_blank">Kaggle Pandas Course</a></li>
+            <li class="resource-item"><span class="badge free">Free</span> <a href="https://www.youtube.com/watch?v=vmEHCJofslg" target="_blank">Corey Schafer — Pandas series</a></li>
+            <li class="resource-item"><span class="badge free">Free</span> <a href="https://pandas.pydata.org/docs/user_guide/10min.html" target="_blank">10 minutes to Pandas (official)</a></li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="week-card">
+        <div class="week-title">Week 3: Advanced SQL (Your Strength → Make it Sharper)</div>
+        <ul class="task-list">
+          <li class="task-item"><input type="checkbox" id="m1w3-1"><label for="m1w3-1">Window functions (ROW_NUMBER, RANK, LAG, LEAD)</label></li>
+          <li class="task-item"><input type="checkbox" id="m1w3-2"><label for="m1w3-2">CTEs (Common Table Expressions), recursive CTEs</label></li>
+          <li class="task-item"><input type="checkbox" id="m1w3-3"><label for="m1w3-3">Complex joins, self-joins, anti-joins</label></li>
+          <li class="task-item"><input type="checkbox" id="m1w3-4"><label for="m1w3-4">Query optimization: EXPLAIN PLAN, indexes</label></li>
+          <li class="task-item"><input type="checkbox" id="m1w3-5"><label for="m1w3-5">Partitioning, indexing strategies</label></li>
+          <li class="task-item"><input type="checkbox" id="m1w3-6"><label for="m1w3-6">Stored procedures, triggers (refresh)</label></li>
+          <li class="task-item"><input type="checkbox" id="m1w3-7"><label for="m1w3-7">Solve 50 SQL problems on StrataScratch / LeetCode</label></li>
+        </ul>
+        <div class="resources-section">
+          <div class="resources-title">📚 Resources</div>
+          <ul class="resource-list">
+            <li class="resource-item"><span class="badge free">Free</span> <span class="badge must">Must</span> <a href="https://www.stratascratch.com" target="_blank">StrataScratch (free SQL DE interview questions)</a></li>
+            <li class="resource-item"><span class="badge free">Free</span> <a href="https://datalemur.com" target="_blank">DataLemur (free SQL problems)</a></li>
+            <li class="resource-item"><span class="badge free">Free</span> <a href="https://mode.com/sql-tutorial/" target="_blank">Mode SQL Tutorial</a></li>
+            <li class="resource-item"><span class="badge paid">Paid</span> <a href="https://www.udemy.com/course/the-complete-sql-bootcamp/" target="_blank">Jose Portilla — SQL Bootcamp (Udemy, ~₹500)</a></li>
+            <li class="resource-item"><span class="badge free">Free</span> <a href="https://use-the-index-luke.com/" target="_blank">Use The Index, Luke! (SQL performance)</a></li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="week-card">
+        <div class="week-title">Week 4: Linux, Shell, Git, Docker basics</div>
+        <ul class="task-list">
+          <li class="task-item"><input type="checkbox" id="m1w4-1"><label for="m1w4-1">Linux file system, permissions, processes (refresh)</label></li>
+          <li class="task-item"><input type="checkbox" id="m1w4-2"><label for="m1w4-2">Shell scripting: cron, sed, awk, grep mastery</label></li>
+          <li class="task-item"><input type="checkbox" id="m1w4-3"><label for="m1w4-3">Git branching, PRs, merge vs rebase, conflicts</label></li>
+          <li class="task-item"><input type="checkbox" id="m1w4-4"><label for="m1w4-4">GitHub: create profile, push code, README writing</label></li>
+          <li class="task-item"><input type="checkbox" id="m1w4-5"><label for="m1w4-5">Docker basics: images, containers, Dockerfile, docker-compose</label></li>
+          <li class="task-item"><input type="checkbox" id="m1w4-6"><label for="m1w4-6">Run PostgreSQL + Airflow locally via Docker</label></li>
+        </ul>
+        <div class="resources-section">
+          <div class="resources-title">📚 Resources</div>
+          <ul class="resource-list">
+            <li class="resource-item"><span class="badge free">Free</span> <a href="https://www.atlassian.com/git/tutorials" target="_blank">Atlassian Git Tutorials</a></li>
+            <li class="resource-item"><span class="badge free">Free</span> <a href="https://www.youtube.com/watch?v=3c-iBn73dDE" target="_blank">TechWorld with Nana — Docker Tutorial</a></li>
+            <li class="resource-item"><span class="badge free">Free</span> <a href="https://learngitbranching.js.org/" target="_blank">Learn Git Branching (interactive)</a></li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="project-card">
+        <div class="project-title">Month 1 Project: Python ETL → PostgreSQL</div>
+        <p style="color: var(--text-dim); font-size: 14px;">Build a Python script that:</p>
+        <ul style="color: var(--text-dim); font-size: 14px; padding-left: 20px; margin-top: 8px;">
+          <li>Fetches data from a public API (e.g., OpenWeather, COVID-19, NYC Taxi)</li>
+          <li>Cleans + transforms using Pandas</li>
+          <li>Loads to PostgreSQL (running in Docker)</li>
+          <li>Has logging, error handling, retry logic</li>
+          <li>Scheduled via cron (shell script wrapper)</li>
+          <li>Pushed to GitHub with detailed README</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- MONTH 2 -->
+  <div class="tab-content" id="month2">
+    <div class="month-card">
+      <div class="month-header">
+        <h2 class="month-title">Month 2: Big Data Core</h2>
+        <span class="month-tag">PySpark · Kafka · Hadoop</span>
+      </div>
+
+      <div class="week-card">
+        <div class="week-title">Week 1-2: PySpark Deep Dive</div>
+        <ul class="task-list">
+          <li class="task-item"><input type="checkbox" id="m2w1-1"><label for="m2w1-1">Spark architecture: driver, executors, cluster manager</label></li>
+          <li class="task-item"><input type="checkbox" id="m2w1-2"><label for="m2w1-2">RDDs vs DataFrames vs Datasets</label></li>
+          <li class="task-item"><input type="checkbox" id="m2w1-3"><label for="m2w1-3">Transformations vs Actions, lazy evaluation</label></li>
+          <li class="task-item"><input type="checkbox" id="m2w1-4"><label for="m2w1-4">DataFrame API: select, filter, groupBy, agg, join</label></li>
+          <li class="task-item"><input type="checkbox" id="m2w1-5"><label for="m2w1-5">Spark SQL — writing SQL on DataFrames</label></li>
+          <li class="task-item"><input type="checkbox" id="m2w1-6"><label for="m2w1-6">Window functions in Spark</label></li>
+          <li class="task-item"><input type="checkbox" id="m2w1-7"><label for="m2w1-7">UDFs and Pandas UDFs (and when NOT to use them)</label></li>
+          <li class="task-item"><input type="checkbox" id="m2w1-8"><label for="m2w1-8">Performance: partitioning, bucketing, caching, broadcast joins</label></li>
+          <li class="task-item"><input type="checkbox" id="m2w1-9"><label for="m2w1-9">Spark UI — reading DAGs and stages</label></li>
+          <li class="task-item"><input type="checkbox" id="m2w1-10"><label for="m2w1-10">File formats: Parquet, ORC, Avro, Delta</label></li>
+          <li class="task-item"><input type="checkbox" id="m2w1-11"><label for="m2w1-11">Structured Streaming basics</label></li>
+        </ul>
+        <div class="resources-section">
+          <div class="resources-title">📚 Resources</div>
+          <ul class="resource-list">
+            <li class="resource-item"><span class="badge free">Free</span> <span class="badge must">Must</span> <a href="https://www.youtube.com/playlist?list=PL2IsFZBGM_IHCl9zhRVC1EXTomkEp_1zm" target="_blank">Data Engineering Simplified — PySpark playlist (YouTube)</a></li>
+            <li class="resource-item"><span class="badge free">Free</span> <a href="https://sparkbyexamples.com/pyspark-tutorial/" target="_blank">Spark By Examples (PySpark)</a></li>
+            <li class="resource-item"><span class="badge paid">Paid</span> <a href="https://www.udemy.com/course/end-to-end-pyspark-real-time-project-implementation/" target="_blank">Udemy — End-to-End PySpark Real-Time Project (~₹500)</a></li>
+            <li class="resource-item"><span class="badge free">Free</span> <a href="https://learning.oreilly.com/" target="_blank">Book: "Learning Spark, 2nd Ed" (free PDF from Databricks)</a></li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="week-card">
+        <div class="week-title">Week 3: Apache Kafka</div>
+        <ul class="task-list">
+          <li class="task-item"><input type="checkbox" id="m2w3-1"><label for="m2w3-1">Kafka concepts: brokers, topics, partitions, offsets</label></li>
+          <li class="task-item"><input type="checkbox" id="m2w3-2"><label for="m2w3-2">Producers, consumers, consumer groups</label></li>
+          <li class="task-item"><input type="checkbox" id="m2w3-3"><label for="m2w3-3">Replication, ISR, durability</label></li>
+          <li class="task-item"><input type="checkbox" id="m2w3-4"><label for="m2w3-4">Kafka Connect (sources & sinks)</label></li>
+          <li class="task-item"><input type="checkbox" id="m2w3-5"><label for="m2w3-5">Schema Registry + Avro basics</label></li>
+          <li class="task-item"><input type="checkbox" id="m2w3-6"><label for="m2w3-6">Hands-on: Run Kafka via Docker, write producer/consumer in Python</label></li>
+          <li class="task-item"><input type="checkbox" id="m2w3-7"><label for="m2w3-7">PySpark + Kafka integration (Structured Streaming)</label></li>
+        </ul>
+        <div class="resources-section">
+          <div class="resources-title">📚 Resources</div>
+          <ul class="resource-list">
+            <li class="resource-item"><span class="badge free">Free</span> <a href="https://www.youtube.com/watch?v=R873BlNVUB4" target="_blank">Confluent — Apache Kafka 101 (YouTube)</a></li>
+            <li class="resource-item"><span class="badge free">Free</span> <a href="https://developer.confluent.io/learn-kafka/" target="_blank">Confluent Developer (free courses)</a></li>
+            <li class="resource-item"><span class="badge paid">Paid</span> <a href="https://www.udemy.com/course/apache-kafka/" target="_blank">Stephane Maarek — Kafka for Beginners (Udemy, ~₹500)</a></li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="week-card">
+        <div class="week-title">Week 4: Hadoop Concepts + Delta Lake</div>
+        <ul class="task-list">
+          <li class="task-item"><input type="checkbox" id="m2w4-1"><label for="m2w4-1">HDFS architecture (just concepts — you won't set this up)</label></li>
+          <li class="task-item"><input type="checkbox" id="m2w4-2"><label for="m2w4-2">Hive basics + Hive Metastore concept</label></li>
+          <li class="task-item"><input type="checkbox" id="m2w4-3"><label for="m2w4-3">YARN, MapReduce (interview-level understanding)</label></li>
+          <li class="task-item"><input type="checkbox" id="m2w4-4"><label for="m2w4-4">Delta Lake — ACID, time travel, schema evolution</label></li>
+          <li class="task-item"><input type="checkbox" id="m2w4-5"><label for="m2w4-5">Apache Iceberg overview (newer than Delta, growing)</label></li>
+          <li class="task-item"><input type="checkbox" id="m2w4-6"><label for="m2w4-6">Lakehouse architecture concept</label></li>
+        </ul>
+        <div class="resources-section">
+          <div class="resources-title">📚 Resources</div>
+          <ul class="resource-list">
+            <li class="resource-item"><span class="badge free">Free</span> <a href="https://delta.io/learn/getting-started/" target="_blank">Delta Lake — Getting Started</a></li>
+            <li class="resource-item"><span class="badge free">Free</span> <a href="https://www.youtube.com/watch?v=NIY4nbsX4U0" target="_blank">Hadoop Ecosystem Overview</a></li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="project-card">
+        <div class="project-title">Month 2 Project: Real-Time Streaming Pipeline</div>
+        <p style="color: var(--text-dim); font-size: 14px;">Build a streaming pipeline:</p>
+        <ul style="color: var(--text-dim); font-size: 14px; padding-left: 20px; margin-top: 8px;">
+          <li>Producer: Python script publishing fake events (use Faker library) to Kafka</li>
+          <li>Stream processor: PySpark Structured Streaming reads from Kafka</li>
+          <li>Transformations: windowed aggregations (e.g., events per minute)</li>
+          <li>Sink: Write to Parquet/Delta files locally</li>
+          <li>Bonus: Add late-arrival data + watermarking</li>
+          <li>All on Docker Compose (Kafka + Spark + Zookeeper)</li>
+          <li>GitHub repo with architecture diagram</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- MONTH 3 -->
+  <div class="tab-content" id="month3">
+    <div class="month-card">
+      <div class="month-header">
+        <h2 class="month-title">Month 3: AWS + Snowflake + Orchestration</h2>
+        <span class="month-tag">AWS · Snowflake · Airflow · dbt</span>
+      </div>
+
+      <div class="week-card">
+        <div class="week-title">Week 1-2: AWS Deep Dive (for Data Engineers)</div>
+        <ul class="task-list">
+          <li class="task-item"><input type="checkbox" id="m3w1-1"><label for="m3w1-1">AWS account setup, IAM (users, roles, policies)</label></li>
+          <li class="task-item"><input type="checkbox" id="m3w1-2"><label for="m3w1-2">S3: buckets, lifecycle, storage classes, versioning</label></li>
+          <li class="task-item"><input type="checkbox" id="m3w1-3"><label for="m3w1-3">AWS Glue: crawlers, catalog, ETL jobs (PySpark)</label></li>
+          <li class="task-item"><input type="checkbox" id="m3w1-4"><label for="m3w1-4">Lambda: triggers, S3 events, Python runtime</label></li>
+          <li class="task-item"><input type="checkbox" id="m3w1-5"><label for="m3w1-5">EMR: Spark clusters on AWS (concept + 1 hands-on)</label></li>
+          <li class="task-item"><input type="checkbox" id="m3w1-6"><label for="m3w1-6">Redshift: clusters, distribution keys, sort keys</label></li>
+          <li class="task-item"><input type="checkbox" id="m3w1-7"><label for="m3w1-7">Athena: query S3 with SQL (serverless)</label></li>
+          <li class="task-item"><input type="checkbox" id="m3w1-8"><label for="m3w1-8">DMS: Database Migration Service overview</label></li>
+          <li class="task-item"><input type="checkbox" id="m3w1-9"><label for="m3w1-9">CloudWatch: logs, metrics, alarms</label></li>
+          <li class="task-item"><input type="checkbox" id="m3w1-10"><label for="m3w1-10">Step Functions: orchestration overview</label></li>
+          <li class="task-item"><input type="checkbox" id="m3w1-11"><label for="m3w1-11">AWS CLI + boto3 (Python SDK)</label></li>
+          <li class="task-item"><input type="checkbox" id="m3w1-12"><label for="m3w1-12">Cost monitoring — set billing alerts to avoid surprises!</label></li>
+        </ul>
+        <div class="resources-section">
+          <div class="resources-title">📚 Resources</div>
+          <ul class="resource-list">
+            <li class="resource-item"><span class="badge free">Free</span> <span class="badge must">Must</span> <a href="https://www.youtube.com/@johnnychivers" target="_blank">Johnny Chivers — AWS Data Engineering (YouTube)</a></li>
+            <li class="resource-item"><span class="badge free">Free</span> <a href="https://aws.amazon.com/free/" target="_blank">AWS Free Tier (12 months free for new accounts)</a></li>
+            <li class="resource-item"><span class="badge paid">Paid</span> <a href="https://www.udemy.com/course/aws-certified-data-engineer-associate/" target="_blank">Stephane Maarek — AWS Data Engineer Associate (Udemy, ~₹500)</a></li>
+            <li class="resource-item"><span class="badge free">Free</span> <a href="https://explore.skillbuilder.aws/" target="_blank">AWS Skill Builder (free courses + labs)</a></li>
+            <li class="resource-item"><span class="badge free">Free</span> <a href="https://www.youtube.com/@DarshilParmarOfficial" target="_blank">Darshil Parmar — Free AWS DE projects (YouTube)</a></li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="week-card">
+        <div class="week-title">Week 3: Snowflake Deep Dive</div>
+        <ul class="task-list">
+          <li class="task-item"><input type="checkbox" id="m3w3-1"><label for="m3w3-1">Snowflake architecture: storage, compute, services layer</label></li>
+          <li class="task-item"><input type="checkbox" id="m3w3-2"><label for="m3w3-2">Warehouses: scaling, multi-cluster, auto-suspend</label></li>
+          <li class="task-item"><input type="checkbox" id="m3w3-3"><label for="m3w3-3">Databases, schemas, tables, views</label></li>
+          <li class="task-item"><input type="checkbox" id="m3w3-4"><label for="m3w3-4">Loading data: COPY INTO, Snowpipe (auto-ingest from S3)</label></li>
+          <li class="task-item"><input type="checkbox" id="m3w3-5"><label for="m3w3-5">Streams + Tasks (CDC and scheduled jobs)</label></li>
+          <li class="task-item"><input type="checkbox" id="m3w3-6"><label for="m3w3-6">Time Travel, Zero-Copy Cloning, Fail-safe</label></li>
+          <li class="task-item"><input type="checkbox" id="m3w3-7"><label for="m3w3-7">RBAC: roles, grants, privileges</label></li>
+          <li class="task-item"><input type="checkbox" id="m3w3-8"><label for="m3w3-8">Performance: clustering keys, materialized views, query profiling</label></li>
+          <li class="task-item"><input type="checkbox" id="m3w3-9"><label for="m3w3-9">Cost optimization: warehouse sizing, query tuning</label></li>
+          <li class="task-item"><input type="checkbox" id="m3w3-10"><label for="m3w3-10">Snowpark (Python on Snowflake) — bonus</label></li>
+        </ul>
+        <div class="resources-section">
+          <div class="resources-title">📚 Resources</div>
+          <ul class="resource-list">
+            <li class="resource-item"><span class="badge free">Free</span> <span class="badge must">Must</span> <a href="https://signup.snowflake.com/" target="_blank">Snowflake — Free 30-day trial ($400 credits)</a></li>
+            <li class="resource-item"><span class="badge free">Free</span> <a href="https://quickstarts.snowflake.com/" target="_blank">Snowflake Quickstarts (official hands-on)</a></li>
+            <li class="resource-item"><span class="badge free">Free</span> <a href="https://www.youtube.com/@DataEngineering-z9o" target="_blank">Data Engineering — Snowflake series (YouTube)</a></li>
+            <li class="resource-item"><span class="badge paid">Paid</span> <a href="https://www.udemy.com/course/snowflake-masterclass/" target="_blank">Nikolai Schuler — Snowflake Masterclass (Udemy, ~₹500)</a></li>
+            <li class="resource-item"><span class="badge free">Free</span> <a href="https://docs.snowflake.com/" target="_blank">Snowflake Documentation (excellent)</a></li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="week-card">
+        <div class="week-title">Week 4: Airflow + dbt</div>
+        <ul class="task-list">
+          <li class="task-item"><input type="checkbox" id="m3w4-1"><label for="m3w4-1">Airflow concepts: DAGs, tasks, operators, dependencies</label></li>
+          <li class="task-item"><input type="checkbox" id="m3w4-2"><label for="m3w4-2">PythonOperator, BashOperator, SnowflakeOperator, S3 sensors</label></li>
+          <li class="task-item"><input type="checkbox" id="m3w4-3"><label for="m3w4-3">XComs (passing data between tasks)</label></li>
+          <li class="task-item"><input type="checkbox" id="m3w4-4"><label for="m3w4-4">Connections, Variables, Hooks</label></li>
+          <li class="task-item"><input type="checkbox" id="m3w4-5"><label for="m3w4-5">Backfills, retries, SLAs, alerting</label></li>
+          <li class="task-item"><input type="checkbox" id="m3w4-6"><label for="m3w4-6">Run Airflow locally via Astronomer CLI or Docker</label></li>
+          <li class="task-item"><input type="checkbox" id="m3w4-7"><label for="m3w4-7">dbt: models, sources, refs, tests</label></li>
+          <li class="task-item"><input type="checkbox" id="m3w4-8"><label for="m3w4-8">dbt incremental models, snapshots (SCD2)</label></li>
+          <li class="task-item"><input type="checkbox" id="m3w4-9"><label for="m3w4-9">dbt + Snowflake integration</label></li>
+          <li class="task-item"><input type="checkbox" id="m3w4-10"><label for="m3w4-10">dbt Cloud vs dbt Core</label></li>
+        </ul>
+        <div class="resources-section">
+          <div class="resources-title">📚 Resources</div>
+          <ul class="resource-list">
+            <li class="resource-item"><span class="badge free">Free</span> <a href="https://www.astronomer.io/docs/learn/" target="_blank">Astronomer — Airflow Academy (free)</a></li>
+            <li class="resource-item"><span class="badge free">Free</span> <a href="https://www.youtube.com/@MarcLamberti" target="_blank">Marc Lamberti — Airflow (YouTube)</a></li>
+            <li class="resource-item"><span class="badge paid">Paid</span> <a href="https://www.udemy.com/course/the-complete-hands-on-course-to-master-apache-airflow/" target="_blank">Marc Lamberti — Airflow Master Class (Udemy, ~₹500)</a></li>
+            <li class="resource-item"><span class="badge free">Free</span> <span class="badge must">Must</span> <a href="https://courses.getdbt.com/" target="_blank">dbt Learn (free official courses)</a></li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="project-card">
+        <div class="project-title">Month 3 Project: End-to-End Cloud Data Pipeline</div>
+        <p style="color: var(--text-dim); font-size: 14px;">Build a complete production-style pipeline:</p>
+        <ul style="color: var(--text-dim); font-size: 14px; padding-left: 20px; margin-top: 8px;">
+          <li><strong>Source:</strong> Fetch data from API (e.g., Spotify, IPL stats, stocks) every hour</li>
+          <li><strong>Ingest:</strong> Lambda → S3 (raw zone, partitioned by date)</li>
+          <li><strong>Transform:</strong> Glue PySpark job → S3 (curated zone, Parquet)</li>
+          <li><strong>Load:</strong> Snowpipe auto-loads curated → Snowflake staging tables</li>
+          <li><strong>Model:</strong> dbt transforms staging → marts (star schema)</li>
+          <li><strong>Orchestrate:</strong> Airflow DAG runs entire pipeline with dependencies</li>
+          <li><strong>Monitor:</strong> CloudWatch + Airflow alerts to Slack/email</li>
+          <li><strong>Document:</strong> Architecture diagram + README + blog post on Medium</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- MONTH 4 -->
+  <div class="tab-content" id="month4">
+    <div class="month-card">
+      <div class="month-header">
+        <h2 class="month-title">Month 4: Polish + Job Hunt</h2>
+        <span class="month-tag">Modeling · CI/CD · Interviews · Apply</span>
+      </div>
+
+      <div class="week-card">
+        <div class="week-title">Week 1: Data Modeling + Warehousing Theory</div>
+        <ul class="task-list">
+          <li class="task-item"><input type="checkbox" id="m4w1-1"><label for="m4w1-1">OLTP vs OLAP, normalization vs denormalization</label></li>
+          <li class="task-item"><input type="checkbox" id="m4w1-2"><label for="m4w1-2">Star schema vs Snowflake schema</label></li>
+          <li class="task-item"><input type="checkbox" id="m4w1-3"><label for="m4w1-3">Fact tables, dimension tables, conformed dimensions</label></li>
+          <li class="task-item"><input type="checkbox" id="m4w1-4"><label for="m4w1-4">SCD Type 1, 2, 3 (slowly changing dimensions)</label></li>
+          <li class="task-item"><input type="checkbox" id="m4w1-5"><label for="m4w1-5">Data Vault 2.0 (high-level)</label></li>
+          <li class="task-item"><input type="checkbox" id="m4w1-6"><label for="m4w1-6">Medallion architecture (bronze / silver / gold)</label></li>
+          <li class="task-item"><input type="checkbox" id="m4w1-7"><label for="m4w1-7">Data quality: tests, anomaly detection, Great Expectations</label></li>
+        </ul>
+        <div class="resources-section">
+          <div class="resources-title">📚 Resources</div>
+          <ul class="resource-list">
+            <li class="resource-item"><span class="badge free">Free</span> <a href="https://www.kimballgroup.com/data-warehouse-business-intelligence-resources/kimball-techniques/" target="_blank">Kimball Group — Free Articles</a></li>
+            <li class="resource-item"><span class="badge paid">Paid</span> Book: "The Data Warehouse Toolkit" by Ralph Kimball (~₹2,500)</li>
+            <li class="resource-item"><span class="badge free">Free</span> <a href="https://greatexpectations.io/" target="_blank">Great Expectations Docs</a></li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="week-card">
+        <div class="week-title">Week 2: CI/CD + Infrastructure as Code</div>
+        <ul class="task-list">
+          <li class="task-item"><input type="checkbox" id="m4w2-1"><label for="m4w2-1">GitHub Actions for data pipelines</label></li>
+          <li class="task-item"><input type="checkbox" id="m4w2-2"><label for="m4w2-2">Automated testing (pytest for Python, dbt tests)</label></li>
+          <li class="task-item"><input type="checkbox" id="m4w2-3"><label for="m4w2-3">Terraform basics (provision S3, IAM, Glue) — overview only</label></li>
+          <li class="task-item"><input type="checkbox" id="m4w2-4"><label for="m4w2-4">Environment promotion: dev → staging → prod</label></li>
+          <li class="task-item"><input type="checkbox" id="m4w2-5"><label for="m4w2-5">Secret management (AWS Secrets Manager / Airflow connections)</label></li>
+          <li class="task-item"><input type="checkbox" id="m4w2-6"><label for="m4w2-6">Add CI/CD to your Month 3 project</label></li>
+        </ul>
+        <div class="resources-section">
+          <div class="resources-title">📚 Resources</div>
+          <ul class="resource-list">
+            <li class="resource-item"><span class="badge free">Free</span> <a href="https://docs.github.com/en/actions" target="_blank">GitHub Actions Docs</a></li>
+            <li class="resource-item"><span class="badge free">Free</span> <a href="https://learn.hashicorp.com/terraform" target="_blank">Terraform — HashiCorp Learn</a></li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="week-card">
+        <div class="week-title">Week 3: Interview Prep (Crunch Mode)</div>
+        <ul class="task-list">
+          <li class="task-item"><input type="checkbox" id="m4w3-1"><label for="m4w3-1">SQL: solve 30 medium/hard problems on StrataScratch</label></li>
+          <li class="task-item"><input type="checkbox" id="m4w3-2"><label for="m4w3-2">Python: 30 LeetCode easy/medium (focus arrays, strings, dicts)</label></li>
+          <li class="task-item"><input type="checkbox" id="m4w3-3"><label for="m4w3-3">PySpark scenario questions (joins, windows, optimization)</label></li>
+          <li class="task-item"><input type="checkbox" id="m4w3-4"><label for="m4w3-4">System design: design Uber data pipeline, Twitter analytics, etc.</label></li>
+          <li class="task-item"><input type="checkbox" id="m4w3-5"><label for="m4w3-5">Behavioral: STAR format stories from your 5.5 yrs experience</label></li>
+          <li class="task-item"><input type="checkbox" id="m4w3-6"><label for="m4w3-6">Mock interviews: 5+ on Pramp / Interviewing.io (free)</label></li>
+          <li class="task-item"><input type="checkbox" id="m4w3-7"><label for="m4w3-7">Common questions: Star vs Snowflake schema, partitioning, SCD2 logic</label></li>
+        </ul>
+        <div class="resources-section">
+          <div class="resources-title">📚 Resources</div>
+          <ul class="resource-list">
+            <li class="resource-item"><span class="badge free">Free</span> <a href="https://www.pramp.com" target="_blank">Pramp — Free peer mock interviews</a></li>
+            <li class="resource-item"><span class="badge free">Free</span> <a href="https://github.com/andkret/Cookbook" target="_blank">Data Engineering Cookbook (GitHub)</a></li>
+            <li class="resource-item"><span class="badge paid">Paid</span> Book: "Designing Data-Intensive Applications" by Martin Kleppmann (~₹800)</li>
+            <li class="resource-item"><span class="badge free">Free</span> <a href="https://www.youtube.com/@SeattleDataGuy" target="_blank">SeattleDataGuy — DE interviews (YouTube)</a></li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="week-card">
+        <div class="week-title">Week 4: Resume, LinkedIn & Application Sprint</div>
+        <ul class="task-list">
+          <li class="task-item"><input type="checkbox" id="m4w4-1"><label for="m4w4-1">Rewrite resume — DE-focused, keyword-optimized for ATS</label></li>
+          <li class="task-item"><input type="checkbox" id="m4w4-2"><label for="m4w4-2">Reframe SAP/support work as data engineering wins</label></li>
+          <li class="task-item"><input type="checkbox" id="m4w4-3"><label for="m4w4-3">Add 3 GitHub projects with strong READMEs to resume</label></li>
+          <li class="task-item"><input type="checkbox" id="m4w4-4"><label for="m4w4-4">LinkedIn: headline, About section, skills, recent posts</label></li>
+          <li class="task-item"><input type="checkbox" id="m4w4-5"><label for="m4w4-5">Write 1 Medium/Hashnode article per project</label></li>
+          <li class="task-item"><input type="checkbox" id="m4w4-6"><label for="m4w4-6">Apply to 50+ companies via LinkedIn, Naukri, Instahyre, Cutshort</label></li>
+          <li class="task-item"><input type="checkbox" id="m4w4-7"><label for="m4w4-7">Reach out to 20 DE professionals on LinkedIn for referrals</label></li>
+          <li class="task-item"><input type="checkbox" id="m4w4-8"><label for="m4w4-8">Take 1 certification exam (AWS Data Engineer Associate)</label></li>
+        </ul>
+      </div>
+
+      <div class="project-card">
+        <div class="project-title">Capstone Project: Production-Grade Data Platform</div>
+        <p style="color: var(--text-dim); font-size: 14px;">Combine everything — your portfolio centerpiece:</p>
+        <ul style="color: var(--text-dim); font-size: 14px; padding-left: 20px; margin-top: 8px;">
+          <li>Multi-source ingestion (API + DB + Kafka stream)</li>
+          <li>Medallion architecture (bronze/silver/gold) on S3 + Snowflake</li>
+          <li>dbt models with tests + documentation</li>
+          <li>Airflow orchestration with SLA monitoring</li>
+          <li>CI/CD pipeline via GitHub Actions</li>
+          <li>Cost & performance metrics documented</li>
+          <li>Streamlit/Metabase dashboard on top of gold layer</li>
+          <li>Detailed Medium blog post + LinkedIn announcement</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- PROJECTS -->
+  <div class="tab-content" id="projects">
+    <div class="month-card">
+      <h2 class="month-title">🛠 Portfolio Projects (Critical for Hiring)</h2>
+      <p style="color: var(--text-dim); margin-bottom: 16px;">Recruiters care more about GitHub projects than certifications. Each project must have: clean code, README with architecture diagram, screenshots, and "lessons learned" section.</p>
+
+      <div class="project-card">
+        <div class="project-title">Project 1 — Python ETL (Month 1)</div>
+        <p style="color: var(--text-dim); font-size: 14px;"><strong>Stack:</strong> Python, Pandas, PostgreSQL, Docker, Cron, GitHub</p>
+        <p style="color: var(--text-dim); font-size: 14px; margin-top: 8px;"><strong>Idea:</strong> Daily ingestion of NYC Yellow Taxi data → Postgres + analytical SQL queries.</p>
+      </div>
+
+      <div class="project-card">
+        <div class="project-title">Project 2 — Streaming Pipeline (Month 2)</div>
+        <p style="color: var(--text-dim); font-size: 14px;"><strong>Stack:</strong> Python, Kafka, PySpark Structured Streaming, Delta Lake, Docker</p>
+        <p style="color: var(--text-dim); font-size: 14px; margin-top: 8px;"><strong>Idea:</strong> Fake e-commerce events → Kafka → Spark → real-time aggregations (sales/min, top products).</p>
+      </div>
+
+      <div class="project-card">
+        <div class="project-title">Project 3 — Cloud Data Lakehouse (Month 3)</div>
+        <p style="color: var(--text-dim); font-size: 14px;"><strong>Stack:</strong> AWS (S3, Glue, Lambda, Snowpipe), Snowflake, dbt, Airflow</p>
+        <p style="color: var(--text-dim); font-size: 14px; margin-top: 8px;"><strong>Idea:</strong> Stock market data API → S3 raw/curated → Snowflake → dbt marts → orchestrated by Airflow.</p>
+      </div>
+
+      <div class="project-card">
+        <div class="project-title">Capstone — Full Platform (Month 4)</div>
+        <p style="color: var(--text-dim); font-size: 14px;"><strong>Stack:</strong> Everything above + CI/CD + Streamlit dashboard + monitoring</p>
+        <p style="color: var(--text-dim); font-size: 14px; margin-top: 8px;"><strong>Idea:</strong> SAP-inspired manufacturing data platform — production orders, BOM, inventory pipelines (leverage your SAP PP knowledge!).</p>
+      </div>
+
+      <div class="alert info">
+        <strong>💡 SAP PP Bonus Project Idea:</strong> Build a "SAP-to-Snowflake" mock migration. Generate fake PP data (Production Orders, Routing, Work Centers), simulate SAP extracts as CSV → ingest into Snowflake via Snowpipe → model in dbt. This positions you uniquely for SAP-heavy enterprises (₹25-35 LPA roles).
+      </div>
+    </div>
+  </div>
+
+  <!-- JOB HUNT -->
+  <div class="tab-content" id="jobhunt">
+    <div class="month-card">
+      <h2 class="month-title">💼 Job Hunt Strategy (India 2026)</h2>
+
+      <div class="info-grid">
+        <div class="info-card">
+          <h3>🌐 Where to Apply</h3>
+          <ul>
+            <li>LinkedIn Jobs (set "Open to Work")</li>
+            <li>Naukri.com (still #1 for India)</li>
+            <li>Instahyre (curated, product cos)</li>
+            <li>Cutshort (mid-senior tech)</li>
+            <li>Hirist.com (tech-focused)</li>
+            <li>Company career pages directly</li>
+            <li>Wellfound (formerly AngelList) — startups</li>
+          </ul>
+        </div>
+        <div class="info-card">
+          <h3>📝 Resume Keywords (ATS)</h3>
+          <ul>
+            <li>Data Engineer, ETL/ELT, Data Pipelines</li>
+            <li>AWS S3, Glue, Lambda, EMR, Redshift, Athena</li>
+            <li>Snowflake, dbt, Airflow, Kafka</li>
+            <li>PySpark, Python, SQL, Shell scripting</li>
+            <li>Data Modeling, Star Schema, SCD</li>
+            <li>CI/CD, GitHub Actions, Docker</li>
+          </ul>
+        </div>
+        <div class="info-card">
+          <h3>🤝 Networking Hacks</h3>
+          <ul>
+            <li>Connect with 20 DEs/week on LinkedIn</li>
+            <li>Comment thoughtfully on DE posts</li>
+            <li>Post your learning journey weekly</li>
+            <li>Ask for referrals AFTER building rapport</li>
+            <li>Join DE Discord/Slack communities</li>
+            <li>Attend local meetups (Bangalore/Hyderabad heavy)</li>
+          </ul>
+        </div>
+        <div class="info-card">
+          <h3>📊 Application Math</h3>
+          <ul>
+            <li>Apply: 50 jobs/week</li>
+            <li>Responses: ~10% = 5</li>
+            <li>Screening calls: ~50% = 2-3</li>
+            <li>Tech rounds: ~50% = 1-2</li>
+            <li>Offers: ~30% = 0-1/week</li>
+            <li>Target: 3-5 offers in 4-6 weeks of applying</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="alert success">
+        <strong>💰 Salary Negotiation Tip:</strong> Use your 5.5 yrs total experience as anchor. Quote ₹22-28 LPA expectation even if your current is ₹10 LPA. Companies negotiate down — start high. Always ask for: base + variable + joining bonus + stocks separately. Get 2-3 competing offers before signing.
+      </div>
+
+      <div class="alert info">
+        <strong>📞 Interview Process (typical, India 2026):</strong>
+        <ol style="margin-top: 8px; padding-left: 20px;">
+          <li>Recruiter screen (15 min) — current CTC, expected, notice period</li>
+          <li>Technical screen (45 min) — SQL + Python coding</li>
+          <li>Round 1: Deep tech (Spark, SQL scenarios)</li>
+          <li>Round 2: System design (data pipeline design)</li>
+          <li>Round 3: Hiring manager (project deep-dive)</li>
+          <li>Round 4: HR + offer discussion</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+
+  <!-- TIPS & PITFALLS -->
+  <div class="tab-content" id="tips">
+    <div class="month-card">
+      <h2 class="month-title">⚡ Tips, Pitfalls & FAQs</h2>
+
+      <div class="info-grid">
+        <div class="info-card" style="border-left: 4px solid var(--success);">
+          <h3 style="color: var(--success);">✅ Do This</h3>
+          <ul>
+            <li>Build projects from week 1 — don't wait for "enough" knowledge</li>
+            <li>Commit to GitHub daily (green squares matter)</li>
+            <li>Write Medium/LinkedIn posts about what you're learning</li>
+            <li>Get 1 AWS or Databricks certification</li>
+            <li>Mock interview minimum 10 times before real interviews</li>
+            <li>Set AWS billing alert at ₹500 to avoid bill shocks</li>
+            <li>Leverage your SAP background — it's a differentiator</li>
+            <li>Frame support exp as "production data ops + on-call"</li>
+          </ul>
+        </div>
+        <div class="info-card" style="border-left: 4px solid var(--danger);">
+          <h3 style="color: var(--danger);">❌ Avoid This</h3>
+          <ul>
+            <li>Tutorial hell — watching without building</li>
+            <li>Learning Scala, Flink, Airflow internals (overkill for now)</li>
+            <li>Applying for "Senior" titles too early — you'll fail interviews</li>
+            <li>Ignoring SQL — 40% of interviews are SQL</li>
+            <li>Skipping data modeling theory</li>
+            <li>Building "todo app" style projects — go for real-world data</li>
+            <li>Trying to learn AWS + GCP + Azure simultaneously</li>
+            <li>Hiding your SAP background — it's an asset, not baggage</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="month-card" style="background: var(--bg);">
+        <h3 style="color: var(--accent); margin-bottom: 12px;">❓ Frequently Asked</h3>
+        <div style="margin-bottom: 16px;">
+          <strong>Q: Can I skip Kafka?</strong>
+          <p style="color: var(--text-dim); font-size: 14px;">A: Learn basics only (1 week). 60% of DE roles don't need it day 1. Don't skip if you target product companies (Flipkart, Swiggy etc.).</p>
+        </div>
+        <div style="margin-bottom: 16px;">
+          <strong>Q: AWS vs Azure vs GCP — which one?</strong>
+          <p style="color: var(--text-dim); font-size: 14px;">A: For India market in 2026 — AWS is #1 (60% of jobs), Azure #2 (25%), GCP #3 (15%). Stick with AWS for highest ROI.</p>
+        </div>
+        <div style="margin-bottom: 16px;">
+          <strong>Q: Should I learn Databricks instead of Snowflake?</strong>
+          <p style="color: var(--text-dim); font-size: 14px;">A: Both are growing. Snowflake is easier to start with and more common in BFSI/retail. Databricks is bigger in ML-heavy companies. Learn Snowflake now, add Databricks in month 5-6 on the job.</p>
+        </div>
+        <div style="margin-bottom: 16px;">
+          <strong>Q: Do I need Java for DE?</strong>
+          <p style="color: var(--text-dim); font-size: 14px;">A: Not really. Python is the primary language. Your Java is a bonus (helps debug Spark JVM issues, read source code).</p>
+        </div>
+        <div style="margin-bottom: 16px;">
+          <strong>Q: Should I quit my current job to focus full-time?</strong>
+          <p style="color: var(--text-dim); font-size: 14px;">A: NO. Keep your job for income + safety net. Study 4-5 hrs/day after work. Quit only when you have an offer in hand.</p>
+        </div>
+        <div>
+          <strong>Q: What if I can't get a DE job in 4 months?</strong>
+          <p style="color: var(--text-dim); font-size: 14px;">A: Realistic timeline is 4-7 months including job search. Don't lose hope. Internal transfers within your current company are also a great path — talk to data teams internally.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    Built for your career transition · Track your progress · Stay consistent · You've got this 💪<br>
+    <a href="index.html" style="color: var(--accent);">📚 All Guides Hub</a> ·
+    <a href="daywise_4month_plan.html" style="color: var(--accent);">📅 Day-by-Day Plan (120 days)</a><br>
+    Last updated: May 2026 · Tailored for: 5.5 yrs exp · India market · AWS + Snowflake stack
+  </footer>
+
+</div>
+
+<script>
+  function showTab(evt, tabId) {
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.getElementById(tabId).classList.add('active');
+    evt.currentTarget.classList.add('active');
+  }
+
+  const STORAGE_KEY = 'de_roadmap_progress_v1';
+
+  function loadProgress() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+      document.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+        if (saved[cb.id]) cb.checked = true;
+      });
+    } catch (e) { console.warn('Load failed', e); }
+    updateProgress();
+  }
+
+  function saveProgress() {
+    const state = {};
+    document.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+      if (cb.checked) state[cb.id] = true;
+    });
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    updateProgress();
+  }
+
+  function updateProgress() {
+    const all = document.querySelectorAll('input[type="checkbox"]');
+    const done = document.querySelectorAll('input[type="checkbox"]:checked');
+    const pct = all.length ? Math.round((done.length / all.length) * 100) : 0;
+    const fill = document.getElementById('progress-fill');
+    fill.style.width = pct + '%';
+    fill.textContent = pct + '%';
+    document.getElementById('progress-text').textContent = done.length + ' / ' + all.length + ' tasks';
+  }
+
+  function resetProgress() {
+    if (!confirm('Reset all progress? This cannot be undone.')) return;
+    localStorage.removeItem(STORAGE_KEY);
+    document.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = false);
+    updateProgress();
+  }
+
+  function exportProgress() {
+    const state = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+    const blob = new Blob([JSON.stringify(state, null, 2)], {type: 'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'de_roadmap_progress_' + new Date().toISOString().split('T')[0] + '.json';
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  document.addEventListener('change', e => {
+    if (e.target.matches('input[type="checkbox"]')) saveProgress();
+  });
+
+  document.addEventListener('DOMContentLoaded', loadProgress);
+  if (document.readyState !== 'loading') loadProgress();
+</script>
+</body>
+</html>

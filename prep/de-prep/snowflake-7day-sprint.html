@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Snowflake 7-Day Sprint + SnowPro Core</title>
+<style>
+  :root{
+    --bg:#0b1020; --bg2:#101a33; --panel:#131d36; --panel2:#1a2745;
+    --text:#e6edf6; --muted:#9fb0c7; --line:#26365c;
+    --accent:#38bdf8; --accent2:#22d3ee; --green:#34d399; --amber:#fbbf24;
+    --red:#f87171; --purple:#a78bfa; --code:#0a0f1e; --sf:#29b5e8;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0; font-family:"Segoe UI",Roboto,system-ui,Arial,sans-serif;
+    background:linear-gradient(180deg,#090e1c,#0b1020); color:var(--text);
+    line-height:1.65; font-size:15.5px;}
+  a{color:var(--accent2); text-decoration:none}
+  a:hover{text-decoration:underline}
+
+  .topbar{position:sticky; top:0; z-index:10; display:flex; align-items:center; gap:14px;
+    background:rgba(11,16,32,.85); backdrop-filter:blur(8px);
+    border-bottom:1px solid var(--line); padding:12px 22px;}
+  .topbar .back{display:inline-flex; align-items:center; gap:6px; font-size:13.5px;
+    font-weight:600; color:var(--accent2); background:var(--panel2);
+    border:1px solid var(--line); padding:6px 12px; border-radius:999px;}
+  .topbar .back:hover{border-color:var(--accent); text-decoration:none}
+  .topbar .crumb{font-size:13px; color:var(--muted)}
+
+  main.doc{max-width:920px; margin:26px auto; padding:30px 36px 50px;
+    background:var(--panel); border:1px solid var(--line); border-radius:16px;}
+
+  .kicker{font-size:12px; letter-spacing:1.5px; text-transform:uppercase;
+    color:var(--sf); font-weight:700}
+  h1{font-size:27px; margin:6px 0 10px; color:#eaf2ff;}
+  .lead{color:var(--muted); font-size:14.5px; margin:0 0 8px}
+  h2{font-size:20px; margin:30px 0 12px; padding:8px 0 8px 14px; color:var(--accent);
+    border-left:4px solid var(--accent);
+    background:linear-gradient(90deg,rgba(56,189,248,.08),transparent);
+    border-radius:0 8px 8px 0;}
+
+  /* progress */
+  .progress{position:sticky; top:54px; z-index:9; margin:18px 0 6px; padding:14px 16px;
+    background:var(--panel2); border:1px solid var(--line); border-radius:12px;}
+  .progress .row{display:flex; justify-content:space-between; align-items:center; margin-bottom:8px}
+  .progress .lbl{font-weight:600; font-size:13.5px; color:#dbe7ff}
+  .progress .count{font-size:13.5px; color:var(--accent2); font-weight:700}
+  .pbar{height:10px; background:#0c142a; border:1px solid var(--line); border-radius:999px; overflow:hidden}
+  .pfill{height:100%; width:0%; border-radius:999px;
+    background:linear-gradient(90deg,var(--sf),var(--green)); transition:width .25s ease}
+  .reset{margin-top:8px; font-size:12px; color:var(--muted); background:none; border:none;
+    cursor:pointer; text-decoration:underline; padding:0}
+  .reset:hover{color:var(--red)}
+
+  /* day cards */
+  .day{border:1px solid var(--line); border-radius:13px; margin:14px 0; overflow:hidden;
+    background:var(--bg2)}
+  .day > .head{display:flex; align-items:center; gap:12px; padding:13px 16px;
+    background:var(--panel2); border-bottom:1px solid var(--line)}
+  .day .badge{flex:none; width:62px; height:30px; display:flex; align-items:center;
+    justify-content:center; border-radius:8px; font-weight:700; font-size:13px;
+    background:rgba(41,181,232,.15); color:var(--sf); border:1px solid rgba(41,181,232,.35)}
+  .day .ttl{font-size:15.5px; font-weight:600; color:#eaf2ff}
+  .day .sub{font-size:12px; color:var(--muted); margin-left:auto}
+  .day .body{padding:6px 16px 14px}
+
+  .task{display:flex; align-items:flex-start; gap:11px; padding:9px 4px;
+    border-bottom:1px dashed rgba(38,54,92,.6); cursor:pointer}
+  .task:last-child{border-bottom:none}
+  .task input{margin-top:3px; width:17px; height:17px; accent-color:var(--sf); cursor:pointer; flex:none}
+  .task .txt{font-size:14px}
+  .task .tag{display:inline-block; font-size:10.5px; padding:1px 7px; border-radius:999px;
+    margin-right:8px; font-weight:700; letter-spacing:.3px; vertical-align:middle}
+  .tag.watch{background:rgba(167,139,250,.15); color:var(--purple); border:1px solid rgba(167,139,250,.3)}
+  .tag.do{background:rgba(52,211,153,.13); color:var(--green); border:1px solid rgba(52,211,153,.3)}
+  .tag.exam{background:rgba(251,191,36,.13); color:var(--amber); border:1px solid rgba(251,191,36,.3)}
+  .task input:checked + .txt{color:var(--muted); text-decoration:line-through}
+
+  .callout{border-radius:10px; padding:14px 18px; margin:16px 0; font-size:14px}
+  .callout b{color:#fff}
+  .callout.green{border-left:4px solid var(--green); background:rgba(52,211,153,.08)}
+  .callout.amber{border-left:4px solid var(--amber); background:rgba(251,191,36,.08); color:#f3e6c2}
+  .callout.blue{border-left:4px solid var(--sf); background:rgba(41,181,232,.08)}
+
+  ul.tight{margin:8px 0; padding-left:22px} ul.tight li{margin:6px 0}
+  ol.steps{margin:8px 0; padding-left:22px} ol.steps li{margin:8px 0}
+  table{width:100%; border-collapse:collapse; margin:14px 0; font-size:13.6px}
+  th,td{border:1px solid var(--line); padding:9px 12px; text-align:left; vertical-align:top}
+  th{background:var(--panel2); color:#dbe7ff}
+  code{font-family:Consolas,"Courier New",monospace; font-size:12.5px; background:var(--panel2);
+    color:#ffd9a8; padding:2px 6px; border-radius:5px; border:1px solid var(--line)}
+  .docfoot{max-width:920px; margin:0 auto 50px; padding:0 36px; text-align:center;
+    color:var(--muted); font-size:12.5px}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <a class="back" href="index.html">&#8592; Prep Home</a>
+  <span class="crumb">snowflake-7day-sprint.html</span>
+</div>
+
+<main class="doc">
+  <div class="kicker">Intensive Track &middot; Snowflake</div>
+  <h1>7-Day Snowflake Sprint <span style="color:var(--muted); font-weight:400; font-size:18px;">+ SnowPro Core</span></h1>
+  <p class="lead">For a quick learner who already knows SQL. ~5&ndash;6 hrs/day. Goal: functional Snowflake + a project by Day 5, cert-ready by Day 7.</p>
+
+  <div class="callout green">
+    <b>The efficiency unlock:</b> the project <i>is</i> your cert prep. Loading (stages,
+    <code>COPY INTO</code>, Snowpipe), warehouses, micro-partitions, clustering, caching,
+    semi-structured, Time Travel &amp; cloning are <b>both</b> SnowPro Core topics <b>and</b>
+    project tasks. Don't study them twice &mdash; do the project to practice for the exam.
+  </div>
+
+  <div class="progress">
+    <div class="row"><span class="lbl">Sprint progress</span><span class="count" id="count">0 / 0 done</span></div>
+    <div class="pbar"><div class="pfill" id="pfill"></div></div>
+    <button class="reset" id="reset">reset progress</button>
+  </div>
+
+  <h2>The 7-Day Plan</h2>
+
+  <div class="day">
+    <div class="head"><span class="badge">Day 1</span><span class="ttl">Foundations &amp; setup</span><span class="sub">~5 hr</span></div>
+    <div class="body">
+      <label class="task"><input type="checkbox" data-task><span class="txt"><span class="tag watch">WATCH</span>Course: architecture, editions, connectivity, virtual warehouses (~2&ndash;3 hr, play at 1.5&times;)</span></label>
+      <label class="task"><input type="checkbox" data-task><span class="txt"><span class="tag do">DO</span>Sign up for the free 30-day trial; explore Snowsight UI</span></label>
+      <label class="task"><input type="checkbox" data-task><span class="txt"><span class="tag do">DO</span>Create a warehouse, database, schema; run your first queries</span></label>
+    </div>
+  </div>
+
+  <div class="day">
+    <div class="head"><span class="badge">Day 2</span><span class="ttl">Data loading</span><span class="sub">~5 hr</span></div>
+    <div class="body">
+      <label class="task"><input type="checkbox" data-task><span class="txt"><span class="tag watch">WATCH</span>Course: stages, file formats, <code>COPY INTO</code>, Snowpipe</span></label>
+      <label class="task"><input type="checkbox" data-task><span class="txt"><span class="tag do">DO</span>Generate synthetic billing data (project)</span></label>
+      <label class="task"><input type="checkbox" data-task><span class="txt"><span class="tag do">DO</span><code>COPY INTO</code> your <code>RAW</code> tables; verify row counts vs source</span></label>
+    </div>
+  </div>
+
+  <div class="day">
+    <div class="head"><span class="badge">Day 3</span><span class="ttl">Performance &amp; cost</span><span class="sub">~5 hr</span></div>
+    <div class="body">
+      <label class="task"><input type="checkbox" data-task><span class="txt"><span class="tag watch">WATCH</span>Course: micro-partitions, clustering, caching layers, query profile, cost</span></label>
+      <label class="task"><input type="checkbox" data-task><span class="txt"><span class="tag do">DO</span>Inspect a query in Query Profile; spot pruning &amp; spilling</span></label>
+      <label class="task"><input type="checkbox" data-task><span class="txt"><span class="tag do">DO</span>Build staging + dimension models (project)</span></label>
+    </div>
+  </div>
+
+  <div class="day">
+    <div class="head"><span class="badge">Day 4</span><span class="ttl">Advanced features</span><span class="sub">~5 hr</span></div>
+    <div class="body">
+      <label class="task"><input type="checkbox" data-task><span class="txt"><span class="tag watch">WATCH</span>Course: semi-structured (VARIANT/FLATTEN), Time Travel, cloning, data sharing</span></label>
+      <label class="task"><input type="checkbox" data-task><span class="txt"><span class="tag do">DO</span>Build the fact table &mdash; complete the star schema (project)</span></label>
+      <label class="task"><input type="checkbox" data-task><span class="txt"><span class="tag do">DO</span>Demo Time Travel + a zero-copy clone for dev</span></label>
+    </div>
+  </div>
+
+  <div class="day">
+    <div class="head"><span class="badge">Day 5</span><span class="ttl">Security + ship the project</span><span class="sub">~6 hr</span></div>
+    <div class="body">
+      <label class="task"><input type="checkbox" data-task><span class="txt"><span class="tag watch">WATCH</span>Course: security/RBAC, accounts, data protection (finish the course)</span></label>
+      <label class="task"><input type="checkbox" data-task><span class="txt"><span class="tag do">DO</span>Finalize project + README + architecture diagram</span></label>
+      <label class="task"><input type="checkbox" data-task><span class="txt"><span class="tag do">DO</span>Push to GitHub &mdash; this is now interview-ready. <b>Start applying.</b></span></label>
+    </div>
+  </div>
+
+  <div class="day">
+    <div class="head"><span class="badge">Day 6</span><span class="ttl">Practice exams</span><span class="sub">~6 hr</span></div>
+    <div class="body">
+      <label class="task"><input type="checkbox" data-task><span class="txt"><span class="tag exam">EXAM</span>Take 2&ndash;3 full practice exams (timed)</span></label>
+      <label class="task"><input type="checkbox" data-task><span class="txt"><span class="tag exam">EXAM</span>Review <b>every</b> wrong answer &mdash; understand why</span></label>
+      <label class="task"><input type="checkbox" data-task><span class="txt"><span class="tag do">DO</span>Re-read weak areas in <a href="cheatsheets/06-snowflake.html">06 &middot; Snowflake</a></span></label>
+    </div>
+  </div>
+
+  <div class="day">
+    <div class="head"><span class="badge">Day 7</span><span class="ttl">Lock it in &amp; sit the exam</span><span class="sub">~5 hr</span></div>
+    <div class="body">
+      <label class="task"><input type="checkbox" data-task><span class="txt"><span class="tag exam">EXAM</span>Practice until consistently <b>80%+</b></span></label>
+      <label class="task"><input type="checkbox" data-task><span class="txt"><span class="tag do">DO</span>Light revision of flagged topics only</span></label>
+      <label class="task"><input type="checkbox" data-task><span class="txt"><span class="tag exam">EXAM</span>Book + sit the exam (slip to Day 8&ndash;9 if not at 80%)</span></label>
+    </div>
+  </div>
+
+  <div class="callout amber">
+    <b>Don't sit the exam below 80% on practice.</b> A fail costs the retake fee and time.
+    If you're not there by Day 7, push the exam 2&ndash;3 days &mdash; the learning is done, you
+    just need the practice scores to confirm it.
+  </div>
+
+  <h2>Critical success factors</h2>
+  <ol class="steps">
+    <li><b>Practice exams are non-negotiable.</b> The course gets you ~60%; the practice tests + reviewing wrong answers get you to a pass.</li>
+    <li><b>Hands-on &gt; passive watching.</b> Play the course at 1.5&ndash;2&times;, then <i>do</i> it in the console. Aim ~2 hrs of clicking per 1 hr of video.</li>
+    <li><b>Time-box the project.</b> A working <code>load &rarr; star schema</code> is enough this week. Don't gold-plate it.</li>
+    <li><b>Apply by Day 5.</b> Don't let the cert delay job applications &mdash; functional Snowflake + a project is already interview-ready. The cert is the cherry on top.</li>
+  </ol>
+
+  <h2>Exam logistics</h2>
+  <div class="callout blue">
+    <b>SnowPro Core (COF-C02)</b> &mdash; ~100 questions, ~115 min, pass ~750/1000, ~$175 USD,
+    online proctored. <i>Verify current details on the official Snowflake certification page before booking.</i>
+  </div>
+  <table>
+    <tr><th>Domain (approx. weighting)</th><th>Covered on day</th></tr>
+    <tr><td>Architecture &amp; account/security</td><td>Day 1, Day 5</td></tr>
+    <tr><td>Data loading &amp; unloading</td><td>Day 2</td></tr>
+    <tr><td>Performance &amp; cost optimization</td><td>Day 3</td></tr>
+    <tr><td>Data transformation &amp; semi-structured</td><td>Day 4</td></tr>
+    <tr><td>Data protection (Time Travel, cloning, sharing)</td><td>Day 4</td></tr>
+  </table>
+
+  <div class="callout green" style="margin-top:22px">
+    <b>Reality check:</b> functional Snowflake + project = doable in 5 days. The cert <i>pass</i>
+    is the only variable &mdash; gated by practice exams, not the 8-hr course. Plan to sit it end of
+    week 1 or a few days into week 2. You've got this.
+  </div>
+</main>
+
+<footer class="docfoot">Data Engineer Prep &middot; Snowflake + dbt + Airflow &middot; progress saved in your browser</footer>
+
+<script>
+  (function(){
+    var KEY = "sf7day.progress";
+    var tasks = Array.prototype.slice.call(document.querySelectorAll('input[data-task]'));
+    tasks.forEach(function(t, i){ t.id = "t" + i; });
+
+    function load(){
+      var saved = {};
+      try { saved = JSON.parse(localStorage.getItem(KEY) || "{}"); } catch(e){}
+      tasks.forEach(function(t){ if(saved[t.id]) t.checked = true; });
+    }
+    function save(){
+      var state = {};
+      tasks.forEach(function(t){ if(t.checked) state[t.id] = 1; });
+      try { localStorage.setItem(KEY, JSON.stringify(state)); } catch(e){}
+    }
+    function render(){
+      var done = tasks.filter(function(t){ return t.checked; }).length;
+      var pct = tasks.length ? Math.round(done / tasks.length * 100) : 0;
+      document.getElementById('count').textContent = done + " / " + tasks.length + " done  (" + pct + "%)";
+      document.getElementById('pfill').style.width = pct + "%";
+    }
+    tasks.forEach(function(t){
+      t.addEventListener('change', function(){ save(); render(); });
+    });
+    document.getElementById('reset').addEventListener('click', function(){
+      tasks.forEach(function(t){ t.checked = false; });
+      save(); render();
+    });
+    load(); render();
+  })();
+</script>
+</body>
+</html>

@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Part 4 — Stages, File Formats & Bulk Loading | Snowflake Notes</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #0b1020; --bg-2: #131a2f; --bg-3: #1f2a44; --card: #131a2f;
+    --text: #e6edf6; --text-dim: #93a4bf; --accent: #29b5e8; --accent-2: #c084fc;
+    --accent-3: #34d399; --success: #22c55e; --warn: #fbbf24; --danger: #f87171;
+    --border: #2a3553; --code-bg: #0a0f1e;
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: linear-gradient(135deg, #0b1020 0%, #0c2233 100%); color: var(--text);
+    line-height: 1.65; min-height: 100vh; }
+  .container { max-width: 1100px; margin: 0 auto; padding: 24px; }
+  header { background: linear-gradient(135deg, #29b5e8 0%, #2563eb 50%, #7c3aed 100%);
+    border-radius: 16px; padding: 30px; margin-bottom: 18px; box-shadow: 0 20px 60px rgba(41,181,232,0.25); }
+  header .crumb { font-size: 12px; opacity: 0.85; text-transform: uppercase; letter-spacing: 1px; }
+  header h1 { font-size: 30px; margin: 6px 0 8px 0; }
+  header p { opacity: 0.92; font-size: 15px; max-width: 760px; }
+  nav.pager { display: flex; justify-content: space-between; gap: 10px; margin: 14px 0 22px 0; flex-wrap: wrap; }
+  nav.pager a { text-decoration: none; background: var(--card); border: 1px solid var(--border);
+    color: var(--text); padding: 10px 16px; border-radius: 10px; font-size: 13px; font-weight: 600; transition: all 0.2s; }
+  nav.pager a:hover { background: var(--accent); color: #04121b; border-color: var(--accent); }
+  nav.pager a.home { border-color: var(--accent-2); }
+
+  .section { background: var(--card); border-radius: 12px; padding: 24px; margin-bottom: 18px; border: 1px solid var(--border); }
+  .section h2 { color: var(--accent); font-size: 22px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+  .section h3 { color: var(--accent-2); font-size: 18px; margin: 20px 0 10px 0; }
+  .section h4 { color: var(--accent-3); font-size: 15px; margin: 14px 0 8px 0; }
+  .section p { color: var(--text); margin-bottom: 10px; }
+  ul.bullet { padding-left: 22px; color: var(--text); font-size: 14.5px; margin: 6px 0 12px 0; }
+  ul.bullet li { padding: 4px 0; }
+  ul.bullet li b { color: var(--accent-3); }
+
+  table { width: 100%; border-collapse: collapse; background: var(--bg); border-radius: 8px;
+    overflow: hidden; margin: 14px 0; font-size: 13.5px; }
+  th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { background: var(--bg-3); color: var(--accent); text-transform: uppercase; font-size: 11px; letter-spacing: 1px; }
+  tr:last-child td { border-bottom: none; }
+
+  .alert { padding: 12px 14px; border-radius: 8px; margin: 14px 0; border-left: 4px solid; font-size: 14px; }
+  .alert.warn { background: rgba(251,191,36,0.1); border-color: var(--warn); }
+  .alert.danger { background: rgba(248,113,113,0.1); border-color: var(--danger); }
+  .alert.success { background: rgba(34,197,94,0.1); border-color: var(--success); }
+  .alert.info { background: rgba(41,181,232,0.1); border-color: var(--accent); }
+  .alert strong { color: var(--text); }
+
+  .diagram { background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 22px; margin: 16px 0; overflow-x: auto; }
+  .diagram .title { text-align: center; color: var(--text-dim); font-size: 12px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 16px; }
+  .flow { display: flex; align-items: stretch; justify-content: center; flex-wrap: wrap; }
+  .flow-box { background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px;
+    min-width: 120px; text-align: center; font-size: 13px; font-weight: 600; display: flex; flex-direction: column; justify-content: center; }
+  .flow-box small { display: block; color: var(--text-dim); font-weight: 400; font-size: 11px; margin-top: 4px; }
+  .flow-arrow { display: flex; align-items: center; padding: 0 8px; color: var(--accent); font-size: 22px; font-weight: 700; }
+  .flow-box.gen { border-top: 3px solid var(--accent); }
+  .flow-box.ing { border-top: 3px solid var(--accent-2); }
+  .flow-box.sto { border-top: 3px solid var(--accent-3); }
+  .flow-box.tra { border-top: 3px solid var(--warn); }
+  .flow-box.ser { border-top: 3px solid var(--danger); }
+
+  /* ---- animated pipeline (shared) ---- */
+  .apipe { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 0; margin: 4px 0; }
+  .anode { position: relative; z-index: 1; background: var(--bg-3); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 14px; min-width: 112px; text-align: center; font-size: 12.5px; font-weight: 700;
+    animation: aPulse 3s ease-in-out infinite; }
+  .anode small { display: block; font-weight: 400; color: var(--text-dim); font-size: 11px; margin-top: 4px; }
+  .anode.a { border-top: 3px solid var(--accent); }
+  .anode.b { border-top: 3px solid var(--accent-2); }
+  .anode.c { border-top: 3px solid var(--accent-3); }
+  .anode.d { border-top: 3px solid var(--warn); }
+  .anode.e { border-top: 3px solid var(--danger); }
+  .alink { position: relative; width: 50px; height: 3px; background: var(--border); margin: 0 1px; border-radius: 2px; flex: none; }
+  .alink .apkt { position: absolute; top: -3px; left: 0; width: 9px; height: 9px; border-radius: 50%;
+    background: var(--accent); box-shadow: 0 0 10px 1px var(--accent); animation: aMove 2.4s linear infinite; }
+  .alink .apkt.k2 { animation-delay: 1.2s; background: var(--accent-2); box-shadow: 0 0 10px 1px var(--accent-2); }
+  @keyframes aMove { 0% { left: 0; opacity: 0; } 12% { opacity: 1; } 88% { opacity: 1; } 100% { left: 100%; opacity: 0; } }
+  @keyframes aPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(41,181,232,0); } 50% { box-shadow: 0 0 16px 0 rgba(41,181,232,0.22); } }
+  @media (prefers-reduced-motion: reduce) { .alink .apkt { animation: none; opacity: .7; } .anode { animation: none; } }
+
+  pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px;
+    overflow-x: auto; margin: 12px 0; font-size: 13px; line-height: 1.55; }
+  pre code { color: #cfe3ff; font-family: "Consolas","Monaco",monospace; white-space: pre; }
+  pre .kw { color: #29b5e8; font-weight: 700; }
+  pre .cm { color: #6b7a99; font-style: italic; }
+  pre .st { color: #7ee787; }
+  :not(pre) > code { background: var(--bg-3); padding: 2px 6px; border-radius: 4px; font-size: 13px;
+    color: var(--accent-3); font-family: "Consolas","Monaco",monospace; }
+  footer { text-align: center; margin-top: 30px; padding: 20px; color: var(--text-dim); font-size: 13px; }
+  @media (max-width: 640px) { header h1 { font-size: 23px; } .container { padding: 12px; } }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <div class="crumb">Part 4 of 6</div>
+    <h1>Stages, File Formats & Bulk Loading</h1>
+    <p>Where files live before they become rows, how to describe their structure, and the workhorse command that
+       loads them: <code>COPY INTO</code>.</p>
+  </header>
+
+  <nav class="pager">
+    <a class="home" href="index.html">🏠 Home / Contents</a>
+    <a href="05-snowpipe-streams-tasks.html">Next → Part 5: Snowpipe, Streams & Tasks</a>
+  </nav>
+
+  <div class="section">
+    <h2>1. Stages — where source files live</h2>
+    <p>A <strong>stage</strong> is a location that holds your data files before (or after) they're loaded into
+       tables. There are two families: <b>internal</b> (inside Snowflake) and <b>external</b> (your own cloud bucket).</p>
+
+    <h3>Internal stages</h3>
+    <p>Snowflake-managed storage. You <code>PUT</code> files into them, then <code>COPY INTO</code> a table. There are
+       three kinds, referenced with special prefixes:</p>
+    <table>
+      <thead><tr><th>Internal stage</th><th>Reference</th><th>Scope</th></tr></thead>
+      <tbody>
+        <tr><td><b>User stage</b></td><td><code>@~</code></td><td>One per user — files only that user can see.</td></tr>
+        <tr><td><b>Table stage</b></td><td><code>@%table_name</code></td><td>One per table — tied to that specific table.</td></tr>
+        <tr><td><b>Named (internal) stage</b></td><td><code>@stage_name</code></td><td>A first-class object you create &amp; grant on. Most flexible &amp; recommended.</td></tr>
+      </tbody>
+    </table>
+
+    <h3>External stages</h3>
+    <p>Point to a bucket you own — <b>Amazon S3</b>, <b>Azure Blob</b>, or <b>Google Cloud Storage</b>. Snowflake reads
+       the files in place using credentials or a <b>storage integration</b> (the secure, recommended way).</p>
+
+    <div class="diagram">
+      <div class="title">▶ File → Stage → Table (animated load)</div>
+      <div class="apipe">
+        <div class="anode a">📄 Source files<small>CSV / JSON / Parquet</small></div>
+        <div class="alink"><span class="apkt"></span><span class="apkt k2"></span></div>
+        <div class="anode b">📦 Stage<small>internal (@) or external (S3/Blob/GCS)</small></div>
+        <div class="alink"><span class="apkt"></span></div>
+        <div class="anode c">📋 Table<small>via COPY INTO</small></div>
+      </div>
+    </div>
+
+    <pre><code><span class="cm">-- named internal stage</span>
+<span class="kw">CREATE STAGE</span> my_int_stage;
+
+<span class="cm">-- external stage on S3 (using a storage integration)</span>
+<span class="kw">CREATE STAGE</span> my_ext_stage
+  URL = <span class="st">'s3://my-bucket/data/'</span>
+  STORAGE_INTEGRATION = my_s3_int
+  FILE_FORMAT = my_csv_format;
+
+<span class="cm">-- put a local file into an internal stage (run from SnowSQL/CLI)</span>
+<span class="kw">PUT</span> file://C:/data/customer.csv @my_int_stage;
+
+<span class="cm">-- inspect what's in a stage</span>
+<span class="kw">LIST</span> @my_int_stage;</code></pre>
+    <div class="alert info"><strong>Browser upload:</strong> in Snowsight you can also upload a file straight into a
+      stage from the UI, then <code>LIST</code> it and load it — handy when you don't have the CLI installed.</div>
+
+    <h3>Query files in a stage <em>without</em> loading</h3>
+    <p>You can run SQL directly over staged files to preview/validate them before a <code>COPY</code>. Columns are
+       referenced positionally as <code>$1</code>, <code>$2</code>, …</p>
+    <pre><code><span class="cm">-- preview the first columns of staged files</span>
+<span class="kw">SELECT</span> $1, $2, $3
+<span class="kw">FROM</span> @my_int_stage
+  (FILE_FORMAT => <span class="st">'my_csv_format'</span>)
+<span class="kw">LIMIT</span> 10;
+
+<span class="cm">-- let Snowflake infer a schema from Parquet/CSV files</span>
+<span class="kw">SELECT</span> * <span class="kw">FROM TABLE</span>(
+  INFER_SCHEMA(LOCATION => <span class="st">'@my_int_stage'</span>,
+               FILE_FORMAT => <span class="st">'my_csv_format'</span>));</code></pre>
+  </div>
+
+  <div class="section">
+    <h2>2. File Formats</h2>
+    <p>A <strong>file format</strong> object describes the structure of your files so Snowflake can parse them:
+       type (CSV/JSON/etc.), delimiter, header rows, compression, quoting, null handling, and more. You can define it
+       inline in a <code>COPY</code>, but a reusable named object is cleaner.</p>
+    <pre><code><span class="kw">CREATE FILE FORMAT</span> my_csv_format
+  TYPE = <span class="st">'CSV'</span>
+  FIELD_DELIMITER = <span class="st">','</span>
+  SKIP_HEADER = 1                 <span class="cm">-- ignore the header row</span>
+  FIELD_OPTIONALLY_ENCLOSED_BY = <span class="st">'"'</span>
+  NULL_IF = (<span class="st">''</span>, <span class="st">'NULL'</span>)
+  EMPTY_FIELD_AS_NULL = <span class="kw">TRUE</span>;
+
+<span class="cm">-- JSON / Parquet are just as easy</span>
+<span class="kw">CREATE FILE FORMAT</span> my_json_format TYPE = <span class="st">'JSON'</span>;</code></pre>
+    <p>Snowflake supports <b>structured</b> (CSV, TSV) and <b>semi-structured</b> (JSON, Avro, ORC, Parquet, XML)
+       formats. Semi-structured data can be stored in a <code>VARIANT</code> column and queried with dot/bracket notation.</p>
+  </div>
+
+  <div class="section">
+    <h2>3. Two Data-Loading Approaches</h2>
+    <div class="diagram">
+      <div class="title">Choose based on how data arrives</div>
+      <div class="flow">
+        <div class="flow-box tra">📦 Bulk Loading<small>COPY INTO · batches · your warehouse · on demand/scheduled</small></div>
+        <div class="flow-arrow">vs</div>
+        <div class="flow-box ser">🚿 Continuous Loading<small>Snowpipe · micro-batches · serverless · auto/near real-time</small></div>
+      </div>
+    </div>
+    <table>
+      <thead><tr><th></th><th>Bulk (COPY INTO)</th><th>Continuous (Snowpipe)</th></tr></thead>
+      <tbody>
+        <tr><td><b>Volume / cadence</b></td><td>Large batches, run on demand or on a schedule.</td><td>Small files as they arrive, near real-time.</td></tr>
+        <tr><td><b>Compute</b></td><td>Your own virtual warehouse (you manage size &amp; cost).</td><td>Snowflake-managed serverless compute.</td></tr>
+        <tr><td><b>Billing</b></td><td>Per-second warehouse credits while running.</td><td>Per-file + compute consumed by the pipe.</td></tr>
+        <tr><td><b>Use when</b></td><td>Periodic ETL, historical/initial loads.</td><td>Streaming-ish files landing in a bucket continuously.</td></tr>
+      </tbody>
+    </table>
+    <p>This part covers <b>bulk loading</b>; Snowpipe is covered in <a href="05-snowpipe-streams-tasks.html" style="color:var(--accent);">Part 5</a>.</p>
+  </div>
+
+  <div class="section">
+    <h2>4. Bulk Loading with COPY INTO</h2>
+    <p>The standard recipe: create the table → create a stage → put/land the files → define a file format →
+       <code>COPY INTO</code> the table → validate.</p>
+    <pre><code><span class="cm">-- 1) target table</span>
+<span class="kw">CREATE TABLE</span> customer (
+  id <span class="kw">INT</span>, name <span class="kw">STRING</span>, email <span class="kw">STRING</span>, country <span class="kw">STRING</span>
+);
+
+<span class="cm">-- 2) load all files from the stage into the table</span>
+<span class="kw">COPY INTO</span> customer
+  <span class="kw">FROM</span> @my_int_stage
+  FILE_FORMAT = (FORMAT_NAME = my_csv_format)
+  ON_ERROR = <span class="st">'CONTINUE'</span>;     <span class="cm">-- skip bad rows instead of failing the whole load</span></code></pre>
+
+    <h3>Loading specific files & transforming on load</h3>
+    <pre><code><span class="cm">-- pick a specific file (or use PATTERN for a regex match)</span>
+<span class="kw">COPY INTO</span> customer
+  <span class="kw">FROM</span> @my_int_stage/customer.csv
+  FILE_FORMAT = (FORMAT_NAME = my_csv_format);
+
+<span class="cm">-- reshape columns during load with a SELECT over the stage</span>
+<span class="kw">COPY INTO</span> customer (id, name, email)
+  <span class="kw">FROM</span> (
+    <span class="kw">SELECT</span> $1, <span class="kw">UPPER</span>($2), <span class="kw">LOWER</span>($3)
+    <span class="kw">FROM</span> @my_int_stage
+  )
+  FILE_FORMAT = (FORMAT_NAME = my_csv_format);</code></pre>
+
+    <h3>Key COPY options</h3>
+    <table>
+      <thead><tr><th>Option</th><th>What it does</th></tr></thead>
+      <tbody>
+        <tr><td><code>ON_ERROR</code></td><td><code>ABORT_STATEMENT</code> (default), <code>CONTINUE</code>, <code>SKIP_FILE</code>, or <code>SKIP_FILE_n</code> — how to react to bad rows.</td></tr>
+        <tr><td><code>PATTERN</code></td><td>Regex to select matching files in the stage.</td></tr>
+        <tr><td><code>FORCE</code></td><td>Re-load files even if already loaded (ignores load history).</td></tr>
+        <tr><td><code>PURGE</code></td><td>Delete files from the stage after a successful load.</td></tr>
+        <tr><td><code>VALIDATION_MODE</code></td><td>Dry-run that checks files (e.g. <code>RETURN_ERRORS</code>) without loading.</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Load history & avoiding duplicates</h3>
+    <div class="alert info"><strong>Snowflake remembers what it loaded.</strong> Each table keeps load metadata for
+      ~64 days. If you run the same <code>COPY</code> again, already-loaded files are <b>skipped</b> automatically —
+      so re-running won't duplicate rows. To intentionally reload, <code>TRUNCATE</code> the table (clearing the
+      relationship) or use <code>FORCE = TRUE</code>.</div>
+    <pre><code><span class="cm">-- validate the load worked</span>
+<span class="kw">SELECT COUNT</span>(*) <span class="kw">FROM</span> customer;
+
+<span class="cm">-- inspect load results / errors of the last copy</span>
+<span class="kw">SELECT</span> * <span class="kw">FROM TABLE</span>(VALIDATE(customer, JOB_ID => <span class="st">'_last'</span>));
+
+<span class="cm">-- to reload the same file, clear the table first</span>
+<span class="kw">TRUNCATE TABLE</span> customer;</code></pre>
+    <div class="alert success"><strong>Bulk-load checklist:</strong> table ✓ → stage ✓ → files staged (<code>LIST</code>) ✓
+      → file format ✓ → <code>COPY INTO</code> ✓ → validate row count ✓.</div>
+  </div>
+
+  <nav class="pager">
+    <a class="home" href="index.html">🏠 Home / Contents</a>
+    <a href="05-snowpipe-streams-tasks.html">Next → Part 5: Snowpipe, Streams & Tasks</a>
+  </nav>
+
+  <footer>Part 4 of 6 · Learn Snowflake in 2 Hours — study notes</footer>
+</div>
+</body>
+</html>

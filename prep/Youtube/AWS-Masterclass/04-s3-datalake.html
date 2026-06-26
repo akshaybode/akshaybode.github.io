@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Part 4 — S3 &amp; the Data Lake | AWS for Data Engineers</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #0b1020; --bg-2: #131a2f; --bg-3: #1f2a44; --card: #131a2f;
+    --text: #e6edf6; --text-dim: #93a4bf; --accent: #60a5fa; --accent-2: #c084fc;
+    --accent-3: #34d399; --success: #22c55e; --warn: #fbbf24; --danger: #f87171;
+    --border: #2a3553; --code-bg: #0a0f1e; --aws: #ff9900;
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: linear-gradient(135deg, #0b1020 0%, #1a0f2e 100%); color: var(--text);
+    line-height: 1.65; min-height: 100vh; }
+  .container { max-width: 1100px; margin: 0 auto; padding: 24px; }
+  header { background: linear-gradient(135deg, #232f3e 0%, #ff9900 140%);
+    border-radius: 16px; padding: 30px; margin-bottom: 18px; box-shadow: 0 20px 60px rgba(255,153,0,0.2); }
+  header .crumb { font-size: 12px; opacity: 0.85; text-transform: uppercase; letter-spacing: 1px; }
+  header h1 { font-size: 30px; margin: 6px 0 8px 0; }
+  header p { opacity: 0.95; font-size: 15px; max-width: 760px; }
+  nav.pager { display: flex; justify-content: space-between; gap: 10px; margin: 14px 0 22px 0; flex-wrap: wrap; }
+  nav.pager a { text-decoration: none; background: var(--card); border: 1px solid var(--border);
+    color: var(--text); padding: 10px 16px; border-radius: 10px; font-size: 13px; font-weight: 600; transition: all 0.2s; }
+  nav.pager a:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+  nav.pager a.home { border-color: var(--accent-2); }
+  .section { background: var(--card); border-radius: 12px; padding: 24px; margin-bottom: 18px; border: 1px solid var(--border); }
+  .section h2 { color: var(--accent); font-size: 22px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+  .section h3 { color: var(--accent-2); font-size: 18px; margin: 20px 0 10px 0; }
+  .section h4 { color: var(--accent-3); font-size: 15px; margin: 14px 0 8px 0; }
+  .section p { color: var(--text); margin-bottom: 10px; }
+  ul.bullet { padding-left: 22px; color: var(--text); font-size: 14.5px; margin: 6px 0 12px 0; }
+  ul.bullet li { padding: 4px 0; }
+  ul.bullet li b { color: var(--accent-3); }
+  table { width: 100%; border-collapse: collapse; background: var(--bg); border-radius: 8px; overflow: hidden; margin: 14px 0; font-size: 13.5px; }
+  th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { background: var(--bg-3); color: var(--accent); text-transform: uppercase; font-size: 11px; letter-spacing: 1px; }
+  tr:last-child td { border-bottom: none; }
+  .alert { padding: 12px 14px; border-radius: 8px; margin: 14px 0; border-left: 4px solid; font-size: 14px; }
+  .alert.warn { background: rgba(251,191,36,0.1); border-color: var(--warn); }
+  .alert.danger { background: rgba(248,113,113,0.1); border-color: var(--danger); }
+  .alert.success { background: rgba(34,197,94,0.1); border-color: var(--success); }
+  .alert.info { background: rgba(96,165,250,0.1); border-color: var(--accent); }
+  .alert strong { color: var(--text); }
+  .diagram { background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 22px; margin: 16px 0; overflow-x: auto; }
+  .diagram .title { text-align: center; color: var(--text-dim); font-size: 12px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 16px; }
+  .flow { display: flex; align-items: stretch; justify-content: center; flex-wrap: wrap; }
+  .flow-box { background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px;
+    min-width: 130px; text-align: center; font-size: 13px; font-weight: 600; display: flex; flex-direction: column; justify-content: center; }
+  .flow-box small { display: block; color: var(--text-dim); font-weight: 400; font-size: 11px; margin-top: 4px; }
+  .flow-arrow { display: flex; align-items: center; padding: 0 8px; color: var(--accent); font-size: 22px; font-weight: 700; }
+  .flow-box.gen { border-top: 3px solid var(--accent); }
+  .flow-box.ing { border-top: 3px solid var(--accent-2); }
+  .flow-box.sto { border-top: 3px solid var(--accent-3); }
+  .flow-box.tra { border-top: 3px solid var(--warn); }
+  .flow-box.ser { border-top: 3px solid var(--danger); }
+  :not(pre) > code { background: var(--bg-3); padding: 2px 6px; border-radius: 4px; font-size: 13px; color: var(--accent-3); font-family: "Consolas","Monaco",monospace; }
+  footer { text-align: center; margin-top: 30px; padding: 20px; color: var(--text-dim); font-size: 13px; }
+  @media (max-width: 640px) { header h1 { font-size: 23px; } .container { padding: 12px; } }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <div class="crumb">Part 4 of 7</div>
+    <h1>S3 &amp; the Data Lake</h1>
+    <p>The single most-used storage service for data engineers. Understand blob storage, what a "data lake"
+       really is, then create buckets, enable versioning, and choose the right storage class.</p>
+  </header>
+
+  <nav class="pager">
+    <a class="home" href="index.html">&#127968; Home / Contents</a>
+    <a href="03-virtualization-ec2-ebs.html">&#8592; Part 3</a>
+    <a href="05-sdk-boto3.html">Next &#8594; Part 5: Accessing AWS (CLI &amp; SDK)</a>
+  </nav>
+
+  <div class="section">
+    <h2>1. From Block Storage to Blob Storage</h2>
+    <p>Recall block storage (Part 3): your data is split into blocks, and you need an <b>OS / VM</b> to reassemble
+       and read it. The pain point: <em>to access stored data you must log into a virtual machine.</em></p>
+    <p>What if you want to dump data <strong>and</strong> read it back <strong>without any VM or OS</strong>? That's
+       what <b>blob storage</b> solves. <b>BLOB = Binary Large Object.</b></p>
+    <h3>How blob storage works</h3>
+    <p>Under the hood it still uses the block-storage idea — your file is split into <b>chunks</b>. But instead of
+       an OS reassembling them, the chunks live on <b>distributed storage nodes</b>, and you access them through
+       <b>APIs</b> — you <em>request objects</em>, you don't "open files".</p>
+    <div class="diagram">
+      <div class="title">Blob storage: no VM, no OS — just API requests</div>
+      <div class="flow">
+        <div class="flow-box gen">&#128196; File<small>document.txt</small></div>
+        <div class="flow-arrow">&#8594; split</div>
+        <div class="flow-box ing">&#9707;&#9707;&#9707; Chunks<small>on distributed nodes</small></div>
+        <div class="flow-arrow">&#8594; API request</div>
+        <div class="flow-box ser">&#128228; Object returned<small>no VM needed</small></div>
+      </div>
+    </div>
+    <table>
+      <thead><tr><th>Aspect</th><th>Block storage (EBS)</th><th>Blob storage (S3)</th></tr></thead>
+      <tbody>
+        <tr><td>Needs a VM/OS?</td><td><b>Yes</b> — relies on OS to map blocks</td><td><b>No</b> — managed by the storage service</td></tr>
+        <tr><td>How you access data</td><td>Mounted disk via the VM</td><td>API requests (request objects)</td></tr>
+        <tr><td>Stored as</td><td>Blocks (OS keeps metadata)</td><td>Distributed chunks</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <h2>2. What is a Data Lake?</h2>
+    <p>A <strong>data lake</strong> is just <b>enhanced blob storage</b>. Plain blob storage dumps files with no
+       structure. For big-data analytics you also want:</p>
+    <ul class="bullet">
+      <li><b>Hierarchical folders</b> — e.g. a <code>sales/</code> folder, a <code>categories/</code> folder, to keep data organized.</li>
+      <li><b>ACLs</b> (Access Control Lists) — fine-grained permission control.</li>
+    </ul>
+    <p>So: data lake = blob storage under the hood + folder hierarchy + finer access control.</p>
+    <div class="alert info">
+      <strong>AWS vs Azure naming:</strong> In Azure you get <em>two</em> services — Blob Storage and ADLS Gen2 (data
+      lake). In AWS there's just one: <strong>S3</strong>, which is the enhanced-blob/data-lake solution.
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>3. S3 — Simple Storage Service</h2>
+    <p><strong>S3</strong> is AWS's data-lake / object-storage service — the one DEs use almost weekly. Search
+       <code>S3</code> in the console. Bucket types you'll see: general purpose, directory, table, and
+       <b>vector buckets</b> (newer, for AI engineering — storing embeddings/vectors).</p>
+    <h3>Creating a bucket</h3>
+    <ul class="bullet">
+      <li><b>Bucket name</b> must be <b>globally unique</b> (across all of AWS).</li>
+      <li><b>ACLs:</b> usually left disabled.</li>
+      <li><b>Block all public access:</b> keep this ON — since data is reachable via API, you don't want anyone calling it. This denies all public access.</li>
+      <li><b>Bucket versioning:</b> enable it (see below).</li>
+      <li>Create the bucket &rarr; open it &rarr; use <b>Create folder</b> (e.g. <code>raw/</code>) and <b>Upload</b> files.</li>
+    </ul>
+    <div class="alert info"><strong>The "Create folder" button itself</strong> is proof of the data-lake behavior — plain blob storage wouldn't offer hierarchical folders.</div>
+    <h4>Store any form of data</h4>
+    <p>A big advantage of the data lake: it stores <b>any</b> data — structured CSV, Parquet/Delta, JSON, text,
+       images, video. Similar feel to Google Drive / OneDrive, but for analytics.</p>
+  </div>
+
+  <div class="section">
+    <h2>4. Versioning</h2>
+    <p>With <b>versioning enabled</b>, uploading a file with the same name <em>doesn't overwrite</em> it — S3 keeps
+       a <b>new version</b> and serves the latest by default. Click <b>Show versions</b> to see all versions
+       (each with its own timestamp); you can download or restore any older version.</p>
+    <div class="diagram">
+      <div class="title">Versioning keeps history instead of overwriting</div>
+      <div class="flow">
+        <div class="flow-box gen">data1.csv<small>v1 @ 4:39</small></div>
+        <div class="flow-arrow">re-upload &#8594;</div>
+        <div class="flow-box ing">data1.csv<small>v2 @ 4:42 (latest)</small></div>
+        <div class="flow-arrow">=</div>
+        <div class="flow-box ser">Both kept<small>restore any version</small></div>
+      </div>
+    </div>
+    <div class="alert success"><strong>Why it matters:</strong> DEs often accidentally overwrite files (e.g. a parameters/config file). Versioning saves hours of recovery work — you just restore the previous version instead of reconstructing it from pipeline logs.</div>
+  </div>
+
+  <div class="section">
+    <h2>5. S3 Storage Classes</h2>
+    <p>Not all data is accessed equally. Before storing, ask: <em>how frequently will this be read?</em> Pick a
+       <b>storage class</b> that matches the access pattern so you don't overpay. (Similar to Azure hot/cool/cold
+       tiers.) The default is <b>S3 Standard</b>.</p>
+    <table>
+      <thead><tr><th>Storage class</th><th>Best for</th></tr></thead>
+      <tbody>
+        <tr><td><b>S3 Standard</b></td><td>Frequently accessed data (more than once a month), millisecond access. Default. ~99.999999999% durability, &ge;3 AZs.</td></tr>
+        <tr><td><b>S3 Standard-IA</b> (Infrequent Access)</td><td>Long-lived but infrequently accessed (about once a month), still millisecond access.</td></tr>
+        <tr><td><b>S3 Intelligent-Tiering</b></td><td>Unknown / changing / unpredictable access — AWS auto-moves data between tiers to optimize cost.</td></tr>
+        <tr><td><b>S3 One Zone-IA</b></td><td>Infrequent access, stored in a single AZ (cheaper, less redundancy).</td></tr>
+        <tr><td><b>S3 Express One Zone</b></td><td>Single-digit-millisecond, high-performance, single zone.</td></tr>
+        <tr><td><b>Glacier Instant Retrieval</b></td><td>Archive that you occasionally need instantly.</td></tr>
+        <tr><td><b>Glacier Flexible Retrieval</b></td><td>Long-lived archive, retrieval in minutes/hours.</td></tr>
+        <tr><td><b>Glacier Deep Archive</b></td><td>"Store it and forget it" — cheapest, slowest retrieval.</td></tr>
+      </tbody>
+    </table>
+    <div class="alert warn"><strong>Don't memorize — refer.</strong> These classes change over time. As a senior DE, check the official docs when making a storage-class decision. The point is matching cost to access pattern (hot &rarr; standard, archive &rarr; glacier).</div>
+    <div class="alert success">
+      <strong>Recap of Part 4:</strong> Blob storage (BLOB = Binary Large Object) splits files into distributed
+      chunks accessed via APIs — no VM needed (unlike block storage/EBS). A <b>data lake</b> is enhanced blob
+      storage with folders + ACLs, and in AWS that's <b>S3</b>. Create globally-unique buckets, keep public
+      access blocked, enable <b>versioning</b> to avoid lost overwrites, and pick a <b>storage class</b>
+      (Standard &rarr; IA &rarr; Glacier) to match how often data is read.
+    </div>
+  </div>
+
+  <nav class="pager">
+    <a class="home" href="index.html">&#127968; Home / Contents</a>
+    <a href="03-virtualization-ec2-ebs.html">&#8592; Part 3</a>
+    <a href="05-sdk-boto3.html">Next &#8594; Part 5: Accessing AWS (CLI &amp; SDK)</a>
+  </nav>
+
+  <footer>Part 4 of 7 · AWS Fundamentals for Data Engineers · Source: youtube.com/watch?v=Ae3xyW2Ef0c</footer>
+</div>
+</body>
+</html>

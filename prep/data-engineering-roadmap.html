@@ -1,0 +1,987 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AWS + Snowflake Data Engineering Roadmap</title>
+  <style>
+    :root {
+      --bg: #f5f7fb;
+      --card: #ffffff;
+      --ink: #1f2937;
+      --muted: #6b7280;
+      --primary: #2563eb;
+      --primary-dark: #1e40af;
+      --accent: #0f766e;
+      --border: #dbe3ef;
+      --soft: #eff6ff;
+      --success: #dcfce7;
+      --warning: #fef3c7;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      line-height: 1.6;
+      color: var(--ink);
+      background: var(--bg);
+    }
+
+    header {
+      padding: 56px 24px;
+      color: white;
+      background: linear-gradient(135deg, #0f172a, #1d4ed8);
+      text-align: center;
+    }
+
+    header h1 {
+      margin: 0 0 12px;
+      font-size: clamp(2rem, 5vw, 3.5rem);
+      line-height: 1.1;
+    }
+
+    header p {
+      max-width: 880px;
+      margin: 0 auto;
+      color: #dbeafe;
+      font-size: 1.1rem;
+    }
+
+    main {
+      width: min(1180px, calc(100% - 32px));
+      margin: -32px auto 56px;
+    }
+
+    section,
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      box-shadow: 0 14px 34px rgba(15, 23, 42, 0.08);
+    }
+
+    section {
+      padding: 28px;
+      margin-bottom: 24px;
+    }
+
+    h2 {
+      margin: 0 0 16px;
+      color: #111827;
+      font-size: 1.7rem;
+    }
+
+    h3 {
+      margin: 0 0 10px;
+      color: var(--primary-dark);
+    }
+
+    p {
+      margin: 0 0 12px;
+    }
+
+    ul {
+      margin: 10px 0 0;
+      padding-left: 22px;
+    }
+
+    li {
+      margin-bottom: 8px;
+    }
+
+    .intro-grid,
+    .skills-grid,
+    .timeline,
+    .project-grid {
+      display: grid;
+      gap: 18px;
+    }
+
+    .intro-grid {
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    }
+
+    .skills-grid {
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    }
+
+    .project-grid {
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    }
+
+    .card {
+      padding: 20px;
+      box-shadow: none;
+    }
+
+    .badge {
+      display: inline-block;
+      margin-bottom: 10px;
+      padding: 5px 10px;
+      border-radius: 999px;
+      color: var(--primary-dark);
+      background: var(--soft);
+      font-size: 0.85rem;
+      font-weight: 700;
+    }
+
+    .highlight {
+      border-left: 5px solid var(--primary);
+      background: var(--soft);
+      padding: 18px;
+      border-radius: 14px;
+    }
+
+    .timeline {
+      grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+      counter-reset: month;
+    }
+
+    .month {
+      position: relative;
+      padding-top: 52px;
+    }
+
+    .month::before {
+      counter-increment: month;
+      content: "Month " counter(month);
+      position: absolute;
+      top: 16px;
+      left: 20px;
+      padding: 5px 10px;
+      border-radius: 8px;
+      color: white;
+      background: var(--accent);
+      font-size: 0.85rem;
+      font-weight: 700;
+    }
+
+    .flow {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 16px;
+    }
+
+    .flow span {
+      padding: 10px 14px;
+      border: 1px solid #bfdbfe;
+      border-radius: 12px;
+      background: #eff6ff;
+      font-weight: 700;
+    }
+
+    .flow .arrow {
+      border: none;
+      background: transparent;
+      color: var(--muted);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      overflow: hidden;
+      border-radius: 12px;
+      margin-top: 12px;
+      background: white;
+    }
+
+    th,
+    td {
+      padding: 13px;
+      border: 1px solid var(--border);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      color: white;
+      background: #1e3a8a;
+    }
+
+    code {
+      padding: 2px 6px;
+      border-radius: 6px;
+      background: #eef2ff;
+      color: #312e81;
+    }
+
+    .checklist li {
+      list-style: none;
+      position: relative;
+      padding-left: 4px;
+    }
+
+    .checklist li::before {
+      content: "✓";
+      margin-right: 8px;
+      color: var(--accent);
+      font-weight: 700;
+    }
+
+    .note {
+      background: var(--warning);
+      border: 1px solid #fde68a;
+      border-radius: 14px;
+      padding: 16px;
+    }
+
+    .career-path {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+      align-items: stretch;
+      margin-top: 18px;
+    }
+
+    .career-step {
+      position: relative;
+      padding: 18px;
+      border: 1px solid #bfdbfe;
+      border-radius: 16px;
+      background: linear-gradient(180deg, #eff6ff, #ffffff);
+      text-align: center;
+    }
+
+    .career-step strong {
+      display: block;
+      color: var(--primary-dark);
+      font-size: 1rem;
+      margin-bottom: 6px;
+    }
+
+    .career-step span {
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .career-branches {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 16px;
+      margin-top: 18px;
+    }
+
+    .recommended {
+      border-left: 5px solid var(--accent);
+      background: var(--success);
+    }
+
+    footer {
+      color: var(--muted);
+      text-align: center;
+      padding: 24px;
+    }
+
+    @media (max-width: 720px) {
+      section {
+        padding: 20px;
+      }
+
+      table,
+      thead,
+      tbody,
+      th,
+      td,
+      tr {
+        display: block;
+      }
+
+      th {
+        display: none;
+      }
+
+      td {
+        border-top: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Data Engineering Roadmap</h1>
+    <p>
+      A practical learning path for moving from support experience into a Data Engineer role using
+      SQL, Python, AWS, Snowflake, dbt, Apache Airflow, and AI-enabled data pipelines.
+    </p>
+  </header>
+
+  <main>
+    <section>
+      <h2>Recommended Direction</h2>
+      <div class="intro-grid">
+        <div class="card">
+          <span class="badge">Best Fit</span>
+          <h3>AWS + Snowflake Data Engineer</h3>
+          <p>
+            This path uses your existing SQL strength and support background. Production support
+            experience is valuable because data engineers must debug pipeline failures, investigate
+            data issues, monitor jobs, and communicate with business users.
+          </p>
+        </div>
+        <div class="card">
+          <span class="badge">Why It Works</span>
+          <h3>Your Current Advantage</h3>
+          <ul>
+            <li>Strong SQL helps immediately in interviews and project work.</li>
+            <li>Basic Python is enough to start with automation and data transformations.</li>
+            <li>Support experience maps well to monitoring, troubleshooting, and incident handling.</li>
+          </ul>
+        </div>
+        <div class="card">
+          <span class="badge">Preparation Time</span>
+          <h3>Estimated Timeline</h3>
+          <p>
+            With consistent learning, target <strong>3 to 5 months</strong>. Start applying after
+            around 3 months while continuing interview preparation.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Skills You Need To Learn</h2>
+      <div class="skills-grid">
+        <div class="card">
+          <h3>1. Advanced SQL</h3>
+          <ul>
+            <li>Joins, CTEs, subqueries, unions</li>
+            <li>Window functions: <code>row_number</code>, <code>rank</code>, <code>lag</code>, <code>lead</code></li>
+            <li>Aggregations, case statements, date functions</li>
+            <li>Query optimization and execution plan basics</li>
+            <li>Data quality checks using SQL</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3>2. Python For Data Engineering</h3>
+          <ul>
+            <li>Lists, dictionaries, functions, modules</li>
+            <li>File handling for CSV, JSON, and Parquet</li>
+            <li>Exception handling and logging</li>
+            <li>API calls using <code>requests</code></li>
+            <li>Pandas basics for small data transformations</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3>3. Data Warehouse Concepts</h3>
+          <ul>
+            <li>OLTP vs OLAP</li>
+            <li>Star schema and snowflake schema</li>
+            <li>Fact and dimension tables</li>
+            <li>Slowly Changing Dimensions: SCD Type 1 and Type 2</li>
+            <li>Incremental load and full refresh strategies</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3>4. Snowflake</h3>
+          <ul>
+            <li>Databases, schemas, tables, views</li>
+            <li>Virtual warehouses and warehouse sizing</li>
+            <li>Internal and external stages</li>
+            <li>File formats and <code>COPY INTO</code></li>
+            <li>Snowpipe, streams, tasks, Time Travel, cloning</li>
+            <li>Roles, grants, and access control</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3>5. AWS For Data Engineering</h3>
+          <ul>
+            <li>S3 for raw and processed data storage</li>
+            <li>IAM users, roles, policies, and least privilege</li>
+            <li>AWS Glue jobs and Glue Data Catalog</li>
+            <li>Lambda for event-driven processing</li>
+            <li>CloudWatch logs, metrics, and alarms</li>
+            <li>Step Functions and EventBridge basics</li>
+            <li>Secrets Manager for credentials</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3>6. dbt</h3>
+          <ul>
+            <li>Models, sources, seeds, snapshots</li>
+            <li>Staging, intermediate, and mart layers</li>
+            <li>Materializations: view, table, incremental</li>
+            <li>Generic and custom tests</li>
+            <li>Jinja, macros, documentation, lineage graph</li>
+            <li>Running dbt against Snowflake</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3>7. Apache Airflow</h3>
+          <ul>
+            <li>DAGs, tasks, operators, and sensors</li>
+            <li>Scheduling, retries, backfills, catchup</li>
+            <li>Variables, connections, and XCom basics</li>
+            <li>PythonOperator and SQL/Snowflake operators</li>
+            <li>Triggering dbt from Airflow</li>
+            <li>Monitoring failed workflows</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3>8. Interview And Project Skills</h3>
+          <ul>
+            <li>Basic DSA: arrays, strings, hash maps, sorting</li>
+            <li>Python log parsing and data transformation problems</li>
+            <li>Data pipeline design and troubleshooting scenarios</li>
+            <li>Git, GitHub/GitLab, pull requests, and CI/CD basics</li>
+            <li>Cost, security, and reliability discussions</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3>9. AI For Data Engineering</h3>
+          <ul>
+            <li>LLM basics: prompts, tokens, context window, and hallucination risks</li>
+            <li>Embeddings, vector search, and Retrieval Augmented Generation (RAG)</li>
+            <li>Amazon Bedrock for calling foundation models from pipelines</li>
+            <li>AWS Textract for extracting text and tables from PDFs and invoices</li>
+            <li>Snowflake Cortex, Cortex Search, Document AI, and vector functions</li>
+            <li>Validating AI output before loading it into trusted reporting tables</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>AI Must-Learn Topics For Data Engineers</h2>
+      <p>
+        As a Data Engineer, you do not need to become a full Machine Learning Engineer. Your goal is
+        to use AI safely inside data pipelines, validate the results, store clean outputs, and make
+        AI-generated data useful for analytics and business teams.
+      </p>
+
+      <div class="skills-grid">
+        <div class="card">
+          <span class="badge">Foundation</span>
+          <h3>LLM And Prompting Basics</h3>
+          <ul>
+            <li>Prompt design for extraction, classification, summarization, and SQL help</li>
+            <li>Tokens, context limits, temperature, structured output, and JSON responses</li>
+            <li>Common risks: hallucination, inconsistent output, privacy, and cost</li>
+            <li>Guardrails: validation rules, schema checks, retries, and human review queues</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <span class="badge">AWS</span>
+          <h3>Amazon Bedrock And Textract</h3>
+          <ul>
+            <li>Use Amazon Bedrock to call LLMs from Python, Lambda, Glue, or Airflow tasks.</li>
+            <li>Use AWS Textract to extract text, key-value pairs, and tables from documents.</li>
+            <li>Store raw documents in S3 and extracted structured output in Snowflake.</li>
+            <li>Monitor AI pipeline failures using CloudWatch logs and alerts.</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <span class="badge">Snowflake</span>
+          <h3>Snowflake Cortex</h3>
+          <ul>
+            <li>Use Cortex LLM functions for summarization, classification, and extraction.</li>
+            <li>Learn Cortex Search for AI-powered search on enterprise data.</li>
+            <li>Understand vector data types and similarity search.</li>
+            <li>Explore Document AI for document processing use cases.</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <span class="badge">RAG</span>
+          <h3>Embeddings And Vector Search</h3>
+          <ul>
+            <li>Create embeddings from documents, tickets, logs, policies, or knowledge articles.</li>
+            <li>Store embeddings in Snowflake, OpenSearch, Pinecone, or another vector store.</li>
+            <li>Retrieve relevant chunks and pass them to an LLM for grounded answers.</li>
+            <li>Design metadata filters for security, department, region, and document type.</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <span class="badge">dbt</span>
+          <h3>AI With dbt</h3>
+          <ul>
+            <li>Use AI to draft dbt model documentation and column descriptions.</li>
+            <li>Add dbt tests to verify AI-generated classifications and extracted fields.</li>
+            <li>Use dbt models to separate raw AI output from trusted analytics tables.</li>
+            <li>Generate lineage and documentation so reviewers can understand the pipeline.</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <span class="badge">Airflow</span>
+          <h3>AI Pipeline Orchestration</h3>
+          <ul>
+            <li>Use Airflow to schedule document ingestion, extraction, validation, and loading.</li>
+            <li>Call Bedrock, Textract, Snowflake Cortex, or Python validation scripts from tasks.</li>
+            <li>Add retries for temporary API failures and alerts for bad AI output.</li>
+            <li>Track pipeline status, failed documents, and manual review exceptions.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Suggested 4-Month Learning Plan</h2>
+      <div class="timeline">
+        <div class="card month">
+          <h3>SQL + Python Revision</h3>
+          <ul>
+            <li>Practice SQL daily, especially window functions and CTEs.</li>
+            <li>Revise Python basics and write small scripts.</li>
+            <li>Solve data-style coding problems such as duplicate detection and frequency counts.</li>
+          </ul>
+        </div>
+
+        <div class="card month">
+          <h3>Snowflake + Warehouse Design</h3>
+          <ul>
+            <li>Learn Snowflake objects, stages, file formats, and loading.</li>
+            <li>Practice <code>COPY INTO</code>, streams, tasks, and Snowpipe.</li>
+            <li>Design fact and dimension tables for sample business cases.</li>
+          </ul>
+        </div>
+
+        <div class="card month">
+          <h3>AWS + dbt</h3>
+          <ul>
+            <li>Learn S3, IAM, Glue, Lambda, CloudWatch, and Secrets Manager.</li>
+            <li>Create dbt models on top of Snowflake raw tables.</li>
+            <li>Add dbt tests, documentation, and incremental models.</li>
+          </ul>
+        </div>
+
+        <div class="card month">
+          <h3>Airflow + Interview Prep</h3>
+          <ul>
+            <li>Create Airflow DAGs to orchestrate extraction, loading, dbt, and alerts.</li>
+            <li>Build one AI-enabled pipeline using Bedrock, Textract, or Snowflake Cortex.</li>
+            <li>Prepare scenario-based data engineering answers.</li>
+            <li>Apply to jobs and explain your end-to-end project confidently.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>End-To-End Portfolio Project</h2>
+      <div class="highlight">
+        <h3>Project Name: Retail Sales Analytics Pipeline</h3>
+        <p>
+          Build a production-style batch data pipeline that collects retail sales data, stores raw
+          files in AWS S3, loads them into Snowflake, transforms them using dbt, orchestrates the
+          workflow with Airflow, and monitors failures with logs and alerts.
+        </p>
+      </div>
+
+      <h3>Business Problem</h3>
+      <p>
+        A retail company receives daily sales files from stores and online channels. The business
+        wants clean reporting tables to track revenue, top products, customer behavior, store
+        performance, payment methods, and daily sales trends.
+      </p>
+
+      <div class="flow" aria-label="Project data flow">
+        <span>CSV/API Source</span>
+        <span class="arrow">→</span>
+        <span>AWS S3 Raw</span>
+        <span class="arrow">→</span>
+        <span>Snowflake Raw</span>
+        <span class="arrow">→</span>
+        <span>dbt Models</span>
+        <span class="arrow">→</span>
+        <span>Analytics Marts</span>
+        <span class="arrow">→</span>
+        <span>Airflow Monitoring</span>
+      </div>
+
+      <div class="project-grid" style="margin-top: 20px;">
+        <div class="card">
+          <h3>Data Sources</h3>
+          <ul>
+            <li><code>sales.csv</code>: order id, customer id, store id, product id, quantity, price, date</li>
+            <li><code>customers.csv</code>: customer details and location</li>
+            <li><code>products.csv</code>: product category, brand, and price</li>
+            <li><code>stores.csv</code>: store location and region</li>
+            <li>Optional API source for exchange rates or weather data</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3>AWS Layer</h3>
+          <ul>
+            <li>Create S3 buckets for <code>raw</code>, <code>processed</code>, and <code>archive</code>.</li>
+            <li>Use IAM roles with least privilege access.</li>
+            <li>Use Lambda or Glue to validate file names and move files.</li>
+            <li>Use CloudWatch for logs and error visibility.</li>
+            <li>Store Snowflake/dbt credentials in Secrets Manager.</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3>Snowflake Layer</h3>
+          <ul>
+            <li>Create raw tables for each source file.</li>
+            <li>Create external/internal stages pointing to S3 files.</li>
+            <li>Load data using <code>COPY INTO</code>.</li>
+            <li>Track load history and rejected rows.</li>
+            <li>Create separate schemas: <code>raw</code>, <code>staging</code>, <code>mart</code>.</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3>dbt Transformation Layer</h3>
+          <ul>
+            <li>Create source definitions for raw Snowflake tables.</li>
+            <li>Create staging models to clean columns and standardize data types.</li>
+            <li>Create intermediate models for sales calculations and joins.</li>
+            <li>Create mart models such as <code>fact_sales</code>, <code>dim_customer</code>, <code>dim_product</code>.</li>
+            <li>Add tests for uniqueness, null checks, accepted values, and relationships.</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3>Airflow Orchestration</h3>
+          <ul>
+            <li>Schedule the pipeline to run daily.</li>
+            <li>Check whether source files arrived in S3.</li>
+            <li>Run Snowflake loading SQL.</li>
+            <li>Trigger <code>dbt run</code> and <code>dbt test</code>.</li>
+            <li>Send failure alerts through email, Slack, or CloudWatch alarms.</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3>Analytics Outputs</h3>
+          <ul>
+            <li>Daily revenue by store and region</li>
+            <li>Top-selling products and categories</li>
+            <li>Repeat customers and customer lifetime value basics</li>
+            <li>Failed orders or missing product/customer records</li>
+            <li>Data quality summary table for pipeline health</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>AI Portfolio Project</h2>
+      <div class="highlight">
+        <h3>Project Name: AI Invoice Processing Pipeline</h3>
+        <p>
+          Build an AI-enabled data pipeline that processes PDF invoices from vendors, extracts
+          invoice fields using AWS Textract and an LLM, validates the structured output, loads clean
+          data into Snowflake, transforms it with dbt, and orchestrates everything using Airflow.
+        </p>
+      </div>
+
+      <h3>Business Problem</h3>
+      <p>
+        A finance team receives hundreds of vendor invoices as PDFs. Manual entry is slow and error
+        prone. The company wants an automated pipeline that extracts invoice number, vendor name,
+        invoice date, due date, line items, tax, total amount, and payment status for reporting and
+        exception tracking.
+      </p>
+
+      <div class="flow" aria-label="AI project data flow">
+        <span>PDF Invoices</span>
+        <span class="arrow">→</span>
+        <span>AWS S3</span>
+        <span class="arrow">→</span>
+        <span>Textract</span>
+        <span class="arrow">→</span>
+        <span>Bedrock/Cortex</span>
+        <span class="arrow">→</span>
+        <span>Python Validation</span>
+        <span class="arrow">→</span>
+        <span>Snowflake</span>
+        <span class="arrow">→</span>
+        <span>dbt + Airflow</span>
+      </div>
+
+      <div class="project-grid" style="margin-top: 20px;">
+        <div class="card">
+          <h3>AI Extraction Layer</h3>
+          <ul>
+            <li>Upload sample invoice PDFs to an S3 raw bucket.</li>
+            <li>Use Textract to extract raw text, tables, and key-value pairs.</li>
+            <li>Use Bedrock or Snowflake Cortex to convert raw text into structured JSON.</li>
+            <li>Keep the original raw extraction for audit and debugging.</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3>Validation Layer</h3>
+          <ul>
+            <li>Check required fields such as invoice number, vendor name, date, and total amount.</li>
+            <li>Validate numeric totals, tax calculations, and duplicate invoice numbers.</li>
+            <li>Send low-confidence or invalid records to an exception table.</li>
+            <li>Use dbt tests before promoting data into trusted reporting models.</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3>Snowflake And dbt Layer</h3>
+          <ul>
+            <li>Create raw tables for invoice text, AI JSON output, and validation results.</li>
+            <li>Create staging models to flatten JSON into relational columns.</li>
+            <li>Create mart models for vendor spend, monthly expenses, and exception reporting.</li>
+            <li>Document AI-generated fields clearly so reviewers know their source.</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3>Airflow Workflow</h3>
+          <ul>
+            <li>Detect new invoice PDFs in S3.</li>
+            <li>Run Textract and LLM extraction tasks.</li>
+            <li>Run Python validation, Snowflake load, <code>dbt run</code>, and <code>dbt test</code>.</li>
+            <li>Alert when invoices fail extraction or need manual review.</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3>Analytics Outputs</h3>
+          <ul>
+            <li>Vendor-wise monthly spend</li>
+            <li>Pending and overdue invoices</li>
+            <li>Invoices requiring manual review</li>
+            <li>Duplicate invoice detection</li>
+            <li>AI extraction success rate and validation failure rate</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3>Interview Talking Points</h3>
+          <ul>
+            <li>How you prevent hallucinated AI output from entering trusted tables</li>
+            <li>Why raw, extracted, validated, and mart layers are separated</li>
+            <li>How retries and exception handling work in Airflow</li>
+            <li>How you control cost when calling AI APIs at scale</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Project Deliverables</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Deliverable</th>
+            <th>What To Show</th>
+            <th>Interview Value</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Architecture Diagram</td>
+            <td>S3 to Snowflake to dbt to Airflow pipeline flow</td>
+            <td>Shows you understand end-to-end data systems</td>
+          </tr>
+          <tr>
+            <td>SQL Scripts</td>
+            <td>Snowflake DDL, stages, file formats, and load commands</td>
+            <td>Proves Snowflake hands-on knowledge</td>
+          </tr>
+          <tr>
+            <td>dbt Project</td>
+            <td>Models, tests, docs, sources, and incremental model</td>
+            <td>Shows modern transformation workflow</td>
+          </tr>
+          <tr>
+            <td>Airflow DAG</td>
+            <td>Tasks for file check, load, transform, test, and alert</td>
+            <td>Shows orchestration and production mindset</td>
+          </tr>
+          <tr>
+            <td>AI Pipeline Module</td>
+            <td>Textract/Bedrock or Cortex extraction, validation rules, and exception handling</td>
+            <td>Shows you can adopt AI in practical data engineering workflows</td>
+          </tr>
+          <tr>
+            <td>README</td>
+            <td>Problem statement, setup steps, architecture, and screenshots</td>
+            <td>Helps recruiters and interviewers quickly understand your work</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>Interview Preparation Checklist</h2>
+      <div class="project-grid">
+        <div class="card">
+          <h3>Must Be Able To Explain</h3>
+          <ul class="checklist">
+            <li>Why you used S3 as the landing zone</li>
+            <li>How data moves from S3 to Snowflake</li>
+            <li>Why dbt is used after loading raw data</li>
+            <li>How Airflow handles retries and dependencies</li>
+            <li>How you detect duplicates, nulls, and bad records</li>
+            <li>How you validate AI-generated data before using it for reporting</li>
+            <li>How you would restart a failed pipeline safely</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3>Common Questions</h3>
+          <ul>
+            <li>How do you design an incremental load?</li>
+            <li>How do you handle late-arriving data?</li>
+            <li>What is the difference between ETL and ELT?</li>
+            <li>What is a fact table and a dimension table?</li>
+            <li>What are dbt tests and why are they useful?</li>
+            <li>How do you optimize Snowflake cost and performance?</li>
+            <li>How would you build an AI invoice extraction pipeline?</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="note" style="margin-top: 18px;">
+        <strong>Tip:</strong> For big companies, prepare basic DSA, but prioritize SQL, Python
+        data problems, pipeline design, Snowflake, AWS, dbt, Airflow, and practical AI pipeline
+        use cases. For your background, this combination gives you a strong and realistic
+        transition path.
+      </div>
+    </section>
+
+    <section>
+      <h2>Best Career Transition Path</h2>
+      <p>
+        The strongest path for your background is to grow deeper in data engineering instead of
+        moving backward into a Data Analyst role. Data Scientist is possible later, but only if you
+        genuinely want statistics, machine learning, experimentation, and model building.
+      </p>
+
+      <div class="career-path" aria-label="Recommended career growth path">
+        <div class="career-step">
+          <strong>Support Engineer</strong>
+          <span>5+ years production and troubleshooting experience</span>
+        </div>
+        <div class="career-step">
+          <strong>Data Engineer</strong>
+          <span>SQL, Python, AWS, Snowflake, dbt, Airflow</span>
+        </div>
+        <div class="career-step">
+          <strong>Senior Data Engineer</strong>
+          <span>Pipeline design, performance tuning, reliability</span>
+        </div>
+        <div class="career-step">
+          <strong>AI Data Engineer</strong>
+          <span>RAG, Bedrock, Cortex, vector search, AI pipelines</span>
+        </div>
+        <div class="career-step">
+          <strong>Data Architect / Lead</strong>
+          <span>Platform design, governance, cost, leadership</span>
+        </div>
+      </div>
+
+      <div class="highlight" style="margin-top: 20px;">
+        <h3>Best Recommended Path</h3>
+        <p>
+          <strong>Support → Data Engineer → Senior Data Engineer → AI Data Engineer / Cloud Data
+          Architect</strong>
+        </p>
+        <p>
+          This path gives better alignment with your support experience, SQL strength, cloud
+          interest, and long-term salary growth.
+        </p>
+      </div>
+
+      <div class="career-branches">
+        <div class="card recommended">
+          <h3>Best Growth Track</h3>
+          <ul>
+            <li>Data Engineer with AWS and Snowflake</li>
+            <li>Senior Data Engineer after 1-3 years of real project experience</li>
+            <li>AI Data Engineer or Cloud Data Architect after strong platform experience</li>
+            <li>Best for demand, salary growth, and long-term technical depth</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3>Good Optional Track</h3>
+          <ul>
+            <li>Analytics Engineer if you enjoy SQL, dbt, modeling, and business-facing work</li>
+            <li>Good demand in modern data teams</li>
+            <li>Less infrastructure-heavy than Data Engineering</li>
+            <li>Can still grow into Senior Analytics Engineer or Data Modeling Lead</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3>Not Ideal As Next Step</h3>
+          <ul>
+            <li>Moving from Data Engineer to Data Analyst can look like a step down.</li>
+            <li>Data Analyst is usually more focused on dashboards, reporting, and business metrics.</li>
+            <li>It is useful only if you prefer business analysis over engineering.</li>
+            <li>Salary growth is often slower than Senior Data Engineer or Architect tracks.</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3>Data Scientist Path</h3>
+          <ul>
+            <li>Choose this only if you like statistics, ML algorithms, and model evaluation.</li>
+            <li>Requires Python ML libraries, experimentation, feature engineering, and math.</li>
+            <li>It is not the most natural next step from your current support background.</li>
+            <li>AI Data Engineer is a more practical AI-focused path for you.</li>
+          </ul>
+        </div>
+      </div>
+
+      <h3 style="margin-top: 22px;">What To Learn After Your First Data Engineer Role</h3>
+      <div class="skills-grid">
+        <div class="card">
+          <h3>Year 1 Focus</h3>
+          <ul>
+            <li>Production Python and reusable pipeline code</li>
+            <li>Advanced Airflow and failure recovery</li>
+            <li>Snowflake performance and cost optimization</li>
+            <li>dbt incremental models, tests, and documentation</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3>Year 2-3 Focus</h3>
+          <ul>
+            <li>PySpark and big data processing</li>
+            <li>Kafka or streaming basics</li>
+            <li>Data quality and observability</li>
+            <li>CI/CD, deployment, and platform reliability</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3>Long-Term Focus</h3>
+          <ul>
+            <li>Data architecture and lakehouse patterns</li>
+            <li>Governance, security, and access control</li>
+            <li>AI pipelines with Bedrock, Cortex, embeddings, and RAG</li>
+            <li>Technical leadership and solution design</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="note" style="margin-top: 18px;">
+        <strong>Career brand:</strong> AWS + Snowflake Data Engineer who builds production data
+        pipelines, optimizes data platforms, and adopts AI use cases safely.
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    Created as a learning guide for AWS + Snowflake Data Engineering preparation.
+  </footer>
+</body>
+</html>

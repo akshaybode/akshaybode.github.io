@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Part 5 — Cloud & Real-World Architectures | Data Engineering Notes</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #0b1020; --bg-2: #131a2f; --bg-3: #1f2a44; --card: #131a2f;
+    --text: #e6edf6; --text-dim: #93a4bf; --accent: #60a5fa; --accent-2: #c084fc;
+    --accent-3: #34d399; --success: #22c55e; --warn: #fbbf24; --danger: #f87171;
+    --border: #2a3553; --code-bg: #0a0f1e;
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: linear-gradient(135deg, #0b1020 0%, #1a0f2e 100%); color: var(--text); line-height: 1.65; min-height: 100vh; }
+  .container { max-width: 1100px; margin: 0 auto; padding: 24px; }
+  header { background: linear-gradient(135deg, #2563eb 0%, #7c3aed 50%, #db2777 100%);
+    border-radius: 16px; padding: 30px; margin-bottom: 18px; box-shadow: 0 20px 60px rgba(124,58,237,0.25); }
+  header .crumb { font-size: 12px; opacity: 0.85; text-transform: uppercase; letter-spacing: 1px; }
+  header h1 { font-size: 30px; margin: 6px 0 8px 0; }
+  header p { opacity: 0.92; font-size: 15px; max-width: 760px; }
+  nav.pager { display: flex; justify-content: space-between; gap: 10px; margin: 14px 0 22px 0; flex-wrap: wrap; }
+  nav.pager a { text-decoration: none; background: var(--card); border: 1px solid var(--border);
+    color: var(--text); padding: 10px 16px; border-radius: 10px; font-size: 13px; font-weight: 600; transition: all 0.2s; }
+  nav.pager a:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+  nav.pager a.home { border-color: var(--accent-2); }
+
+  .section { background: var(--card); border-radius: 12px; padding: 24px; margin-bottom: 18px; border: 1px solid var(--border); }
+  .section h2 { color: var(--accent); font-size: 22px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+  .section h3 { color: var(--accent-2); font-size: 18px; margin: 20px 0 10px 0; }
+  .section h4 { color: var(--accent-3); font-size: 15px; margin: 14px 0 8px 0; }
+  .section p { color: var(--text); margin-bottom: 10px; }
+  ul.bullet { padding-left: 22px; color: var(--text); font-size: 14.5px; margin: 6px 0 12px 0; }
+  ul.bullet li { padding: 4px 0; }
+  ul.bullet li b { color: var(--accent-3); }
+
+  table { width: 100%; border-collapse: collapse; background: var(--bg); border-radius: 8px; overflow: hidden; margin: 14px 0; font-size: 13.5px; }
+  th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { background: var(--bg-3); color: var(--accent); text-transform: uppercase; font-size: 11px; letter-spacing: 1px; }
+  tr:last-child td { border-bottom: none; }
+
+  .alert { padding: 12px 14px; border-radius: 8px; margin: 14px 0; border-left: 4px solid; font-size: 14px; }
+  .alert.warn { background: rgba(251,191,36,0.1); border-color: var(--warn); }
+  .alert.danger { background: rgba(248,113,113,0.1); border-color: var(--danger); }
+  .alert.success { background: rgba(34,197,94,0.1); border-color: var(--success); }
+  .alert.info { background: rgba(96,165,250,0.1); border-color: var(--accent); }
+  .alert strong { color: var(--text); }
+
+  .diagram { background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 22px; margin: 16px 0; overflow-x: auto; }
+  .diagram .title { text-align: center; color: var(--text-dim); font-size: 12px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 16px; }
+  .flow { display: flex; align-items: stretch; justify-content: center; flex-wrap: wrap; }
+  .flow-box { background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; min-width: 110px; text-align: center; font-size: 12.5px; font-weight: 600; display: flex; flex-direction: column; justify-content: center; }
+  .flow-box small { display: block; color: var(--text-dim); font-weight: 400; font-size: 11px; margin-top: 4px; }
+  .flow-arrow { display: flex; align-items: center; padding: 0 6px; color: var(--accent); font-size: 20px; font-weight: 700; }
+
+  .svc-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+  .svc { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px; text-align: center; }
+  .svc b { color: var(--accent); display: block; font-size: 13px; }
+  .svc span { font-size: 11px; color: var(--text-dim); }
+
+  :not(pre) > code { background: var(--bg-3); padding: 2px 6px; border-radius: 4px; font-size: 13px; color: var(--accent-3); font-family: "Consolas","Monaco",monospace; }
+  footer { text-align: center; margin-top: 30px; padding: 20px; color: var(--text-dim); font-size: 13px; }
+  @media (max-width: 640px) { header h1 { font-size: 23px; } .container { padding: 12px; } }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <div class="crumb">Part 5 of 6</div>
+    <h1>Cloud & Real-World Architectures</h1>
+    <p>Cloud computing basics, service models, AWS/GCP/Azure for data engineering, the Dream11 case study,
+       and the modern data stack.</p>
+  </header>
+
+  <nav class="pager">
+    <a class="home" href="index.html">🏠 Home</a>
+    <a href="04-architecture.html">← Part 4</a>
+    <a href="06-tools-roadmap.html">Next → Part 6: Tools & Roadmap</a>
+  </nav>
+
+  <div class="section">
+    <h2>1. What Is Cloud Computing?</h2>
+    <p>Cloud providers are <strong>giant computers in data centers</strong> that rent you compute and services.
+       The top three: <b>AWS (Amazon), GCP (Google), Azure (Microsoft)</b> (others: IBM Cloud, Oracle Cloud, Cloudera).</p>
+    <h4>On-premise vs Cloud</h4>
+    <p>Before cloud, you built your own servers — RAM, disks, CPU/GPU, cooling (ACs), networking, switches, routers.
+       Problems: maintenance, hardware failure, replication, scaling, disasters (earthquake = lost data center).</p>
+    <div class="alert success"><strong>Pay-per-use:</strong> the cloud's killer feature. Need a VM for 2 hours? Pay for 2 hours — no need to run hardware 24/7.</div>
+  </div>
+
+  <div class="section">
+    <h2>2. Cloud Service Models</h2>
+    <div class="diagram">
+      <div class="title">IaaS → PaaS → SaaS (you manage less as you go up)</div>
+      <div class="flow">
+        <div class="flow-box" style="border-top:3px solid var(--accent);">IaaS<small>Infrastructure as a Service<br/>e.g., EC2, EMR</small></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-box" style="border-top:3px solid var(--accent-2);">PaaS<small>Platform as a Service<br/>e.g., AWS Lambda</small></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-box" style="border-top:3px solid var(--accent-3);">SaaS<small>Software as a Service<br/>e.g., Google Workspace</small></div>
+      </div>
+    </div>
+    <table>
+      <thead><tr><th>Model</th><th>What you get</th><th>Example</th></tr></thead>
+      <tbody>
+        <tr><td><b>IaaS</b></td><td>Raw infrastructure (virtual machines, clusters)</td><td>EC2 (VM), EMR (Elastic MapReduce for Spark)</td></tr>
+        <tr><td><b>PaaS</b></td><td>A ready platform — you just write code, they manage servers/maintenance</td><td>AWS Lambda</td></tr>
+        <tr><td><b>SaaS</b></td><td>Ready-to-use software</td><td>Google Sheets / Slides (Workspace)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <h2>3. AWS Services for Data Engineering</h2>
+    <p>Same services have different names across clouds, but fundamentally do the same thing. A few AWS examples:</p>
+    <div class="svc-grid">
+      <div class="svc"><b>EC2</b><span>Virtual machine</span></div>
+      <div class="svc"><b>Lambda</b><span>Serverless code</span></div>
+      <div class="svc"><b>S3</b><span>Object storage / data lake</span></div>
+      <div class="svc"><b>RDS / Aurora</b><span>Relational DB</span></div>
+      <div class="svc"><b>DynamoDB</b><span>NoSQL DB</span></div>
+      <div class="svc"><b>Redshift</b><span>Data warehouse</span></div>
+      <div class="svc"><b>EMR</b><span>Managed Spark/Hadoop</span></div>
+      <div class="svc"><b>Glue</b><span>Serverless Spark ETL</span></div>
+      <div class="svc"><b>Kinesis / MSK</b><span>Real-time streaming</span></div>
+      <div class="svc"><b>Athena</b><span>Ad-hoc query engine</span></div>
+      <div class="svc"><b>SageMaker</b><span>ML platform</span></div>
+    </div>
+    <div class="diagram">
+      <div class="title">Build a full pipeline on AWS — collect, process, store, analyze</div>
+      <div class="flow">
+        <div class="flow-box">Collect<small>S3, Kinesis, DynamoDB, RDS, MSK</small></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-box">Event/Process<small>Lambda, EMR, Glue</small></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-box">Store<small>Redshift, S3</small></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-box">Analyze<small>Athena, SageMaker, QuickSight</small></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>4. Which Cloud Should You Learn?</h2>
+    <p>The instructor's personal opinion (may change with trends):</p>
+    <ul class="bullet">
+      <li><b>Azure</b> — increasingly #1 for <b>enterprise</b> (banks, big companies already on Microsoft 365). Great DE services.</li>
+      <li><b>AWS</b> — favorite of <b>startups</b> (good credits, big talent pool, easy to start — Zepto, CRED).</li>
+      <li><b>GCP</b> — strong specific services (e.g., BigQuery); learn it if a target company requires it.</li>
+    </ul>
+    <div class="alert info"><strong>Advice for students:</strong> Pick any one of the three and you'll likely get a job. For enterprise → Azure; for startups → AWS/GCP. You can also do <b>hybrid/cross-cloud</b> (e.g., S3 + Databricks + BigQuery), but it's harder to maintain.</div>
+  </div>
+
+  <div class="section">
+    <h2>5. Cross-Cloud Service Equivalents</h2>
+    <table>
+      <thead><tr><th>Purpose</th><th>AWS</th><th>GCP</th><th>Azure</th></tr></thead>
+      <tbody>
+        <tr><td>Object storage / lake</td><td>S3</td><td>Cloud Storage</td><td>ADLS / Blob Storage</td></tr>
+        <tr><td>Data warehouse</td><td>Redshift</td><td>BigQuery</td><td>Synapse (SQL pool)</td></tr>
+        <tr><td>Serverless function</td><td>Lambda</td><td>Cloud Function</td><td>Azure Functions</td></tr>
+        <tr><td>Relational DB service</td><td>RDS</td><td>Cloud SQL</td><td>SQL Database</td></tr>
+        <tr><td>Managed Spark</td><td>EMR / Glue</td><td>Dataproc</td><td>Databricks</td></tr>
+        <tr><td>Streaming</td><td>Kinesis</td><td>Pub/Sub + Dataflow</td><td>Stream Analytics</td></tr>
+        <tr><td>Orchestration / ETL</td><td>Glue</td><td>—</td><td>Data Factory</td></tr>
+      </tbody>
+    </table>
+    <div class="alert success"><strong>Azure favorites for DE:</strong> Databricks (Spark), Data Factory (orchestration/ETL), Synapse Analytics. <b>Microsoft Fabric</b> bundles many of these into one place. The instructor also loves Google <b>BigQuery</b> and AWS <b>Glue + S3</b>.</div>
+  </div>
+
+  <div class="section">
+    <h2>6. Real-World Case Study — Dream11</h2>
+    <p>Dream11 (fantasy sports app, India) built its data platform on AWS + open source. Even though it looks
+       complex, it maps perfectly onto the DE lifecycle.</p>
+    <div class="diagram">
+      <div class="title">Dream11 architecture mapped to the lifecycle</div>
+      <div class="flow">
+        <div class="flow-box" style="border-top:3px solid var(--accent);">Generation<small>3rd-party vendors, MySQL, Cassandra, iOS/Android, Dream11.com</small></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-box" style="border-top:3px solid var(--accent-2);">Ingestion<small>Apache Kafka<br/>(producers → consumers)</small></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-box" style="border-top:3px solid var(--accent-3);">Storage<small>Amazon S3 (data lake)</small></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-box" style="border-top:3px solid var(--warn);">ETL<small>Apache Spark</small></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-box" style="border-top:3px solid var(--danger);">Warehouse<small>Amazon Redshift</small></div>
+      </div>
+    </div>
+    <h4>Two pipelines</h4>
+    <ul class="bullet">
+      <li><b>Batch pipeline:</b> Kafka → S3 → Spark (ETL) → Redshift. Plus <b>ad-hoc analysis</b> via Amazon Athena and reporting via Looker.</li>
+      <li><b>Real-time pipeline:</b> streaming engine <b>Apache Flink</b> → Elasticsearch → notifications/visualization.</li>
+    </ul>
+    <div class="alert info"><strong>The takeaway:</strong> Once you know the fundamentals, you can read <em>any</em> architecture in the world — spot the ingestion, transformation, storage, and serving. Tools are swappable (Redshift↔Snowflake, Glue↔Databricks); the fundamentals are constant.</div>
+  </div>
+
+  <div class="section">
+    <h2>7. GCP & Azure Reference Pipelines</h2>
+    <p>Same lifecycle, different service names.</p>
+    <div class="diagram">
+      <div class="title">Azure pipeline example</div>
+      <div class="flow">
+        <div class="flow-box">Stream / batch sources</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-box">ADLS<small>raw zone</small></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-box">Data Factory + Databricks<small>process</small></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-box">Synapse SQL pool<small>warehouse</small></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-box">Power BI<small>insights</small></div>
+      </div>
+    </div>
+    <p>Undercurrents on Azure: <b>Azure Key Vault</b> (secrets), <b>Log Analytics</b> (monitoring), <b>Azure DevOps</b> (operationalize). On GCP swap S3→Cloud Storage, Redshift→BigQuery, EMR→Dataproc, Kafka→Pub/Sub + Dataflow.</p>
+  </div>
+
+  <div class="section">
+    <h2>8. Modern Data Stack & Reverse ETL</h2>
+    <p>Modern companies say "the old tools/approach are outdated" and make life easier — connect sources, auto-load
+       to the warehouse, transform on demand. This shifts ETL → <b>ELT</b>.</p>
+    <table>
+      <thead><tr><th>Function</th><th>Modern tools</th></tr></thead>
+      <tbody>
+        <tr><td>Ingestion</td><td>Fivetran, Airbyte, Stitch (or Python/SQL)</td></tr>
+        <tr><td>Storage</td><td>BigQuery, Snowflake, Databricks</td></tr>
+        <tr><td>Transformation</td><td><b>DBT</b> (Data Build Tool) — landing → staging → warehouse → mart layers</td></tr>
+        <tr><td>Orchestration</td><td>Apache Airflow</td></tr>
+        <tr><td>BI</td><td>Looker, Data Studio</td></tr>
+        <tr><td>Data quality</td><td>Great Expectations</td></tr>
+        <tr><td>Metadata / lineage</td><td>OpenLineage, DataHub</td></tr>
+      </tbody>
+    </table>
+    <div class="alert warn"><strong>DBT will replace SQL?</strong> No. SQL is still the king of data — always learn it. DBT is gaining popularity for modern, layered transformations.</div>
+    <p><b>Reverse ETL:</b> push transformed data <em>back</em> into source/operational systems to gain more insights — an emerging pattern.</p>
+    <div class="alert info"><strong>How to pick any tool:</strong> Does it solve the business problem? Is it reversible (easy to swap)? Does it fit your cost/time constraints? Startups often pay for managed tools to save time; others use open-source Spark to save money.</div>
+  </div>
+
+  <nav class="pager">
+    <a class="home" href="index.html">🏠 Home</a>
+    <a href="04-architecture.html">← Part 4</a>
+    <a href="06-tools-roadmap.html">Next → Part 6: Tools & Roadmap</a>
+  </nav>
+
+  <footer>Part 5 of 6 · Fundamentals of Data Engineering Masterclass notes</footer>
+</div>
+</body>
+</html>

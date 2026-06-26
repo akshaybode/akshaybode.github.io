@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Part 3 — Virtualization, EC2 &amp; EBS | AWS for Data Engineers</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #0b1020; --bg-2: #131a2f; --bg-3: #1f2a44; --card: #131a2f;
+    --text: #e6edf6; --text-dim: #93a4bf; --accent: #60a5fa; --accent-2: #c084fc;
+    --accent-3: #34d399; --success: #22c55e; --warn: #fbbf24; --danger: #f87171;
+    --border: #2a3553; --code-bg: #0a0f1e; --aws: #ff9900;
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: linear-gradient(135deg, #0b1020 0%, #1a0f2e 100%); color: var(--text);
+    line-height: 1.65; min-height: 100vh; }
+  .container { max-width: 1100px; margin: 0 auto; padding: 24px; }
+  header { background: linear-gradient(135deg, #232f3e 0%, #ff9900 140%);
+    border-radius: 16px; padding: 30px; margin-bottom: 18px; box-shadow: 0 20px 60px rgba(255,153,0,0.2); }
+  header .crumb { font-size: 12px; opacity: 0.85; text-transform: uppercase; letter-spacing: 1px; }
+  header h1 { font-size: 30px; margin: 6px 0 8px 0; }
+  header p { opacity: 0.95; font-size: 15px; max-width: 760px; }
+  nav.pager { display: flex; justify-content: space-between; gap: 10px; margin: 14px 0 22px 0; flex-wrap: wrap; }
+  nav.pager a { text-decoration: none; background: var(--card); border: 1px solid var(--border);
+    color: var(--text); padding: 10px 16px; border-radius: 10px; font-size: 13px; font-weight: 600; transition: all 0.2s; }
+  nav.pager a:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+  nav.pager a.home { border-color: var(--accent-2); }
+  .section { background: var(--card); border-radius: 12px; padding: 24px; margin-bottom: 18px; border: 1px solid var(--border); }
+  .section h2 { color: var(--accent); font-size: 22px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+  .section h3 { color: var(--accent-2); font-size: 18px; margin: 20px 0 10px 0; }
+  .section h4 { color: var(--accent-3); font-size: 15px; margin: 14px 0 8px 0; }
+  .section p { color: var(--text); margin-bottom: 10px; }
+  ul.bullet { padding-left: 22px; color: var(--text); font-size: 14.5px; margin: 6px 0 12px 0; }
+  ul.bullet li { padding: 4px 0; }
+  ul.bullet li b { color: var(--accent-3); }
+  table { width: 100%; border-collapse: collapse; background: var(--bg); border-radius: 8px; overflow: hidden; margin: 14px 0; font-size: 13.5px; }
+  th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { background: var(--bg-3); color: var(--accent); text-transform: uppercase; font-size: 11px; letter-spacing: 1px; }
+  tr:last-child td { border-bottom: none; }
+  .alert { padding: 12px 14px; border-radius: 8px; margin: 14px 0; border-left: 4px solid; font-size: 14px; }
+  .alert.warn { background: rgba(251,191,36,0.1); border-color: var(--warn); }
+  .alert.danger { background: rgba(248,113,113,0.1); border-color: var(--danger); }
+  .alert.success { background: rgba(34,197,94,0.1); border-color: var(--success); }
+  .alert.info { background: rgba(96,165,250,0.1); border-color: var(--accent); }
+  .alert strong { color: var(--text); }
+  .diagram { background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 22px; margin: 16px 0; overflow-x: auto; }
+  .diagram .title { text-align: center; color: var(--text-dim); font-size: 12px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 16px; }
+  .flow { display: flex; align-items: stretch; justify-content: center; flex-wrap: wrap; }
+  .flow-box { background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px;
+    min-width: 130px; text-align: center; font-size: 13px; font-weight: 600; display: flex; flex-direction: column; justify-content: center; }
+  .flow-box small { display: block; color: var(--text-dim); font-weight: 400; font-size: 11px; margin-top: 4px; }
+  .flow-arrow { display: flex; align-items: center; padding: 0 8px; color: var(--accent); font-size: 22px; font-weight: 700; }
+  .flow-box.gen { border-top: 3px solid var(--accent); }
+  .flow-box.ing { border-top: 3px solid var(--accent-2); }
+  .flow-box.sto { border-top: 3px solid var(--accent-3); }
+  .flow-box.tra { border-top: 3px solid var(--warn); }
+  .flow-box.ser { border-top: 3px solid var(--danger); }
+  .server-box { border: 2px solid var(--warn); border-radius: 12px; padding: 14px; background: rgba(251,191,36,0.06); margin: 8px 0; }
+  .server-box .stitle { color: var(--warn); font-weight: 700; font-size: 13px; text-align: center; margin-bottom: 10px; }
+  :not(pre) > code { background: var(--bg-3); padding: 2px 6px; border-radius: 4px; font-size: 13px; color: var(--accent-3); font-family: "Consolas","Monaco",monospace; }
+  pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; padding: 14px; overflow-x: auto; margin: 12px 0; font-size: 13px; line-height: 1.5; }
+  pre code { color: var(--text); font-family: "Consolas","Monaco",monospace; }
+  footer { text-align: center; margin-top: 30px; padding: 20px; color: var(--text-dim); font-size: 13px; }
+  @media (max-width: 640px) { header h1 { font-size: 23px; } .container { padding: 12px; } }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <div class="crumb">Part 3 of 7</div>
+    <h1>Virtualization, EC2 &amp; EBS</h1>
+    <p>The most important infrastructure concept in cloud: how one giant server becomes many isolated virtual
+       machines, how to launch them with EC2, and how disks (EBS) attach to them.</p>
+  </header>
+
+  <nav class="pager">
+    <a class="home" href="index.html">&#127968; Home / Contents</a>
+    <a href="02-account-regions-iam.html">&#8592; Part 2</a>
+    <a href="04-s3-datalake.html">Next &#8594; Part 4: S3 &amp; the Data Lake</a>
+  </nav>
+
+  <div class="section">
+    <h2>1. Virtualization</h2>
+    <p>A <b>server</b> is just a machine like your laptop — only far more powerful (much more RAM, storage,
+       processors). Imagine combining the RAM/CPU/storage of every computer on your street into one machine.</p>
+    <p><strong>Virtualization</strong> = slicing that one big, powerful server into many small, isolated
+       <b>virtual machines (VMs)</b>.</p>
+    <div class="diagram">
+      <div class="title">One powerful server &rarr; many isolated VMs</div>
+      <div class="server-box">
+        <div class="stitle">&#129518; One big physical server (shared RAM / CPU / storage)</div>
+        <div class="flow">
+          <div class="flow-box gen">VM 1<small>Windows, 8GB</small></div>
+          <div class="flow-box ing">VM 2<small>Ubuntu, 16GB</small></div>
+          <div class="flow-box sto">VM 3<small>Mac, 32GB</small></div>
+        </div>
+      </div>
+    </div>
+    <h3>Two key properties of each VM</h3>
+    <ul class="bullet">
+      <li><b>Own operating system</b> — each VM runs its own OS (Windows/Linux/Mac); they don't share the OS. This makes each VM <b>isolated</b> from the others.</li>
+      <li><b>Shared resources, allocated quota</b> — RAM/CPU/storage all come from the shared server, but each VM gets a dedicated allocation (e.g. "give me 8GB RAM, 1TB storage"), so it feels private.</li>
+    </ul>
+    <h3>Why virtualize?</h3>
+    <p>Before cloud, if you needed Windows + Linux + Mac machines occasionally, buying separate machines was
+       wasteful. Instead you bought <em>one</em> big server and carved out VMs on demand. After cloud, you don't
+       even buy the server — <b>AWS owns it</b>, and you just request "give me a Windows VM with 8GB RAM" and AWS
+       creates it for you.</p>
+  </div>
+
+  <div class="section">
+    <h2>2. Hypervisor — the magic behind virtualization</h2>
+    <p>A <b>hypervisor</b> is the software that makes virtualization possible: it creates the VMs and allocates
+       CPU/RAM to each. <em>No hypervisor &rarr; no virtual machines.</em></p>
+    <table>
+      <thead><tr><th>Type</th><th>What it is</th><th>Examples</th></tr></thead>
+      <tbody>
+        <tr><td><b>Type 1 (bare metal)</b></td><td>Runs directly on the hardware.</td><td>VMware ESXi, Microsoft Hyper-V</td></tr>
+        <tr><td><b>Type 2 (hosted)</b></td><td>Runs as software on top of a host OS.</td><td>VirtualBox, VMware Workstation</td></tr>
+      </tbody>
+    </table>
+    <div class="alert info"><strong>For cloud:</strong> the provider manages the hypervisor for you. You don't worry about which one AWS uses — just know that a hypervisor is the engine creating and powering your VMs.</div>
+  </div>
+
+  <div class="section">
+    <h2>3. EC2 — Elastic Compute Cloud</h2>
+    <p><strong>EC2 (Elastic Compute Cloud)</strong> is simply <b>a virtual machine you rent from AWS</b>. It's the
+       flagship product of every cloud provider — thousands of instance types (combinations of processor,
+       storage, networking, OS, even GPUs).</p>
+    <h3>Launching an instance</h3>
+    <p>Search <code>EC2</code> &rarr; <b>Launch instance</b>:</p>
+    <ul class="bullet">
+      <li><b>Name</b> the server.</li>
+      <li><b>AMI / OS:</b> pick from free-tier images — Amazon Linux, Ubuntu, Windows Server, macOS, etc. (<b>Amazon Linux</b> is very popular in AWS; it's a Linux distro like Ubuntu.)</li>
+      <li><b>Instance type</b> (CPU/RAM size).</li>
+      <li><b>Key pair:</b> create one (downloads a <code>.pem</code> file — keep it safe; you'll need it to decrypt the Windows password / SSH in).</li>
+      <li><b>Network:</b> allow HTTP/HTTPS traffic (to hit endpoints) and SSH from anywhere (to connect).</li>
+      <li><b>Storage:</b> 8 GB is enough for learning. Then <b>Launch instance</b> — ready in seconds.</li>
+    </ul>
+    <h4>Linux vs Ubuntu (quick aside)</h4>
+    <p>Linux is the <b>kernel</b> (the engine). Combine that kernel with utilities, a terminal and tooling and
+       you get a <b>distribution</b> like Ubuntu or Amazon Linux. You interact with the kernel through the distro.</p>
+    <h3>Connecting to the instance</h3>
+    <table>
+      <thead><tr><th>OS</th><th>How to connect</th></tr></thead>
+      <tbody>
+        <tr><td><b>Linux (Amazon Linux/Ubuntu)</b></td><td>Use <b>EC2 Instance Connect</b> (browser terminal) or an SSH client. No UI — pure terminal (<code>pwd</code>, <code>cd</code>, <code>ls</code>). Fast, because no resources wasted on a GUI.</td></tr>
+        <tr><td><b>Windows</b></td><td>Use <b>RDP</b> (Remote Desktop). Download the <code>.rdp</code> file, get the password (decrypt it with your <code>.pem</code> key pair), connect &rarr; full desktop UI. Slower, because resources go to the GUI.</td></tr>
+      </tbody>
+    </table>
+    <div class="alert warn">
+      <strong>Always stop instances you're not using!</strong> A running instance keeps billing. Instances &rarr;
+      select &rarr; <b>Instance state &rarr; Stop</b>. Don't waste your free credits.
+    </div>
+    <div class="alert info"><strong>Windows vs Linux trade-off:</strong> Windows VMs need resources allocated to the UI (extra cost), which is why core developers often prefer fast, UI-less Linux machines and work via the terminal. Big orgs may still use Windows for easier management.</div>
+  </div>
+
+  <div class="section">
+    <h2>4. EBS — Elastic Block Storage</h2>
+    <p>To understand EBS, first understand <b>block storage</b>.</p>
+    <h3>What is block storage?</h3>
+    <p>When you save a file (say <code>document.txt</code>, 100 MB) on your computer, the OS doesn't store it as
+       one chunk. It <b>breaks the file into small blocks</b> (typically KB-sized), stores them, and keeps
+       <b>metadata</b> about where each block lives. When you open the file, the OS finds all the blocks,
+       reassembles them, and shows you one file — you never see the blocks.</p>
+    <div class="diagram">
+      <div class="title">Block storage relies on the OS to split &amp; reassemble</div>
+      <div class="flow">
+        <div class="flow-box gen">&#128196; File<small>document.txt</small></div>
+        <div class="flow-arrow">&#8594; OS splits</div>
+        <div class="flow-box ing">&#9707;&#9707;&#9707; Blocks<small>+ metadata</small></div>
+        <div class="flow-arrow">&#8594; OS reassembles</div>
+        <div class="flow-box ser">&#128196; Full file<small>shown to you</small></div>
+      </div>
+    </div>
+    <p><b>Key point:</b> block storage needs an <b>operating system / VM</b> in the picture to manage metadata and
+       reassemble blocks.</p>
+    <h3>EBS = block storage for EC2</h3>
+    <p><strong>Elastic Block Storage (EBS)</strong> provides scalable, high-performance block-storage volumes
+       (HDD or SSD) that <b>attach to an EC2 instance</b> — think of it as a hard disk for your VM. You
+       <em>cannot</em> access EBS data without the VM/OS.</p>
+    <div class="alert info">
+      <strong>DE relevance:</strong> Data engineers rarely touch EBS after the VM is set up — it's a once-in-a-few-months
+      task. The storage service DEs use constantly is <b>S3</b> (next part). EBS is for VM disks; S3 is for data lakes.
+    </div>
+    <div class="alert success">
+      <strong>Recap of Part 3:</strong> Virtualization slices one powerful server into isolated VMs (each with its
+      own OS, shared-but-allocated resources), powered by a <b>hypervisor</b>. <b>EC2</b> is a rented VM — launch
+      Linux (terminal) or Windows (RDP) in seconds, and always stop it when idle. <b>EBS</b> is block storage (a
+      disk) that attaches to an EC2 instance and depends on the OS.
+    </div>
+  </div>
+
+  <nav class="pager">
+    <a class="home" href="index.html">&#127968; Home / Contents</a>
+    <a href="02-account-regions-iam.html">&#8592; Part 2</a>
+    <a href="04-s3-datalake.html">Next &#8594; Part 4: S3 &amp; the Data Lake</a>
+  </nav>
+
+  <footer>Part 3 of 7 · AWS Fundamentals for Data Engineers · Source: youtube.com/watch?v=Ae3xyW2Ef0c</footer>
+</div>
+</body>
+</html>

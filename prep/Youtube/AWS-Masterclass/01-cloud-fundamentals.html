@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Part 1 — Cloud Fundamentals | AWS for Data Engineers</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #0b1020; --bg-2: #131a2f; --bg-3: #1f2a44; --card: #131a2f;
+    --text: #e6edf6; --text-dim: #93a4bf; --accent: #60a5fa; --accent-2: #c084fc;
+    --accent-3: #34d399; --success: #22c55e; --warn: #fbbf24; --danger: #f87171;
+    --border: #2a3553; --code-bg: #0a0f1e; --aws: #ff9900;
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: linear-gradient(135deg, #0b1020 0%, #1a0f2e 100%); color: var(--text);
+    line-height: 1.65; min-height: 100vh; }
+  .container { max-width: 1100px; margin: 0 auto; padding: 24px; }
+  header { background: linear-gradient(135deg, #232f3e 0%, #ff9900 140%);
+    border-radius: 16px; padding: 30px; margin-bottom: 18px; box-shadow: 0 20px 60px rgba(255,153,0,0.2); }
+  header .crumb { font-size: 12px; opacity: 0.85; text-transform: uppercase; letter-spacing: 1px; }
+  header h1 { font-size: 30px; margin: 6px 0 8px 0; }
+  header p { opacity: 0.95; font-size: 15px; max-width: 760px; }
+  nav.pager { display: flex; justify-content: space-between; gap: 10px; margin: 14px 0 22px 0; flex-wrap: wrap; }
+  nav.pager a { text-decoration: none; background: var(--card); border: 1px solid var(--border);
+    color: var(--text); padding: 10px 16px; border-radius: 10px; font-size: 13px; font-weight: 600; transition: all 0.2s; }
+  nav.pager a:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+  nav.pager a.home { border-color: var(--accent-2); }
+
+  .section { background: var(--card); border-radius: 12px; padding: 24px; margin-bottom: 18px; border: 1px solid var(--border); }
+  .section h2 { color: var(--accent); font-size: 22px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+  .section h3 { color: var(--accent-2); font-size: 18px; margin: 20px 0 10px 0; }
+  .section h4 { color: var(--accent-3); font-size: 15px; margin: 14px 0 8px 0; }
+  .section p { color: var(--text); margin-bottom: 10px; }
+  ul.bullet { padding-left: 22px; color: var(--text); font-size: 14.5px; margin: 6px 0 12px 0; }
+  ul.bullet li { padding: 4px 0; }
+  ul.bullet li b { color: var(--accent-3); }
+
+  table { width: 100%; border-collapse: collapse; background: var(--bg); border-radius: 8px; overflow: hidden; margin: 14px 0; font-size: 13.5px; }
+  th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { background: var(--bg-3); color: var(--accent); text-transform: uppercase; font-size: 11px; letter-spacing: 1px; }
+  tr:last-child td { border-bottom: none; }
+
+  .alert { padding: 12px 14px; border-radius: 8px; margin: 14px 0; border-left: 4px solid; font-size: 14px; }
+  .alert.warn { background: rgba(251,191,36,0.1); border-color: var(--warn); }
+  .alert.danger { background: rgba(248,113,113,0.1); border-color: var(--danger); }
+  .alert.success { background: rgba(34,197,94,0.1); border-color: var(--success); }
+  .alert.info { background: rgba(96,165,250,0.1); border-color: var(--accent); }
+  .alert strong { color: var(--text); }
+
+  .diagram { background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 22px; margin: 16px 0; overflow-x: auto; }
+  .diagram .title { text-align: center; color: var(--text-dim); font-size: 12px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 16px; }
+  .flow { display: flex; align-items: stretch; justify-content: center; flex-wrap: wrap; }
+  .flow-box { background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px;
+    min-width: 130px; text-align: center; font-size: 13px; font-weight: 600; display: flex; flex-direction: column; justify-content: center; }
+  .flow-box small { display: block; color: var(--text-dim); font-weight: 400; font-size: 11px; margin-top: 4px; }
+  .flow-arrow { display: flex; align-items: center; padding: 0 8px; color: var(--accent); font-size: 22px; font-weight: 700; }
+  .flow-box.gen { border-top: 3px solid var(--accent); }
+  .flow-box.ing { border-top: 3px solid var(--accent-2); }
+  .flow-box.sto { border-top: 3px solid var(--accent-3); }
+  .flow-box.tra { border-top: 3px solid var(--warn); }
+  .flow-box.ser { border-top: 3px solid var(--danger); }
+
+  .role-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin: 12px 0; }
+  .role { background: var(--bg); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 10px; padding: 14px; }
+  .role h4 { color: var(--accent); margin-bottom: 6px; }
+  .role p { font-size: 13px; color: var(--text-dim); margin: 0; }
+
+  :not(pre) > code { background: var(--bg-3); padding: 2px 6px; border-radius: 4px; font-size: 13px; color: var(--accent-3); font-family: "Consolas","Monaco",monospace; }
+  footer { text-align: center; margin-top: 30px; padding: 20px; color: var(--text-dim); font-size: 13px; }
+  @media (max-width: 640px) { header h1 { font-size: 23px; } .container { padding: 12px; } }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <div class="crumb">Part 1 of 7</div>
+    <h1>Cloud Fundamentals</h1>
+    <p>The base of your entire cloud journey: what cloud computing actually means, what AWS is,
+       why companies use it, and the models (IaaS/PaaS/SaaS, public/private/hybrid) that organize it all.</p>
+  </header>
+
+  <nav class="pager">
+    <a class="home" href="index.html">&#127968; Home / Contents</a>
+    <a href="02-account-regions-iam.html">Next &#8594; Part 2: Account, Regions &amp; IAM</a>
+  </nav>
+
+  <div class="section">
+    <h2>1. What is Cloud Computing?</h2>
+    <p>The word is two words glued together: <strong>cloud + computing</strong>. Break it down.</p>
+    <h4>Computing</h4>
+    <p><b>Computing</b> = the use of a <b>computer</b> — a machine that can compute (process / calculate).
+       A computer is called a computer because it bundles the parts needed to compute:
+       <b>RAM</b>, <b>ROM / storage</b>, and a <b>processor</b>. Using that machine = computing. You already
+       do this every day on your laptop.</p>
+    <h4>Cloud</h4>
+    <p>A <b>cloud</b> is just a <strong>connection / bridge between you and a machine</strong>, created over the
+       <b>internet</b>. Why a bridge? Because the machine isn't in front of you — imagine your computer is
+       sitting in a friend's house and you want to use it from your home. The internet is what connects you.</p>
+    <div class="diagram">
+      <div class="title">Cloud computing = computing over the internet</div>
+      <div class="flow">
+        <div class="flow-box gen">&#128100; You<small>The user</small></div>
+        <div class="flow-arrow">&#8594;</div>
+        <div class="flow-box ing">&#127758; Internet<small>The "cloud" bridge</small></div>
+        <div class="flow-arrow">&#8594;</div>
+        <div class="flow-box sto">&#128421;&#65039; Remote Machine<small>RAM + storage + CPU, owned by a provider</small></div>
+      </div>
+    </div>
+    <div class="alert info">
+      <strong>Definition in one line:</strong> Cloud computing is performing computing <em>not physically</em> —
+      you don't own the machine in front of you; you use it over the internet.
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>2. What is AWS?</h2>
+    <p><strong>AWS = Amazon Web Services.</strong> Amazon has many branches (Marketplace, Prime, etc.); AWS is
+       the branch that <em>sells web services</em>. AWS owns huge numbers of machines and says: "You want
+       compute? Use my machines over the internet and pay me for it." So the "cloud" you connect to is AWS,
+       and the machine you use is actually owned by AWS.</p>
+    <h3>The Big Three (not four)</h3>
+    <p>AWS was the <b>first</b> cloud provider, which is why it has the largest market share. The major players:</p>
+    <table>
+      <thead><tr><th>Provider</th><th>Owner</th><th>Approx. market share</th></tr></thead>
+      <tbody>
+        <tr><td><b>AWS</b> (Amazon Web Services)</td><td>Amazon</td><td>~30% (biggest)</td></tr>
+        <tr><td><b>Azure</b></td><td>Microsoft</td><td>~20%</td></tr>
+        <tr><td><b>GCP</b> (Google Cloud Platform)</td><td>Google</td><td>~10%</td></tr>
+      </tbody>
+    </table>
+    <p>You could call it the "big four" if you add <b>IBM</b>, but realistically it's the big three. AWS leads
+       because of <b>early adoption</b>, a massive catalog of services, reputation and brand. AWS also created
+       the <em>hype</em> around cloud — the race only started after AWS proved it worked.</p>
+  </div>
+
+  <div class="section">
+    <h2>3. Why Cloud? (Buy vs Rent)</h2>
+    <p>If machines are getting cheaper, why don't companies just buy their own? Picture a startup that needs
+       several machines. They have two options:</p>
+    <div class="diagram">
+      <div class="title">The two options for a growing company</div>
+      <div class="flow">
+        <div class="flow-box danger" style="border-top:3px solid var(--danger)">Option 1: Buy servers<small>High cost, you manage everything</small></div>
+        <div class="flow-arrow">vs</div>
+        <div class="flow-box ser" style="border-top:3px solid var(--accent-3)">Option 2: Rent from cloud<small>Pay-as-you-go, provider manages it</small></div>
+      </div>
+    </div>
+    <h3>Problems that buying-your-own creates (and cloud solves)</h3>
+    <ul class="bullet">
+      <li><b>High cost / high investment</b> — buying many machines up front is brutal for a startup.</li>
+      <li><b>Scaling</b> — during a festival/sale season you suddenly need far more capacity, then less afterwards.</li>
+      <li><b>Resource wastage</b> — some months you only use 2 of your 5 machines; the rest sit idle.</li>
+      <li><b>No downtime allowed</b> — you can't afford to wait when you need a machine immediately.</li>
+      <li><b>Data redundancy</b> — if a data center is hit by a disaster, you need an instant backup elsewhere. Customers don't care about your data-center problems; they just want the service to work.</li>
+      <li><b>Security, firewall rules</b>, and a hundred other concerns.</li>
+    </ul>
+    <div class="alert success">
+      <strong>The renting analogy:</strong> Living in a rented house — you don't own it, you pay rent, and you
+      get flexibility (change houses, discontinue, request more). In tech, renting infrastructure is the best
+      thing: the startup focuses on its <em>business</em>, AWS handles the <em>infrastructure</em>.
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>4. What Cloud Actually Offers (200+ services)</h2>
+    <p>Cloud <em>started</em> with machines/servers as its core business. But once that problem was solved,
+       providers realized that owning a machine still means managing many things around it — for example a
+       <b>database</b> needs the server downloaded, scaling handled, upgrades applied, and so on.</p>
+    <p>So they kept asking "can we solve this too?" — and because they already have the powerhouse (servers),
+       anything that can run on a computer, they can offer as a managed service. Today AWS has
+       <strong>200+ services</strong>.</p>
+    <div class="alert info">
+      <strong>Relax — you don't need all 200.</strong> A data engineer might actively use ~10 services. That's
+      why DEs must know cloud: you work with those specific services daily. These notes cover exactly the ones
+      that matter.
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>5. Cloud Service Types: IaaS, PaaS, SaaS</h2>
+    <p>Services are grouped by <strong>how much the cloud manages vs how much you manage</strong>. The more the
+       cloud handles, the less control (and less work) you have.</p>
+    <div class="role-grid">
+      <div class="role"><h4>IaaS — Infrastructure as a Service</h4><p>Cloud gives you only the <b>infrastructure</b> (the machine, with the RAM/storage you ask for). <b>You</b> manage everything inside: OS, Windows upgrades, every application. Like buying an empty machine from a shop. Example: EC2.</p></div>
+      <div class="role"><h4>PaaS — Platform as a Service</h4><p>One step further: cloud manages the underlying infrastructure (scaling, upgrades). You just manage your <b>platform/app</b> — e.g. a managed PostgreSQL database where you don't touch the machine it runs on. Example: managed databases, Glue, many storage services.</p></div>
+      <div class="role"><h4>SaaS — Software as a Service</h4><p>The most hyped. You don't manage platform <em>or</em> infrastructure — you just use the <b>final product</b> over the internet. Examples: Amazon.com itself, Microsoft Fabric, basically any web app you log into.</p></div>
+    </div>
+    <div class="diagram">
+      <div class="title">Who manages what (less control &rarr; more control)</div>
+      <div class="flow">
+        <div class="flow-box ser">SaaS<small>Use the product. AWS manages all.</small></div>
+        <div class="flow-arrow">&#8592;</div>
+        <div class="flow-box tra">PaaS<small>Manage your app. AWS manages infra.</small></div>
+        <div class="flow-arrow">&#8592;</div>
+        <div class="flow-box gen">IaaS<small>Manage everything inside the machine.</small></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>6. Cloud Models / Architectures</h2>
+    <p>A separate grouping — not by management level, but by <strong>who can access the cloud</strong>.</p>
+    <table>
+      <thead><tr><th>Model</th><th>Meaning</th><th>Example use</th></tr></thead>
+      <tbody>
+        <tr><td><b>Public Cloud</b></td><td>Accessible to everyone over the internet (not restricted).</td><td>AWS, Azure, GCP — the three kings.</td></tr>
+        <tr><td><b>Private Cloud</b></td><td>Same cloud concept, but locked to one specific organization. Built for sensitive data.</td><td>Government / entities handling sensitive data.</td></tr>
+        <tr><td><b>Hybrid Cloud</b></td><td>A mix: build a private cloud for sensitive parts, but also use some public services for the rest.</td><td>AWS EC2 for compute + private infra for secure data.</td></tr>
+      </tbody>
+    </table>
+    <div class="alert success">
+      <strong>Recap of Part 1:</strong> Cloud computing = using a machine over the internet. AWS is the first
+      and biggest cloud provider (big three: AWS, Azure, GCP). Companies rent instead of buy to avoid cost,
+      scaling, wastage, downtime and redundancy problems. AWS has 200+ services, grouped as IaaS/PaaS/SaaS
+      (by how much they manage) and deployed as public/private/hybrid clouds (by who can access them).
+    </div>
+  </div>
+
+  <nav class="pager">
+    <a class="home" href="index.html">&#127968; Home / Contents</a>
+    <a href="02-account-regions-iam.html">Next &#8594; Part 2: Account, Regions &amp; IAM</a>
+  </nav>
+
+  <footer>Part 1 of 7 · AWS Fundamentals for Data Engineers · Source: youtube.com/watch?v=Ae3xyW2Ef0c</footer>
+</div>
+</body>
+</html>

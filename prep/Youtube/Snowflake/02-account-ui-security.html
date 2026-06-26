@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Part 2 — Account, UI & Users/Roles | Snowflake Notes</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #0b1020; --bg-2: #131a2f; --bg-3: #1f2a44; --card: #131a2f;
+    --text: #e6edf6; --text-dim: #93a4bf; --accent: #29b5e8; --accent-2: #c084fc;
+    --accent-3: #34d399; --success: #22c55e; --warn: #fbbf24; --danger: #f87171;
+    --border: #2a3553; --code-bg: #0a0f1e;
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: linear-gradient(135deg, #0b1020 0%, #0c2233 100%); color: var(--text);
+    line-height: 1.65; min-height: 100vh; }
+  .container { max-width: 1100px; margin: 0 auto; padding: 24px; }
+  header { background: linear-gradient(135deg, #29b5e8 0%, #2563eb 50%, #7c3aed 100%);
+    border-radius: 16px; padding: 30px; margin-bottom: 18px; box-shadow: 0 20px 60px rgba(41,181,232,0.25); }
+  header .crumb { font-size: 12px; opacity: 0.85; text-transform: uppercase; letter-spacing: 1px; }
+  header h1 { font-size: 30px; margin: 6px 0 8px 0; }
+  header p { opacity: 0.92; font-size: 15px; max-width: 760px; }
+  nav.pager { display: flex; justify-content: space-between; gap: 10px; margin: 14px 0 22px 0; flex-wrap: wrap; }
+  nav.pager a { text-decoration: none; background: var(--card); border: 1px solid var(--border);
+    color: var(--text); padding: 10px 16px; border-radius: 10px; font-size: 13px; font-weight: 600; transition: all 0.2s; }
+  nav.pager a:hover { background: var(--accent); color: #04121b; border-color: var(--accent); }
+  nav.pager a.home { border-color: var(--accent-2); }
+
+  .section { background: var(--card); border-radius: 12px; padding: 24px; margin-bottom: 18px; border: 1px solid var(--border); }
+  .section h2 { color: var(--accent); font-size: 22px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+  .section h3 { color: var(--accent-2); font-size: 18px; margin: 20px 0 10px 0; }
+  .section h4 { color: var(--accent-3); font-size: 15px; margin: 14px 0 8px 0; }
+  .section p { color: var(--text); margin-bottom: 10px; }
+  ul.bullet { padding-left: 22px; color: var(--text); font-size: 14.5px; margin: 6px 0 12px 0; }
+  ul.bullet li { padding: 4px 0; }
+  ul.bullet li b { color: var(--accent-3); }
+
+  table { width: 100%; border-collapse: collapse; background: var(--bg); border-radius: 8px;
+    overflow: hidden; margin: 14px 0; font-size: 13.5px; }
+  th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { background: var(--bg-3); color: var(--accent); text-transform: uppercase; font-size: 11px; letter-spacing: 1px; }
+  tr:last-child td { border-bottom: none; }
+
+  .alert { padding: 12px 14px; border-radius: 8px; margin: 14px 0; border-left: 4px solid; font-size: 14px; }
+  .alert.warn { background: rgba(251,191,36,0.1); border-color: var(--warn); }
+  .alert.danger { background: rgba(248,113,113,0.1); border-color: var(--danger); }
+  .alert.success { background: rgba(34,197,94,0.1); border-color: var(--success); }
+  .alert.info { background: rgba(41,181,232,0.1); border-color: var(--accent); }
+  .alert strong { color: var(--text); }
+
+  .diagram { background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 22px; margin: 16px 0; overflow-x: auto; }
+  .diagram .title { text-align: center; color: var(--text-dim); font-size: 12px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 16px; }
+  .pyramid { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .pyramid .lvl { border: 1px solid var(--border); border-radius: 10px; padding: 10px 16px; text-align: center;
+    font-weight: 600; font-size: 13px; background: var(--bg-3); }
+  .pyramid .lvl small { display: block; font-weight: 400; color: var(--text-dim); font-size: 11px; margin-top: 3px; }
+  .pyramid .l0 { width: 62%; border-top: 3px solid var(--danger); }
+  .pyramid .l1 { width: 72%; border-top: 3px solid var(--warn); }
+  .pyramid .l2 { width: 82%; border-top: 3px solid var(--accent-2); }
+  .pyramid .l3 { width: 92%; border-top: 3px solid var(--accent-3); }
+  .pyramid .arrow { color: var(--accent); font-size: 18px; }
+
+  /* ---- animated pipeline (shared) ---- */
+  .apipe { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 0; margin: 4px 0; }
+  .anode { position: relative; z-index: 1; background: var(--bg-3); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 14px; min-width: 112px; text-align: center; font-size: 12.5px; font-weight: 700;
+    animation: aPulse 3s ease-in-out infinite; }
+  .anode small { display: block; font-weight: 400; color: var(--text-dim); font-size: 11px; margin-top: 4px; }
+  .anode.a { border-top: 3px solid var(--accent); }
+  .anode.b { border-top: 3px solid var(--accent-2); }
+  .anode.c { border-top: 3px solid var(--accent-3); }
+  .anode.d { border-top: 3px solid var(--warn); }
+  .anode.e { border-top: 3px solid var(--danger); }
+  .alink { position: relative; width: 50px; height: 3px; background: var(--border); margin: 0 1px; border-radius: 2px; flex: none; }
+  .alink .apkt { position: absolute; top: -3px; left: 0; width: 9px; height: 9px; border-radius: 50%;
+    background: var(--accent); box-shadow: 0 0 10px 1px var(--accent); animation: aMove 2.4s linear infinite; }
+  .alink .apkt.k2 { animation-delay: 1.2s; background: var(--accent-2); box-shadow: 0 0 10px 1px var(--accent-2); }
+  @keyframes aMove { 0% { left: 0; opacity: 0; } 12% { opacity: 1; } 88% { opacity: 1; } 100% { left: 100%; opacity: 0; } }
+  @keyframes aPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(41,181,232,0); } 50% { box-shadow: 0 0 16px 0 rgba(41,181,232,0.22); } }
+  @media (prefers-reduced-motion: reduce) { .alink .apkt { animation: none; opacity: .7; } .anode { animation: none; } }
+
+  pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px;
+    overflow-x: auto; margin: 12px 0; font-size: 13px; line-height: 1.55; }
+  pre code { color: #cfe3ff; font-family: "Consolas","Monaco",monospace; white-space: pre; }
+  pre .kw { color: #29b5e8; font-weight: 700; }
+  pre .cm { color: #6b7a99; font-style: italic; }
+  pre .st { color: #7ee787; }
+  :not(pre) > code { background: var(--bg-3); padding: 2px 6px; border-radius: 4px; font-size: 13px;
+    color: var(--accent-3); font-family: "Consolas","Monaco",monospace; }
+  footer { text-align: center; margin-top: 30px; padding: 20px; color: var(--text-dim); font-size: 13px; }
+  @media (max-width: 640px) { header h1 { font-size: 23px; } .container { padding: 12px; } }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <div class="crumb">Part 2 of 6</div>
+    <h1>Account Setup, the UI & Users / Roles</h1>
+    <p>Getting into Snowflake for free, finding your way around Snowsight and worksheets, and the security model
+       that controls who can do what — Role-Based Access Control (RBAC).</p>
+  </header>
+
+  <nav class="pager">
+    <a class="home" href="index.html">🏠 Home / Contents</a>
+    <a href="03-objects-tables-views.html">Next → Part 3: Databases, Tables & Views</a>
+  </nav>
+
+  <div class="section">
+    <h2>1. Account Setup (Free Trial)</h2>
+    <ul class="bullet">
+      <li>Go to <code>signup.snowflake.com</code> and start a <b>30-day free trial</b> with <b>$400 of credits</b>.</li>
+      <li>Pick an <b>edition</b> (Enterprise is recommended for the trial so all features work) and a
+          <b>cloud provider</b> (AWS, Azure, or GCP) plus a <b>region</b>.</li>
+      <li>You'll get an <b>account URL / account identifier</b> and an email to activate the account and set your password.</li>
+      <li>The first user you create is automatically an <b>ACCOUNTADMIN</b> (the most powerful role).</li>
+    </ul>
+    <div class="alert info"><strong>Tip:</strong> the URL is your account locator — keep it; you log in through it
+      every time. The trial credits expire after 30 days or when the $400 runs out, whichever comes first.</div>
+  </div>
+
+  <div class="section">
+    <h2>2. The Snowflake UI (Snowsight)</h2>
+    <p>The modern web UI is called <strong>Snowsight</strong>. The main areas in the left navigation:</p>
+    <table>
+      <thead><tr><th>Area</th><th>What it's for</th></tr></thead>
+      <tbody>
+        <tr><td><b>Worksheets / Projects</b></td><td>Where you write and run SQL. You can have many worksheets, each with its own context (role + warehouse + database + schema).</td></tr>
+        <tr><td><b>Databases (Data)</b></td><td>Browse the object tree: databases → schemas → tables, views, stages, file formats, etc.</td></tr>
+        <tr><td><b>Warehouses (Admin → Warehouses)</b></td><td>Create, size, suspend/resume compute warehouses.</td></tr>
+        <tr><td><b>Users & Roles (Admin)</b></td><td>Manage users, roles, and grants.</td></tr>
+        <tr><td><b>Query History</b></td><td>See every query run, its duration, cost, and results — great for debugging.</td></tr>
+        <tr><td><b>Marketplace</b></td><td>Get third-party shared datasets directly into your account.</td></tr>
+      </tbody>
+    </table>
+
+    <h3>The worksheet "context"</h3>
+    <p>Before a query runs, four things must be set (top-right of the worksheet). If a query fails with an
+       "object does not exist" error, the context is usually the culprit.</p>
+    <div class="diagram">
+      <div class="flow" style="display:flex;justify-content:center;flex-wrap:wrap;gap:0;">
+        <div style="text-align:center;background:var(--bg-3);border:1px solid var(--border);border-top:3px solid var(--danger);border-radius:10px;padding:12px;min-width:120px;font-weight:600;">👤 Role<small style="display:block;color:var(--text-dim);font-weight:400;font-size:11px;">what you're allowed to do</small></div>
+        <div style="text-align:center;background:var(--bg-3);border:1px solid var(--border);border-top:3px solid var(--warn);border-radius:10px;padding:12px;min-width:120px;font-weight:600;margin-left:10px;">⚙️ Warehouse<small style="display:block;color:var(--text-dim);font-weight:400;font-size:11px;">compute that runs it</small></div>
+        <div style="text-align:center;background:var(--bg-3);border:1px solid var(--border);border-top:3px solid var(--accent-3);border-radius:10px;padding:12px;min-width:120px;font-weight:600;margin-left:10px;">🗄️ Database<small style="display:block;color:var(--text-dim);font-weight:400;font-size:11px;">which DB</small></div>
+        <div style="text-align:center;background:var(--bg-3);border:1px solid var(--border);border-top:3px solid var(--accent-2);border-radius:10px;padding:12px;min-width:120px;font-weight:600;margin-left:10px;">📂 Schema<small style="display:block;color:var(--text-dim);font-weight:400;font-size:11px;">which schema</small></div>
+      </div>
+    </div>
+    <pre><code><span class="cm">-- you can set context with SQL instead of the dropdowns</span>
+<span class="kw">USE ROLE</span> SYSADMIN;
+<span class="kw">USE WAREHOUSE</span> COMPUTE_WH;
+<span class="kw">USE DATABASE</span> MY_DB;
+<span class="kw">USE SCHEMA</span> MY_SCHEMA;</code></pre>
+  </div>
+
+  <div class="section">
+    <h2>3. Users & Roles — RBAC</h2>
+    <p>Snowflake security is <strong>Role-Based Access Control</strong>. The golden rule:
+       <strong>privileges are granted to roles, and roles are granted to users</strong> (never grant directly to a
+       user). A user can have several roles and switches between them.</p>
+    <div class="diagram">
+      <div class="title">▶ Privilege → Role → User (animated — grants flow downward)</div>
+      <div class="apipe">
+        <div class="anode c">🔑 Privileges<small>SELECT, INSERT, CREATE…</small></div>
+        <div class="alink"><span class="apkt"></span><span class="apkt k2"></span></div>
+        <div class="anode b">🎭 Role<small>a bundle of privileges</small></div>
+        <div class="alink"><span class="apkt"></span><span class="apkt k2"></span></div>
+        <div class="anode a">👤 User<small>a person / service</small></div>
+      </div>
+    </div>
+
+    <h3>The system-defined role hierarchy</h3>
+    <p>Snowflake ships with built-in roles arranged in a hierarchy. A higher role <b>inherits</b> the privileges of
+       roles granted to it.</p>
+    <div class="diagram">
+      <div class="title">Top of pyramid = most powerful</div>
+      <div class="pyramid">
+        <div class="lvl l0">ACCOUNTADMIN<small>top role; sees billing &amp; everything; use sparingly</small></div>
+        <div class="arrow">▲</div>
+        <div class="lvl l1">SECURITYADMIN<small>manages object grants account-wide; manages USERADMIN</small></div>
+        <div class="arrow">▲</div>
+        <div class="lvl l2">SYSADMIN &nbsp;•&nbsp; USERADMIN<small>SYSADMIN: create warehouses/DBs/objects · USERADMIN: create users &amp; roles</small></div>
+        <div class="arrow">▲</div>
+        <div class="lvl l3">PUBLIC<small>default role every user &amp; role has; lowest privileges</small></div>
+      </div>
+    </div>
+    <table>
+      <thead><tr><th>Role</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td><b>ACCOUNTADMIN</b></td><td>The most powerful role — encapsulates SYSADMIN and SECURITYADMIN. Manages account-level settings, billing, and account parameters. Grant to very few people.</td></tr>
+        <tr><td><b>SECURITYADMIN</b></td><td>Can manage any object grant globally and create/manage/monitor users and roles (inherits USERADMIN).</td></tr>
+        <tr><td><b>USERADMIN</b></td><td>Dedicated to user &amp; role management — creating users and roles, and managing grants on roles it owns.</td></tr>
+        <tr><td><b>SYSADMIN</b></td><td>Creates and manages databases, schemas, warehouses, and other objects. Best practice: all custom roles roll up to SYSADMIN.</td></tr>
+        <tr><td><b>PUBLIC</b></td><td>Automatically granted to every user and role. Anything granted to PUBLIC is available to everyone.</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Creating users, roles & granting access</h3>
+    <pre><code><span class="cm">-- 1) switch to the right admin role</span>
+<span class="kw">USE ROLE</span> USERADMIN;
+
+<span class="cm">-- 2) create a user</span>
+<span class="kw">CREATE USER</span> john
+  <span class="kw">PASSWORD</span> = <span class="st">'StrongPass123!'</span>
+  DEFAULT_ROLE = ANALYST
+  MUST_CHANGE_PASSWORD = <span class="kw">TRUE</span>;
+
+<span class="cm">-- 3) create a custom role</span>
+<span class="kw">CREATE ROLE</span> ANALYST;
+
+<span class="cm">-- 4) grant privileges TO the role</span>
+<span class="kw">GRANT USAGE</span> <span class="kw">ON WAREHOUSE</span> COMPUTE_WH <span class="kw">TO ROLE</span> ANALYST;
+<span class="kw">GRANT USAGE</span> <span class="kw">ON DATABASE</span> MY_DB    <span class="kw">TO ROLE</span> ANALYST;
+<span class="kw">GRANT USAGE</span> <span class="kw">ON SCHEMA</span> MY_DB.PUBLIC <span class="kw">TO ROLE</span> ANALYST;
+<span class="kw">GRANT SELECT</span> <span class="kw">ON ALL TABLES IN SCHEMA</span> MY_DB.PUBLIC <span class="kw">TO ROLE</span> ANALYST;
+
+<span class="cm">-- 5) grant the role TO the user, and roll it up to SYSADMIN</span>
+<span class="kw">GRANT ROLE</span> ANALYST <span class="kw">TO USER</span> john;
+<span class="kw">GRANT ROLE</span> ANALYST <span class="kw">TO ROLE</span> SYSADMIN;</code></pre>
+
+    <div class="alert success"><strong>Best practices from the course:</strong>
+      use ACCOUNTADMIN only when truly required; create <b>custom roles</b> for job functions (analyst, engineer,
+      loader); always grant custom roles up to <b>SYSADMIN</b> so admins inherit them; follow
+      <b>least privilege</b> — give each role only what it needs.</div>
+
+    <h3>Other account-security features</h3>
+    <p>Beyond RBAC, Snowflake gives admins several account-level security controls worth knowing:</p>
+    <table>
+      <thead><tr><th>Feature</th><th>What it does</th></tr></thead>
+      <tbody>
+        <tr><td><b>MFA</b></td><td>Multi-factor authentication (Duo) for user logins — strongly recommended for ACCOUNTADMIN.</td></tr>
+        <tr><td><b>Network policies</b></td><td>Allow/deny logins by IP range — restrict access to corporate networks/VPN.</td></tr>
+        <tr><td><b>SSO (SAML 2.0)</b></td><td>Federated single sign-on via an identity provider (Okta, Azure AD, etc.).</td></tr>
+        <tr><td><b>SCIM</b></td><td>Automated user/role provisioning &amp; de-provisioning from your IdP.</td></tr>
+        <tr><td><b>Password policies</b></td><td>Enforce length, complexity, rotation, and reuse rules.</td></tr>
+        <tr><td><b>Account identifier</b></td><td>Your account is addressed as <code>&lt;org&gt;-&lt;account&gt;</code> (or a legacy account locator) in the login URL and connectors.</td></tr>
+      </tbody>
+    </table>
+
+    <h4>Useful inspection commands</h4>
+    <pre><code><span class="kw">SHOW</span> ROLES;
+<span class="kw">SHOW</span> USERS;
+<span class="kw">SHOW GRANTS TO ROLE</span> ANALYST;     <span class="cm">-- privileges this role has</span>
+<span class="kw">SHOW GRANTS TO USER</span> john;         <span class="cm">-- roles this user has</span>
+<span class="kw">SHOW GRANTS ON</span> <span class="kw">TABLE</span> MY_DB.PUBLIC.CUSTOMER;</code></pre>
+  </div>
+
+  <nav class="pager">
+    <a class="home" href="index.html">🏠 Home / Contents</a>
+    <a href="03-objects-tables-views.html">Next → Part 3: Databases, Tables & Views</a>
+  </nav>
+
+  <footer>Part 2 of 6 · Learn Snowflake in 2 Hours — study notes</footer>
+</div>
+</body>
+</html>

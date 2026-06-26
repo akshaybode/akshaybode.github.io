@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>07 — dbt (data build tool)</title>
+<style>
+
+:root{
+  --bg:#0b1020; --bg2:#101a33; --panel:#131d36; --panel2:#1a2745;
+  --text:#e6edf6; --muted:#9fb0c7; --line:#26365c;
+  --accent:#38bdf8; --accent2:#22d3ee; --green:#34d399; --amber:#fbbf24;
+  --red:#f87171; --purple:#a78bfa; --code:#0a0f1e;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0; font-family:"Segoe UI",Roboto,system-ui,Arial,sans-serif;
+  background:linear-gradient(180deg,#090e1c,#0b1020); color:var(--text);
+  line-height:1.65; font-size:15.5px;}
+a{color:var(--accent2); text-decoration:none}
+a:hover{text-decoration:underline}
+
+.topbar{position:sticky; top:0; z-index:10; display:flex; align-items:center; gap:14px;
+  background:rgba(11,16,32,.85); backdrop-filter:blur(8px);
+  border-bottom:1px solid var(--line); padding:12px 22px;}
+.topbar .back{display:inline-flex; align-items:center; gap:6px; font-size:13.5px;
+  font-weight:600; color:var(--accent2); background:var(--panel2);
+  border:1px solid var(--line); padding:6px 12px; border-radius:999px;}
+.topbar .back:hover{border-color:var(--accent); text-decoration:none}
+.topbar .crumb{font-size:13px; color:var(--muted)}
+
+main.doc{max-width:900px; margin:26px auto; padding:30px 36px 50px;
+  background:var(--panel); border:1px solid var(--line); border-radius:16px;}
+
+h1{font-size:28px; margin:0 0 18px; padding-bottom:14px; border-bottom:2px solid var(--line);
+  color:#eaf2ff;}
+h2{font-size:21px; margin:34px 0 12px; padding:8px 0 8px 14px; color:var(--accent);
+  border-left:4px solid var(--accent); background:linear-gradient(90deg,rgba(56,189,248,.08),transparent);
+  border-radius:0 8px 8px 0;}
+h3{font-size:17px; margin:22px 0 8px; color:var(--accent2);}
+h4{font-size:14.5px; margin:16px 0 6px; color:var(--purple); text-transform:uppercase; letter-spacing:.5px;}
+p{margin:10px 0}
+
+ul,ol{margin:10px 0; padding-left:24px}
+li{margin:6px 0}
+li::marker{color:var(--accent)}
+
+blockquote{margin:16px 0; padding:12px 18px; border-left:4px solid var(--amber);
+  background:rgba(251,191,36,.07); border-radius:0 8px 8px 0; color:#f3e6c2;}
+blockquote p{margin:4px 0}
+
+hr{border:none; border-top:1px solid var(--line); margin:28px 0}
+
+/* inline code */
+code{font-family:Consolas,"Courier New",monospace; font-size:13px;
+  background:var(--panel2); color:#ffd9a8; padding:2px 6px; border-radius:5px;
+  border:1px solid var(--line);}
+
+/* code blocks */
+pre{margin:14px 0; padding:0; background:transparent; border:none; overflow:auto}
+.codehilite{background:var(--code); border:1px solid var(--line); border-radius:10px;
+  padding:14px 16px; margin:14px 0; overflow:auto;}
+.codehilite pre{margin:0; padding:0; background:transparent; line-height:1.5}
+.codehilite code, pre code{background:transparent; border:none; color:inherit; padding:0;
+  font-size:13px;}
+
+/* tables */
+table{width:100%; border-collapse:collapse; margin:16px 0; font-size:13.8px}
+th,td{border:1px solid var(--line); padding:9px 12px; text-align:left; vertical-align:top}
+th{background:var(--panel2); color:#dbe7ff}
+tr:nth-child(even) td{background:rgba(255,255,255,.015)}
+
+strong{color:#f1f6ff}
+em{color:#cdd9ee}
+
+.docfoot{max-width:900px; margin:0 auto 50px; padding:0 36px; text-align:center;
+  color:var(--muted); font-size:12.5px}
+
+/* ---- Pygments (dracula) ---- */
+pre { line-height: 125%; }
+td.linenos .normal { color: #f1fa8c; background-color: #44475a; padding-left: 5px; padding-right: 5px; }
+span.linenos { color: #f1fa8c; background-color: #44475a; padding-left: 5px; padding-right: 5px; }
+td.linenos .special { color: #50fa7b; background-color: #6272a4; padding-left: 5px; padding-right: 5px; }
+span.linenos.special { color: #50fa7b; background-color: #6272a4; padding-left: 5px; padding-right: 5px; }
+.codehilite .hll { background-color: #44475a }
+.codehilite { background: #282a36; color: #F8F8F2 }
+.codehilite .c { color: #6272A4 } /* Comment */
+.codehilite .err { color: #F8F8F2 } /* Error */
+.codehilite .g { color: #F8F8F2 } /* Generic */
+.codehilite .k { color: #FF79C6 } /* Keyword */
+.codehilite .l { color: #F8F8F2 } /* Literal */
+.codehilite .n { color: #F8F8F2 } /* Name */
+.codehilite .o { color: #FF79C6 } /* Operator */
+.codehilite .x { color: #F8F8F2 } /* Other */
+.codehilite .p { color: #F8F8F2 } /* Punctuation */
+.codehilite .ch { color: #6272A4 } /* Comment.Hashbang */
+.codehilite .cm { color: #6272A4 } /* Comment.Multiline */
+.codehilite .cp { color: #FF79C6 } /* Comment.Preproc */
+.codehilite .cpf { color: #6272A4 } /* Comment.PreprocFile */
+.codehilite .c1 { color: #6272A4 } /* Comment.Single */
+.codehilite .cs { color: #6272A4 } /* Comment.Special */
+.codehilite .gd { color: #8B080B } /* Generic.Deleted */
+.codehilite .ge { color: #F8F8F2; text-decoration: underline } /* Generic.Emph */
+.codehilite .ges { color: #F8F8F2; text-decoration: underline } /* Generic.EmphStrong */
+.codehilite .gr { color: #F8F8F2 } /* Generic.Error */
+.codehilite .gh { color: #F8F8F2; font-weight: bold } /* Generic.Heading */
+.codehilite .gi { color: #F8F8F2; font-weight: bold } /* Generic.Inserted */
+.codehilite .go { color: #44475A } /* Generic.Output */
+.codehilite .gp { color: #F8F8F2 } /* Generic.Prompt */
+.codehilite .gs { color: #F8F8F2 } /* Generic.Strong */
+.codehilite .gu { color: #F8F8F2; font-weight: bold } /* Generic.Subheading */
+.codehilite .gt { color: #F8F8F2 } /* Generic.Traceback */
+.codehilite .kc { color: #FF79C6 } /* Keyword.Constant */
+.codehilite .kd { color: #8BE9FD; font-style: italic } /* Keyword.Declaration */
+.codehilite .kn { color: #FF79C6 } /* Keyword.Namespace */
+.codehilite .kp { color: #FF79C6 } /* Keyword.Pseudo */
+.codehilite .kr { color: #FF79C6 } /* Keyword.Reserved */
+.codehilite .kt { color: #8BE9FD } /* Keyword.Type */
+.codehilite .ld { color: #F8F8F2 } /* Literal.Date */
+.codehilite .m { color: #FFB86C } /* Literal.Number */
+.codehilite .s { color: #BD93F9 } /* Literal.String */
+.codehilite .na { color: #50FA7B } /* Name.Attribute */
+.codehilite .nb { color: #8BE9FD; font-style: italic } /* Name.Builtin */
+.codehilite .nc { color: #50FA7B } /* Name.Class */
+.codehilite .no { color: #F8F8F2 } /* Name.Constant */
+.codehilite .nd { color: #F8F8F2 } /* Name.Decorator */
+.codehilite .ni { color: #F8F8F2 } /* Name.Entity */
+.codehilite .ne { color: #F8F8F2 } /* Name.Exception */
+.codehilite .nf { color: #50FA7B } /* Name.Function */
+.codehilite .nl { color: #8BE9FD; font-style: italic } /* Name.Label */
+.codehilite .nn { color: #F8F8F2 } /* Name.Namespace */
+.codehilite .nx { color: #F8F8F2 } /* Name.Other */
+.codehilite .py { color: #F8F8F2 } /* Name.Property */
+.codehilite .nt { color: #FF79C6 } /* Name.Tag */
+.codehilite .nv { color: #8BE9FD; font-style: italic } /* Name.Variable */
+.codehilite .ow { color: #FF79C6 } /* Operator.Word */
+.codehilite .pm { color: #F8F8F2 } /* Punctuation.Marker */
+.codehilite .w { color: #F8F8F2 } /* Text.Whitespace */
+.codehilite .mb { color: #FFB86C } /* Literal.Number.Bin */
+.codehilite .mf { color: #FFB86C } /* Literal.Number.Float */
+.codehilite .mh { color: #FFB86C } /* Literal.Number.Hex */
+.codehilite .mi { color: #FFB86C } /* Literal.Number.Integer */
+.codehilite .mo { color: #FFB86C } /* Literal.Number.Oct */
+.codehilite .sa { color: #BD93F9 } /* Literal.String.Affix */
+.codehilite .sb { color: #BD93F9 } /* Literal.String.Backtick */
+.codehilite .sc { color: #BD93F9 } /* Literal.String.Char */
+.codehilite .dl { color: #BD93F9 } /* Literal.String.Delimiter */
+.codehilite .sd { color: #BD93F9 } /* Literal.String.Doc */
+.codehilite .s2 { color: #BD93F9 } /* Literal.String.Double */
+.codehilite .se { color: #BD93F9 } /* Literal.String.Escape */
+.codehilite .sh { color: #BD93F9 } /* Literal.String.Heredoc */
+.codehilite .si { color: #BD93F9 } /* Literal.String.Interpol */
+.codehilite .sx { color: #BD93F9 } /* Literal.String.Other */
+.codehilite .sr { color: #BD93F9 } /* Literal.String.Regex */
+.codehilite .s1 { color: #BD93F9 } /* Literal.String.Single */
+.codehilite .ss { color: #BD93F9 } /* Literal.String.Symbol */
+.codehilite .bp { color: #F8F8F2; font-style: italic } /* Name.Builtin.Pseudo */
+.codehilite .fm { color: #50FA7B } /* Name.Function.Magic */
+.codehilite .vc { color: #8BE9FD; font-style: italic } /* Name.Variable.Class */
+.codehilite .vg { color: #8BE9FD; font-style: italic } /* Name.Variable.Global */
+.codehilite .vi { color: #8BE9FD; font-style: italic } /* Name.Variable.Instance */
+.codehilite .vm { color: #8BE9FD; font-style: italic } /* Name.Variable.Magic */
+.codehilite .il { color: #FFB86C } /* Literal.Number.Integer.Long */
+.codehilite, .codehilite pre{background:#0a0f1e !important;}
+
+</style>
+</head>
+<body>
+<div class="topbar">
+  <a class="back" href="../index.html">&#8592; Prep Home</a>
+  <span class="crumb">cheatsheets/07-dbt.md</span>
+</div>
+<main class="doc">
+<h1 id="07-dbt-data-build-tool">07 — dbt (data build tool)</h1>
+<p>dbt is the <strong>T in ELT</strong> — the transformation layer on top of Snowflake. It brings
+software engineering (version control, tests, modularity, docs) to SQL.</p>
+<h2 id="mental-model">Mental model</h2>
+<ul>
+<li>You write <strong>models</strong> = <code>SELECT</code> statements in <code>.sql</code> files. dbt wraps each in
+  <code>CREATE TABLE/VIEW AS</code> and runs them in dependency order.</li>
+<li>dbt does <strong>not</strong> extract or load — it transforms data already in the warehouse.</li>
+</ul>
+<h2 id="core-concepts">Core concepts</h2>
+<ul>
+<li><strong>Model</strong>: one <code>.sql</code> file → one table/view. Built with <code>dbt run</code>.</li>
+<li><strong><code>ref()</code></strong>: reference another model → dbt builds the <strong>DAG</strong> and the right order.
+  <code>sql
+  -- models/marts/fct_invoices.sql
+  SELECT * FROM {{ ref('stg_invoices') }}</code></li>
+<li><strong><code>source()</code></strong>: reference raw tables loaded into the warehouse.
+  <code>sql
+  SELECT * FROM {{ source('raw', 'invoices') }}</code></li>
+<li><strong>Materializations</strong> (how a model is built):</li>
+<li><code>view</code> (default, no storage), <code>table</code> (rebuilt each run), <code>incremental</code>
+    (only new/changed rows), <code>ephemeral</code> (inlined CTE, not in warehouse).</li>
+</ul>
+<h2 id="project-layout-typical">Project layout (typical)</h2>
+<div class="codehilite"><pre><span></span><code>models/
+  staging/    stg_*.sql      -- 1:1 with sources, cleaned/renamed/typed
+  intermediate/ int_*.sql    -- reusable business logic
+  marts/      dim_*, fct_*   -- star-schema, business-facing
+dbt_project.yml
+</code></pre></div>
+
+<h2 id="incremental-models-the-important-one">Incremental models (the important one)</h2>
+<div class="codehilite"><pre><span></span><code><span class="err">{{</span><span class="w"> </span><span class="n">config</span><span class="p">(</span><span class="n">materialized</span><span class="o">=</span><span class="s1">&#39;incremental&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">unique_key</span><span class="o">=</span><span class="s1">&#39;invoice_id&#39;</span><span class="p">)</span><span class="w"> </span><span class="err">}}</span>
+<span class="k">SELECT</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">FROM</span><span class="w"> </span><span class="err">{{</span><span class="w"> </span><span class="k">source</span><span class="p">(</span><span class="s1">&#39;raw&#39;</span><span class="p">,</span><span class="s1">&#39;invoices&#39;</span><span class="p">)</span><span class="w"> </span><span class="err">}}</span>
+<span class="err">{</span><span class="o">%</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">is_incremental</span><span class="p">()</span><span class="w"> </span><span class="o">%</span><span class="err">}</span>
+<span class="w">  </span><span class="k">WHERE</span><span class="w"> </span><span class="n">updated_at</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="p">(</span><span class="k">SELECT</span><span class="w"> </span><span class="k">MAX</span><span class="p">(</span><span class="n">updated_at</span><span class="p">)</span><span class="w"> </span><span class="k">FROM</span><span class="w"> </span><span class="err">{{</span><span class="w"> </span><span class="n">this</span><span class="w"> </span><span class="err">}}</span><span class="p">)</span>
+<span class="err">{</span><span class="o">%</span><span class="w"> </span><span class="n">endif</span><span class="w"> </span><span class="o">%</span><span class="err">}</span>
+</code></pre></div>
+
+<ul>
+<li>dbt builds full on first run, then only processes new rows; merges on <code>unique_key</code>.</li>
+</ul>
+<h2 id="tests-data-quality-version-controlled">Tests (data quality, version-controlled)</h2>
+<ul>
+<li><strong>Generic</strong> (in YAML): <code>not_null</code>, <code>unique</code>, <code>accepted_values</code>, <code>relationships</code> (FK).
+  ```yaml
+  models:<ul>
+<li>name: fct_invoices
+  columns:<ul>
+<li>name: invoice_id
+  tests: [unique, not_null]</li>
+<li>name: customer_id
+  tests:<ul>
+<li>relationships:
+    to: ref('dim_customer')
+    field: customer_id
+  ```</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li><strong>Singular</strong>: a <code>.sql</code> file in <code>tests/</code> that should return <strong>0 rows</strong> to pass.</li>
+<li>Run with <code>dbt test</code>. CI fails the build if tests fail.</li>
+</ul>
+<h2 id="snapshots-scd-type-2-built-in">Snapshots (SCD Type 2, built in!)</h2>
+<div class="codehilite"><pre><span></span><code><span class="err">{</span><span class="o">%</span><span class="w"> </span><span class="n">snapshot</span><span class="w"> </span><span class="n">scd_customers</span><span class="w"> </span><span class="o">%</span><span class="err">}</span>
+<span class="err">{{</span><span class="w"> </span><span class="n">config</span><span class="p">(</span><span class="n">target_schema</span><span class="o">=</span><span class="s1">&#39;snapshots&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">unique_key</span><span class="o">=</span><span class="s1">&#39;customer_id&#39;</span><span class="p">,</span>
+<span class="w">          </span><span class="n">strategy</span><span class="o">=</span><span class="s1">&#39;timestamp&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">updated_at</span><span class="o">=</span><span class="s1">&#39;updated_at&#39;</span><span class="p">)</span><span class="w"> </span><span class="err">}}</span>
+<span class="k">SELECT</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">FROM</span><span class="w"> </span><span class="err">{{</span><span class="w"> </span><span class="k">source</span><span class="p">(</span><span class="s1">&#39;raw&#39;</span><span class="p">,</span><span class="s1">&#39;customers&#39;</span><span class="p">)</span><span class="w"> </span><span class="err">}}</span>
+<span class="err">{</span><span class="o">%</span><span class="w"> </span><span class="n">endsnapshot</span><span class="w"> </span><span class="o">%</span><span class="err">}</span>
+</code></pre></div>
+
+<ul>
+<li>dbt manages <code>dbt_valid_from</code>/<code>dbt_valid_to</code> automatically — instant SCD2 history.</li>
+</ul>
+<h2 id="jinja-macros-dry-sql">Jinja &amp; macros (DRY SQL)</h2>
+<ul>
+<li>dbt SQL is templated with <strong>Jinja</strong> (<code>{{ }}</code>, <code>{% %}</code>). <strong>Macros</strong> = reusable SQL
+  functions. <code>{{ var(...) }}</code> and <code>{{ env_var(...) }}</code> for config.</li>
+</ul>
+<h2 id="other-essentials">Other essentials</h2>
+<ul>
+<li><strong>Seeds</strong>: small CSVs version-controlled and loaded (<code>dbt seed</code>) — e.g. mappings.</li>
+<li><strong>Docs</strong>: <code>dbt docs generate &amp;&amp; dbt docs serve</code> → auto lineage graph + descriptions.</li>
+<li><strong>Exposures / freshness</strong>: declare downstream BI; <code>dbt source freshness</code> checks SLAs.</li>
+</ul>
+<h2 id="commands-you-should-know">Commands you should know</h2>
+<div class="codehilite"><pre><span></span><code>dbt<span class="w"> </span>run<span class="w">                 </span><span class="c1"># build models</span>
+dbt<span class="w"> </span><span class="nb">test</span><span class="w">                </span><span class="c1"># run tests</span>
+dbt<span class="w"> </span>build<span class="w">               </span><span class="c1"># run + test + snapshot + seed, in DAG order</span>
+dbt<span class="w"> </span>run<span class="w"> </span>--select<span class="w"> </span>stg_invoices+<span class="w">   </span><span class="c1"># this model and everything downstream</span>
+dbt<span class="w"> </span>snapshot
+</code></pre></div>
+
+<h2 id="why-dbt-interview-soundbite">Why dbt (interview soundbite)</h2>
+<blockquote>
+<p>"dbt turns transformations into versioned, tested, documented SQL with automatic
+lineage. It replaces brittle stored-procedure spaghetti with a DAG I can test in
+CI, build incrementally, and hand to any analyst to read."</p>
+</blockquote>
+</main>
+<footer class="docfoot">Data Engineer Prep &middot; Snowflake + dbt + Airflow</footer>
+</body>
+</html>

@@ -1,0 +1,1556 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>PySpark for Data Engineers — Complete Guide</title>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #0b1020; --bg-2: #131a2f; --bg-3: #1f2a44; --card: #131a2f;
+    --text: #e6edf6; --text-dim: #93a4bf;
+    --accent: #f97316; --accent-2: #fbbf24; --accent-3: #60a5fa;
+    --success: #22c55e; --warn: #fbbf24; --danger: #f87171;
+    --border: #2a3553; --code-bg: #0a0f1e;
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: linear-gradient(135deg, #0b1020 0%, #2d1810 100%); color: var(--text); line-height: 1.65; min-height: 100vh; }
+  .container { max-width: 1280px; margin: 0 auto; padding: 24px; }
+  header { background: linear-gradient(135deg, #f97316 0%, #ef4444 50%, #dc2626 100%); border-radius: 16px; padding: 32px; margin-bottom: 24px; box-shadow: 0 20px 60px rgba(249, 115, 22, 0.25); }
+  header h1 { font-size: 32px; margin-bottom: 8px; }
+  header p { opacity: 0.92; font-size: 16px; }
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; margin-top: 24px; }
+  .stat { background: rgba(255,255,255,0.13); backdrop-filter: blur(10px); padding: 14px 16px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.2); }
+  .stat-label { font-size: 11px; opacity: 0.85; text-transform: uppercase; letter-spacing: 1px; }
+  .stat-value { font-size: 22px; font-weight: 700; margin-top: 4px; }
+  .progress-section { background: var(--card); border-radius: 12px; padding: 18px; margin-bottom: 20px; border: 1px solid var(--border); }
+  .progress-bar { background: var(--bg); height: 14px; border-radius: 8px; overflow: hidden; margin-top: 8px; }
+  .progress-fill { background: linear-gradient(90deg, #f97316, #fbbf24); height: 100%; width: 0%; transition: width 0.5s ease; display: flex; align-items: center; justify-content: flex-end; padding-right: 8px; font-size: 10px; color: white; font-weight: 700; }
+  .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 24px; background: var(--card); padding: 8px; border-radius: 12px; border: 1px solid var(--border); }
+  .tab { padding: 9px 16px; background: transparent; color: var(--text-dim); border: none; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600; transition: all 0.2s; }
+  .tab:hover { background: var(--bg-3); color: var(--text); }
+  .tab.active { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #1a1500; }
+  .tab-content { display: none; animation: fadeIn 0.3s; }
+  .tab-content.active { display: block; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  .section { background: var(--card); border-radius: 12px; padding: 24px; margin-bottom: 18px; border: 1px solid var(--border); }
+  .section h2 { color: var(--accent); font-size: 22px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+  .section h3 { color: var(--accent-2); font-size: 17px; margin: 18px 0 10px 0; }
+  .section h4 { color: var(--accent-3); font-size: 15px; margin: 14px 0 8px 0; }
+  .section p { color: var(--text); margin-bottom: 10px; }
+  pre[class*="language-"] { border-radius: 8px; background: var(--code-bg) !important; padding: 14px !important; font-size: 13px; margin: 10px 0; border: 1px solid var(--border); overflow-x: auto; }
+  code[class*="language-"] { font-family: "Consolas", "Monaco", monospace; }
+  :not(pre) > code { background: var(--bg-3); padding: 2px 6px; border-radius: 4px; font-size: 13px; color: var(--accent-2); font-family: "Consolas", "Monaco", monospace; }
+  .check-row { display: flex; align-items: flex-start; gap: 10px; padding: 8px 12px; background: var(--bg); border-radius: 6px; margin: 6px 0; border-left: 3px solid var(--accent); }
+  .check-row input[type="checkbox"] { margin-top: 4px; width: 16px; height: 16px; accent-color: var(--success); cursor: pointer; flex-shrink: 0; }
+  .check-row label { flex: 1; cursor: pointer; color: var(--text); font-size: 13px; }
+  .check-row input:checked + label { text-decoration: line-through; color: var(--text-dim); }
+  .alert { padding: 12px 14px; border-radius: 8px; margin: 12px 0; border-left: 4px solid; font-size: 14px; }
+  .alert.warn { background: rgba(251, 191, 36, 0.1); border-color: var(--warn); }
+  .alert.danger { background: rgba(248, 113, 113, 0.1); border-color: var(--danger); }
+  .alert.success { background: rgba(34, 197, 94, 0.1); border-color: var(--success); }
+  .alert.info { background: rgba(96, 165, 250, 0.1); border-color: var(--accent-3); }
+  .alert strong { color: var(--text); }
+  .qa-card { background: var(--bg); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 8px; padding: 14px; margin: 12px 0; }
+  .qa-q { color: var(--accent); font-weight: 700; margin-bottom: 8px; }
+  .qa-a { color: var(--text-dim); font-size: 14px; }
+  table { width: 100%; border-collapse: collapse; background: var(--bg); border-radius: 8px; overflow: hidden; margin: 12px 0; font-size: 13px; }
+  th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); }
+  th { background: var(--bg-3); color: var(--accent); text-transform: uppercase; font-size: 11px; letter-spacing: 1px; }
+  tr:last-child td { border-bottom: none; }
+  .controls { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+  .btn { background: var(--bg-3); color: var(--text); border: 1px solid var(--border); padding: 8px 14px; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: 600; transition: all 0.2s; }
+  .btn:hover { background: var(--accent); color: white; border-color: var(--accent); }
+  .btn.danger:hover { background: var(--danger); border-color: var(--danger); }
+  .badge { font-size: 10px; padding: 2px 8px; border-radius: 10px; font-weight: 700; text-transform: uppercase; margin-left: 6px; }
+  .badge.must { background: var(--danger); color: white; }
+  .badge.tip { background: var(--accent-3); color: white; }
+  .badge.frequent { background: var(--warn); color: #1a1500; }
+  ul.bullet { padding-left: 20px; color: var(--text-dim); font-size: 14px; }
+  ul.bullet li { padding: 4px 0; }
+  .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 14px; }
+  footer { text-align: center; margin-top: 40px; padding: 20px; color: var(--text-dim); font-size: 13px; }
+  @media (max-width: 640px) { header h1 { font-size: 22px; } .container { padding: 12px; } .tab { padding: 7px 10px; font-size: 11px; } }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <h1>⚡ PySpark for Data Engineers — Complete Guide</h1>
+    <p>Distributed data processing at scale — architecture, DataFrames, optimization, and streaming.</p>
+    <div class="stats-grid">
+      <div class="stat"><div class="stat-label">Topics</div><div class="stat-value">12</div></div>
+      <div class="stat"><div class="stat-label">Code Examples</div><div class="stat-value">110+</div></div>
+      <div class="stat"><div class="stat-label">Interview Q&A</div><div class="stat-value">30+</div></div>
+      <div class="stat"><div class="stat-label">Level</div><div class="stat-value">Beginner → Pro</div></div>
+    </div>
+  </header>
+
+  <div class="progress-section">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <strong>📊 Your Progress</strong>
+      <span id="progress-text" style="color: var(--accent); font-weight: 700;">0 / 0</span>
+    </div>
+    <div class="progress-bar"><div class="progress-fill" id="progress-fill">0%</div></div>
+    <div class="controls">
+      <button class="btn" onclick="exportProgress()">💾 Export</button>
+      <button class="btn danger" onclick="resetProgress()">♻ Reset</button>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="showTab(event,'overview')">Overview</button>
+    <button class="tab" onclick="showTab(event,'arch')">1. Architecture</button>
+    <button class="tab" onclick="showTab(event,'setup')">2. SparkSession & Setup</button>
+    <button class="tab" onclick="showTab(event,'df')">3. DataFrames Basics</button>
+    <button class="tab" onclick="showTab(event,'sql')">4. Spark SQL & Functions</button>
+    <button class="tab" onclick="showTab(event,'joins')">5. Joins & Optimization</button>
+    <button class="tab" onclick="showTab(event,'windows')">6. Window Functions</button>
+    <button class="tab" onclick="showTab(event,'partitioning')">7. Partitioning & Formats</button>
+    <button class="tab" onclick="showTab(event,'udf')">8. UDFs</button>
+    <button class="tab" onclick="showTab(event,'perf')">9. Performance Tuning</button>
+    <button class="tab" onclick="showTab(event,'streaming')">10. Structured Streaming</button>
+    <button class="tab" onclick="showTab(event,'interview')">11. Interview Q&A</button>
+  </div>
+
+  <!-- OVERVIEW -->
+  <div class="tab-content active" id="overview">
+    <div class="section">
+      <h2>🎯 PySpark — Why It Matters</h2>
+      <p>Apache Spark is the de facto standard for big data processing. PySpark (Python API) is essential for any Data Engineer working with TB-scale data on AWS EMR, Databricks, Google Dataproc, or on-prem Hadoop clusters.</p>
+
+      <h3>📋 Topic Map</h3>
+      <table>
+        <thead><tr><th>#</th><th>Topic</th><th>Why It Matters</th><th>Weight</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td>Architecture</td><td>Understand why things are slow/fast</td><td>⭐⭐⭐⭐⭐</td></tr>
+          <tr><td>2</td><td>SparkSession & Setup</td><td>Entry point for everything</td><td>⭐⭐⭐</td></tr>
+          <tr><td>3</td><td>DataFrames Basics</td><td>Primary abstraction (90% of usage)</td><td>⭐⭐⭐⭐⭐</td></tr>
+          <tr><td>4</td><td>Spark SQL & Functions</td><td>pyspark.sql.functions for everything</td><td>⭐⭐⭐⭐⭐</td></tr>
+          <tr><td>5</td><td>Joins & Optimization</td><td>Broadcast, salting, skew handling</td><td>⭐⭐⭐⭐⭐</td></tr>
+          <tr><td>6</td><td>Window Functions</td><td>Top-N, running totals, deduplication</td><td>⭐⭐⭐⭐⭐</td></tr>
+          <tr><td>7</td><td>Partitioning & Formats</td><td>Parquet, Delta, partition pruning</td><td>⭐⭐⭐⭐⭐</td></tr>
+          <tr><td>8</td><td>UDFs</td><td>Custom logic (and when to avoid)</td><td>⭐⭐⭐</td></tr>
+          <tr><td>9</td><td>Performance Tuning</td><td>Spark UI, AQE, caching, shuffle</td><td>⭐⭐⭐⭐⭐</td></tr>
+          <tr><td>10</td><td>Structured Streaming</td><td>Real-time pipelines</td><td>⭐⭐⭐⭐</td></tr>
+        </tbody>
+      </table>
+
+      <div class="alert info"><strong>💡 Where you'll write PySpark:</strong> Databricks notebooks, AWS Glue jobs, EMR steps, Dataproc, local development for testing. Same API everywhere.</div>
+      <div class="alert warn"><strong>⚠ Version note:</strong> Examples assume Spark 3.3+. Spark 3.x has Adaptive Query Execution (AQE) enabled by default, which auto-optimizes many things.</div>
+    </div>
+  </div>
+
+  <!-- ARCHITECTURE -->
+  <div class="tab-content" id="arch">
+    <div class="section">
+      <h2>1. Spark Architecture <span class="badge frequent">Always Asked</span></h2>
+
+      <h3>The Big Picture</h3>
+<pre><code class="language-python"># Spark cluster components
+#
+#  ┌─────────────────────────────────────────────────┐
+#  │  Driver Program  (your script + SparkSession)    │
+#  │  - Creates SparkContext                          │
+#  │  - Builds execution plan (DAG)                   │
+#  │  - Schedules tasks                               │
+#  └────────────────────┬────────────────────────────┘
+#                       │
+#  ┌────────────────────▼────────────────────────────┐
+#  │  Cluster Manager (YARN / K8s / Standalone / Mesos)│
+#  │  - Allocates resources                            │
+#  └────────────────────┬────────────────────────────┘
+#                       │
+#         ┌─────────────┼─────────────┐
+#         ▼             ▼             ▼
+#   ┌─────────┐   ┌─────────┐   ┌─────────┐
+#   │Executor │   │Executor │   │Executor │
+#   │ - Tasks │   │ - Tasks │   │ - Tasks │
+#   │ - Cache │   │ - Cache │   │ - Cache │
+#   └─────────┘   └─────────┘   └─────────┘
+#       (Worker Nodes — run Python/JVM tasks)</code></pre>
+
+      <h3>Key Concepts</h3>
+      <table>
+        <thead><tr><th>Term</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td>Driver</td><td>Your main process. Coordinates execution. Holds SparkSession.</td></tr>
+          <tr><td>Executor</td><td>JVM process on worker that runs tasks and caches data.</td></tr>
+          <tr><td>Cluster Manager</td><td>Allocates resources (YARN/K8s/Standalone).</td></tr>
+          <tr><td>Job</td><td>One Action triggers one Job (e.g., <code>collect()</code>, <code>write</code>).</td></tr>
+          <tr><td>Stage</td><td>A Job is split into Stages at shuffle boundaries.</td></tr>
+          <tr><td>Task</td><td>Unit of work — one task per partition per stage.</td></tr>
+          <tr><td>Partition</td><td>Logical chunk of data distributed across executors.</td></tr>
+          <tr><td>Shuffle</td><td>Data movement between executors (expensive!).</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Transformations vs Actions</h3>
+<pre><code class="language-python"># TRANSFORMATIONS (lazy — build a DAG, don't execute):
+#   select, filter, where, groupBy, join, orderBy,
+#   withColumn, drop, distinct, union, repartition
+
+# ACTIONS (eager — trigger execution):
+#   show, count, collect, take, first, write, toPandas
+
+df = spark.read.parquet("...")     # transformation (no execution!)
+df2 = df.filter("age > 30")        # transformation
+df3 = df2.select("name", "age")    # transformation
+df3.show()                         # ACTION — NOW it runs the whole chain</code></pre>
+
+      <div class="alert info"><strong>Why lazy evaluation matters:</strong> Spark optimizes the entire chain before executing. Multiple filters get combined, columns get pruned, predicates get pushed down to source. This is why you should use DataFrame API over RDDs.</div>
+
+      <h3>RDD vs DataFrame vs Dataset</h3>
+      <table>
+        <thead><tr><th></th><th>RDD</th><th>DataFrame</th><th>Dataset</th></tr></thead>
+        <tbody>
+          <tr><td>Type Safety</td><td>Yes (compile)</td><td>No (runtime)</td><td>Yes (Scala/Java only)</td></tr>
+          <tr><td>Optimization</td><td>None (Spark can't see inside)</td><td>Catalyst optimizer (best)</td><td>Catalyst</td></tr>
+          <tr><td>Performance</td><td>Slower</td><td>Fast</td><td>Fast</td></tr>
+          <tr><td>API</td><td>Low-level (map/filter)</td><td>SQL-like</td><td>Typed SQL</td></tr>
+          <tr><td>PySpark</td><td>Available but rarely used</td><td>Primary API ✅</td><td>Not available (Python is dynamic)</td></tr>
+        </tbody>
+      </table>
+
+      <div class="alert success"><strong>Rule:</strong> Use <strong>DataFrame API</strong> for everything in PySpark. Touch RDDs only for very specialized cases (rare).</div>
+
+      <h3>Catalyst & Tungsten</h3>
+      <ul class="bullet">
+        <li><strong>Catalyst:</strong> Spark's query optimizer. Analyzes logical plan, applies rules (predicate pushdown, column pruning, constant folding) to produce optimized physical plan.</li>
+        <li><strong>Tungsten:</strong> Execution engine that uses memory-efficient binary format and code generation for speed.</li>
+        <li><strong>AQE (Adaptive Query Execution):</strong> Re-optimizes during runtime — coalesces partitions, switches join strategies based on actual data sizes. Enabled by default in Spark 3.x.</li>
+      </ul>
+
+      <h3>Concepts Checklist</h3>
+      <div class="check-row"><input type="checkbox" id="ar1"><label for="ar1">Driver vs Executor responsibilities</label></div>
+      <div class="check-row"><input type="checkbox" id="ar2"><label for="ar2">Cluster Manager role</label></div>
+      <div class="check-row"><input type="checkbox" id="ar3"><label for="ar3">Job → Stage → Task hierarchy</label></div>
+      <div class="check-row"><input type="checkbox" id="ar4"><label for="ar4">Partitions and shuffle</label></div>
+      <div class="check-row"><input type="checkbox" id="ar5"><label for="ar5">Lazy evaluation (Transformations vs Actions)</label></div>
+      <div class="check-row"><input type="checkbox" id="ar6"><label for="ar6">RDD vs DataFrame vs Dataset</label></div>
+      <div class="check-row"><input type="checkbox" id="ar7"><label for="ar7">Catalyst optimizer + AQE basics</label></div>
+    </div>
+  </div>
+
+  <!-- SETUP -->
+  <div class="tab-content" id="setup">
+    <div class="section">
+      <h2>2. SparkSession & Setup</h2>
+
+      <h3>Installation</h3>
+<pre><code class="language-python"># pip install pyspark==3.5.0
+# Or use Databricks / AWS Glue / EMR — already installed
+
+# Verify
+from pyspark.sql import SparkSession
+print(SparkSession.builder.getOrCreate().version)</code></pre>
+
+      <h3>Create SparkSession</h3>
+<pre><code class="language-python">from pyspark.sql import SparkSession
+
+spark = (
+    SparkSession.builder
+    .appName("my-etl-pipeline")
+    .master("local[*]")                          # local, or yarn, k8s
+    .config("spark.sql.shuffle.partitions", "200")
+    .config("spark.sql.adaptive.enabled", "true")
+    .config("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+    .config("spark.sql.session.timeZone", "UTC")
+    .getOrCreate()
+)
+
+spark.sparkContext.setLogLevel("WARN")           # less noise
+print(spark.version)</code></pre>
+
+      <h3>Common Configurations</h3>
+      <table>
+        <thead><tr><th>Config</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td><code>spark.sql.shuffle.partitions</code></td><td>Default # of partitions after shuffle (default 200). Tune based on data size.</td></tr>
+          <tr><td><code>spark.sql.adaptive.enabled</code></td><td>Enable AQE (default true in 3.x)</td></tr>
+          <tr><td><code>spark.sql.adaptive.coalescePartitions.enabled</code></td><td>Auto-merge small partitions post-shuffle</td></tr>
+          <tr><td><code>spark.sql.adaptive.skewJoin.enabled</code></td><td>Auto-handle skewed joins</td></tr>
+          <tr><td><code>spark.executor.memory</code></td><td>Memory per executor (e.g., "8g")</td></tr>
+          <tr><td><code>spark.executor.cores</code></td><td>Cores per executor (typical 4-5)</td></tr>
+          <tr><td><code>spark.dynamicAllocation.enabled</code></td><td>Auto-scale executors</td></tr>
+          <tr><td><code>spark.sql.autoBroadcastJoinThreshold</code></td><td>Tables &lt; this size are auto-broadcasted (default 10MB)</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Spark UI</h3>
+<pre><code class="language-python">spark.sparkContext.uiWebUrl    # usually http://localhost:4040
+
+# Tabs:
+# - Jobs: list of triggered jobs
+# - Stages: shuffle boundaries, task distribution
+# - Storage: cached data
+# - Environment: configs
+# - Executors: memory/CPU usage
+# - SQL: physical plans, metrics per query</code></pre>
+
+      <h3>Stop the session</h3>
+<pre><code class="language-python">spark.stop()</code></pre>
+
+      <h3>Concepts Checklist</h3>
+      <div class="check-row"><input type="checkbox" id="su1"><label for="su1">Create SparkSession with builder</label></div>
+      <div class="check-row"><input type="checkbox" id="su2"><label for="su2">Key configs (shuffle.partitions, adaptive.enabled)</label></div>
+      <div class="check-row"><input type="checkbox" id="su3"><label for="su3">Access Spark UI on port 4040</label></div>
+      <div class="check-row"><input type="checkbox" id="su4"><label for="su4">setLogLevel for cleaner output</label></div>
+    </div>
+  </div>
+
+  <!-- DATAFRAMES -->
+  <div class="tab-content" id="df">
+    <div class="section">
+      <h2>3. DataFrame Basics</h2>
+
+      <h3>Create DataFrames</h3>
+<pre><code class="language-python"># From list of tuples
+data = [("Asha", 30, "BLR"), ("Ravi", 25, "HYD")]
+columns = ["name", "age", "city"]
+df = spark.createDataFrame(data, columns)
+
+# With explicit schema
+from pyspark.sql.types import StructType, StructField, StringType, IntegerType
+schema = StructType([
+    StructField("name", StringType(), nullable=False),
+    StructField("age", IntegerType(), nullable=True),
+    StructField("city", StringType(), nullable=True),
+])
+df = spark.createDataFrame(data, schema)
+
+# From dict-like
+df = spark.createDataFrame([{"name": "Asha", "age": 30}])
+
+# From Pandas
+import pandas as pd
+pdf = pd.DataFrame(...)
+df = spark.createDataFrame(pdf)
+back_to_pdf = df.toPandas()                       # ⚠ collects all to driver — small data only!</code></pre>
+
+      <h3>Read from Sources</h3>
+<pre><code class="language-python"># Parquet (preferred!)
+df = spark.read.parquet("s3://bucket/path/")
+df = spark.read.parquet("path1", "path2", "path3")
+
+# CSV
+df = (spark.read
+    .option("header", "true")
+    .option("inferSchema", "true")            # slow on big files — provide schema instead
+    .option("sep", ",")
+    .option("nullValue", "N/A")
+    .csv("s3://bucket/data.csv")
+)
+
+# CSV with explicit schema (much faster)
+df = spark.read.schema(my_schema).csv("data.csv", header=True)
+
+# JSON
+df = spark.read.json("data.json")
+df = spark.read.json("events.jsonl")              # JSON Lines (one per row)
+
+# Delta
+df = spark.read.format("delta").load("s3://bucket/delta/")
+
+# JDBC (databases)
+df = (spark.read
+    .format("jdbc")
+    .option("url", "jdbc:postgresql://host:5432/db")
+    .option("dbtable", "schema.orders")
+    .option("user", "user")
+    .option("password", "pwd")
+    .option("partitionColumn", "id")
+    .option("lowerBound", 1)
+    .option("upperBound", 1000000)
+    .option("numPartitions", 10)
+    .load()
+)
+
+# Hive table
+df = spark.table("schema.tablename")
+df = spark.sql("SELECT * FROM schema.tablename WHERE date = '2026-05-23'")</code></pre>
+
+      <h3>Write to Sinks</h3>
+<pre><code class="language-python"># Parquet (preferred!)
+df.write.mode("overwrite").parquet("s3://bucket/out/")
+df.write.mode("append").parquet("s3://bucket/out/")
+# Modes: append, overwrite, ignore, error (default)
+
+# Partitioned (creates folder structure: year=2026/month=05/)
+df.write.partitionBy("year", "month").parquet("s3://bucket/out/")
+
+# Delta
+df.write.format("delta").mode("overwrite").save("s3://bucket/delta/")
+
+# Save as table
+df.write.mode("overwrite").saveAsTable("db.tablename")
+
+# CSV (avoid for big data — slow!)
+df.write.option("header", "true").csv("out/")
+
+# Coalesce to single file (use sparingly — collects to one task)
+df.coalesce(1).write.parquet("out/")</code></pre>
+
+      <h3>Inspection</h3>
+<pre><code class="language-python">df.show()                       # first 20 rows
+df.show(50, truncate=False)
+df.printSchema()                # schema tree
+df.columns                      # list of column names
+df.dtypes                       # [(col, type), ...]
+df.count()                      # row count (ACTION — triggers job!)
+df.describe().show()            # stats
+df.summary("min", "max", "stddev").show()
+df.explain(extended=True)       # show execution plan</code></pre>
+
+      <h3>Column Operations</h3>
+<pre><code class="language-python">from pyspark.sql import functions as F
+from pyspark.sql.functions import col, lit, when
+
+# Select
+df.select("name", "age")
+df.select(col("name"), col("age") + 1)
+df.select("*", (col("salary") * 12).alias("annual"))
+
+# Add / modify column
+df = df.withColumn("annual", col("salary") * 12)
+df = df.withColumn("bonus", lit(5000))
+df = df.withColumn("category", when(col("age") >= 60, "senior")
+                                .when(col("age") >= 18, "adult")
+                                .otherwise("minor"))
+
+# Rename
+df = df.withColumnRenamed("old_name", "new_name")
+
+# Drop
+df = df.drop("temp_col")
+df = df.drop("col1", "col2")
+
+# Filter
+df.filter(col("age") > 30)
+df.filter((col("age") > 30) & (col("city") == "BLR"))
+df.where("age > 30 AND city = 'BLR'")             # same as filter
+df.filter(col("name").isin(["Asha", "Ravi"]))
+df.filter(col("email").isNull())
+df.filter(col("email").isNotNull())
+df.filter(col("name").startswith("A"))
+df.filter(col("name").like("A%"))
+df.filter(col("name").rlike(r"^A.*"))             # regex
+
+# Distinct
+df.distinct()
+df.dropDuplicates(["email"])
+
+# Order
+df.orderBy(col("age").desc(), col("name").asc())
+df.orderBy(F.desc("age"))
+
+# Limit
+df.limit(100)</code></pre>
+
+      <h3>Aggregations</h3>
+<pre><code class="language-python">df.agg(F.count("*"), F.sum("salary"), F.avg("salary"), F.max("salary")).show()
+
+df.groupBy("dept").agg(
+    F.count("*").alias("emp_count"),
+    F.sum("salary").alias("total_sal"),
+    F.avg("salary").alias("avg_sal"),
+    F.countDistinct("manager_id").alias("unique_managers"),
+)
+
+# Multiple columns groupBy
+df.groupBy("dept", "city").sum("salary")
+
+# Pivot
+df.groupBy("region").pivot("product").sum("amount")
+df.groupBy("region").pivot("product", ["A", "B", "C"]).sum("amount")  # explicit values (faster)</code></pre>
+
+      <h3>Schema Definition</h3>
+<pre><code class="language-python">from pyspark.sql.types import *
+
+# Always define schema for production (faster + safer than inferSchema)
+schema = StructType([
+    StructField("id", LongType(), False),
+    StructField("name", StringType(), True),
+    StructField("amount", DecimalType(10, 2), True),
+    StructField("created_at", TimestampType(), True),
+    StructField("tags", ArrayType(StringType()), True),
+    StructField("metadata", MapType(StringType(), StringType()), True),
+    StructField("address", StructType([
+        StructField("city", StringType()),
+        StructField("zip", StringType()),
+    ]), True),
+])
+
+df = spark.read.schema(schema).json("data.jsonl")</code></pre>
+
+      <h3>Concepts Checklist</h3>
+      <div class="check-row"><input type="checkbox" id="df1"><label for="df1">Create DataFrame from list / Pandas / files</label></div>
+      <div class="check-row"><input type="checkbox" id="df2"><label for="df2">Read Parquet / CSV / JSON / JDBC / Delta</label></div>
+      <div class="check-row"><input type="checkbox" id="df3"><label for="df3">Write with mode and partitionBy</label></div>
+      <div class="check-row"><input type="checkbox" id="df4"><label for="df4">select / withColumn / withColumnRenamed / drop</label></div>
+      <div class="check-row"><input type="checkbox" id="df5"><label for="df5">filter / where with multi-condition (& | ~)</label></div>
+      <div class="check-row"><input type="checkbox" id="df6"><label for="df6">when / otherwise for CASE logic</label></div>
+      <div class="check-row"><input type="checkbox" id="df7"><label for="df7">groupBy + agg with named aggregations</label></div>
+      <div class="check-row"><input type="checkbox" id="df8"><label for="df8">pivot</label></div>
+      <div class="check-row"><input type="checkbox" id="df9"><label for="df9">Define explicit schema (StructType)</label></div>
+      <div class="check-row"><input type="checkbox" id="df10"><label for="df10">Complex types: ArrayType, MapType, nested StructType</label></div>
+    </div>
+  </div>
+
+  <!-- SQL -->
+  <div class="tab-content" id="sql">
+    <div class="section">
+      <h2>4. Spark SQL & Functions</h2>
+
+      <h3>Spark SQL — Write SQL Directly</h3>
+<pre><code class="language-python"># Register DataFrame as temp view
+df.createOrReplaceTempView("orders")
+
+result = spark.sql("""
+    SELECT customer_id, SUM(amount) AS total
+    FROM orders
+    WHERE order_date >= '2026-01-01'
+    GROUP BY customer_id
+    HAVING SUM(amount) > 10000
+    ORDER BY total DESC
+""")
+
+# Global temp view (across sessions)
+df.createOrReplaceGlobalTempView("orders_global")
+spark.sql("SELECT * FROM global_temp.orders_global")</code></pre>
+
+      <h3>pyspark.sql.functions — The Toolbox</h3>
+<pre><code class="language-python">from pyspark.sql import functions as F
+
+# String functions
+F.upper(col), F.lower(col), F.initcap(col)
+F.trim(col), F.ltrim(col), F.rtrim(col)
+F.length(col)
+F.substring(col, pos, len)
+F.concat(col1, col2), F.concat_ws("-", col1, col2)
+F.split(col, ",")                                # → ArrayType
+F.regexp_replace(col, pattern, replacement)
+F.regexp_extract(col, pattern, group_idx)
+F.translate(col, "abc", "xyz")
+F.instr(col, "substring")                        # position
+F.lpad(col, length, pad), F.rpad(col, length, pad)
+
+# Numeric
+F.abs(col), F.round(col, 2), F.ceil(col), F.floor(col)
+F.sqrt(col), F.pow(col, 2), F.log(col), F.exp(col)
+F.greatest(col1, col2, col3), F.least(col1, col2)
+
+# Date/Time
+F.current_date(), F.current_timestamp()
+F.to_date(col, "yyyy-MM-dd")
+F.to_timestamp(col, "yyyy-MM-dd HH:mm:ss")
+F.date_format(col, "yyyy/MM/dd")
+F.year(col), F.month(col), F.dayofmonth(col), F.dayofweek(col)
+F.hour(col), F.minute(col), F.second(col)
+F.date_add(col, 7), F.date_sub(col, 7)
+F.datediff(end_col, start_col)
+F.months_between(col1, col2)
+F.last_day(col), F.next_day(col, "Sunday")
+F.date_trunc("month", col)
+F.from_unixtime(col), F.unix_timestamp(col)
+F.from_utc_timestamp(col, "Asia/Kolkata")
+
+# Conditional / Null
+F.when(col > 30, "high").when(col > 10, "mid").otherwise("low")
+F.coalesce(col1, col2, col3)
+F.nvl(col, "default"), F.nullif(col1, col2)
+F.isnan(col), F.isnull(col)
+
+# Aggregations
+F.count(col), F.countDistinct(col), F.approx_count_distinct(col)
+F.sum(col), F.avg(col), F.min(col), F.max(col)
+F.stddev(col), F.variance(col)
+F.collect_list(col), F.collect_set(col)          # → array
+F.first(col), F.last(col)
+F.percentile_approx(col, 0.5)                    # median
+
+# Array functions (work on ArrayType)
+F.array(col1, col2)                              # create array
+F.array_contains(col, value)
+F.array_distinct(col), F.array_union(c1, c2), F.array_intersect(c1, c2)
+F.size(col)                                      # array length
+F.explode(col)                                   # array → rows (one per element)
+F.explode_outer(col)                             # includes nulls/empty
+F.posexplode(col)                                # adds position column
+
+# Map functions (work on MapType)
+F.map_keys(col), F.map_values(col)
+F.map_from_arrays(keys_col, vals_col)
+
+# Struct (nested)
+df.select("address.city", "address.zip")         # dot notation
+df.select(F.struct("name", "age").alias("person"))
+
+# JSON functions
+F.from_json(col, schema)                         # parse string → struct
+F.to_json(col)                                   # struct → string
+F.get_json_object(col, "$.user.name")</code></pre>
+
+      <h3>Common Patterns</h3>
+
+      <h4>Add a row number</h4>
+<pre><code class="language-python">from pyspark.sql import Window
+
+w = Window.orderBy("created_at")
+df = df.withColumn("row_num", F.row_number().over(w))</code></pre>
+
+      <h4>Convert all column names to snake_case</h4>
+<pre><code class="language-python">df = df.toDF(*[c.lower().replace(" ", "_") for c in df.columns])</code></pre>
+
+      <h4>Cast types</h4>
+<pre><code class="language-python">df = df.withColumn("age", col("age").cast("int"))
+df = df.withColumn("amount", col("amount").cast("decimal(10,2)"))
+df = df.withColumn("ts", col("ts").cast("timestamp"))</code></pre>
+
+      <h4>Handle nulls in aggregates</h4>
+<pre><code class="language-python">df.agg(F.sum(F.coalesce(col("amount"), F.lit(0))))</code></pre>
+
+      <h3>Concepts Checklist</h3>
+      <div class="check-row"><input type="checkbox" id="sq1"><label for="sq1">createOrReplaceTempView + spark.sql()</label></div>
+      <div class="check-row"><input type="checkbox" id="sq2"><label for="sq2">String functions (upper, substring, regexp, split)</label></div>
+      <div class="check-row"><input type="checkbox" id="sq3"><label for="sq3">Date/time functions (date_trunc, datediff, date_format)</label></div>
+      <div class="check-row"><input type="checkbox" id="sq4"><label for="sq4">when / otherwise / coalesce</label></div>
+      <div class="check-row"><input type="checkbox" id="sq5"><label for="sq5">collect_list / collect_set / approx_count_distinct</label></div>
+      <div class="check-row"><input type="checkbox" id="sq6"><label for="sq6">explode / posexplode for arrays</label></div>
+      <div class="check-row"><input type="checkbox" id="sq7"><label for="sq7">from_json / to_json / get_json_object</label></div>
+      <div class="check-row"><input type="checkbox" id="sq8"><label for="sq8">Accessing nested struct fields (dot notation)</label></div>
+    </div>
+  </div>
+
+  <!-- JOINS -->
+  <div class="tab-content" id="joins">
+    <div class="section">
+      <h2>5. Joins & Optimization <span class="badge frequent">Critical Interview Topic</span></h2>
+
+      <h3>Join Types</h3>
+<pre><code class="language-python">df1.join(df2, on="customer_id", how="inner")
+df1.join(df2, on="customer_id", how="left")          # left_outer
+df1.join(df2, on="customer_id", how="right")
+df1.join(df2, on="customer_id", how="outer")         # full_outer
+df1.join(df2, on="customer_id", how="left_semi")     # like EXISTS — keeps left columns only
+df1.join(df2, on="customer_id", how="left_anti")     # NOT EXISTS — left rows with no match
+df1.crossJoin(df2)                                    # cartesian — careful!
+
+# Different column names
+df1.join(df2, df1.cust_id == df2.id, "inner")
+
+# Multiple keys
+df1.join(df2, on=["customer_id", "date"], how="inner")
+
+# Complex join condition
+df1.join(df2, (df1.id == df2.id) & (df1.date >= df2.start), "left")</code></pre>
+
+      <h3>Join Strategies</h3>
+      <table>
+        <thead><tr><th>Strategy</th><th>When Spark uses it</th><th>Best for</th></tr></thead>
+        <tbody>
+          <tr><td>Broadcast Hash Join</td><td>One side &lt; spark.sql.autoBroadcastJoinThreshold (default 10MB)</td><td>Small × Big (e.g., lookup tables)</td></tr>
+          <tr><td>Sort-Merge Join</td><td>Both sides large, sortable</td><td>Default for big × big</td></tr>
+          <tr><td>Shuffle Hash Join</td><td>One side moderate, can fit per-partition hash</td><td>Rare; usually SMJ better</td></tr>
+          <tr><td>Broadcast Nested Loop</td><td>Cross / non-equi joins</td><td>Avoid if possible — slow</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Broadcast Hint (Most Important Optimization)</h3>
+<pre><code class="language-python">from pyspark.sql.functions import broadcast
+
+# Force broadcast of small DataFrame
+big_df.join(broadcast(small_df), on="key", how="inner")
+
+# Check threshold (default 10MB)
+spark.conf.get("spark.sql.autoBroadcastJoinThreshold")
+
+# Increase if needed
+spark.conf.set("spark.sql.autoBroadcastJoinThreshold", 100 * 1024 * 1024)  # 100MB</code></pre>
+
+      <div class="alert success"><strong>Rule of thumb:</strong> Always broadcast the smaller side when one is &lt;100MB. Eliminates shuffle on the bigger DataFrame — massive speedup.</div>
+
+      <h3>Skew Handling</h3>
+<pre><code class="language-python"># Problem: some join keys have way more rows than others (e.g., NULL keys, 1 user with 1M events)
+# → one partition takes hours while others finish in seconds
+
+# Solution 1: Enable AQE skew handling (Spark 3.x — default ON)
+spark.conf.set("spark.sql.adaptive.enabled", "true")
+spark.conf.set("spark.sql.adaptive.skewJoin.enabled", "true")
+
+# Solution 2: Filter out null keys before join
+big_df.filter(col("key").isNotNull()).join(other_df, "key")
+
+# Solution 3: Salting (manual technique for non-AQE)
+# Add a random suffix to skewed keys to spread the load
+from pyspark.sql.functions import concat, lit, rand, floor
+
+# Replicate small side for each salt
+N = 10
+small_salted = small_df.withColumn("salt", F.explode(F.array([F.lit(i) for i in range(N)])))
+small_salted = small_salted.withColumn("salted_key", F.concat(col("key"), lit("_"), col("salt")))
+
+# Add random salt to big side
+big_salted = big_df.withColumn("salt", F.floor(F.rand() * N))
+big_salted = big_salted.withColumn("salted_key", F.concat(col("key"), lit("_"), col("salt")))
+
+result = big_salted.join(small_salted, "salted_key").drop("salt", "salted_key")</code></pre>
+
+      <h3>Common Join Pitfalls</h3>
+      <ul class="bullet">
+        <li><strong>Cartesian (cross) join by mistake</strong> — make sure ON condition is correct</li>
+        <li><strong>NULL keys</strong> — NULLs never match in equi-joins, can also cause skew</li>
+        <li><strong>Duplicate keys</strong> — multiplies rows; deduplicate first or use distinct</li>
+        <li><strong>No broadcast for small dim tables</strong> — adds unnecessary shuffle</li>
+        <li><strong>Joining before filtering</strong> — filter first to reduce shuffle volume</li>
+      </ul>
+
+      <h3>Best Practices</h3>
+<pre><code class="language-python"># 1. Filter before join (predicate pushdown)
+small = orders.filter(col("date") >= "2026-01-01")
+result = small.join(customers, "customer_id")
+
+# 2. Select only needed columns (column pruning)
+slim_orders = orders.select("customer_id", "amount", "date")
+
+# 3. Broadcast small dimension
+result = orders.join(broadcast(customers), "customer_id")
+
+# 4. Avoid joining nullable keys without filter
+orders.filter(col("customer_id").isNotNull()).join(customers, "customer_id")
+
+# 5. Use bucketing for repeated joins on same key
+orders.write.bucketBy(50, "customer_id").saveAsTable("orders_bucketed")</code></pre>
+
+      <h3>Concepts Checklist</h3>
+      <div class="check-row"><input type="checkbox" id="jn1"><label for="jn1">All join types (inner/left/right/outer/semi/anti/cross)</label></div>
+      <div class="check-row"><input type="checkbox" id="jn2"><label for="jn2">Broadcast hash join + broadcast() hint</label></div>
+      <div class="check-row"><input type="checkbox" id="jn3"><label for="jn3">Sort-Merge Join (default for big × big)</label></div>
+      <div class="check-row"><input type="checkbox" id="jn4"><label for="jn4">Skew detection and AQE skew handling</label></div>
+      <div class="check-row"><input type="checkbox" id="jn5"><label for="jn5">Salting technique for severe skew</label></div>
+      <div class="check-row"><input type="checkbox" id="jn6"><label for="jn6">Filter + select before join</label></div>
+      <div class="check-row"><input type="checkbox" id="jn7"><label for="jn7">Bucketing for repeated joins on same key</label></div>
+    </div>
+  </div>
+
+  <!-- WINDOWS -->
+  <div class="tab-content" id="windows">
+    <div class="section">
+      <h2>6. Window Functions</h2>
+
+      <h3>Window Spec</h3>
+<pre><code class="language-python">from pyspark.sql import Window
+from pyspark.sql import functions as F
+
+w = Window.partitionBy("region").orderBy(F.desc("sales"))
+
+# Frame: ROWS BETWEEN ...
+w_rolling = (Window.partitionBy("region")
+             .orderBy("date")
+             .rowsBetween(-6, 0))           # last 7 rows (rolling 7-day)
+
+w_running = (Window.partitionBy("region")
+             .orderBy("date")
+             .rowsBetween(Window.unboundedPreceding, Window.currentRow))
+
+w_full = (Window.partitionBy("region")
+          .orderBy("date")
+          .rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing))</code></pre>
+
+      <h3>Ranking Functions</h3>
+<pre><code class="language-python">w = Window.partitionBy("region").orderBy(F.desc("sales"))
+
+df = df.withColumn("row_num", F.row_number().over(w))      # 1,2,3 unique
+df = df.withColumn("rank", F.rank().over(w))               # 1,2,2,4 (gaps)
+df = df.withColumn("dense_rank", F.dense_rank().over(w))   # 1,2,2,3 (no gaps)
+df = df.withColumn("percentile", F.percent_rank().over(w)) # 0..1
+df = df.withColumn("ntile", F.ntile(4).over(w))            # 1..4 buckets</code></pre>
+
+      <h3>LAG / LEAD</h3>
+<pre><code class="language-python">w = Window.partitionBy("customer_id").orderBy("order_date")
+
+df = df.withColumn("prev_amount", F.lag("amount", 1).over(w))
+df = df.withColumn("next_amount", F.lead("amount", 1).over(w))
+df = df.withColumn("amount_change", col("amount") - F.lag("amount", 1).over(w))
+
+# With default value
+df = df.withColumn("prev_amount", F.lag("amount", 1, 0).over(w))</code></pre>
+
+      <h3>Aggregate as Window</h3>
+<pre><code class="language-python">w = Window.partitionBy("region").orderBy("date").rowsBetween(-6, 0)
+
+df = (df
+  .withColumn("rolling_7day_avg", F.avg("sales").over(w))
+  .withColumn("running_total", F.sum("sales").over(
+      Window.partitionBy("region").orderBy("date")
+            .rowsBetween(Window.unboundedPreceding, Window.currentRow)))
+  .withColumn("region_total", F.sum("sales").over(Window.partitionBy("region")))
+  .withColumn("pct_of_region", col("sales") / col("region_total"))
+)</code></pre>
+
+      <h3>FIRST_VALUE / LAST_VALUE</h3>
+<pre><code class="language-python">w = (Window.partitionBy("product").orderBy("date")
+     .rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing))
+
+df = df.withColumn("first_price", F.first("price").over(w))
+df = df.withColumn("last_price", F.last("price").over(w))</code></pre>
+
+      <h3>Common Patterns</h3>
+
+      <h4>Top-N per group</h4>
+<pre><code class="language-python">w = Window.partitionBy("region").orderBy(F.desc("sales"))
+top3 = df.withColumn("rn", F.dense_rank().over(w)).filter(col("rn") <= 3)</code></pre>
+
+      <h4>Deduplication (keep latest)</h4>
+<pre><code class="language-python">w = Window.partitionBy("id").orderBy(F.desc("updated_at"))
+dedup = df.withColumn("rn", F.row_number().over(w)).filter(col("rn") == 1).drop("rn")</code></pre>
+
+      <h4>Sessionization (gaps & islands)</h4>
+<pre><code class="language-python">w = Window.partitionBy("user_id").orderBy("event_time")
+
+df = (df
+  .withColumn("prev_time", F.lag("event_time").over(w))
+  .withColumn("gap_minutes",
+      (F.unix_timestamp("event_time") - F.unix_timestamp("prev_time")) / 60)
+  .withColumn("new_session",
+      F.when(col("prev_time").isNull() | (col("gap_minutes") > 30), 1).otherwise(0))
+  .withColumn("session_id", F.sum("new_session").over(w))
+)</code></pre>
+
+      <div class="alert warn"><strong>Performance:</strong> Each window function triggers a shuffle. Reuse same window spec when possible. Avoid <code>orderBy</code> without <code>partitionBy</code> — entire data goes to one partition!</div>
+
+      <h3>Concepts Checklist</h3>
+      <div class="check-row"><input type="checkbox" id="wn1"><label for="wn1">Window.partitionBy / orderBy / rowsBetween</label></div>
+      <div class="check-row"><input type="checkbox" id="wn2"><label for="wn2">row_number / rank / dense_rank / ntile</label></div>
+      <div class="check-row"><input type="checkbox" id="wn3"><label for="wn3">lag / lead with default</label></div>
+      <div class="check-row"><input type="checkbox" id="wn4"><label for="wn4">Aggregates as windows (running total, rolling avg)</label></div>
+      <div class="check-row"><input type="checkbox" id="wn5"><label for="wn5">first_value / last_value (with full frame)</label></div>
+      <div class="check-row"><input type="checkbox" id="wn6"><label for="wn6">Top-N per group pattern</label></div>
+      <div class="check-row"><input type="checkbox" id="wn7"><label for="wn7">Deduplication pattern</label></div>
+      <div class="check-row"><input type="checkbox" id="wn8"><label for="wn8">Sessionization pattern</label></div>
+    </div>
+  </div>
+
+  <!-- PARTITIONING -->
+  <div class="tab-content" id="partitioning">
+    <div class="section">
+      <h2>7. Partitioning & File Formats</h2>
+
+      <h3>Partitions — In-Memory vs On-Disk</h3>
+      <table>
+        <thead><tr><th>Type</th><th>Where</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td>Partitions (in-memory)</td><td>RDD/DataFrame splits across executors</td><td>Parallelism unit</td></tr>
+          <tr><td>Partitions (on-disk)</td><td>partitionBy folders (year=2026/month=05/)</td><td>Partition pruning at read time</td></tr>
+          <tr><td>Buckets</td><td>Files within a folder split by hash</td><td>Avoid shuffle for repeated joins</td></tr>
+        </tbody>
+      </table>
+
+      <h3>In-Memory Partition Operations</h3>
+<pre><code class="language-python">df.rdd.getNumPartitions()              # check current
+df = df.repartition(200)               # full shuffle to N partitions
+df = df.repartition("customer_id")     # hash partition by key
+df = df.repartition(50, "customer_id") # both
+df = df.coalesce(10)                   # reduce partitions WITHOUT full shuffle
+
+# When to use which:
+# - repartition: increase parallelism, distribute evenly (shuffle)
+# - coalesce: decrease partitions cheaply (no full shuffle), before write
+# - Default partition size target: 100-200 MB</code></pre>
+
+      <h3>On-Disk Partitioning (partitionBy)</h3>
+<pre><code class="language-python"># Write partitioned by date
+df.write.partitionBy("year", "month").parquet("s3://bucket/data/")
+
+# Folder structure:
+#   s3://bucket/data/year=2026/month=01/part-00000.parquet
+#   s3://bucket/data/year=2026/month=02/part-00000.parquet
+
+# Reading with partition filter → Spark reads ONLY relevant folders
+df = spark.read.parquet("s3://bucket/data/")
+df.filter("year = 2026 AND month = 5").show()    # only reads 1 folder
+
+# Best practices:
+# - Partition by columns used in WHERE filters (date is #1)
+# - Avoid high-cardinality columns (e.g., user_id with millions of values)
+# - Each partition should have at least 100MB of data
+# - Don't over-partition (small files problem)</code></pre>
+
+      <h3>Bucketing</h3>
+<pre><code class="language-python"># Write 100 buckets by customer_id
+df.write.bucketBy(100, "customer_id").sortBy("date").saveAsTable("orders_bucketed")
+
+# Benefit: joins on customer_id between two bucketed tables skip shuffle
+# Trade-off: write is more expensive, less flexible than partitioning</code></pre>
+
+      <h3>File Formats</h3>
+      <table>
+        <thead><tr><th>Format</th><th>Type</th><th>Best For</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td>Parquet</td><td>Columnar</td><td>Analytics, big data</td><td>✅ DE default — small, fast, schema</td></tr>
+          <tr><td>ORC</td><td>Columnar</td><td>Hive ecosystems</td><td>Similar to Parquet</td></tr>
+          <tr><td>Avro</td><td>Row-based</td><td>Streaming, Kafka</td><td>Schema evolution</td></tr>
+          <tr><td>Delta Lake</td><td>Parquet + log</td><td>ACID, time travel, MERGE</td><td>✅ Modern DE default</td></tr>
+          <tr><td>Iceberg</td><td>Parquet + metadata</td><td>ACID, hidden partitioning</td><td>Growing alternative to Delta</td></tr>
+          <tr><td>CSV</td><td>Text</td><td>Quick exchange, debugging</td><td>❌ Slow, no schema, no compression by default</td></tr>
+          <tr><td>JSON</td><td>Text</td><td>API ingestion</td><td>Heavy, slow parse — convert to Parquet ASAP</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Compression Codecs</h3>
+<pre><code class="language-python">df.write.option("compression", "snappy").parquet("out/")
+# Options: snappy (default, balanced), gzip (smaller, slower), lz4, zstd (modern, best)</code></pre>
+
+      <h3>Delta Lake Essentials</h3>
+<pre><code class="language-python"># Write Delta
+df.write.format("delta").mode("overwrite").save("s3://bucket/delta/orders")
+df.write.format("delta").mode("overwrite").saveAsTable("orders")
+
+# Read Delta
+df = spark.read.format("delta").load("s3://bucket/delta/orders")
+df = spark.table("orders")
+
+# Time travel
+df = spark.read.format("delta").option("versionAsOf", 5).load("path")
+df = spark.read.format("delta").option("timestampAsOf", "2026-05-01").load("path")
+
+# MERGE (UPSERT) — huge win over plain Parquet
+from delta.tables import DeltaTable
+
+target = DeltaTable.forPath(spark, "s3://bucket/delta/orders")
+(target.alias("t")
+  .merge(updates.alias("s"), "t.order_id = s.order_id")
+  .whenMatchedUpdateAll()
+  .whenNotMatchedInsertAll()
+  .execute()
+)
+
+# DELETE
+target.delete("order_date < '2024-01-01'")
+
+# UPDATE
+target.update(condition="status = 'pending'",
+              set={"status": F.lit("expired")})
+
+# Optimize (compact small files)
+spark.sql("OPTIMIZE delta.`s3://bucket/delta/orders`")
+
+# Z-Order (data clustering for fast queries)
+spark.sql("OPTIMIZE orders ZORDER BY (customer_id)")
+
+# Vacuum (remove old files)
+spark.sql("VACUUM orders RETAIN 168 HOURS")</code></pre>
+
+      <h3>Concepts Checklist</h3>
+      <div class="check-row"><input type="checkbox" id="pa1"><label for="pa1">In-memory partitions: repartition vs coalesce</label></div>
+      <div class="check-row"><input type="checkbox" id="pa2"><label for="pa2">On-disk partitionBy for partition pruning</label></div>
+      <div class="check-row"><input type="checkbox" id="pa3"><label for="pa3">Bucketing for repeated joins</label></div>
+      <div class="check-row"><input type="checkbox" id="pa4"><label for="pa4">Parquet vs ORC vs Avro vs Delta</label></div>
+      <div class="check-row"><input type="checkbox" id="pa5"><label for="pa5">Compression codecs (snappy / zstd)</label></div>
+      <div class="check-row"><input type="checkbox" id="pa6"><label for="pa6">Delta MERGE / DELETE / UPDATE</label></div>
+      <div class="check-row"><input type="checkbox" id="pa7"><label for="pa7">Time travel (versionAsOf / timestampAsOf)</label></div>
+      <div class="check-row"><input type="checkbox" id="pa8"><label for="pa8">OPTIMIZE + Z-Order + VACUUM</label></div>
+    </div>
+  </div>
+
+  <!-- UDFS -->
+  <div class="tab-content" id="udf">
+    <div class="section">
+      <h2>8. User Defined Functions (UDFs)</h2>
+
+      <div class="alert danger"><strong>Important:</strong> Python UDFs are SLOW because data must serialize between JVM ↔ Python for every row. Use built-in <code>pyspark.sql.functions</code> whenever possible. Only use UDFs when there's no native function. For better performance, use Pandas UDFs (vectorized).</div>
+
+      <h3>Regular Python UDF (avoid when possible)</h3>
+<pre><code class="language-python">from pyspark.sql.functions import udf
+from pyspark.sql.types import StringType, IntegerType
+
+# Define
+def categorize(age):
+    if age is None: return "unknown"
+    if age < 18: return "minor"
+    if age < 60: return "adult"
+    return "senior"
+
+# Register
+categorize_udf = udf(categorize, StringType())
+
+# Use
+df = df.withColumn("category", categorize_udf(col("age")))
+
+# Decorator style
+@udf(returnType=IntegerType())
+def double(x):
+    return x * 2 if x is not None else None
+
+df = df.withColumn("doubled", double(col("amount")))</code></pre>
+
+      <h3>Pandas UDF (Vectorized — 10-100x faster!)</h3>
+<pre><code class="language-python">import pandas as pd
+from pyspark.sql.functions import pandas_udf
+
+# Scalar Pandas UDF: pd.Series → pd.Series
+@pandas_udf("double")
+def normalize(series: pd.Series) -> pd.Series:
+    return (series - series.mean()) / series.std()
+
+df = df.withColumn("normalized", normalize(col("amount")))
+
+# Grouped Map UDF: pd.DataFrame → pd.DataFrame (per group)
+def top_n_per_group(pdf: pd.DataFrame) -> pd.DataFrame:
+    return pdf.nlargest(3, "sales")
+
+result = df.groupBy("region").applyInPandas(top_n_per_group, schema=df.schema)
+
+# Grouped Aggregate: pd.Series → scalar
+@pandas_udf("double")
+def gmean(series: pd.Series) -> float:
+    return series.product() ** (1 / len(series))
+
+df.groupBy("region").agg(gmean(col("amount"))).show()</code></pre>
+
+      <h3>When to Use UDFs</h3>
+      <table>
+        <thead><tr><th>Scenario</th><th>Approach</th></tr></thead>
+        <tbody>
+          <tr><td>Simple string/numeric transform</td><td>Use built-in F.* functions</td></tr>
+          <tr><td>Complex Python library (e.g., sklearn)</td><td>Pandas UDF</td></tr>
+          <tr><td>Per-row logic with simple conditions</td><td>F.when().otherwise()</td></tr>
+          <tr><td>Whatever-it-takes one-off</td><td>Regular UDF (last resort)</td></tr>
+          <tr><td>Cryptographic / hashing</td><td>Use F.sha2, F.md5 (built-in)</td></tr>
+        </tbody>
+      </table>
+
+      <h3>UDF Performance Comparison</h3>
+<pre><code class="language-python"># Same task, 3 approaches on 100M rows:
+
+# ❌ Slowest: Python UDF
+@udf("double")
+def py_double(x): return x * 2
+df.withColumn("d", py_double(col("amount")))    # ~120 seconds
+
+# ✅ Fast: Pandas UDF
+@pandas_udf("double")
+def pd_double(s: pd.Series) -> pd.Series: return s * 2
+df.withColumn("d", pd_double(col("amount")))    # ~15 seconds
+
+# ✅✅ Fastest: Native expression
+df.withColumn("d", col("amount") * 2)            # ~2 seconds</code></pre>
+
+      <h3>Concepts Checklist</h3>
+      <div class="check-row"><input type="checkbox" id="ud1"><label for="ud1">Regular UDF syntax + when to AVOID</label></div>
+      <div class="check-row"><input type="checkbox" id="ud2"><label for="ud2">Pandas UDF (scalar)</label></div>
+      <div class="check-row"><input type="checkbox" id="ud3"><label for="ud3">applyInPandas for grouped operations</label></div>
+      <div class="check-row"><input type="checkbox" id="ud4"><label for="ud4">Pandas UDF aggregations</label></div>
+      <div class="check-row"><input type="checkbox" id="ud5"><label for="ud5">Always check built-in functions first</label></div>
+    </div>
+  </div>
+
+  <!-- PERFORMANCE -->
+  <div class="tab-content" id="perf">
+    <div class="section">
+      <h2>9. Performance Tuning <span class="badge must">Senior DE Topic</span></h2>
+
+      <h3>1. Use the Spark UI</h3>
+      <p>Open <code>http://&lt;driver-host&gt;:4040</code>. Look at:</p>
+      <ul class="bullet">
+        <li><strong>Stages tab:</strong> identify slow stages, task duration distribution</li>
+        <li><strong>SQL tab:</strong> see physical plan, stages, shuffle sizes</li>
+        <li><strong>Storage tab:</strong> cached data — is your cache being used?</li>
+        <li><strong>Executors tab:</strong> CPU/memory — are some idle?</li>
+      </ul>
+
+      <h3>2. Adaptive Query Execution (AQE)</h3>
+<pre><code class="language-python"># Enable (on by default in 3.x)
+spark.conf.set("spark.sql.adaptive.enabled", "true")
+spark.conf.set("spark.sql.adaptive.coalescePartitions.enabled", "true")
+spark.conf.set("spark.sql.adaptive.skewJoin.enabled", "true")
+spark.conf.set("spark.sql.adaptive.localShuffleReader.enabled", "true")
+
+# AQE handles automatically:
+# - Coalesces small post-shuffle partitions
+# - Switches join strategies based on actual size
+# - Splits skewed partitions
+# - Converts sort-merge joins to broadcast when possible</code></pre>
+
+      <h3>3. Caching / Persisting</h3>
+<pre><code class="language-python"># Cache DataFrame in memory (use when re-read multiple times)
+df.cache()                # alias for persist(MEMORY_AND_DISK)
+df.count()                # ACTION to materialize cache
+
+# Explicit storage levels
+from pyspark import StorageLevel
+df.persist(StorageLevel.MEMORY_AND_DISK)
+df.persist(StorageLevel.MEMORY_ONLY_SER)        # serialized (less memory)
+df.persist(StorageLevel.DISK_ONLY)
+
+# Unpersist when done!
+df.unpersist()
+
+# Rule: cache only if used 2+ times. Caching has cost.</code></pre>
+
+      <h3>4. Partition Sizing</h3>
+<pre><code class="language-python"># Default 200 partitions after shuffle — often wrong
+spark.conf.set("spark.sql.shuffle.partitions", "400")    # bigger jobs
+
+# Target: 100-200 MB per partition
+# Calc: total_data_size / 128MB ≈ ideal partitions
+# Examples:
+#   1GB → 8-10 partitions
+#   100GB → 800-1000 partitions
+#   1TB → 8000-10000 partitions
+
+# Check + adjust
+df.rdd.getNumPartitions()
+df = df.repartition(400)</code></pre>
+
+      <h3>5. Avoid Common Bottlenecks</h3>
+      <div class="grid-2">
+        <div>
+          <h4>❌ collect() on big data</h4>
+<pre><code class="language-python"># Brings ALL data to driver → OOM
+df.collect()
+
+# ✅ Sample / take
+df.take(100)
+df.sample(0.01).collect()</code></pre>
+        </div>
+        <div>
+          <h4>❌ toPandas() on big data</h4>
+<pre><code class="language-python"># Same problem as collect
+df.toPandas()
+
+# ✅ Filter first
+df.limit(10000).toPandas()
+# Or enable Arrow + sample
+spark.conf.set("spark.sql.execution.arrow.pyspark.enabled", "true")</code></pre>
+        </div>
+        <div>
+          <h4>❌ Repeated transformations</h4>
+<pre><code class="language-python"># Without cache, runs 3x
+df = expensive_transform(...)
+df.count()
+df.show()
+df.write.parquet(...)
+
+# ✅ Cache once
+df.cache(); df.count()  # materialize</code></pre>
+        </div>
+        <div>
+          <h4>❌ Python UDFs</h4>
+<pre><code class="language-python"># 10-100x slower
+@udf("string")
+def fn(x): return x.upper()
+
+# ✅ Built-in
+F.upper(col("x"))</code></pre>
+        </div>
+        <div>
+          <h4>❌ Skewed joins without handling</h4>
+<pre><code class="language-python"># Some partitions take 10x longer
+big.join(other, "user_id")
+
+# ✅ Filter nulls, use AQE, salt
+big.filter(col("user_id").isNotNull())
+   .join(broadcast(small), "user_id")</code></pre>
+        </div>
+        <div>
+          <h4>❌ Too many small files</h4>
+<pre><code class="language-python"># Slow listing, slow read
+df.write.parquet(...)  # creates 200 small files
+
+# ✅ Coalesce before write
+df.coalesce(20).write.parquet(...)
+# Or use Delta OPTIMIZE</code></pre>
+        </div>
+      </div>
+
+      <h3>6. Reading Optimizations</h3>
+<pre><code class="language-python"># 1. Predicate pushdown (Spark does this for Parquet/Delta automatically)
+df = spark.read.parquet("data/").filter("date = '2026-05-23'")
+# ✅ Spark reads only relevant row groups
+
+# 2. Column pruning (auto)
+df.select("id", "amount")   # only reads these columns from Parquet
+
+# 3. Partition pruning (auto on partitioned data)
+df.filter("year = 2026 AND month = 5")  # reads only that folder
+
+# 4. Avoid inferSchema on big CSV
+df = spark.read.schema(my_schema).csv("data/")  # much faster
+
+# 5. Use Parquet over CSV always</code></pre>
+
+      <h3>7. explain() — Understand Your Plan</h3>
+<pre><code class="language-python">df.explain()                  # physical plan
+df.explain(True)              # all 4 plans (parsed, analyzed, optimized, physical)
+df.explain("formatted")       # easier to read
+
+# Look for:
+# - BroadcastHashJoin (good for small × big)
+# - SortMergeJoin (default big × big)
+# - Exchange (shuffle — try to minimize)
+# - PushedFilters / PushedAggregates (good — work pushed to source)
+# - PartitionFilters (good — partition pruning working)</code></pre>
+
+      <h3>8. Memory & Executor Sizing</h3>
+<pre><code class="language-python"># Rule of thumb for AWS EMR / Databricks:
+#   - 4-5 cores per executor (more = lock contention)
+#   - 10-15 GB per executor
+#   - Reserve 7-10% for OS / overhead
+#   - 1-2 GB of memory per core ideal
+
+# Example for r5.4xlarge (16 vCPU, 128GB):
+#   - 3 executors per node
+#   - 5 cores each
+#   - 36GB each
+#   - 1 core, ~20GB for driver/overhead
+
+# spark-submit / Databricks:
+--executor-memory 36g
+--executor-cores 5
+--num-executors 30
+--driver-memory 8g</code></pre>
+
+      <h3>Performance Checklist</h3>
+      <div class="check-row"><input type="checkbox" id="pf1"><label for="pf1">Read Spark UI tabs (Stages, SQL, Storage, Executors)</label></div>
+      <div class="check-row"><input type="checkbox" id="pf2"><label for="pf2">AQE enabled with coalesce + skew join</label></div>
+      <div class="check-row"><input type="checkbox" id="pf3"><label for="pf3">Cache only when used 2+ times (and unpersist)</label></div>
+      <div class="check-row"><input type="checkbox" id="pf4"><label for="pf4">Tune spark.sql.shuffle.partitions based on data size</label></div>
+      <div class="check-row"><input type="checkbox" id="pf5"><label for="pf5">Broadcast small dimensions explicitly</label></div>
+      <div class="check-row"><input type="checkbox" id="pf6"><label for="pf6">Always filter + select before joins</label></div>
+      <div class="check-row"><input type="checkbox" id="pf7"><label for="pf7">Use Parquet/Delta, never CSV in production</label></div>
+      <div class="check-row"><input type="checkbox" id="pf8"><label for="pf8">Read explain() output and understand physical plan</label></div>
+      <div class="check-row"><input type="checkbox" id="pf9"><label for="pf9">Avoid Python UDFs (use built-ins or Pandas UDF)</label></div>
+      <div class="check-row"><input type="checkbox" id="pf10"><label for="pf10">Avoid small files (coalesce + OPTIMIZE)</label></div>
+    </div>
+  </div>
+
+  <!-- STREAMING -->
+  <div class="tab-content" id="streaming">
+    <div class="section">
+      <h2>10. Structured Streaming</h2>
+
+      <h3>Core Concept</h3>
+      <p>Treat a stream as an infinite table. Apply DataFrame operations as if it were batch. Spark handles the micro-batch execution.</p>
+
+      <h3>Read from Stream</h3>
+<pre><code class="language-python"># From Kafka
+stream_df = (spark.readStream
+    .format("kafka")
+    .option("kafka.bootstrap.servers", "broker:9092")
+    .option("subscribe", "events_topic")
+    .option("startingOffsets", "latest")              # or "earliest"
+    .load()
+)
+
+# Kafka returns columns: key, value, topic, partition, offset, timestamp
+# Value is binary → decode
+parsed = stream_df.select(
+    F.col("value").cast("string").alias("json_str"),
+    F.col("timestamp")
+)
+
+# Parse JSON
+from pyspark.sql.types import StructType, StringType, DoubleType
+schema = StructType().add("user_id", StringType()).add("amount", DoubleType())
+parsed = parsed.select(F.from_json("json_str", schema).alias("data"), "timestamp") \
+               .select("data.*", "timestamp")
+
+# From files (file source)
+stream_df = (spark.readStream
+    .schema(my_schema)
+    .option("maxFilesPerTrigger", 1)
+    .parquet("s3://bucket/incoming/")
+)
+
+# From Delta as stream
+stream_df = spark.readStream.format("delta").load("s3://bucket/delta/")</code></pre>
+
+      <h3>Transformations (same as batch!)</h3>
+<pre><code class="language-python">aggregated = (parsed
+    .filter(col("amount") > 0)
+    .withWatermark("timestamp", "10 minutes")        # late data handling
+    .groupBy(
+        F.window("timestamp", "5 minutes"),
+        col("user_id")
+    )
+    .agg(F.sum("amount").alias("total"))
+)</code></pre>
+
+      <h3>Watermarking (handle late events)</h3>
+<pre><code class="language-python"># Tells Spark: drop events older than 10 minutes from the latest seen
+.withWatermark("event_time", "10 minutes")
+
+# Without watermark, aggregation state grows forever (memory leak)</code></pre>
+
+      <h3>Write Stream (Sinks)</h3>
+<pre><code class="language-python"># Console (debugging only)
+query = (aggregated.writeStream
+    .outputMode("append")               # append, update, complete
+    .format("console")
+    .option("truncate", "false")
+    .start()
+)
+
+# To Kafka
+query = (aggregated.writeStream
+    .format("kafka")
+    .option("kafka.bootstrap.servers", "broker:9092")
+    .option("topic", "output_topic")
+    .option("checkpointLocation", "/tmp/checkpoint/")
+    .start()
+)
+
+# To Parquet/Delta
+query = (aggregated.writeStream
+    .format("delta")
+    .outputMode("append")
+    .option("checkpointLocation", "/tmp/ckpt/")
+    .start("s3://bucket/output/")
+)
+
+# Trigger types
+.trigger(processingTime="30 seconds")    # micro-batch every 30s
+.trigger(once=True)                       # one batch, then stop (Trigger.Once)
+.trigger(availableNow=True)               # process all available now
+.trigger(continuous="1 second")           # experimental low-latency mode
+
+# foreachBatch — write to any sink (custom logic)
+def process_batch(batch_df, batch_id):
+    batch_df.write.format("jdbc").mode("append").save()
+
+query = aggregated.writeStream.foreachBatch(process_batch).start()
+
+# Wait + stop
+query.awaitTermination()
+query.stop()</code></pre>
+
+      <h3>Output Modes</h3>
+      <table>
+        <thead><tr><th>Mode</th><th>What</th><th>When</th></tr></thead>
+        <tbody>
+          <tr><td>append</td><td>Only new rows</td><td>No aggregation, or with watermark</td></tr>
+          <tr><td>update</td><td>Only changed rows</td><td>Aggregations, incremental updates</td></tr>
+          <tr><td>complete</td><td>Entire result table every batch</td><td>Aggregations w/o watermark (small results)</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Checkpointing (Required for Production!)</h3>
+<pre><code class="language-python">.option("checkpointLocation", "s3://bucket/checkpoints/job1/")
+
+# Stores:
+# - Offsets (where in Kafka/file source we are)
+# - Aggregation state (between micro-batches)
+# - Commit log (which batches succeeded)
+# - Enables exactly-once semantics with idempotent sinks
+# - Allows safe restart from where it stopped</code></pre>
+
+      <h3>Stream-Static Join</h3>
+<pre><code class="language-python"># Join stream with a static lookup table (e.g., dim_customer)
+customers_static = spark.read.format("delta").load("s3://bucket/dim_customer/")
+
+enriched = (event_stream
+    .join(broadcast(customers_static), "customer_id", "left")
+)</code></pre>
+
+      <h3>Stream-Stream Join</h3>
+<pre><code class="language-python"># Both sides need watermarks
+clicks_with_wm = clicks.withWatermark("click_time", "1 hour")
+impressions_with_wm = impressions.withWatermark("impression_time", "2 hours")
+
+joined = clicks_with_wm.join(impressions_with_wm,
+    F.expr("""
+        click_id = impression_id AND
+        click_time BETWEEN impression_time AND impression_time + INTERVAL 1 HOUR
+    """),
+    "inner")</code></pre>
+
+      <h3>Concepts Checklist</h3>
+      <div class="check-row"><input type="checkbox" id="st1"><label for="st1">readStream from Kafka / files / Delta</label></div>
+      <div class="check-row"><input type="checkbox" id="st2"><label for="st2">Parse JSON from Kafka value</label></div>
+      <div class="check-row"><input type="checkbox" id="st3"><label for="st3">withWatermark for late events</label></div>
+      <div class="check-row"><input type="checkbox" id="st4"><label for="st4">Windowed aggregations (tumbling, sliding)</label></div>
+      <div class="check-row"><input type="checkbox" id="st5"><label for="st5">writeStream with output modes (append/update/complete)</label></div>
+      <div class="check-row"><input type="checkbox" id="st6"><label for="st6">Trigger types (processingTime / once / availableNow)</label></div>
+      <div class="check-row"><input type="checkbox" id="st7"><label for="st7">checkpointLocation (required)</label></div>
+      <div class="check-row"><input type="checkbox" id="st8"><label for="st8">foreachBatch for custom sinks</label></div>
+      <div class="check-row"><input type="checkbox" id="st9"><label for="st9">Stream-static and stream-stream joins</label></div>
+    </div>
+  </div>
+
+  <!-- INTERVIEW -->
+  <div class="tab-content" id="interview">
+    <div class="section">
+      <h2>11. Interview Q&A</h2>
+
+      <div class="qa-card">
+        <div class="qa-q">Q1. RDD vs DataFrame vs Dataset?</div>
+        <div class="qa-a">RDD: low-level, no optimization, slowest. DataFrame: tabular API, Catalyst optimizer, recommended. Dataset: typed (Scala/Java only — not Python). For PySpark always use DataFrames.</div>
+      </div>
+
+      <div class="qa-card">
+        <div class="qa-q">Q2. Transformations vs Actions?</div>
+        <div class="qa-a">Transformations are lazy (select, filter, join, withColumn) — build DAG without executing. Actions trigger execution (show, count, collect, write, take).</div>
+      </div>
+
+      <div class="qa-card">
+        <div class="qa-q">Q3. What's the difference between cache() and persist()?</div>
+        <div class="qa-a"><code>cache()</code> is shortcut for <code>persist(MEMORY_AND_DISK)</code>. <code>persist()</code> lets you specify storage level (MEMORY_ONLY, DISK_ONLY, MEMORY_AND_DISK_SER, etc.).</div>
+      </div>
+
+      <div class="qa-card">
+        <div class="qa-q">Q4. repartition vs coalesce?</div>
+        <div class="qa-a">Both change partition count. <code>repartition(n)</code> does a full shuffle, distributes evenly, can increase or decrease. <code>coalesce(n)</code> only decreases, avoids full shuffle by combining existing partitions. Use coalesce before write to reduce small files.</div>
+      </div>
+
+      <div class="qa-card">
+        <div class="qa-q">Q5. What is a shuffle? When does it happen?</div>
+        <div class="qa-a">Shuffle = redistributing data across executors over network. Triggered by groupBy, join, orderBy, repartition, distinct. It's expensive (network + disk I/O) — minimize shuffles for performance.</div>
+      </div>
+
+      <div class="qa-card">
+        <div class="qa-q">Q6. What is broadcast join?</div>
+        <div class="qa-a">Spark sends the entire small table to every executor, eliminating shuffle on the big table. Auto-triggered when one side &lt; <code>spark.sql.autoBroadcastJoinThreshold</code> (default 10MB). Force with <code>broadcast(df)</code> hint.</div>
+      </div>
+
+      <div class="qa-card">
+        <div class="qa-q">Q7. What is data skew? How to handle it?</div>
+        <div class="qa-a">When one partition has way more data than others (often due to NULLs or hot keys), one task takes hours while others finish quickly. Solutions: filter null keys, enable AQE skew handling, use salting (add random suffix to spread keys), broadcast smaller side.</div>
+      </div>
+
+      <div class="qa-card">
+        <div class="qa-q">Q8. Why are Python UDFs slow?</div>
+        <div class="qa-a">Data must serialize between JVM and Python process for every row, breaking vectorization. Use built-in <code>pyspark.sql.functions</code> first; if not possible, use Pandas UDFs which are vectorized (~10-100x faster).</div>
+      </div>
+
+      <div class="qa-card">
+        <div class="qa-q">Q9. What is the Catalyst optimizer?</div>
+        <div class="qa-a">Spark SQL's query optimizer. Transforms logical plan via rules (predicate pushdown, column pruning, constant folding) then generates optimized physical plan.</div>
+      </div>
+
+      <div class="qa-card">
+        <div class="qa-q">Q10. What is AQE (Adaptive Query Execution)?</div>
+        <div class="qa-a">Re-optimizes the query during runtime based on actual statistics. Coalesces small post-shuffle partitions, switches join strategies (e.g., sort-merge → broadcast), splits skewed partitions. Default ON in Spark 3.x.</div>
+      </div>
+
+      <div class="qa-card">
+        <div class="qa-q">Q11. How do you choose number of partitions?</div>
+        <div class="qa-a">Target 100-200 MB per partition. Calc: total_size / 128MB. <code>spark.sql.shuffle.partitions</code> (default 200) often too low for big jobs. Each partition processed by one task, so partitions should be ≥ # cores for parallelism.</div>
+      </div>
+
+      <div class="qa-card">
+        <div class="qa-q">Q12. What is the difference between partitionBy and bucketBy?</div>
+        <div class="qa-a">partitionBy: writes to separate folders by column values; great for partition pruning. bucketBy: writes hash-partitioned files within folders; avoids shuffle for repeated joins on same key. Bucketing is less flexible (fixed at write).</div>
+      </div>
+
+      <div class="qa-card">
+        <div class="qa-q">Q13. Why Parquet over CSV?</div>
+        <div class="qa-a">Parquet: columnar (column pruning), compressed (5-10x smaller), schema-preserved, predicate pushdown. CSV: row-based, no schema, slow to parse, no compression by default. Always use Parquet/Delta in production.</div>
+      </div>
+
+      <div class="qa-card">
+        <div class="qa-q">Q14. What does collect() do? Why is it dangerous?</div>
+        <div class="qa-a">Brings all data from executors to driver as a list. Dangerous on big data → driver OOM. Use take(n), sample(), or write to storage instead.</div>
+      </div>
+
+      <div class="qa-card">
+        <div class="qa-q">Q15. What is checkpointing in Structured Streaming?</div>
+        <div class="qa-a">Stores stream progress (offsets), state (aggregations), and commits to durable storage. Enables exactly-once semantics, safe restart, and recovery from failures. Required for production streaming.</div>
+      </div>
+
+      <div class="qa-card">
+        <div class="qa-q">Q16. What is watermarking?</div>
+        <div class="qa-a">Threshold for late events: "ignore data older than X". Lets Spark drop old state (otherwise state grows forever). Trade-off: longer watermark = handles later data but uses more memory.</div>
+      </div>
+
+      <div class="qa-card">
+        <div class="qa-q">Q17. How does Delta MERGE work?</div>
+        <div class="qa-a">Performs UPSERT (insert + update + delete) atomically. Reads target + source, matches on condition, executes <code>whenMatched</code>/<code>whenNotMatched</code> clauses. Implements ACID via Delta's transaction log.</div>
+      </div>
+
+      <div class="qa-card">
+        <div class="qa-q">Q18. What is Z-Ordering?</div>
+        <div class="qa-a">Delta optimization that physically sorts data by multiple columns using Z-curve to maximize file skipping at read time. Use on columns frequently filtered together: <code>OPTIMIZE table ZORDER BY (col1, col2)</code>.</div>
+      </div>
+
+      <div class="qa-card">
+        <div class="qa-q">Q19. How would you debug a slow Spark job?</div>
+        <div class="qa-a">Start with Spark UI: identify slowest stages, check task duration variance (skew), look at shuffle read/write sizes. Check explain() output for unexpected SortMerge joins, missing predicate pushdown, or broadcast that didn't happen.</div>
+      </div>
+
+      <div class="qa-card">
+        <div class="qa-q">Q20. Difference between repartition by hash and by range?</div>
+        <div class="qa-a"><code>repartition(n, col)</code>: hash partition. Same value → same partition. <code>repartitionByRange(n, col)</code>: range partition. Ordered, useful before orderBy to maintain order.</div>
+      </div>
+
+      <h3>Practice Resources</h3>
+      <ul class="bullet">
+        <li><a href="https://spark.apache.org/docs/latest/api/python/" target="_blank" style="color: var(--accent);">Official PySpark Docs</a></li>
+        <li><a href="https://sparkbyexamples.com/pyspark/" target="_blank" style="color: var(--accent);">Spark By Examples</a> — best free reference</li>
+        <li><a href="https://www.youtube.com/playlist?list=PL2IsFZBGM_IHCl9zhRVC1EXTomkEp_1zm" target="_blank" style="color: var(--accent);">Data Engineering Simplified — PySpark playlist</a></li>
+        <li><a href="https://docs.databricks.com/" target="_blank" style="color: var(--accent);">Databricks Docs</a></li>
+        <li><a href="https://github.com/cartershanklin/pyspark-cheatsheet" target="_blank" style="color: var(--accent);">PySpark Cheatsheet (GitHub)</a></li>
+        <li><strong>Book:</strong> Learning Spark 2nd Ed (free PDF from Databricks)</li>
+        <li><strong>Book:</strong> High Performance Spark by Holden Karau</li>
+      </ul>
+    </div>
+  </div>
+
+  <footer>⚡ PySpark for Data Engineers · Track your progress · Distributed processing mastery</footer>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
+<script>
+  function showTab(evt, tabId) {
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.getElementById(tabId).classList.add('active');
+    evt.currentTarget.classList.add('active');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+  const STORAGE_KEY = 'pyspark_guide_progress_v1';
+  function loadProgress() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+      document.querySelectorAll('input[type="checkbox"]').forEach(cb => { if (saved[cb.id]) cb.checked = true; });
+    } catch (e) { }
+    updateProgress();
+  }
+  function saveProgress() {
+    const state = {};
+    document.querySelectorAll('input[type="checkbox"]').forEach(cb => { if (cb.checked) state[cb.id] = true; });
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    updateProgress();
+  }
+  function updateProgress() {
+    const all = document.querySelectorAll('input[type="checkbox"]');
+    const done = document.querySelectorAll('input[type="checkbox"]:checked');
+    const pct = all.length ? Math.round((done.length / all.length) * 100) : 0;
+    const fill = document.getElementById('progress-fill');
+    fill.style.width = pct + '%';
+    fill.textContent = pct + '%';
+    document.getElementById('progress-text').textContent = done.length + ' / ' + all.length;
+  }
+  function resetProgress() {
+    if (!confirm('Reset all progress?')) return;
+    localStorage.removeItem(STORAGE_KEY);
+    document.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = false);
+    updateProgress();
+  }
+  function exportProgress() {
+    const state = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+    const blob = new Blob([JSON.stringify(state, null, 2)], {type: 'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'pyspark_progress_' + new Date().toISOString().split('T')[0] + '.json';
+    a.click(); URL.revokeObjectURL(url);
+  }
+  document.addEventListener('change', e => { if (e.target.matches('input[type="checkbox"]')) saveProgress(); });
+  document.addEventListener('DOMContentLoaded', loadProgress);
+  if (document.readyState !== 'loading') loadProgress();
+</script>
+</body>
+</html>

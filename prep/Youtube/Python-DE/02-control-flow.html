@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Part 2 — Conditionals &amp; Loops — Notes</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #0b1020; --bg-2: #131a2f; --bg-3: #1f2a44; --card: #131a2f;
+    --text: #e6edf6; --text-dim: #93a4bf; --accent: #60a5fa; --accent-2: #c084fc;
+    --accent-3: #34d399; --success: #22c55e; --warn: #fbbf24; --danger: #f87171;
+    --border: #2a3553; --code-bg: #0a0f1e; --py: #ffd43b; --py-blue: #4584b6;
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: linear-gradient(135deg, #0b1020 0%, #1a0f2e 100%); color: var(--text);
+    line-height: 1.65; min-height: 100vh; }
+  .container { max-width: 1100px; margin: 0 auto; padding: 24px; }
+  header { background: linear-gradient(135deg, #4584b6 0%, #7c3aed 100%);
+    border-radius: 16px; padding: 30px; margin-bottom: 18px; box-shadow: 0 20px 60px rgba(124,58,237,0.25); }
+  header .crumb { font-size: 12px; opacity: 0.85; text-transform: uppercase; letter-spacing: 1px; }
+  header h1 { font-size: 30px; margin: 6px 0 8px 0; }
+  header p { opacity: 0.92; font-size: 15px; max-width: 760px; }
+  .section { background: var(--card); border-radius: 12px; padding: 24px; margin-bottom: 18px; border: 1px solid var(--border); }
+  .section h2 { color: var(--accent); font-size: 22px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+  .section h3 { color: var(--accent-2); font-size: 18px; margin: 20px 0 10px 0; }
+  .section h4 { color: var(--accent-3); font-size: 15px; margin: 14px 0 8px 0; }
+  .section p { color: var(--text); margin-bottom: 10px; }
+  ul.bullet { padding-left: 22px; color: var(--text); font-size: 14.5px; margin: 6px 0 12px 0; }
+  ul.bullet li { padding: 4px 0; }
+  ul.bullet li b { color: var(--accent-3); }
+  table { width: 100%; border-collapse: collapse; background: var(--bg); border-radius: 8px; overflow: hidden; margin: 14px 0; font-size: 13.5px; }
+  th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { background: var(--bg-3); color: var(--accent); text-transform: uppercase; font-size: 11px; letter-spacing: 1px; }
+  tr:last-child td { border-bottom: none; }
+  .alert { padding: 12px 14px; border-radius: 8px; margin: 14px 0; border-left: 4px solid; font-size: 14px; }
+  .alert.warn { background: rgba(251,191,36,0.1); border-color: var(--warn); }
+  .alert.danger { background: rgba(248,113,113,0.1); border-color: var(--danger); }
+  .alert.success { background: rgba(34,197,94,0.1); border-color: var(--success); }
+  .alert.info { background: rgba(96,165,250,0.1); border-color: var(--accent); }
+  .alert strong { color: var(--text); }
+  .diagram { background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 22px; margin: 16px 0; overflow-x: auto; }
+  .diagram .title { text-align: center; color: var(--text-dim); font-size: 12px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 16px; }
+  .flow { display: flex; align-items: stretch; justify-content: center; flex-wrap: wrap; }
+  .flow-box { background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; min-width: 130px; text-align: center; font-size: 13px; font-weight: 600; display: flex; flex-direction: column; justify-content: center; }
+  .flow-box small { display: block; color: var(--text-dim); font-weight: 400; font-size: 11px; margin-top: 4px; }
+  .flow-arrow { display: flex; align-items: center; padding: 0 8px; color: var(--accent); font-size: 22px; font-weight: 700; }
+  .flow-box.gen { border-top: 3px solid var(--accent); }
+  .flow-box.ing { border-top: 3px solid var(--accent-2); }
+  .flow-box.sto { border-top: 3px solid var(--accent-3); }
+  .flow-box.tra { border-top: 3px solid var(--warn); }
+  :not(pre) > code { background: var(--bg-3); padding: 2px 6px; border-radius: 4px; font-size: 13px; color: var(--accent-3); font-family: "Consolas","Monaco",monospace; }
+  pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; padding: 14px; overflow-x: auto; margin: 12px 0; font-size: 13px; line-height: 1.5; }
+  pre code { color: var(--text); font-family: "Consolas","Monaco",monospace; }
+  .pager { display: flex; justify-content: space-between; gap: 12px; margin: 8px 0 30px 0; flex-wrap: wrap; }
+  .pager a { flex: 1; min-width: 200px; text-decoration: none; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; color: var(--text); transition: all 0.2s; }
+  .pager a:hover { border-color: var(--accent-2); transform: translateY(-2px); }
+  .pager .dir { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; }
+  .pager .ttl { color: var(--accent); font-weight: 600; margin-top: 3px; }
+  .pager a.next { text-align: right; }
+  footer { text-align: center; margin-top: 30px; padding: 20px; color: var(--text-dim); font-size: 13px; }
+  @media (max-width: 640px) { header h1 { font-size: 23px; } .container { padding: 12px; } }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <div class="crumb">Python for Data Engineers · Part 2 of 8</div>
+    <h1>&#127922; Conditionals &amp; Loops</h1>
+    <p>The decision-making and repetition tools you'll use everywhere. Loops are a data engineer's favourite
+       thing &mdash; we work with big data and need to iterate over hundreds of tables.</p>
+  </header>
+
+  <div class="section">
+    <h2>Conditionals: <code>if</code> / <code>elif</code> / <code>else</code></h2>
+    <p>It's plain English: <em>if this is true do that, otherwise do something else.</em></p>
+<pre><code>x = 10
+if (x == 10):
+    print("x is 10")
+elif (x &gt; 100):
+    print("x is too big")
+else:
+    print("x is not 10")</code></pre>
+    <div class="alert danger"><strong>= vs ==:</strong> A single <code>=</code> <em>assigns</em> a value.
+      A double <code>==</code> <em>compares</em>. Use <code>==</code> inside conditions.</div>
+    <ul class="bullet">
+      <li><b><code>elif</code></b> = "else if" &mdash; checked only if the previous conditions failed.</li>
+      <li><b><code>else</code></b> = the catch-all; it always runs if nothing above matched.</li>
+      <li>Only <b>one</b> branch runs &mdash; once a condition is true, the rest are skipped.</li>
+    </ul>
+
+    <h3>Wrap conditions in braces</h3>
+    <p>Always wrap compound conditions in <code>( )</code>. It promotes readability and prevents subtle bugs.</p>
+<pre><code>if (x &gt; 100) and (x &lt; 200):
+    print("between 100 and 200")</code></pre>
+    <div class="alert warn"><strong>Real bug from the video:</strong> without braces,
+      <code>x &gt; 100 and x &lt; 200</code> created a conflict. Adding <code>(x &gt; 100) and (x &lt; 200)</code>
+      fixed it. <b>Add braces wherever you can.</b></div>
+
+    <h3>Nested if</h3>
+    <p>You can put an <code>if</code> inside another <code>if</code> to create branches within branches &mdash;
+       common in data validation.</p>
+  </div>
+
+  <div class="section">
+    <h2>Loops: iteration is the data engineer's superpower</h2>
+    <p>Why are loops so important? Because we work with big data &mdash; reading from many tables
+       (<code>orders</code>, <code>products</code>, <code>customers</code>...). Instead of repeating code per
+       table, we loop over them.</p>
+    <div class="diagram">
+      <div class="title">One loop instead of repeated code</div>
+      <div class="flow">
+        <div class="flow-box gen">tables list<small>[orders, products, ...]</small></div>
+        <div class="flow-arrow">&#8594;</div>
+        <div class="flow-box ing">for loop<small>iterate each</small></div>
+        <div class="flow-arrow">&#8594;</div>
+        <div class="flow-box sto">process<small>same logic per table</small></div>
+      </div>
+    </div>
+
+    <h3>The <code>for</code> loop (you'll use it ~80% of the time)</h3>
+<pre><code>my_list = ["orders", "products", "customers"]
+for i in my_list:
+    print(i)        # i takes each value in turn</code></pre>
+
+    <h3><code>range()</code> &mdash; loop over numbers</h3>
+<pre><code>for i in range(1, 101):   # 1 to 100  (stop is exclusive: n-1)
+    print(i)</code></pre>
+
+    <h3>Combining loops with conditions (a real DE pattern)</h3>
+    <p>You rarely process everything blindly &mdash; you validate first. Note <code>.lower()</code> handles
+       inconsistent casing in real data:</p>
+<pre><code>for i in table_list:
+    if (i.lower() == "order"):
+        print("table order")    # only process the orders table
+    else:
+        print("no table order")</code></pre>
+
+    <h3>Nested loops</h3>
+    <p>Because a string acts like an array, you can loop inside a loop:</p>
+<pre><code>for i in table_list:        # i = "order"
+    for x in i:             # x = 'o','r','d','e','r'
+        print(x)</code></pre>
+  </div>
+
+  <div class="section">
+    <h2><code>break</code> and <code>continue</code></h2>
+    <table>
+      <tr><th>Keyword</th><th>Effect</th><th>DE use-case</th></tr>
+      <tr><td><code>break</code></td><td>Immediately <b>exits</b> the whole loop &mdash; doesn't even run the rest of the current iteration</td><td>Found the one table you needed &rarr; stop searching</td></tr>
+      <tr><td><code>continue</code></td><td><b>Skips</b> the rest of the current iteration and moves to the next</td><td>Skip the <code>order</code> table, process all others</td></tr>
+    </table>
+<pre><code># break — stop as soon as we hit "order"
+for i in table_list:
+    print(i)
+    if (i.lower() == "order"):
+        break
+
+# continue — skip "order", process the rest
+for i in table_list:
+    if (i.lower() == "order"):
+        continue
+    print(i)</code></pre>
+  </div>
+
+  <div class="section">
+    <h2>The <code>while</code> Loop</h2>
+    <p>Used ~20% of the time. Unlike <code>for</code>, a <code>while</code> loop does <b>not</b> iterate for
+       you &mdash; <strong>you must update the counter yourself</strong>, or you get an infinite loop.</p>
+<pre><code>x = 1
+while (x &lt; 11):
+    print(x)
+    x = x + 1     # CRUCIAL: without this it loops forever</code></pre>
+    <div class="alert danger"><strong>Infinite loop:</strong> forgetting <code>x = x + 1</code> means the
+      condition is always true &mdash; the program prints forever until execution is halted (out of memory).</div>
+
+    <h3>Common pattern: <code>while True</code> + <code>break</code></h3>
+    <p>The speaker personally prefers running an "infinite" loop and breaking out on a condition:</p>
+<pre><code>x = 1
+while True:
+    print("hello")
+    x = x + 1
+    if (x &gt; 10):
+        break</code></pre>
+  </div>
+
+  <div class="section">
+    <h2>&#9989; Key Takeaways</h2>
+    <ul class="bullet">
+      <li><code>if</code>/<code>elif</code>/<code>else</code> &mdash; only one branch runs; use <code>==</code> to compare.</li>
+      <li>Always wrap compound conditions in <b>parentheses</b> for clarity and to avoid bugs.</li>
+      <li><b>for loops</b> are the workhorse &mdash; iterate lists, ranges, even characters of a string.</li>
+      <li><code>break</code> exits the loop entirely; <code>continue</code> skips to the next iteration.</li>
+      <li><b>while loops</b> need you to manage the counter manually &mdash; or use <code>while True</code> + <code>break</code>.</li>
+      <li>Combine loops with conditions to build validation into your pipelines.</li>
+    </ul>
+  </div>
+
+  <div class="pager">
+    <a class="prev" href="01-python-basics.html"><div class="dir">&#8592; Previous</div><div class="ttl">Part 1 · Basics &amp; Strings</div></a>
+    <a class="next" href="03-data-structures.html"><div class="dir">Next &#8594;</div><div class="ttl">Part 3 · Data Structures</div></a>
+  </div>
+
+  <footer>
+    Notes generated from the "Python Full Course For Data Engineers [6+ HOURS]" transcript ·
+    Source: youtube.com/watch?v=ZvU7lupoXQE
+  </footer>
+</div>
+</body>
+</html>

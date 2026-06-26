@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Part 7 — Inheritance — Notes</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #0b1020; --bg-2: #131a2f; --bg-3: #1f2a44; --card: #131a2f;
+    --text: #e6edf6; --text-dim: #93a4bf; --accent: #60a5fa; --accent-2: #c084fc;
+    --accent-3: #34d399; --success: #22c55e; --warn: #fbbf24; --danger: #f87171;
+    --border: #2a3553; --code-bg: #0a0f1e; --py: #ffd43b; --py-blue: #4584b6;
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: linear-gradient(135deg, #0b1020 0%, #1a0f2e 100%); color: var(--text);
+    line-height: 1.65; min-height: 100vh; }
+  .container { max-width: 1100px; margin: 0 auto; padding: 24px; }
+  header { background: linear-gradient(135deg, #4584b6 0%, #7c3aed 100%);
+    border-radius: 16px; padding: 30px; margin-bottom: 18px; box-shadow: 0 20px 60px rgba(124,58,237,0.25); }
+  header .crumb { font-size: 12px; opacity: 0.85; text-transform: uppercase; letter-spacing: 1px; }
+  header h1 { font-size: 30px; margin: 6px 0 8px 0; }
+  header p { opacity: 0.92; font-size: 15px; max-width: 760px; }
+  .section { background: var(--card); border-radius: 12px; padding: 24px; margin-bottom: 18px; border: 1px solid var(--border); }
+  .section h2 { color: var(--accent); font-size: 22px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+  .section h3 { color: var(--accent-2); font-size: 18px; margin: 20px 0 10px 0; }
+  .section h4 { color: var(--accent-3); font-size: 15px; margin: 14px 0 8px 0; }
+  .section p { color: var(--text); margin-bottom: 10px; }
+  ul.bullet { padding-left: 22px; color: var(--text); font-size: 14.5px; margin: 6px 0 12px 0; }
+  ul.bullet li { padding: 4px 0; }
+  ul.bullet li b { color: var(--accent-3); }
+  table { width: 100%; border-collapse: collapse; background: var(--bg); border-radius: 8px; overflow: hidden; margin: 14px 0; font-size: 13.5px; }
+  th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { background: var(--bg-3); color: var(--accent); text-transform: uppercase; font-size: 11px; letter-spacing: 1px; }
+  tr:last-child td { border-bottom: none; }
+  .alert { padding: 12px 14px; border-radius: 8px; margin: 14px 0; border-left: 4px solid; font-size: 14px; }
+  .alert.warn { background: rgba(251,191,36,0.1); border-color: var(--warn); }
+  .alert.danger { background: rgba(248,113,113,0.1); border-color: var(--danger); }
+  .alert.success { background: rgba(34,197,94,0.1); border-color: var(--success); }
+  .alert.info { background: rgba(96,165,250,0.1); border-color: var(--accent); }
+  .alert strong { color: var(--text); }
+  .diagram { background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 22px; margin: 16px 0; overflow-x: auto; }
+  .diagram .title { text-align: center; color: var(--text-dim); font-size: 12px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 16px; }
+  .flow { display: flex; align-items: stretch; justify-content: center; flex-wrap: wrap; }
+  .flow-box { background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; min-width: 130px; text-align: center; font-size: 13px; font-weight: 600; display: flex; flex-direction: column; justify-content: center; }
+  .flow-box small { display: block; color: var(--text-dim); font-weight: 400; font-size: 11px; margin-top: 4px; }
+  .flow-arrow { display: flex; align-items: center; padding: 0 8px; color: var(--accent); font-size: 22px; font-weight: 700; }
+  .flow-box.gen { border-top: 3px solid var(--accent); }
+  .flow-box.ing { border-top: 3px solid var(--accent-2); }
+  .flow-box.sto { border-top: 3px solid var(--accent-3); }
+  .flow-box.tra { border-top: 3px solid var(--warn); }
+  :not(pre) > code { background: var(--bg-3); padding: 2px 6px; border-radius: 4px; font-size: 13px; color: var(--accent-3); font-family: "Consolas","Monaco",monospace; }
+  pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; padding: 14px; overflow-x: auto; margin: 12px 0; font-size: 13px; line-height: 1.5; }
+  pre code { color: var(--text); font-family: "Consolas","Monaco",monospace; }
+  .pager { display: flex; justify-content: space-between; gap: 12px; margin: 8px 0 30px 0; flex-wrap: wrap; }
+  .pager a { flex: 1; min-width: 200px; text-decoration: none; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; color: var(--text); transition: all 0.2s; }
+  .pager a:hover { border-color: var(--accent-2); transform: translateY(-2px); }
+  .pager .dir { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; }
+  .pager .ttl { color: var(--accent); font-weight: 600; margin-top: 3px; }
+  .pager a.next { text-align: right; }
+  footer { text-align: center; margin-top: 30px; padding: 20px; color: var(--text-dim); font-size: 13px; }
+  @media (max-width: 640px) { header h1 { font-size: 23px; } .container { padding: 12px; } }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <div class="crumb">Python for Data Engineers · Part 7 of 8</div>
+    <h1>&#129505; Inheritance</h1>
+    <p>The most feared OOP topic &mdash; but simple once you see the flow. A <b>child class</b> reuses all the
+       methods and attributes of a <b>parent class</b> without rewriting them.</p>
+  </header>
+
+  <div class="section">
+    <h2>The Idea</h2>
+    <p>Like a biological family: parent &rarr; child &rarr; grandchild. If <code>Employee</code> needs everything
+       <code>Company</code> has, don't copy-paste &mdash; just <b>inherit</b> it.</p>
+    <table>
+      <tr><th>Type</th><th>Structure</th></tr>
+      <tr><td><b>Single level</b></td><td>Child inherits one parent</td></tr>
+      <tr><td><b>Multiple</b></td><td>One child inherits two (or more) parents</td></tr>
+      <tr><td><b>Multi-level</b></td><td>Grandparent &rarr; parent &rarr; child (a chain)</td></tr>
+    </table>
+  </div>
+
+  <div class="section">
+    <h2>Single-Level Inheritance</h2>
+    <p>Pass the parent class in parentheses when defining the child. Now the child can call the parent's
+       methods too.</p>
+<pre><code>class Company:
+    def company_info(self):
+        return "Company name is XYZ"
+
+class Employee(Company):       # inherit Company
+    def employee_info(self):
+        return "Employee name is Rahul"
+
+emp1 = Employee()
+print(emp1.employee_info())    # own method
+print(emp1.company_info())     # inherited from Company!</code></pre>
+
+    <h3>The hard part: constructors</h3>
+    <p>With <code>__init__</code> in both classes, the child must <b>explicitly provide the parent's
+       attributes</b> too &mdash; otherwise the parent's attributes don't exist on the child.</p>
+<pre><code>class Company:
+    def __init__(self, company_name):
+        self.com_name = company_name
+    def company_info(self):
+        print(f"Company name is {self.com_name}")
+
+class Employee(Company):
+    def __init__(self, employee_name, company_name, country):
+        self.emp_name = employee_name
+        Company.__init__(self, company_name)   # call parent's constructor
+        self.country = country
+
+emp1 = Employee("Rahul", "XYZ", "US")</code></pre>
+    <div class="alert info"><strong>Recommended pattern:</strong> call the parent constructor explicitly with
+      <code>ParentClass.__init__(self, ...)</code>. It stays consistent across single, multiple and
+      multi-level inheritance.</div>
+
+    <h3><code>super()</code> &mdash; the alternative</h3>
+    <p><code>super().company_info()</code> calls the parent (one level up). It's fine for single-level, but
+       gets confusing with multiple inheritance &mdash; so the course recommends the explicit
+       <code>ClassName.method(self)</code> style instead.</p>
+<pre><code># these two are equivalent in single-level inheritance
+Company.company_info(self)
+super().company_info()</code></pre>
+  </div>
+
+  <div class="section">
+    <h2>Multiple Inheritance</h2>
+    <p>One child, two parents. Inherit both by listing them, and provide <b>both</b> parents' attributes in
+       the child constructor.</p>
+    <div class="diagram">
+      <div class="title">two parents, one child</div>
+      <div class="flow">
+        <div class="flow-box gen">class Company<small>parent 1</small></div>
+        <div class="flow-arrow">&#8600;</div>
+        <div class="flow-box sto">class Employee<small>(Company, Country)</small></div>
+        <div class="flow-arrow">&#8599;</div>
+        <div class="flow-box ing">class Country<small>parent 2</small></div>
+      </div>
+    </div>
+<pre><code>class Employee(Company, Country):
+    def __init__(self, employee_name, company_name, country_name):
+        self.emp_name = employee_name
+        Company.__init__(self, company_name)    # parent 1
+        Country.__init__(self, country_name)    # parent 2</code></pre>
+  </div>
+
+  <div class="section">
+    <h2>Multi-Level Inheritance</h2>
+    <p>A chain: <code>Company</code> &rarr; <code>Department</code> &rarr; <code>Employee</code>. When
+       <code>Employee</code> inherits <code>Department</code>, it <b>automatically</b> gets <code>Company</code>
+       too. Each level passes attributes up the chain.</p>
+<pre><code>class Company:
+    def __init__(self, company_name):
+        self.com_name = company_name
+
+class Department(Company):
+    def __init__(self, department_name, company_name):
+        self.department_name = department_name
+        Company.__init__(self, company_name)        # pass up to Company
+
+class Employee(Department):
+    def __init__(self, emp_name, department_name, company_name):
+        self.emp_name = emp_name
+        Department.__init__(self, department_name, company_name)  # passes up the whole chain
+
+emp1 = Employee("Rahul", "HR", "ABC")
+emp1.all_info()        # can reach Employee, Department AND Company data</code></pre>
+    <div class="alert success"><strong>The golden rule:</strong> always pass <b>all</b> the attributes up the
+      chain in each constructor &mdash; that's what makes inherited methods work.</div>
+  </div>
+
+  <div class="section">
+    <h2>Method Priority (Overriding)</h2>
+    <p>If the same method name exists at multiple levels, Python picks the <b>closest</b> one first:</p>
+    <ul class="bullet">
+      <li><b>Local first:</b> the child's own method wins ("local things get priority").</li>
+      <li><b>Then nearest parent:</b> if the child doesn't have it, the first/nearest inherited parent's version runs.</li>
+      <li><b>Then up the chain:</b> only if no closer class has it does the grandparent's version run.</li>
+    </ul>
+<pre><code># If Employee, Department, Company all define show_me():
+emp1.show_me()   # runs Employee's version (the most local one)</code></pre>
+  </div>
+
+  <div class="section">
+    <h2>&#9989; Key Takeaways</h2>
+    <ul class="bullet">
+      <li>Inheritance lets a <b>child class reuse</b> a parent's methods &amp; attributes &mdash; no copy-paste.</li>
+      <li>With constructors, the child must <b>explicitly pass the parent's attributes</b> (<code>Parent.__init__(self, ...)</code>).</li>
+      <li>Prefer explicit <code>ClassName.__init__()</code> over <code>super()</code> &mdash; it works the same everywhere.</li>
+      <li><b>Multiple</b> = several parents; <b>multi-level</b> = a chain that auto-inherits up the line.</li>
+      <li>Method priority: <b>local &rarr; nearest parent &rarr; up the chain</b> (overriding).</li>
+    </ul>
+  </div>
+
+  <div class="pager">
+    <a class="prev" href="06-oop.html"><div class="dir">&#8592; Previous</div><div class="ttl">Part 6 · OOP</div></a>
+    <a class="next" href="08-concurrency-modules.html"><div class="dir">Next &#8594;</div><div class="ttl">Part 8 · Threading, Requests &amp; OS</div></a>
+  </div>
+
+  <footer>
+    Notes generated from the "Python Full Course For Data Engineers [6+ HOURS]" transcript ·
+    Source: youtube.com/watch?v=ZvU7lupoXQE
+  </footer>
+</div>
+</body>
+</html>

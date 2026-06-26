@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Final Plan: DE in 12 Weeks | 2 Certs + Projects + Revision</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #0f172a; --bg-2: #1e293b; --bg-3: #334155; --card: #1e293b;
+    --text: #e2e8f0; --text-dim: #94a3b8; --accent: #38bdf8; --accent-2: #a78bfa;
+    --success: #22c55e; --warn: #f59e0b; --danger: #ef4444; --border: #334155;
+    --free: #22c55e; --paid: #f59e0b; --rev: #ec4899;
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%); color: var(--text);
+    line-height: 1.6; min-height: 100vh; }
+  .container { max-width: 1200px; margin: 0 auto; padding: 24px; }
+  header { background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%);
+    border-radius: 16px; padding: 32px; margin-bottom: 24px; box-shadow: 0 20px 60px rgba(99,102,241,.3); }
+  header h1 { font-size: 30px; margin-bottom: 8px; }
+  header p { opacity: .9; font-size: 16px; }
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr)); gap: 16px; margin-top: 24px; }
+  .stat { background: rgba(255,255,255,.15); backdrop-filter: blur(10px); padding: 16px; border-radius: 12px; border: 1px solid rgba(255,255,255,.2); }
+  .stat-label { font-size: 12px; opacity: .85; text-transform: uppercase; letter-spacing: 1px; }
+  .stat-value { font-size: 20px; font-weight: 700; margin-top: 4px; }
+  .progress-section { background: var(--card); border-radius: 12px; padding: 20px; margin-bottom: 24px; border: 1px solid var(--border); }
+  .progress-bar { background: var(--bg); height: 16px; border-radius: 8px; overflow: hidden; margin-top: 8px; }
+  .progress-fill { background: linear-gradient(90deg, #22c55e, #38bdf8); height: 100%; width: 0%; transition: width .5s ease;
+    display: flex; align-items: center; justify-content: flex-end; padding-right: 8px; font-size: 11px; color: #fff; font-weight: 700; }
+  .tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 24px; background: var(--card); padding: 8px; border-radius: 12px; border: 1px solid var(--border); }
+  .tab { padding: 10px 18px; background: transparent; color: var(--text-dim); border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600; transition: all .2s; }
+  .tab:hover { background: var(--bg-3); color: var(--text); }
+  .tab.active { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; }
+  .tab-content { display: none; animation: fadeIn .3s; }
+  .tab-content.active { display: block; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+  .month-card { background: var(--card); border-radius: 12px; padding: 24px; margin-bottom: 20px; border: 1px solid var(--border); }
+  .month-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid var(--border); flex-wrap: wrap; gap: 12px; }
+  .month-title { font-size: 22px; color: var(--accent); }
+  .month-tag { background: var(--accent-2); color: #fff; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+  .week-card { background: var(--bg); border-left: 4px solid var(--accent); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+  .week-card.rev { border-left-color: var(--rev); }
+  .week-card.cert { border-left-color: var(--warn); }
+  .week-title { font-size: 16px; color: var(--text); margin-bottom: 4px; font-weight: 700; }
+  .week-sub { font-size: 12px; color: var(--text-dim); margin-bottom: 12px; }
+  .task-list { list-style: none; }
+  .task-item { display: flex; align-items: flex-start; gap: 10px; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,.05); }
+  .task-item:last-child { border-bottom: none; }
+  .task-item input[type="checkbox"] { margin-top: 4px; width: 18px; height: 18px; accent-color: var(--success); cursor: pointer; flex-shrink: 0; }
+  .task-item label { flex: 1; cursor: pointer; color: var(--text); font-size: 14px; }
+  .task-item input:checked + label { text-decoration: line-through; color: var(--text-dim); }
+  .pill { font-size: 10px; padding: 2px 8px; border-radius: 10px; font-weight: 700; text-transform: uppercase; margin-right: 6px; }
+  .pill.learn { background: var(--accent); color: #fff; }
+  .pill.rev { background: var(--rev); color: #fff; }
+  .pill.proj { background: var(--accent-2); color: #fff; }
+  .pill.cert { background: var(--warn); color: #fff; }
+  .pill.sql { background: #0ea5e9; color: #fff; }
+  .project-card { background: linear-gradient(135deg, rgba(167,139,250,.1), rgba(56,189,248,.1)); border: 1px solid var(--accent-2); border-radius: 8px; padding: 16px; margin-top: 12px; }
+  .project-title { color: var(--accent-2); font-weight: 700; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+  .project-title::before { content: "🛠"; }
+  .info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px,1fr)); gap: 16px; margin-bottom: 20px; }
+  .info-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+  .info-card h3 { color: var(--accent); margin-bottom: 12px; font-size: 16px; }
+  .info-card ul { list-style: none; }
+  .info-card li { padding: 6px 0; color: var(--text-dim); font-size: 14px; padding-left: 20px; position: relative; }
+  .info-card li::before { content: "\2192"; color: var(--accent); position: absolute; left: 0; }
+  table { width: 100%; border-collapse: collapse; background: var(--card); border-radius: 8px; overflow: hidden; margin: 12px 0; }
+  th, td { padding: 12px; text-align: left; border-bottom: 1px solid var(--border); font-size: 14px; }
+  th { background: var(--bg); color: var(--accent); text-transform: uppercase; font-size: 12px; letter-spacing: 1px; }
+  tr:last-child td { border-bottom: none; }
+  .alert { padding: 16px; border-radius: 8px; margin: 16px 0; border-left: 4px solid; }
+  .alert.warn { background: rgba(245,158,11,.1); border-color: var(--warn); }
+  .alert.success { background: rgba(34,197,94,.1); border-color: var(--success); }
+  .alert.info { background: rgba(56,189,248,.1); border-color: var(--accent); }
+  .alert.rev { background: rgba(236,72,153,.1); border-color: var(--rev); }
+  .alert strong { color: var(--text); }
+  .controls { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+  .btn { background: var(--bg-3); color: var(--text); border: 1px solid var(--border); padding: 8px 16px; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600; transition: all .2s; }
+  .btn:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .btn.danger:hover { background: var(--danger); border-color: var(--danger); }
+  footer { text-align: center; margin-top: 40px; padding: 20px; color: var(--text-dim); font-size: 13px; }
+  @media (max-width: 640px) { header h1 { font-size: 20px; } .container { padding: 12px; } .tab { padding: 8px 12px; font-size: 12px; } }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <h1>🎯 Final Plan — Data Engineer in 12 Weeks</h1>
+    <p>Jun 8 → Aug 25, 2026 · 8 courses + 2 certifications + 3 projects + interview prep + lifetime-retention revision system</p>
+    <div class="stats-grid">
+      <div class="stat"><div class="stat-label">Duration</div><div class="stat-value">~11 Weeks</div></div>
+      <div class="stat"><div class="stat-label">Daily Effort</div><div class="stat-value">3.5 hr (6+ wknd)</div></div>
+      <div class="stat"><div class="stat-label">Weekly</div><div class="stat-value">~29 hrs</div></div>
+      <div class="stat"><div class="stat-label">Cert #1</div><div class="stat-value">AWS DEA (Jun)</div></div>
+      <div class="stat"><div class="stat-label">Cert #2</div><div class="stat-value">SnowPro (Jul)</div></div>
+    </div>
+  </header>
+
+  <div class="progress-section">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+      <strong>📊 Overall Progress</strong>
+      <span id="progress-text" style="color: var(--accent); font-weight: 700;">0 / 0 tasks</span>
+    </div>
+    <div class="progress-bar"><div class="progress-fill" id="progress-fill">0%</div></div>
+    <div class="controls" style="margin-top:16px;">
+      <button class="btn" onclick="exportProgress()">💾 Export Progress</button>
+      <button class="btn danger" onclick="resetProgress()">♻ Reset All</button>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="showTab(event,'overview')">Overview</button>
+    <button class="tab" onclick="showTab(event,'phase1')">Phase 1: June</button>
+    <button class="tab" onclick="showTab(event,'phase2')">Phase 2: July</button>
+    <button class="tab" onclick="showTab(event,'phase3')">Phase 3: August</button>
+    <button class="tab" onclick="showTab(event,'consolidate')">Revision Phase</button>
+    <button class="tab" onclick="showTab(event,'revision')">Revision System</button>
+    <button class="tab" onclick="showTab(event,'projects')">Projects</button>
+    <button class="tab" onclick="showTab(event,'interview')">Interview Prep</button>
+    <button class="tab" onclick="showTab(event,'certs')">Certifications</button>
+  </div>
+
+  <!-- OVERVIEW -->
+  <div class="tab-content active" id="overview">
+    <div class="month-card">
+      <h2 class="month-title">🗺 Plan at a Glance</h2>
+      <p style="color: var(--text-dim); margin-bottom:16px;">A focused sprint using the courses you already own, sequenced by dependency, with two certifications front-loaded and a dedicated revision system so it sticks for life.</p>
+      <table>
+        <thead><tr><th>Phase</th><th>Weeks</th><th>Focus</th><th>Milestone</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Phase 1</strong></td><td>1–4 (Jun)</td><td>Python + Pandas, Advanced SQL, AWS DEA</td><td>✅ AWS DEA-C01 Cert</td></tr>
+          <tr><td><strong>Phase 2</strong></td><td>5–8 (Jul)</td><td>PySpark, Snowflake (SnowPro prep)</td><td>✅ SnowPro Core Cert</td></tr>
+          <tr><td><strong>Phase 3</strong></td><td>9–10 (Aug)</td><td>dbt, Airflow, Databricks (light), Capstone</td><td>Capstone + portfolio</td></tr>
+          <tr><td><strong>Revision</strong></td><td>11–12 (Aug)</td><td>Full consolidation + mock interviews</td><td>Interview-ready</td></tr>
+        </tbody>
+      </table>
+      <div class="alert info"><strong>📌 Sequencing logic:</strong> Python is first because PySpark, Airflow &amp; dbt all assume it. AWS cert is front-loaded (it needs little Python). Snowflake moves into July to hit your SnowPro goal. Databricks is last &amp; light because it overlaps PySpark + Snowflake.</div>
+      <div class="alert rev"><strong>🧠 Why the +10 days:</strong> Weeks 11–12 are pure revision. Spaced repetition (revisit after 1 day → 1 week → 1 month) is what moves knowledge into long-term memory. Skipping this is why most people forget courses within weeks.</div>
+    </div>
+
+    <div class="info-grid">
+      <div class="info-card">
+        <h3>📚 Your Course Inventory</h3>
+        <ul>
+          <li>Kaggle Python + Pandas (~13 hr) — added</li>
+          <li>SQL for Data Analysis: Advanced (8h21m)</li>
+          <li>AWS Certified Data Engineer DEA-C01 (22h17m)</li>
+          <li>PySpark — Apache Spark 2026 (28h29m)</li>
+          <li>SnowPro Core Prep COF-C03 (11h15m)</li>
+          <li>dbt Bootcamp Zero to Hero (12h49m)</li>
+          <li>Apache Airflow Hands-On (10h54m)</li>
+          <li>Databricks DE Associate (5h10m) — light bonus</li>
+        </ul>
+      </div>
+      <div class="info-card">
+        <h3>⏱ Time Budget</h3>
+        <ul>
+          <li>Weekdays: 3.5 hr × 5 = 17.5 hr</li>
+          <li>Weekends: 6 hr × 2 = 12 hr</li>
+          <li>Weekly total: ~29 hr</li>
+          <li>11 weeks ≈ ~290 hr available</li>
+          <li>Workload (courses+certs+projects+revision) ≈ 270 hr</li>
+          <li>~20 hr buffer for slippage</li>
+        </ul>
+      </div>
+      <div class="info-card">
+        <h3>🎯 End-State Deliverables</h3>
+        <ul>
+          <li>2 certifications (AWS DEA + SnowPro Core)</li>
+          <li>3 GitHub projects with READMEs</li>
+          <li>1 capstone (multi-tool pipeline)</li>
+          <li>Flashcard deck for lifetime revision</li>
+          <li>DE-focused resume + LinkedIn</li>
+          <li>10+ mock interviews done</li>
+        </ul>
+      </div>
+      <div class="info-card">
+        <h3>📅 Key Exam Dates (book early!)</h3>
+        <ul>
+          <li>AWS DEA-C01: ~Jul 1–3 (end Week 4)</li>
+          <li>SnowPro Core: ~Jul 30–Aug 1 (end Week 8)</li>
+          <li>Book exams 2 weeks in advance</li>
+          <li>Target 80%+ on practice before booking</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="alert warn"><strong>⚠ The danger zone is July.</strong> PySpark (your biggest course) + a new Snowflake course + the SnowPro exam land in the same 4 weeks. If anything slips, protect the cert date and push PySpark polish into the revision phase.</div>
+  </div>
+
+  <!-- PHASE 1 -->
+  <div class="tab-content" id="phase1">
+    <div class="month-card">
+      <div class="month-header">
+        <h2 class="month-title">Phase 1 — June: Foundations + AWS Cert</h2>
+        <span class="month-tag">Python · SQL · AWS DEA-C01</span>
+      </div>
+      <div class="alert info"><strong>Daily split:</strong> ~2 hr AWS DEA course + ~1.5 hr Python/Pandas. Weekends: longer AWS practice-exam blocks. Goal: pass AWS DEA-C01 by ~Jul 1–3.</div>
+
+      <div class="week-card">
+        <div class="week-title">Week 1 (Jun 8–14) — Python Core + AWS Foundations</div>
+        <div class="week-sub">~29 hrs · Python track + AWS track in parallel</div>
+        <ul class="task-list">
+          <li class="task-item"><input type="checkbox" id="p1w1-1"><label for="p1w1-1"><span class="pill learn">Learn</span>Kaggle Python: lessons 1–7 (syntax, functions, lists, loops, strings/dicts)</label></li>
+          <li class="task-item"><input type="checkbox" id="p1w1-2"><label for="p1w1-2"><span class="pill learn">Learn</span>Patch gaps via YouTube: OOP (classes/inheritance) + try/except + venv/pip</label></li>
+          <li class="task-item"><input type="checkbox" id="p1w1-3"><label for="p1w1-3"><span class="pill learn">Learn</span>AWS DEA: course intro, IAM, S3 (buckets, storage classes, lifecycle, versioning)</label></li>
+          <li class="task-item"><input type="checkbox" id="p1w1-4"><label for="p1w1-4"><span class="pill cert">Cert</span>Create AWS free-tier account + set a billing alert at ₹500</label></li>
+          <li class="task-item"><input type="checkbox" id="p1w1-5"><label for="p1w1-5"><span class="pill sql">SQL</span>Interview warm-up: 3 SQL problems on DataLemur (easy)</label></li>
+          <li class="task-item"><input type="checkbox" id="p1w1-6"><label for="p1w1-6"><span class="pill rev">Revise</span>Revision Sunday: re-do 5 Python exercises from memory + write notes</label></li>
+        </ul>
+      </div>
+
+      <div class="week-card">
+        <div class="week-title">Week 2 (Jun 15–21) — Pandas + AWS Ingestion Services</div>
+        <div class="week-sub">~29 hrs · Pandas track + AWS track</div>
+        <ul class="task-list">
+          <li class="task-item"><input type="checkbox" id="p1w2-1"><label for="p1w2-1"><span class="pill learn">Learn</span>Kaggle Pandas (6 lessons) + Kaggle Data Cleaning</label></li>
+          <li class="task-item"><input type="checkbox" id="p1w2-2"><label for="p1w2-2"><span class="pill learn">Learn</span>AWS DEA: Glue (crawlers, catalog, ETL), Lambda, Kinesis, EMR overview</label></li>
+          <li class="task-item"><input type="checkbox" id="p1w2-3"><label for="p1w2-3"><span class="pill learn">Learn</span>Python: requests (API calls), SQLAlchemy + psycopg2 basics</label></li>
+          <li class="task-item"><input type="checkbox" id="p1w2-4"><label for="p1w2-4"><span class="pill proj">Project</span>START Project 1: Python ETL (public API → Pandas clean → PostgreSQL)</label></li>
+          <li class="task-item"><input type="checkbox" id="p1w2-5"><label for="p1w2-5"><span class="pill sql">SQL</span>3 SQL problems (window functions focus)</label></li>
+          <li class="task-item"><input type="checkbox" id="p1w2-6"><label for="p1w2-6"><span class="pill rev">Revise</span>Revision Sunday: recap Week 1+2 + spaced repeat of Python OOP</label></li>
+        </ul>
+      </div>
+
+      <div class="week-card">
+        <div class="week-title">Week 3 (Jun 22–28) — AWS Analytics + Practice Exams</div>
+        <div class="week-sub">~29 hrs · AWS-heavy week</div>
+        <ul class="task-list">
+          <li class="task-item"><input type="checkbox" id="p1w3-1"><label for="p1w3-1"><span class="pill learn">Learn</span>AWS DEA: Redshift (dist/sort keys), Athena, DMS, Step Functions, CloudWatch</label></li>
+          <li class="task-item"><input type="checkbox" id="p1w3-2"><label for="p1w3-2"><span class="pill learn">Learn</span>AWS DEA: security, encryption, governance, cost optimization sections</label></li>
+          <li class="task-item"><input type="checkbox" id="p1w3-3"><label for="p1w3-3"><span class="pill cert">Cert</span>Take 1st full practice exam — note weak areas</label></li>
+          <li class="task-item"><input type="checkbox" id="p1w3-4"><label for="p1w3-4"><span class="pill proj">Project</span>Finish Project 1: add logging, retry, cron + push to GitHub with README</label></li>
+          <li class="task-item"><input type="checkbox" id="p1w3-5"><label for="p1w3-5"><span class="pill cert">Cert</span>Book the AWS DEA-C01 exam for early July</label></li>
+          <li class="task-item"><input type="checkbox" id="p1w3-6"><label for="p1w3-6"><span class="pill rev">Revise</span>Revision Sunday: AWS services flashcards (S3/Glue/Redshift/Athena)</label></li>
+        </ul>
+      </div>
+
+      <div class="week-card cert">
+        <div class="week-title">Week 4 (Jun 29–Jul 5) — AWS Exam Week 🎓</div>
+        <div class="week-sub">~29 hrs · Practice exams + the real thing</div>
+        <ul class="task-list">
+          <li class="task-item"><input type="checkbox" id="p1w4-1"><label for="p1w4-1"><span class="pill cert">Cert</span>Practice exams ×2–3, review every wrong answer until 80%+</label></li>
+          <li class="task-item"><input type="checkbox" id="p1w4-2"><label for="p1w4-2"><span class="pill cert">Cert</span>Final review of weak domains (usually Glue/Redshift/security)</label></li>
+          <li class="task-item"><input type="checkbox" id="p1w4-3"><label for="p1w4-3"><span class="pill cert">Cert</span>✅ TAKE AWS CERTIFIED DATA ENGINEER ASSOCIATE (DEA-C01)</label></li>
+          <li class="task-item"><input type="checkbox" id="p1w4-4"><label for="p1w4-4"><span class="pill learn">Learn</span>Decompress: install Spark/Databricks Free Edition, watch PySpark intro</label></li>
+          <li class="task-item"><input type="checkbox" id="p1w4-5"><label for="p1w4-5"><span class="pill rev">Revise</span>Revision Sunday: month-1 spaced review (Python + Pandas + AWS core)</label></li>
+        </ul>
+      </div>
+
+      <div class="project-card">
+        <div class="project-title">Project 1 — Python ETL → PostgreSQL (built across Weeks 2–3)</div>
+        <p style="color: var(--text-dim); font-size: 14px;">API (NYC Taxi / weather / stocks) → Pandas cleaning → PostgreSQL (Docker) → logging, retries, cron scheduling → GitHub README. This doubles as your Python + Pandas practice, so it costs no extra time.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- PHASE 2 -->
+  <div class="tab-content" id="phase2">
+    <div class="month-card">
+      <div class="month-header">
+        <h2 class="month-title">Phase 2 — July: PySpark + Snowflake + SnowPro Cert</h2>
+        <span class="month-tag">PySpark · Snowflake · SnowPro Core</span>
+      </div>
+      <div class="alert warn"><strong>Hardest phase.</strong> PySpark (28 hr) + Snowflake (11 hr) + SnowPro exam in 4 weeks. Protect the cert date. Use weekends fully here.</div>
+
+      <div class="week-card">
+        <div class="week-title">Week 5 (Jul 6–12) — PySpark Core + finish Advanced SQL</div>
+        <div class="week-sub">~29 hrs · PySpark-heavy</div>
+        <ul class="task-list">
+          <li class="task-item"><input type="checkbox" id="p2w5-1"><label for="p2w5-1"><span class="pill learn">Learn</span>PySpark: architecture (driver/executors), RDD vs DataFrame, lazy eval</label></li>
+          <li class="task-item"><input type="checkbox" id="p2w5-2"><label for="p2w5-2"><span class="pill learn">Learn</span>PySpark: DataFrame API (select, filter, groupBy, agg, joins), Spark SQL</label></li>
+          <li class="task-item"><input type="checkbox" id="p2w5-3"><label for="p2w5-3"><span class="pill learn">Learn</span>Finish "SQL for Data Analysis" course (subqueries, CTEs, windows)</label></li>
+          <li class="task-item"><input type="checkbox" id="p2w5-4"><label for="p2w5-4"><span class="pill sql">SQL</span>5 medium SQL problems (StrataScratch)</label></li>
+          <li class="task-item"><input type="checkbox" id="p2w5-5"><label for="p2w5-5"><span class="pill rev">Revise</span>Revision Sunday: spaced repeat AWS (1-month interval) + PySpark notes</label></li>
+        </ul>
+      </div>
+
+      <div class="week-card">
+        <div class="week-title">Week 6 (Jul 13–19) — PySpark Performance + Snowflake Start</div>
+        <div class="week-sub">~29 hrs</div>
+        <ul class="task-list">
+          <li class="task-item"><input type="checkbox" id="p2w6-1"><label for="p2w6-1"><span class="pill learn">Learn</span>PySpark: window functions, UDFs, partitioning, caching, broadcast joins, Spark UI</label></li>
+          <li class="task-item"><input type="checkbox" id="p2w6-2"><label for="p2w6-2"><span class="pill learn">Learn</span>PySpark: file formats (Parquet/Delta) + Structured Streaming basics</label></li>
+          <li class="task-item"><input type="checkbox" id="p2w6-3"><label for="p2w6-3"><span class="pill learn">Learn</span>SnowPro course: architecture, warehouses, databases/schemas/tables</label></li>
+          <li class="task-item"><input type="checkbox" id="p2w6-4"><label for="p2w6-4"><span class="pill proj">Project</span>START Project 2: PySpark batch/stream processing on real dataset</label></li>
+          <li class="task-item"><input type="checkbox" id="p2w6-5"><label for="p2w6-5"><span class="pill rev">Revise</span>Revision Sunday: PySpark flashcards (transformations vs actions, joins)</label></li>
+        </ul>
+      </div>
+
+      <div class="week-card">
+        <div class="week-title">Week 7 (Jul 20–26) — Snowflake Deep + finish PySpark</div>
+        <div class="week-sub">~29 hrs · Snowflake-heavy</div>
+        <ul class="task-list">
+          <li class="task-item"><input type="checkbox" id="p2w7-1"><label for="p2w7-1"><span class="pill learn">Learn</span>SnowPro: COPY INTO, Snowpipe, stages, Streams + Tasks (CDC)</label></li>
+          <li class="task-item"><input type="checkbox" id="p2w7-2"><label for="p2w7-2"><span class="pill learn">Learn</span>SnowPro: Time Travel, cloning, RBAC, micro-partitions, clustering, caching</label></li>
+          <li class="task-item"><input type="checkbox" id="p2w7-3"><label for="p2w7-3"><span class="pill learn">Learn</span>Hands-on: Snowflake free trial — load data, run queries, build a warehouse</label></li>
+          <li class="task-item"><input type="checkbox" id="p2w7-4"><label for="p2w7-4"><span class="pill proj">Project</span>Finish Project 2 + push to GitHub with architecture diagram</label></li>
+          <li class="task-item"><input type="checkbox" id="p2w7-5"><label for="p2w7-5"><span class="pill cert">Cert</span>1st SnowPro practice exam + book the real exam</label></li>
+          <li class="task-item"><input type="checkbox" id="p2w7-6"><label for="p2w7-6"><span class="pill rev">Revise</span>Revision Sunday: Snowflake flashcards + spaced repeat PySpark</label></li>
+        </ul>
+      </div>
+
+      <div class="week-card cert">
+        <div class="week-title">Week 8 (Jul 27–Aug 2) — SnowPro Exam Week 🎓</div>
+        <div class="week-sub">~29 hrs</div>
+        <ul class="task-list">
+          <li class="task-item"><input type="checkbox" id="p2w8-1"><label for="p2w8-1"><span class="pill cert">Cert</span>SnowPro practice exams ×2–3, review wrong answers to 80%+</label></li>
+          <li class="task-item"><input type="checkbox" id="p2w8-2"><label for="p2w8-2"><span class="pill cert">Cert</span>Final review: data loading, performance, account/security domains</label></li>
+          <li class="task-item"><input type="checkbox" id="p2w8-3"><label for="p2w8-3"><span class="pill cert">Cert</span>✅ TAKE SNOWPRO CORE (COF-C03)</label></li>
+          <li class="task-item"><input type="checkbox" id="p2w8-4"><label for="p2w8-4"><span class="pill learn">Learn</span>Start dbt course intro (setup, project structure)</label></li>
+          <li class="task-item"><input type="checkbox" id="p2w8-5"><label for="p2w8-5"><span class="pill rev">Revise</span>Revision Sunday: month-2 spaced review (PySpark + Snowflake)</label></li>
+        </ul>
+      </div>
+
+      <div class="project-card">
+        <div class="project-title">Project 2 — PySpark Data Processing (Weeks 6–7)</div>
+        <p style="color: var(--text-dim); font-size: 14px;">Read a large dataset → PySpark transformations (joins, windows, aggregations) → write Parquet/Delta. Bonus: a Structured Streaming variant. Built during the PySpark course, so no extra time.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- PHASE 3 -->
+  <div class="tab-content" id="phase3">
+    <div class="month-card">
+      <div class="month-header">
+        <h2 class="month-title">Phase 3 — August: dbt + Airflow + Capstone</h2>
+        <span class="month-tag">dbt · Airflow · Databricks · Capstone</span>
+      </div>
+      <div class="alert info"><strong>Both certs are done.</strong> Now connect the tools into one end-to-end pipeline (the capstone) — this is what recruiters actually look at.</div>
+
+      <div class="week-card">
+        <div class="week-title">Week 9 (Aug 3–9) — dbt + Airflow</div>
+        <div class="week-sub">~29 hrs</div>
+        <ul class="task-list">
+          <li class="task-item"><input type="checkbox" id="p3w9-1"><label for="p3w9-1"><span class="pill learn">Learn</span>dbt: models, sources, refs, tests, docs; incremental models + snapshots (SCD2)</label></li>
+          <li class="task-item"><input type="checkbox" id="p3w9-2"><label for="p3w9-2"><span class="pill learn">Learn</span>dbt + Snowflake integration (use your trial account)</label></li>
+          <li class="task-item"><input type="checkbox" id="p3w9-3"><label for="p3w9-3"><span class="pill learn">Learn</span>Airflow: DAGs, operators, dependencies, XComs, connections, retries/SLAs</label></li>
+          <li class="task-item"><input type="checkbox" id="p3w9-4"><label for="p3w9-4"><span class="pill learn">Learn</span>Run Airflow locally via Docker/Astro CLI</label></li>
+          <li class="task-item"><input type="checkbox" id="p3w9-5"><label for="p3w9-5"><span class="pill proj">Project</span>START Capstone scaffold (S3 → Snowflake → dbt → Airflow)</label></li>
+          <li class="task-item"><input type="checkbox" id="p3w9-6"><label for="p3w9-6"><span class="pill rev">Revise</span>Revision Sunday: spaced repeat Snowflake (1-week) + dbt notes</label></li>
+        </ul>
+      </div>
+
+      <div class="week-card">
+        <div class="week-title">Week 10 (Aug 10–15) — Databricks (light) + Build Capstone</div>
+        <div class="week-sub">~29 hrs</div>
+        <ul class="task-list">
+          <li class="task-item"><input type="checkbox" id="p3w10-1"><label for="p3w10-1"><span class="pill learn">Learn</span>Databricks Associate course (quick pass — overlaps PySpark/Snowflake)</label></li>
+          <li class="task-item"><input type="checkbox" id="p3w10-2"><label for="p3w10-2"><span class="pill proj">Project</span>Build Capstone: ingest (Lambda/S3) → transform (PySpark/Glue) → Snowflake → dbt marts → Airflow orchestration</label></li>
+          <li class="task-item"><input type="checkbox" id="p3w10-3"><label for="p3w10-3"><span class="pill proj">Project</span>Add data-quality tests + a simple dashboard (Streamlit/Metabase)</label></li>
+          <li class="task-item"><input type="checkbox" id="p3w10-4"><label for="p3w10-4"><span class="pill proj">Project</span>Write Capstone README + architecture diagram + push to GitHub</label></li>
+          <li class="task-item"><input type="checkbox" id="p3w10-5"><label for="p3w10-5"><span class="pill rev">Revise</span>Revision Sunday: full tool-chain recap (how the pieces connect)</label></li>
+        </ul>
+      </div>
+
+      <div class="project-card">
+        <div class="project-title">Capstone — End-to-End Cloud Pipeline (Weeks 9–10, polished in revision phase)</div>
+        <p style="color: var(--text-dim); font-size: 14px;">Multi-source ingest → S3 (bronze) → PySpark/Glue (silver) → Snowflake → dbt marts (gold, star schema) → Airflow orchestration → dashboard. Tip: use SAP-style manufacturing data (production orders, BOM) to leverage your background.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONSOLIDATION / REVISION PHASE -->
+  <div class="tab-content" id="consolidate">
+    <div class="month-card">
+      <div class="month-header">
+        <h2 class="month-title">Revision Phase — Weeks 11–12 (Aug 16–25)</h2>
+        <span class="month-tag">Consolidate · Mock Interviews · Lifetime Retention</span>
+      </div>
+      <div class="alert rev"><strong>This is the +10 days you asked for.</strong> No new courses. Pure consolidation so everything sticks for life and you walk into interviews confident.</div>
+
+      <div class="week-card rev">
+        <div class="week-title">Week 11 (Aug 16–20) — Topic-by-Topic Deep Revision</div>
+        <div class="week-sub">~25 hrs · revisit every domain + active recall</div>
+        <ul class="task-list">
+          <li class="task-item"><input type="checkbox" id="cw11-1"><label for="cw11-1"><span class="pill rev">Revise</span>Day 1: Python + Pandas — redo key exercises from memory, refine flashcards</label></li>
+          <li class="task-item"><input type="checkbox" id="cw11-2"><label for="cw11-2"><span class="pill rev">Revise</span>Day 2: SQL + PySpark — re-solve 10 problems without notes</label></li>
+          <li class="task-item"><input type="checkbox" id="cw11-3"><label for="cw11-3"><span class="pill rev">Revise</span>Day 3: AWS — re-take a practice exam to confirm retention</label></li>
+          <li class="task-item"><input type="checkbox" id="cw11-4"><label for="cw11-4"><span class="pill rev">Revise</span>Day 4: Snowflake + dbt — re-explain Streams/Tasks &amp; SCD2 out loud</label></li>
+          <li class="task-item"><input type="checkbox" id="cw11-5"><label for="cw11-5"><span class="pill rev">Revise</span>Day 5: Airflow + data modeling — re-draw a DAG &amp; a star schema from memory</label></li>
+          <li class="task-item"><input type="checkbox" id="cw11-6"><label for="cw11-6"><span class="pill proj">Project</span>Rebuild ONE project from scratch from memory (the ultimate retention test)</label></li>
+        </ul>
+      </div>
+
+      <div class="week-card rev">
+        <div class="week-title">Week 12 (Aug 21–25) — Mock Interviews + Polish</div>
+        <div class="week-sub">~25 hrs · interview-ready</div>
+        <ul class="task-list">
+          <li class="task-item"><input type="checkbox" id="cw12-1"><label for="cw12-1"><span class="pill rev">Revise</span>5 mock interviews (Pramp / peers) — SQL + PySpark + system design</label></li>
+          <li class="task-item"><input type="checkbox" id="cw12-2"><label for="cw12-2"><span class="pill rev">Revise</span>Behavioral STAR stories from your 5 yrs support experience</label></li>
+          <li class="task-item"><input type="checkbox" id="cw12-3"><label for="cw12-3"><span class="pill proj">Project</span>Finalize all 3 GitHub repos: READMEs, diagrams, screenshots</label></li>
+          <li class="task-item"><input type="checkbox" id="cw12-4"><label for="cw12-4"><span class="pill cert">Cert</span>Add both certs to resume + LinkedIn (headline, About, skills)</label></li>
+          <li class="task-item"><input type="checkbox" id="cw12-5"><label for="cw12-5"><span class="pill rev">Revise</span>Final flashcard sweep across ALL topics — confirm long-term recall</label></li>
+          <li class="task-item"><input type="checkbox" id="cw12-6"><label for="cw12-6"><span class="pill proj">Project</span>Start applying — you're job-ready! 🚀</label></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- REVISION SYSTEM -->
+  <div class="tab-content" id="revision">
+    <div class="month-card">
+      <h2 class="month-title">🧠 The Revision System (Remember It for Life)</h2>
+      <p style="color: var(--text-dim); margin-bottom:16px;">Completing a course ≠ remembering it. These 3 layers are built into every week above so knowledge moves into long-term memory.</p>
+
+      <div class="info-grid">
+        <div class="info-card" style="border-left:4px solid var(--rev);">
+          <h3 style="color: var(--rev);">Layer 1 — Revision Sundays</h3>
+          <ul>
+            <li>Every Sunday: 1–1.5 hr recap of the week</li>
+            <li>Re-do key exercises without looking</li>
+            <li>Update your notes &amp; flashcards</li>
+            <li>Re-explain one concept out loud (Feynman technique)</li>
+          </ul>
+        </div>
+        <div class="info-card" style="border-left:4px solid var(--rev);">
+          <h3 style="color: var(--rev);">Layer 2 — Spaced Repetition</h3>
+          <ul>
+            <li>Revisit each topic after 1 day → 1 week → 1 month</li>
+            <li>Built into later weeks (e.g., AWS revisited in Week 5)</li>
+            <li>Use Anki or a simple flashcard sheet</li>
+            <li>Only re-study cards you got wrong</li>
+          </ul>
+        </div>
+        <div class="info-card" style="border-left:4px solid var(--rev);">
+          <h3 style="color: var(--rev);">Layer 3 — Consolidation Phase</h3>
+          <ul>
+            <li>Weeks 11–12: full revision, no new content</li>
+            <li>Rebuild a project from memory</li>
+            <li>Re-take practice exams</li>
+            <li>Mock interviews = active recall under pressure</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="alert rev"><strong>The retention rule:</strong> If you can't explain a concept out loud or solve a problem without notes, you haven't learned it yet — you've only seen it. Active recall &gt; re-watching videos.</div>
+
+      <div class="month-card" style="background: var(--bg);">
+        <h3 style="color: var(--accent); margin-bottom:12px;">📇 Build these flashcard decks as you go</h3>
+        <table>
+          <thead><tr><th>Deck</th><th>Example cards</th></tr></thead>
+          <tbody>
+            <tr><td>Python/Pandas</td><td>merge vs join, list vs dict comprehension, when to use groupby.agg</td></tr>
+            <tr><td>SQL</td><td>window fn syntax, RANK vs DENSE_RANK, CTE vs subquery</td></tr>
+            <tr><td>PySpark</td><td>transformation vs action, narrow vs wide, broadcast join, partitioning</td></tr>
+            <tr><td>AWS</td><td>Glue vs EMR, Redshift dist keys, Athena vs Redshift Spectrum</td></tr>
+            <tr><td>Snowflake</td><td>Streams + Tasks, Time Travel, micro-partitions, warehouse sizing</td></tr>
+            <tr><td>dbt/Modeling</td><td>incremental strategy, SCD2 logic, star vs snowflake schema</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- PROJECTS -->
+  <div class="tab-content" id="projects">
+    <div class="month-card">
+      <h2 class="month-title">🛠 Portfolio Projects</h2>
+      <p style="color: var(--text-dim); margin-bottom:16px;">Recruiters trust GitHub projects over certificates. Each needs: clean code, README with architecture diagram, screenshots, and a "what I learned" section. These are built <em>inside</em> the course weeks, so they cost little extra time.</p>
+
+      <div class="project-card">
+        <div class="project-title">Project 1 — Python ETL → PostgreSQL (Weeks 2–3)</div>
+        <p style="color: var(--text-dim); font-size: 14px;"><strong>Stack:</strong> Python, Pandas, PostgreSQL, Docker, cron</p>
+        <p style="color: var(--text-dim); font-size: 14px; margin-top:8px;"><strong>Idea:</strong> Daily ingest of a public API (NYC Taxi / weather / stocks) → clean → load to Postgres, with logging, retries, scheduling.</p>
+      </div>
+      <div class="project-card">
+        <div class="project-title">Project 2 — PySpark Data Processing (Weeks 6–7)</div>
+        <p style="color: var(--text-dim); font-size: 14px;"><strong>Stack:</strong> PySpark, Parquet/Delta, (optional) Structured Streaming</p>
+        <p style="color: var(--text-dim); font-size: 14px; margin-top:8px;"><strong>Idea:</strong> Large dataset → joins/windows/aggregations → curated Parquet. Bonus: streaming variant reading from a socket/Kafka.</p>
+      </div>
+      <div class="project-card">
+        <div class="project-title">Capstone — End-to-End Cloud Pipeline (Weeks 9–10 + polished in revision)</div>
+        <p style="color: var(--text-dim); font-size: 14px;"><strong>Stack:</strong> AWS (S3/Lambda/Glue), Snowflake, dbt, Airflow, dashboard</p>
+        <p style="color: var(--text-dim); font-size: 14px; margin-top:8px;"><strong>Idea:</strong> Medallion pipeline (bronze/silver/gold), orchestrated by Airflow, modeled in dbt. Use SAP-style manufacturing data to stand out for SAP-heavy enterprises.</p>
+      </div>
+      <div class="alert info"><strong>💡 GitHub habit:</strong> commit small and often from Week 1 — the green contribution graph is a signal recruiters notice.</div>
+    </div>
+  </div>
+
+  <!-- INTERVIEW PREP -->
+  <div class="tab-content" id="interview">
+    <div class="month-card">
+      <h2 class="month-title">🎤 Interview Prep (Woven Throughout)</h2>
+      <p style="color: var(--text-dim); margin-bottom:16px;">Don't cram interview prep at the end — drip it across the plan, then intensify in the revision phase.</p>
+      <table>
+        <thead><tr><th>When</th><th>What</th></tr></thead>
+        <tbody>
+          <tr><td>Weeks 1–4</td><td>3 SQL problems/week (DataLemur, StrataScratch) — easy→medium</td></tr>
+          <tr><td>Weeks 5–8</td><td>5 SQL/week + PySpark scenario questions (joins, windows, optimization)</td></tr>
+          <tr><td>Weeks 9–10</td><td>System design basics: design a data pipeline, batch vs streaming</td></tr>
+          <tr><td>Weeks 11–12</td><td>5+ mock interviews + behavioral STAR stories + project deep-dives</td></tr>
+        </tbody>
+      </table>
+      <div class="info-grid" style="margin-top:16px;">
+        <div class="info-card">
+          <h3>🔑 Topics They Always Ask</h3>
+          <ul>
+            <li>SQL: window functions, CTEs, 2nd highest salary, dedup</li>
+            <li>PySpark: narrow vs wide transforms, skew, broadcast joins</li>
+            <li>Modeling: star vs snowflake, SCD Type 2 logic</li>
+            <li>Snowflake: Streams &amp; Tasks, Time Travel, warehouse sizing</li>
+            <li>System design: design Uber/Twitter data pipeline</li>
+          </ul>
+        </div>
+        <div class="info-card">
+          <h3>🗣 Frame Your Background</h3>
+          <ul>
+            <li>Support → "production data operations + on-call"</li>
+            <li>Shell scripts → "ETL automation"</li>
+            <li>SQL experience → genuine strength, lead with it</li>
+            <li>SAP exposure → differentiator for enterprise roles</li>
+            <li>Have a STAR story for: an incident, a fix, an improvement</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CERTIFICATIONS -->
+  <div class="tab-content" id="certs">
+    <div class="month-card">
+      <h2 class="month-title">🏅 Certification Strategy</h2>
+
+      <div class="week-card cert">
+        <div class="week-title">AWS Certified Data Engineer Associate (DEA-C01) — Week 4</div>
+        <div class="week-sub">Course: AWS DEA-C01 (22h17m) · Target ~Jul 1–3</div>
+        <ul class="task-list">
+          <li class="task-item"><input type="checkbox" id="cert-aws-1"><label for="cert-aws-1">Finish all course sections by end of Week 3</label></li>
+          <li class="task-item"><input type="checkbox" id="cert-aws-2"><label for="cert-aws-2">Score 80%+ on 2–3 full practice exams</label></li>
+          <li class="task-item"><input type="checkbox" id="cert-aws-3"><label for="cert-aws-3">Review weak domains: Glue, Redshift, security, orchestration</label></li>
+          <li class="task-item"><input type="checkbox" id="cert-aws-4"><label for="cert-aws-4">Book &amp; pass the exam</label></li>
+        </ul>
+      </div>
+
+      <div class="week-card cert">
+        <div class="week-title">SnowPro Core (COF-C03) — Week 8</div>
+        <div class="week-sub">Course: SnowPro Core Prep (11h15m) + free Snowflake trial · Target ~Jul 30–Aug 1</div>
+        <ul class="task-list">
+          <li class="task-item"><input type="checkbox" id="cert-snow-1"><label for="cert-snow-1">Finish prep course by Week 7</label></li>
+          <li class="task-item"><input type="checkbox" id="cert-snow-2"><label for="cert-snow-2">Hands-on practice in a free Snowflake trial account</label></li>
+          <li class="task-item"><input type="checkbox" id="cert-snow-3"><label for="cert-snow-3">Score 80%+ on practice exams</label></li>
+          <li class="task-item"><input type="checkbox" id="cert-snow-4"><label for="cert-snow-4">Focus domains: data loading, performance, account/security</label></li>
+          <li class="task-item"><input type="checkbox" id="cert-snow-5"><label for="cert-snow-5">Book &amp; pass the exam</label></li>
+        </ul>
+      </div>
+
+      <div class="alert success"><strong>Bonus (optional, after Aug 25):</strong> Databricks Data Engineer Associate — you already have the course, and it overlaps heavily with PySpark + Snowflake, so it's an easy 3rd cert once the dust settles.</div>
+      <div class="alert warn"><strong>Booking tip:</strong> schedule both exams ~2 weeks ahead. A booked date creates healthy pressure and prevents endless "I'm not ready yet" drift.</div>
+    </div>
+  </div>
+
+
+  <footer>
+    Built for your career transition · Consistency &gt; intensity · Revise, don't just complete · You've got this 💪<br>
+    <a href="index.html" style="color: var(--accent);">📚 All Guides Hub</a> ·
+    <a href="data_engineer_plan.html" style="color: var(--accent);">🗺 4-Month Roadmap</a><br>
+    Final plan · Jun 8 – Aug 25, 2026 · 3.5 hr/day + weekends · 2 certs + revision
+  </footer>
+
+</div>
+
+<script>
+  function showTab(evt, tabId) {
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.getElementById(tabId).classList.add('active');
+    evt.currentTarget.classList.add('active');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+  const STORAGE_KEY = 'final_plan_progress_v1';
+  function loadProgress() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+      document.querySelectorAll('input[type="checkbox"]').forEach(cb => { if (saved[cb.id]) cb.checked = true; });
+    } catch (e) { console.warn('Load failed', e); }
+    updateProgress();
+  }
+  function saveProgress() {
+    const state = {};
+    document.querySelectorAll('input[type="checkbox"]').forEach(cb => { if (cb.checked) state[cb.id] = true; });
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    updateProgress();
+  }
+  function updateProgress() {
+    const all = document.querySelectorAll('input[type="checkbox"]');
+    const done = document.querySelectorAll('input[type="checkbox"]:checked');
+    const pct = all.length ? Math.round((done.length / all.length) * 100) : 0;
+    const fill = document.getElementById('progress-fill');
+    fill.style.width = pct + '%';
+    fill.textContent = pct + '%';
+    document.getElementById('progress-text').textContent = done.length + ' / ' + all.length + ' tasks';
+  }
+  function resetProgress() {
+    if (!confirm('Reset all progress? This cannot be undone.')) return;
+    localStorage.removeItem(STORAGE_KEY);
+    document.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = false);
+    updateProgress();
+  }
+  function exportProgress() {
+    const state = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+    const blob = new Blob([JSON.stringify(state, null, 2)], {type: 'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'final_plan_progress_' + new Date().toISOString().split('T')[0] + '.json';
+    a.click(); URL.revokeObjectURL(url);
+  }
+  document.addEventListener('change', e => { if (e.target.matches('input[type="checkbox"]')) saveProgress(); });
+  document.addEventListener('DOMContentLoaded', loadProgress);
+  if (document.readyState !== 'loading') loadProgress();
+</script>
+</body>
+</html>

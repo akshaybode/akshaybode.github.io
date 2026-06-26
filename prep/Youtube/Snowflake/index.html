@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Learn Snowflake in 2 Hours — Study Notes</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #0b1020; --bg-2: #131a2f; --bg-3: #1f2a44; --card: #131a2f;
+    --text: #e6edf6; --text-dim: #93a4bf; --accent: #29b5e8; --accent-2: #c084fc;
+    --accent-3: #34d399; --success: #22c55e; --warn: #fbbf24; --danger: #f87171;
+    --border: #2a3553; --code-bg: #0a0f1e;
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: linear-gradient(135deg, #0b1020 0%, #0c2233 100%); color: var(--text);
+    line-height: 1.65; min-height: 100vh; }
+  .container { max-width: 1200px; margin: 0 auto; padding: 24px; }
+  header { background: linear-gradient(135deg, #29b5e8 0%, #2563eb 50%, #7c3aed 100%);
+    border-radius: 16px; padding: 36px; margin-bottom: 24px;
+    box-shadow: 0 20px 60px rgba(41, 181, 232, 0.25); }
+  header h1 { font-size: 34px; margin-bottom: 10px; }
+  header p { opacity: 0.94; font-size: 17px; max-width: 800px; }
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 16px; margin-top: 26px; }
+  .stat { background: rgba(255,255,255,0.13); backdrop-filter: blur(10px); padding: 14px 16px;
+    border-radius: 12px; border: 1px solid rgba(255,255,255,0.2); }
+  .stat-label { font-size: 11px; opacity: 0.85; text-transform: uppercase; letter-spacing: 1px; }
+  .stat-value { font-size: 22px; font-weight: 700; margin-top: 4px; }
+
+  .section { background: var(--card); border-radius: 12px; padding: 24px; margin-bottom: 18px;
+    border: 1px solid var(--border); }
+  .section h2 { color: var(--accent); font-size: 22px; margin-bottom: 12px; padding-bottom: 10px;
+    border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
+  .section h3 { color: var(--accent-2); font-size: 17px; margin: 18px 0 10px 0; }
+  .section p { color: var(--text); margin-bottom: 10px; }
+
+  .card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin-top: 12px; }
+  a.nav-card { display: block; text-decoration: none; background: var(--bg); border: 1px solid var(--border);
+    border-left: 4px solid var(--accent); border-radius: 12px; padding: 18px; transition: all 0.2s; }
+  a.nav-card:hover { transform: translateY(-3px); border-left-color: var(--accent-2);
+    box-shadow: 0 10px 30px rgba(41,181,232,0.15); }
+  a.nav-card .num { font-size: 12px; color: var(--accent-3); font-weight: 700; letter-spacing: 1px; }
+  a.nav-card h4 { color: var(--text); font-size: 17px; margin: 6px 0 8px 0; }
+  a.nav-card p { color: var(--text-dim); font-size: 13px; margin: 0; }
+
+  .diagram { background: var(--bg); border: 1px solid var(--border); border-radius: 12px;
+    padding: 22px; margin: 16px 0; overflow-x: auto; }
+  .diagram .title { text-align: center; color: var(--text-dim); font-size: 12px;
+    text-transform: uppercase; letter-spacing: 1px; margin-bottom: 16px; }
+  .flow { display: flex; align-items: stretch; justify-content: center; gap: 0; flex-wrap: wrap; }
+  .flow-box { background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px 14px; min-width: 120px; text-align: center; font-size: 13px; font-weight: 600;
+    display: flex; flex-direction: column; justify-content: center; }
+  .flow-box small { display: block; color: var(--text-dim); font-weight: 400; font-size: 11px; margin-top: 4px; }
+  .flow-arrow { display: flex; align-items: center; padding: 0 8px; color: var(--accent); font-size: 22px; font-weight: 700; }
+  .flow-box.gen { border-top: 3px solid var(--accent); }
+  .flow-box.ing { border-top: 3px solid var(--accent-2); }
+  .flow-box.sto { border-top: 3px solid var(--accent-3); }
+  .flow-box.tra { border-top: 3px solid var(--warn); }
+  .flow-box.ser { border-top: 3px solid var(--danger); }
+
+  .alert { padding: 12px 14px; border-radius: 8px; margin: 12px 0; border-left: 4px solid; font-size: 14px; }
+  .alert.info { background: rgba(41,181,232,0.1); border-color: var(--accent); }
+  .alert strong { color: var(--text); }
+  footer { text-align: center; margin-top: 40px; padding: 20px; color: var(--text-dim); font-size: 13px; }
+  @media (max-width: 640px) { header h1 { font-size: 24px; } .container { padding: 12px; } }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <h1>❄️ Learn Snowflake — Complete Study Notes</h1>
+    <p>End-to-end notes from the <strong>"Learn Snowflake in 2 Hours"</strong> step-by-step beginner course by
+       Data Engineer Academy (Chris Garzon) — from "what is Snowflake" through architecture, security, loading data,
+       Snowpipe, Streams, Tasks, Time Travel, and zero-copy Cloning.</p>
+    <div class="stats-grid">
+      <div class="stat"><div class="stat-label">Duration</div><div class="stat-value">~3h 49m</div></div>
+      <div class="stat"><div class="stat-label">Note Parts</div><div class="stat-value">6</div></div>
+      <div class="stat"><div class="stat-label">SQL Examples</div><div class="stat-value">60+</div></div>
+      <div class="stat"><div class="stat-label">Level</div><div class="stat-value">Beginner → Intermediate</div></div>
+    </div>
+  </header>
+
+  <div class="section">
+    <h2>🧭 The Big Picture</h2>
+    <p>Snowflake is a <strong>cloud-native data warehouse delivered as a service (SaaS)</strong>. You don't manage
+       any hardware, software, or tuning — Snowflake handles it. Its superpower is the
+       <strong>separation of storage and compute</strong>, which lets you scale each independently and pay only for
+       what you use.</p>
+    <div class="alert info">
+      <strong>The 3 things that define Snowflake:</strong> (1) it's a complete <em>SQL</em> data warehouse — if you
+      know SQL, you can use it; (2) it's <em>built only for the cloud</em> (AWS, Azure, or GCP); (3) it's delivered
+      <em>as a service</em> — no infrastructure to set up or manage.
+    </div>
+
+    <h3>The full data journey in this course</h3>
+    <div class="diagram">
+      <div class="title">What you'll build by the end</div>
+      <div class="flow">
+        <div class="flow-box gen">Raw files<small>CSV / JSON in a Stage</small></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-box ing">COPY / Snowpipe<small>Bulk &amp; continuous load</small></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-box sto">Tables<small>Stored on cloud storage</small></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-box tra">Streams + Tasks<small>CDC &amp; scheduling</small></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-box ser">Analytics<small>Views, Time Travel, Clones</small></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>📚 Notes — Read in Order</h2>
+    <p>Split into 6 parts following the course chapters. Each part links to the next.</p>
+    <div class="card-grid">
+      <a class="nav-card" href="01-fundamentals.html">
+        <div class="num">PART 1</div>
+        <h4>Fundamentals, Editions & Architecture</h4>
+        <p>What Snowflake is, the legacy vs modern data landscape, the 6 "built for the cloud" pillars, all 5 editions (Standard → VPS), shared-disk/nothing/multi-cluster, and the 3-layer architecture + micro-partitions.</p>
+      </a>
+      <a class="nav-card" href="02-account-ui-security.html">
+        <div class="num">PART 2</div>
+        <h4>Account Setup, UI & Users/Roles</h4>
+        <p>Free-trial setup, the Snowsight UI & worksheets, and Role-Based Access Control (RBAC): the system role hierarchy, creating users/roles, and GRANT.</p>
+      </a>
+      <a class="nav-card" href="03-objects-tables-views.html">
+        <div class="num">PART 3</div>
+        <h4>Databases, Schemas, Tables & Views</h4>
+        <p>The object hierarchy, table types (permanent, transient, temporary, external) and view types (standard, secure, materialized).</p>
+      </a>
+      <a class="nav-card" href="04-stages-loading.html">
+        <div class="num">PART 4</div>
+        <h4>Stages, File Formats & Bulk Loading</h4>
+        <p>Internal vs external stages, file format objects, the two loading approaches, and bulk loading with <code>COPY INTO</code>.</p>
+      </a>
+      <a class="nav-card" href="05-snowpipe-streams-tasks.html">
+        <div class="num">PART 5</div>
+        <h4>Snowpipe, Streams & Tasks</h4>
+        <p>Continuous loading with Snowpipe, change data capture with Streams, scheduling with Tasks, and combining them into a pipeline.</p>
+      </a>
+      <a class="nav-card" href="06-timetravel-cloning.html">
+        <div class="num">PART 6</div>
+        <h4>Time Travel, Fail-safe & Cloning</h4>
+        <p>Query/restore historical data with Time Travel, the 7-day Fail-safe, and zero-copy Cloning of databases, schemas, and tables.</p>
+      </a>
+    </div>
+  </div>
+
+  <footer>
+    Notes generated from "Learn Snowflake in 2 Hours | High Paying Skills | Step by Step For Beginners" ·
+    Data Engineer Academy · Source video: youtube.com/watch?v=mP3QbYURT9k
+  </footer>
+</div>
+</body>
+</html>

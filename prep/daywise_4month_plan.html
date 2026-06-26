@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>4-Month Day-by-Day DE Study Plan</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  :root{--bg:#0f172a;--card:#1e293b;--text:#e2e8f0;--dim:#94a3b8;--accent:#38bdf8;--accent2:#a78bfa;--ok:#22c55e;--warn:#fbbf24;--border:#334155}
+  body{font-family:system-ui,sans-serif;background:linear-gradient(135deg,#0f172a,#1e1b4b);color:var(--text);line-height:1.55}
+  .container{max-width:1100px;margin:0 auto;padding:20px}
+  header{background:linear-gradient(135deg,#6366f1,#8b5cf6,#ec4899);border-radius:16px;padding:28px;margin-bottom:20px}
+  header h1{font-size:28px}
+  .nav-month{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}
+  .nav-month button{padding:10px 18px;border:none;border-radius:8px;cursor:pointer;font-weight:600;background:var(--card);color:var(--dim);border:1px solid var(--border)}
+  .nav-month button.active{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff}
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:16px}
+  .stat{background:var(--card);padding:14px;border-radius:10px;border:1px solid var(--border)}
+  .stat-label{font-size:11px;color:var(--dim);text-transform:uppercase}
+  .stat-value{font-size:22px;font-weight:700;color:var(--accent)}
+  .progress-section{background:var(--card);padding:16px;border-radius:12px;margin-bottom:16px;border:1px solid var(--border)}
+  .progress-bar{background:#0f172a;height:14px;border-radius:7px;overflow:hidden;margin-top:8px}
+  .progress-fill{background:linear-gradient(90deg,#22c55e,#38bdf8);height:100%;width:0%;transition:.4s;font-size:10px;text-align:right;padding-right:6px;color:#fff;font-weight:700}
+  .day-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:12px;border-left:4px solid var(--accent)}
+  .day-card.done{opacity:.75;border-left-color:var(--ok)}
+  .day-header{display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+  .day-num{font-size:12px;color:var(--accent);font-weight:700;text-transform:uppercase}
+  .day-title{font-size:17px;font-weight:700}
+  .day-meta{font-size:12px;color:var(--dim)}
+  .section-label{font-size:11px;text-transform:uppercase;color:var(--accent2);margin:10px 0 6px;font-weight:700}
+  .read-links{display:flex;flex-direction:column;gap:6px}
+  .read-link{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;background:#0f172a;border-radius:8px;color:var(--accent);text-decoration:none;font-size:13px;border:1px solid var(--border);transition:.2s}
+  .read-link:hover{background:#1e3a5f;border-color:var(--accent)}
+  .read-link::before{content:"📖"}
+  ul.tasks{color:var(--dim);font-size:13px;padding-left:18px}
+  ul.tasks li{margin:4px 0}
+  .day-check{display:flex;align-items:center;gap:8px;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)}
+  .day-check input{width:18px;height:18px;accent-color:var(--ok);cursor:pointer}
+  .controls{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+  .btn{background:var(--card);color:var(--text);border:1px solid var(--border);padding:8px 14px;border-radius:8px;cursor:pointer;font-size:12px}
+  .btn:hover{border-color:var(--accent)}
+  .today-highlight{box-shadow:0 0 0 2px var(--warn)}
+  footer{text-align:center;padding:24px;color:var(--dim);font-size:13px}
+  .hub-link{display:inline-block;margin-top:12px;padding:10px 16px;background:rgba(255,255,255,.15);border-radius:8px;color:#fff;text-decoration:none}
+</style>
+</head>
+<body>
+<div class="container">
+<header>
+  <h1>📅 4-Month Day-by-Day Plan</h1>
+  <p>~4–5 hrs weekdays + ~8 hrs weekends · 120 days · Click <strong>Read</strong> links to open the exact guide section.</p>
+  <a class="hub-link" href="index.html">← All guides & roadmap</a>
+</header>
+<div class="stats">
+  <div class="stat"><div class="stat-label">Total days</div><div class="stat-value">120</div></div>
+  <div class="stat"><div class="stat-label">Completed</div><div class="stat-value" id="done-count">0</div></div>
+  <div class="stat"><div class="stat-label">Current month</div><div class="stat-value" id="current-month-label">1</div></div>
+  <div class="stat"><div class="stat-label">Today</div><div class="stat-value" id="today-day">—</div></div>
+</div>
+<div class="progress-section">
+  <strong>Overall progress</strong>
+  <div class="progress-bar"><div class="progress-fill" id="progress-fill">0%</div></div>
+  <div class="controls" style="margin-top:12px">
+    <button class="btn" onclick="exportProgress()">Export progress</button>
+    <button class="btn" onclick="resetProgress()">Reset all</button>
+    <button class="btn" onclick="jumpToday()">Jump to today (Day 1)</button>
+  </div>
+</div>
+<div class="nav-month" id="month-nav"></div>
+<div id="days-container"></div>
+<footer>Tip: Mark each day complete when done. Links use <code>guide.html#section</code> to open the right tab.</footer>
+</div>
+<script>
+const STORAGE_KEY = "daywise_de_plan_v1";
+const START_DATE_KEY = "daywise_start_date";
+
+function link(file, tab, label) {
+  const href = tab ? `${file}#${tab}` : file;
+  return { href, label };
+}
+
+// 120 days — each: month (1-4), title, hours, reads[], tasks[], project?
+const DAYS = [];
+function add(month, title, hours, reads, tasks, project) {
+  DAYS.push({ day: DAYS.length + 1, month, title, hours, reads, tasks, project: project || null });
+}
+
+// ========== MONTH 1: Foundation ==========
+add(1,"Python: variables, types, control flow",4,[link("python_guide.html","fundamentals","Python → Fundamentals")],[ "Type all examples in VS Code or Jupyter","Solve 5 easy HackerRank Python problems"]);
+add(1,"Python: lists, dicts, comprehensions",4,[link("python_guide.html","datastructures","Python → Data Structures")],[ "Build word-frequency counter from a text file","10 LeetCode easy (arrays/strings)"]);
+add(1,"Python: functions, *args, lambdas",4,[link("python_guide.html","functions","Python → Functions")],[ "Write 3 functions with type hints","Refactor yesterday's script using functions"]);
+add(1,"Python: OOP basics + dataclass",4,[link("python_guide.html","oop","Python → OOP")],[ "Create a small ETL class: extract/transform/load stubs"]);
+add(1,"Python: file I/O, JSON, requests",4,[link("python_guide.html","fileio","Python → File I/O")],[ "Fetch a public API and save JSON locally"]);
+add(1,"Python: errors, logging",3,[link("python_guide.html","errors","Python → Errors & Logging")],[ "Add try/except + logging to API script"]);
+add(1,"Python: generators & decorators",4,[link("python_guide.html","advanced","Python → Generators/Decorators")],[ "Write @retry decorator","Read large file with generator"]);
+add(1,"Python: stdlib (datetime, collections)",3,[link("python_guide.html","stdlib","Python → Standard Library")],[ "Use defaultdict + Counter in a script"]);
+add(1,"Python: DE patterns (config, API client)",4,[link("python_guide.html","depatterns","Python → DE Patterns")],[ "Build reusable APIClient class"]);
+add(1,"Pandas: Series & DataFrame basics",4,[link("pandas_guide.html","basics","Pandas → Basics")],[ "Kaggle Pandas micro-course (1–2 hrs)","Create DataFrame from your API JSON"]);
+add(1,"Pandas: read/write CSV, JSON, Parquet",4,[link("pandas_guide.html","io","Pandas → I/O")],[ "Download NYC taxi sample CSV","Save as Parquet, read back"]);
+add(1,"Pandas: loc, iloc, boolean filter",4,[link("pandas_guide.html","select","Pandas → Selection")],[ "20 filter exercises on sample data"]);
+add(1,"Pandas: nulls, dtypes, strings",4,[link("pandas_guide.html","clean","Pandas → Data Cleaning")],[ "Clean messy CSV: nulls, wrong types"]);
+add(1,"Pandas: groupby & aggregations",4,[link("pandas_guide.html","groupby","Pandas → GroupBy")],[ "Top 10 products by revenue per region"]);
+add(1,"Pandas: merge & concat",4,[link("pandas_guide.html","merge","Pandas → Merge")],[ "Join orders + customers + products"]);
+add(1,"Pandas: reshape (pivot/melt)",3,[link("pandas_guide.html","reshape","Pandas → Reshape")],[ "pivot_table exercise on sales data"]);
+add(1,"Pandas: practice & 100 puzzles",4,[link("pandas_guide.html","interview","Pandas Interview"),link("https://github.com/guipsamora/pandas_exercises","Pandas Exercises (GitHub)")],[ "Complete 5 exercises from pandas_exercises"]);
+add(1,"Pandas: time series & performance",4,[link("pandas_guide.html","timeseries","Pandas → Time Series"),link("pandas_guide.html","performance","Pandas → Performance")],[ "Daily sales trend + downcast dtypes"]);
+add(1,"SQL: fundamentals refresh",4,[link("advanced_sql_guide.html","fundamentals","SQL → Fundamentals")],[ "Mode SQL tutorial sections 1–3"]);
+add(1,"SQL: joins deep dive",4,[link("advanced_sql_guide.html","joins","SQL → Joins")],[ "StrataScratch 5 join problems"]);
+add(1,"SQL: window functions",5,[link("advanced_sql_guide.html","window","SQL → Window Functions")],[ "StrataScratch 8 window problems","Running total + top-N per group"]);
+add(1,"SQL: window functions practice",4,[link("advanced_sql_guide.html","window","SQL → Windows (review)")],[ "Sessionization pattern on paper","5 more window problems"]);
+add(1,"SQL: CTEs & subqueries",4,[link("advanced_sql_guide.html","cte","SQL → CTEs")],[ "Recursive CTE: date spine","5 medium SQL problems"]);
+add(1,"SQL: aggregations & pivot",3,[link("advanced_sql_guide.html","aggregations","SQL → Aggregations")],[ "PIVOT sales by quarter"]);
+add(1,"SQL: performance & DE patterns",4,[link("advanced_sql_guide.html","performance","SQL → Performance"),link("advanced_sql_guide.html","de-sql","SQL → DE Patterns (SCD/MERGE)")],[ "Write SCD Type 2 logic on paper"]);
+add(1,"SQL: interview patterns drill",4,[link("advanced_sql_guide.html","interview","SQL → Interview Patterns")],[ "DataLemur 5 problems","Explain 3 patterns out loud"]);
+add(1,"Python: concurrency overview",3,[link("python_guide.html","concurrency","Python → Concurrency")],[ "ThreadPoolExecutor example for 3 API calls"]);
+add(1,"Git: basics",3,[link("devops_guide.html","git-basics","Git → Basics")],[ "Create GitHub repo","Push today's scripts"]);
+add(1,"Git: branches & PR workflow",3,[link("devops_guide.html","git-advanced","Git → Workflow")],[ "Practice branch + merge on repo"]);
+add(1,"Docker: basics + compose",4,[link("devops_guide.html","docker","Docker"),link("devops_guide.html","compose","Docker Compose")],[ "Run Postgres in Docker","Connect from Python/SQLAlchemy"]);
+add(1,"Project 1 start: Python ETL",5,[link("data_engineer_plan.html","month1","Roadmap → Month 1 Project")],[ "Design: API → clean → Postgres","Create README outline"]);
+add(1,"Project 1: build pipeline",6,[link("python_guide.html","depatterns","Python DE Patterns"),link("pandas_guide.html","io","Pandas I/O")],[ "Implement extract + transform","Load to Postgres in Docker"]);
+add(1,"Project 1: polish + GitHub",5,[link("devops_guide.html","git-advanced","Git")],[ "Add logging, error handling, README","Push to GitHub — portfolio piece"]);
+add(1,"Month 1 review & buffer",4,[link("python_guide.html","interview","Python Interview"),link("advanced_sql_guide.html","practice","SQL Practice")],[ "Fix weak areas from checklists","Mock explain Project 1 in 5 min"]);
+add(1,"Buffer: catch-up / LeetCode SQL",3,[link("advanced_sql_guide.html","practice","SQL Practice")],[ "Complete any missed checkboxes","5 SQL problems"]);
+
+// ========== MONTH 2: Big Data ==========
+add(2,"PySpark: architecture",4,[link("pyspark_guide.html","arch","PySpark → Architecture")],[ "Draw driver/executor diagram","Watch DE Simplified Spark intro"]);
+add(2,"PySpark: SparkSession & setup",3,[link("pyspark_guide.html","setup","PySpark → Setup")],[ "Install PySpark locally","Run first DataFrame"]);
+add(2,"PySpark: create & read data",4,[link("pyspark_guide.html","df","PySpark → DataFrames")],[ "read.csv + read.parquet","printSchema, show, count"]);
+add(2,"PySpark: select, filter, withColumn",4,[link("pyspark_guide.html","df","PySpark → Column ops")],[ "Rewrite Pandas cleaning in PySpark"]);
+add(2,"PySpark: groupBy & agg",4,[link("pyspark_guide.html","df","PySpark → Aggregations")],[ "Regional sales aggregation"]);
+add(2,"PySpark: Spark SQL & functions",4,[link("pyspark_guide.html","sql","PySpark → Spark SQL")],[ "createOrReplaceTempView + spark.sql","10 F.* function examples"]);
+add(2,"PySpark: joins",5,[link("pyspark_guide.html","joins","PySpark → Joins")],[ "Inner/left join exercise","Try broadcast() on small dim"]);
+add(2,"PySpark: joins practice (skew awareness)",4,[link("pyspark_guide.html","joins","PySpark → Joins (review)")],[ "Read explain() for a join","Note BroadcastHashJoin in plan"]);
+add(2,"PySpark: window functions",5,[link("pyspark_guide.html","windows","PySpark → Windows")],[ "Top-3 per group","Deduplicate with row_number"]);
+add(2,"PySpark: windows + SQL combo day",4,[link("pyspark_guide.html","sql","Spark SQL"),link("pyspark_guide.html","windows","Windows")],[ "Rewrite 3 SQL window queries in PySpark"]);
+add(2,"PySpark: partitioning & formats",4,[link("pyspark_guide.html","partitioning","PySpark → Partitioning")],[ "Write partitioned Parquet","repartition vs coalesce"]);
+add(2,"PySpark: UDFs (avoid when possible)",3,[link("pyspark_guide.html","udf","PySpark → UDFs")],[ "Compare native vs Python UDF timing"]);
+add(2,"PySpark: performance tuning",5,[link("pyspark_guide.html","perf","PySpark → Performance")],[ "Run explain() on a join","Read Spark UI Stages tab"]);
+add(2,"PySpark: practice day",4,[link("pyspark_guide.html","interview","PySpark Interview")],[ "Spark By Examples: 5 exercises"]);
+add(2,"Kafka: concepts",3,[link("kafka_guide.html",null,"Kafka Essentials")],[ "Confluent Kafka 101 videos"]);
+add(2,"Kafka: producer/consumer hands-on",4,[link("kafka_guide.html",null,"Kafka"),link("pyspark_guide.html","streaming","PySpark Streaming (preview)")],[ "Docker Kafka + Python producer","Consume 100 messages"]);
+add(2,"PySpark: Structured Streaming intro",4,[link("pyspark_guide.html","streaming","Structured Streaming")],[ "Read streaming tab fully","Sketch checkpoint + watermark"]);
+add(2,"SQL + Spark combined practice",4,[link("advanced_sql_guide.html","interview","SQL Patterns"),link("pyspark_guide.html","interview","PySpark Q&A")],[ "Solve 3 SQL problems","Explain lazy evaluation"]);
+add(2,"Delta / lakehouse concepts",3,[link("pyspark_guide.html","partitioning","Delta in Partitioning tab")],[ "Read Delta Lake getting started"]);
+add(2,"Project 2 start: streaming design",4,[link("data_engineer_plan.html","month2","Roadmap → Month 2 Project")],[ "Architecture diagram: Kafka→Spark→Parquet"]);
+add(2,"Project 2: build streaming pipeline",6,[link("pyspark_guide.html","streaming","Structured Streaming")],[ "Fake events producer","Spark streaming agg"]);
+add(2,"Project 2: test & fix bugs",4,[link("pyspark_guide.html","perf","Spark UI")],[ "Run pipeline end-to-end","Fix errors, add logging"]);
+add(2,"Project 2: Docker compose + docs",5,[link("devops_guide.html","compose","Docker Compose")],[ "docker-compose for Kafka+Spark","GitHub README with diagram"]);
+add(2,"Month 2 review",4,[link("pyspark_guide.html","perf","Performance"),link("advanced_sql_guide.html","interview","SQL Patterns")],[ "Explain shuffle to a friend","10 SQL + 5 Spark interview Qs"]);
+
+// ========== MONTH 3: Cloud + Warehouse ==========
+add(3,"AWS overview & free tier setup",3,[link("aws_de_guide.html","overview","AWS → Overview")],[ "Create AWS account + billing alarm","Explore AWS console"]);
+add(3,"AWS S3 hands-on",4,[link("aws_de_guide.html","s3","AWS → S3")],[ "Create bucket, upload Parquet via boto3","Folder layout raw/curated"]);
+add(3,"AWS IAM for DE",4,[link("aws_de_guide.html","iam","AWS → IAM")],[ "Create role for Glue/Lambda","Attach S3 read/write policy"]);
+add(3,"AWS Lambda ingest",4,[link("aws_de_guide.html","lambda","AWS → Lambda")],[ "Lambda: API → S3 on schedule or trigger"]);
+add(3,"AWS Glue intro + crawler",4,[link("aws_de_guide.html","glue","AWS → Glue")],[ "Run Glue crawler on S3","View table in Glue Catalog"]);
+add(3,"AWS Glue PySpark job",5,[link("aws_de_guide.html","glue","Glue ETL"),link("pyspark_guide.html","df","PySpark refresh")],[ "Glue job: raw → curated Parquet"]);
+add(3,"AWS: boto3 practice",3,[link("aws_de_guide.html","s3","AWS S3"),link("python_guide.html","depatterns","Python patterns")],[ "Script: list S3 prefix + upload Parquet"]);
+add(3,"AWS Athena queries",3,[link("aws_de_guide.html","athena","AWS → Athena")],[ "Query curated data in Athena","Note bytes scanned"]);
+add(3,"AWS end-to-end practice",4,[link("aws_de_guide.html","pipeline","AWS → Pipeline")],[ "Trace full path Lambda→S3→Glue"]);
+add(3,"Snowflake: setup & objects",4,[link("snowflake_guide.html","setup","Snowflake → Setup")],[ "Free trial account","Create WH, DB, schemas"]);
+add(3,"Snowflake: stages & COPY",4,[link("snowflake_guide.html","load","Snowflake → Loading")],[ "Internal stage + COPY INTO","Load Parquet from S3 (if integrated)"]);
+add(3,"Snowflake: hands-on SQL practice",4,[link("snowflake_guide.html","sql","Snowflake SQL"),link("advanced_sql_guide.html","window","SQL Windows")],[ "Run 10 queries in worksheet","Practice MERGE"]);
+add(3,"Snowflake: SQL & VARIANT",4,[link("snowflake_guide.html","sql","Snowflake → SQL"),link("advanced_sql_guide.html","functions","SQL JSON functions")],[ "MERGE upsert exercise","FLATTEN JSON array"]);
+add(3,"Snowflake: streams & tasks",3,[link("snowflake_guide.html","streams","Snowflake → Streams/Tasks")],[ "Create stream on table","Simple scheduled task"]);
+add(3,"Snowflake: RBAC & performance",4,[link("snowflake_guide.html","security","Snowflake → Security"),link("snowflake_guide.html","perf","Snowflake → Performance")],[ "Create role + grants","Check query profile"]);
+add(3,"Snowflake: Snowpipe concept",3,[link("snowflake_guide.html","load","Snowflake → Snowpipe")],[ "Read Snowpipe quickstart"]);
+add(3,"Airflow: concepts + local setup",4,[link("airflow_guide.html","overview","Airflow → Overview")],[ "astro dev start OR Docker","Open UI localhost:8080"]);
+add(3,"Airflow: first DAG",4,[link("airflow_guide.html","dag","Airflow → DAGs")],[ "DAG: BashOperator + PythonOperator","Use {{ ds }} macro"]);
+add(3,"Airflow: practice DAG (3 tasks)",4,[link("airflow_guide.html","dag","Airflow DAGs")],[ "Build DAG: check file → run script → notify","Test manual trigger"]);
+add(3,"Airflow: AWS & Snowflake operators",4,[link("airflow_guide.html","operators","Airflow → Operators")],[ "GlueJobOperator or Bash for Glue","Document connections"]);
+add(3,"Airflow: sensors & production",4,[link("airflow_guide.html","sensors","Sensors & XCom"),link("airflow_guide.html","prod","Airflow Production")],[ "S3KeySensor waits for file"]);
+add(3,"dbt: init & project structure",4,[link("dbt_guide.html","overview","dbt → Overview"),link("dbt_guide.html","project","dbt → Project")],[ "dbt init + dbt debug","courses.getdbt.com unit 1"]);
+add(3,"dbt: models & sources",4,[link("dbt_guide.html","models","dbt → Models")],[ "staging model from raw source","marts model with ref()"]);
+add(3,"dbt: getdbt.com course",4,[link("dbt_guide.html","overview","dbt Overview")],[ "Complete dbt Learn path units 1–4","dbt run + dbt test locally"]);
+add(3,"dbt: incremental & tests",4,[link("dbt_guide.html","incremental","dbt → Incremental"),link("dbt_guide.html","tests","dbt → Tests")],[ "One incremental model","schema.yml tests"]);
+add(3,"dbt: snapshots & Airflow",4,[link("dbt_guide.html","snapshots","dbt → Snapshots"),link("dbt_guide.html","cicd","dbt CI/CD")],[ "SCD2 snapshot","BashOperator: dbt run"]);
+add(3,"Project 3 start: cloud pipeline",5,[link("data_engineer_plan.html","month3","Roadmap → Month 3 Project")],[ "Architecture: S3→Snowflake→dbt","List AWS+Snowflake objects needed"]);
+add(3,"Project 3: build pipeline",6,[link("aws_de_guide.html","pipeline","AWS Pipeline"),link("snowflake_guide.html","load","Snowflake Load"),link("dbt_guide.html","models","dbt Models")],[ "Implement ingest + load + dbt"]);
+add(3,"Project 3: Airflow orchestration",5,[link("airflow_guide.html","dag","Airflow DAG")],[ "DAG runs full pipeline daily","Add retry + email_on_failure"]);
+add(3,"Project 3: documentation & demo video",4,[link("devops_guide.html","git-advanced","Git README")],[ "Record 3-min Loom demo of pipeline","Update GitHub README"]);
+add(3,"Month 3 review",4,[link("aws_de_guide.html","interview","AWS Interview"),link("snowflake_guide.html","interview","Snowflake Interview")],[ "Explain your stack in 3 min","Fix weakest checklist items"]);
+add(3,"Buffer: catch-up / labs",3,[link("https://quickstarts.snowflake.com/","Snowflake Quickstarts"),link("https://explore.skillbuilder.aws/","AWS Skill Builder")],[ "1 Snowflake OR AWS lab"]);
+
+// ========== MONTH 4: Polish + Jobs ==========
+add(4,"Data modeling: OLTP vs OLAP",3,[link("data_modeling_guide.html","overview","Modeling → Overview")],[ "Sketch star schema for your project"]);
+add(4,"Kimball star schema",4,[link("data_modeling_guide.html","kimball","Kimball / Star")],[ "Define grain for fct_orders","List 3 dims"]);
+add(4,"SCD types + medallion",4,[link("data_modeling_guide.html","scd","SCD"),link("data_modeling_guide.html","medallion","Medallion")],[ "Map bronze/silver/gold to your S3 paths"]);
+add(4,"SQL interview drill",5,[link("advanced_sql_guide.html","interview","SQL Interview Patterns"),link("advanced_sql_guide.html","practice","SQL Practice")],[ "StrataScratch 10 problems timed"]);
+add(4,"SQL timed mock (45 min)",4,[link("advanced_sql_guide.html","practice","SQL Practice")],[ "5 medium problems under time limit","Review mistakes"]);
+add(4,"Python + Pandas drill",4,[link("python_guide.html","interview","Python Q&A"),link("pandas_guide.html","interview","Pandas Q&A")],[ "5 Python coding problems"]);
+add(4,"PySpark interview drill",4,[link("pyspark_guide.html","interview","PySpark Q&A")],[ "Explain shuffle, broadcast, skew","5 scenario questions out loud"]);
+add(4,"System design: data pipeline",4,[link("data_engineer_plan.html","jobhunt","Roadmap → Job Hunt")],[ "Design Uber ETL on whiteboard","Design batch vs streaming"]);
+add(4,"CI/CD basics",3,[link("devops_guide.html","cicd","Git → CI/CD")],[ "Read GitHub Actions dbt example"]);
+add(4,"Capstone start",5,[link("data_engineer_plan.html","projects","All Projects")],[ "Pick capstone dataset (SAP-inspired optional)","Write architecture doc"]);
+add(4,"Capstone: multi-source ingest",6,[link("aws_de_guide.html","lambda","Lambda"),link("kafka_guide.html",null,"Kafka optional")],[ "API + file + optional stream"]);
+add(4,"Capstone: AWS + Snowflake integration",5,[link("aws_de_guide.html","pipeline","AWS Pipeline"),link("snowflake_guide.html","dbt","Snowflake + dbt tab")],[ "Verify S3 → Snowflake load works"]);
+add(4,"Capstone: transform & warehouse",6,[link("pyspark_guide.html","df","PySpark"),link("snowflake_guide.html","sql","Snowflake")],[ "Medallion layers complete"]);
+add(4,"Capstone: dbt + Airflow",6,[link("dbt_guide.html","models","dbt"),link("airflow_guide.html","prod","Airflow")],[ "dbt tests pass","DAG documented"]);
+add(4,"Capstone: README + blog",5,[link("devops_guide.html","git-advanced","Git")],[ "Architecture diagram in README","Medium/LinkedIn post"]);
+add(4,"Resume rewrite for DE",4,[link("data_engineer_plan.html","jobhunt","Job Hunt tab")],[ "ATS keywords: AWS, Snowflake, Spark, Airflow, dbt","Reframe SAP/support as data ops"]);
+add(4,"LinkedIn + GitHub polish",3,[link("data_engineer_plan.html","jobhunt","Job Hunt")],[ "Update headline + About","Pin 3 projects on profile"]);
+add(4,"Apply: batch 1 (15 companies)",4,[link("data_engineer_plan.html","jobhunt","Job Hunt")],[ "Naukri + LinkedIn Easy Apply","Track in spreadsheet"]);
+add(4,"Networking: LinkedIn outreach",3,[link("data_engineer_plan.html","jobhunt","Job Hunt")],[ "Connect with 10 DEs","Comment on 3 technical posts"]);
+add(4,"Apply: batch 2 (15 companies)",4,[link("data_engineer_plan.html","jobhunt","Job Hunt")],[ "Instahyre, Cutshort, company sites"]);
+add(4,"Apply: batch 3 + referrals",4,[link("data_engineer_plan.html","jobhunt","Job Hunt")],[ "Message 10 DEs for referral","Apply 20 more roles"]);
+add(4,"Mock interviews",5,[link("advanced_sql_guide.html","interview","SQL"),link("pyspark_guide.html","interview","Spark")],[ "Pramp 2 sessions","Record yourself answering"]);
+add(4,"Behavioral interview prep (STAR)",3,[link("data_engineer_plan.html","jobhunt","Job Hunt")],[ "Prepare 5 STAR stories from SAP/support career"]);
+add(4,"Certification study (AWS DEA)",4,[link("aws_de_guide.html","interview","AWS Cert")],[ "Udemy DEA practice test 1","Review wrong answers"]);
+add(4,"Stack revision: full pipeline whiteboard",4,[link("index.html",null,"All Guides"),link("aws_de_guide.html","pipeline","AWS Pipeline")],[ "Draw Lambda→S3→Glue→Snowflake→dbt→Airflow","Explain in 10 min recording"]);
+add(4,"Weak area fix + buffer",4,[link("index.html",null,"Index — pick weak guide"),link("airflow_guide.html","prod","Airflow"),link("dbt_guide.html","cicd","dbt")],[ "Re-read lowest-progress guide","Review Airflow + dbt"]);
+add(4,"Final review & celebrate",3,[link("index.html",null,"All Guides Hub")],[ "Review all 4 projects","You are job-ready — keep applying!"]);
+add(4,"Buffer: applications follow-up",3,[link("data_engineer_plan.html","jobhunt","Job Hunt")],[ "Follow up on pending applications"]);
+
+// Verify 120 days
+if (DAYS.length !== 120) console.warn("Expected 120 days, got", DAYS.length);
+
+function renderMonthNav() {
+  const nav = document.getElementById("month-nav");
+  [1,2,3,4].forEach(m => {
+    const b = document.createElement("button");
+    b.textContent = "Month " + m;
+    b.dataset.month = m;
+    b.onclick = () => showMonth(+m);
+    nav.appendChild(b);
+  });
+}
+
+let activeMonth = 1;
+
+function showMonth(m) {
+  activeMonth = m;
+  document.getElementById("current-month-label").textContent = m;
+  document.querySelectorAll("#month-nav button").forEach(b => {
+    b.classList.toggle("active", +b.dataset.month === m);
+  });
+  renderDays();
+}
+
+function getProgress() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}"); } catch { return {}; }
+}
+
+function saveProgress(p) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(p));
+  updateStats();
+}
+
+function updateStats() {
+  const p = getProgress();
+  const done = Object.values(p).filter(Boolean).length;
+  document.getElementById("done-count").textContent = done;
+  const pct = Math.round((done / 120) * 100);
+  const fill = document.getElementById("progress-fill");
+  fill.style.width = pct + "%";
+  fill.textContent = pct + "%";
+}
+
+function renderDays() {
+  const container = document.getElementById("days-container");
+  container.innerHTML = "";
+  const progress = getProgress();
+  const start = localStorage.getItem(START_DATE_KEY);
+  let todayNum = 1;
+  if (start) {
+    const d0 = new Date(start);
+    const now = new Date();
+    todayNum = Math.min(120, Math.max(1, Math.floor((now - d0) / 86400000) + 1));
+  }
+  document.getElementById("today-day").textContent = "Day " + todayNum;
+
+  DAYS.filter(d => d.month === activeMonth).forEach(d => {
+    const card = document.createElement("div");
+    card.className = "day-card" + (progress[d.day] ? " done" : "");
+    if (d.day === todayNum) card.classList.add("today-highlight");
+
+    let readsHtml = d.reads.map(r =>
+      `<a class="read-link" href="${r.href}" target="_blank">${r.label}</a>`
+    ).join("");
+    let tasksHtml = d.tasks.map(t => `<li>${t}</li>`).join("");
+
+    card.innerHTML = `
+      <div class="day-header">
+        <div>
+          <div class="day-num">Day ${d.day} · Month ${d.month} · ~${d.hours}h</div>
+          <div class="day-title">${d.title}</div>
+        </div>
+      </div>
+      ${d.project ? `<div class="day-meta">🛠 ${d.project}</div>` : ""}
+      <div class="section-label">Read today</div>
+      <div class="read-links">${readsHtml}</div>
+      <div class="section-label">Practice / build</div>
+      <ul class="tasks">${tasksHtml}</ul>
+      <div class="day-check">
+        <input type="checkbox" id="day-${d.day}" ${progress[d.day] ? "checked" : ""}>
+        <label for="day-${d.day}">Mark Day ${d.day} complete</label>
+      </div>
+    `;
+    card.querySelector("input").addEventListener("change", e => {
+      const p = getProgress();
+      p[d.day] = e.target.checked;
+      saveProgress(p);
+      card.classList.toggle("done", e.target.checked);
+    });
+    container.appendChild(card);
+  });
+}
+
+function exportProgress() {
+  const blob = new Blob([JSON.stringify(getProgress(), null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "daywise_progress.json";
+  a.click();
+}
+
+function resetProgress() {
+  if (!confirm("Reset all 120 day checkmarks?")) return;
+  localStorage.removeItem(STORAGE_KEY);
+  updateStats();
+  renderDays();
+}
+
+function jumpToday() {
+  if (!localStorage.getItem(START_DATE_KEY)) {
+    localStorage.setItem(START_DATE_KEY, new Date().toISOString().slice(0, 10));
+    alert("Start date set to today. Day 1 = today. Change START in localStorage if needed.");
+  }
+  const p = getProgress();
+  let todayNum = 1;
+  const start = localStorage.getItem(START_DATE_KEY);
+  if (start) {
+    const d0 = new Date(start);
+    todayNum = Math.min(120, Math.max(1, Math.floor((new Date() - d0) / 86400000) + 1));
+  }
+  showMonth(DAYS[todayNum - 1].month);
+  setTimeout(() => {
+    const el = document.getElementById("day-" + todayNum);
+    if (el) el.closest(".day-card").scrollIntoView({ behavior: "smooth", block: "center" });
+  }, 100);
+}
+
+renderMonthNav();
+showMonth(1);
+updateStats();
+</script>
+</body>
+</html>

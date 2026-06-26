@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>03 — PySpark (the #1 hard skill)</title>
+<style>
+
+:root{
+  --bg:#0b1020; --bg2:#101a33; --panel:#131d36; --panel2:#1a2745;
+  --text:#e6edf6; --muted:#9fb0c7; --line:#26365c;
+  --accent:#38bdf8; --accent2:#22d3ee; --green:#34d399; --amber:#fbbf24;
+  --red:#f87171; --purple:#a78bfa; --code:#0a0f1e;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0; font-family:"Segoe UI",Roboto,system-ui,Arial,sans-serif;
+  background:linear-gradient(180deg,#090e1c,#0b1020); color:var(--text);
+  line-height:1.65; font-size:15.5px;}
+a{color:var(--accent2); text-decoration:none}
+a:hover{text-decoration:underline}
+
+.topbar{position:sticky; top:0; z-index:10; display:flex; align-items:center; gap:14px;
+  background:rgba(11,16,32,.85); backdrop-filter:blur(8px);
+  border-bottom:1px solid var(--line); padding:12px 22px;}
+.topbar .back{display:inline-flex; align-items:center; gap:6px; font-size:13.5px;
+  font-weight:600; color:var(--accent2); background:var(--panel2);
+  border:1px solid var(--line); padding:6px 12px; border-radius:999px;}
+.topbar .back:hover{border-color:var(--accent); text-decoration:none}
+.topbar .crumb{font-size:13px; color:var(--muted)}
+
+main.doc{max-width:900px; margin:26px auto; padding:30px 36px 50px;
+  background:var(--panel); border:1px solid var(--line); border-radius:16px;}
+
+h1{font-size:28px; margin:0 0 18px; padding-bottom:14px; border-bottom:2px solid var(--line);
+  color:#eaf2ff;}
+h2{font-size:21px; margin:34px 0 12px; padding:8px 0 8px 14px; color:var(--accent);
+  border-left:4px solid var(--accent); background:linear-gradient(90deg,rgba(56,189,248,.08),transparent);
+  border-radius:0 8px 8px 0;}
+h3{font-size:17px; margin:22px 0 8px; color:var(--accent2);}
+h4{font-size:14.5px; margin:16px 0 6px; color:var(--purple); text-transform:uppercase; letter-spacing:.5px;}
+p{margin:10px 0}
+
+ul,ol{margin:10px 0; padding-left:24px}
+li{margin:6px 0}
+li::marker{color:var(--accent)}
+
+blockquote{margin:16px 0; padding:12px 18px; border-left:4px solid var(--amber);
+  background:rgba(251,191,36,.07); border-radius:0 8px 8px 0; color:#f3e6c2;}
+blockquote p{margin:4px 0}
+
+hr{border:none; border-top:1px solid var(--line); margin:28px 0}
+
+/* inline code */
+code{font-family:Consolas,"Courier New",monospace; font-size:13px;
+  background:var(--panel2); color:#ffd9a8; padding:2px 6px; border-radius:5px;
+  border:1px solid var(--line);}
+
+/* code blocks */
+pre{margin:14px 0; padding:0; background:transparent; border:none; overflow:auto}
+.codehilite{background:var(--code); border:1px solid var(--line); border-radius:10px;
+  padding:14px 16px; margin:14px 0; overflow:auto;}
+.codehilite pre{margin:0; padding:0; background:transparent; line-height:1.5}
+.codehilite code, pre code{background:transparent; border:none; color:inherit; padding:0;
+  font-size:13px;}
+
+/* tables */
+table{width:100%; border-collapse:collapse; margin:16px 0; font-size:13.8px}
+th,td{border:1px solid var(--line); padding:9px 12px; text-align:left; vertical-align:top}
+th{background:var(--panel2); color:#dbe7ff}
+tr:nth-child(even) td{background:rgba(255,255,255,.015)}
+
+strong{color:#f1f6ff}
+em{color:#cdd9ee}
+
+.docfoot{max-width:900px; margin:0 auto 50px; padding:0 36px; text-align:center;
+  color:var(--muted); font-size:12.5px}
+
+/* ---- Pygments (dracula) ---- */
+pre { line-height: 125%; }
+td.linenos .normal { color: #f1fa8c; background-color: #44475a; padding-left: 5px; padding-right: 5px; }
+span.linenos { color: #f1fa8c; background-color: #44475a; padding-left: 5px; padding-right: 5px; }
+td.linenos .special { color: #50fa7b; background-color: #6272a4; padding-left: 5px; padding-right: 5px; }
+span.linenos.special { color: #50fa7b; background-color: #6272a4; padding-left: 5px; padding-right: 5px; }
+.codehilite .hll { background-color: #44475a }
+.codehilite { background: #282a36; color: #F8F8F2 }
+.codehilite .c { color: #6272A4 } /* Comment */
+.codehilite .err { color: #F8F8F2 } /* Error */
+.codehilite .g { color: #F8F8F2 } /* Generic */
+.codehilite .k { color: #FF79C6 } /* Keyword */
+.codehilite .l { color: #F8F8F2 } /* Literal */
+.codehilite .n { color: #F8F8F2 } /* Name */
+.codehilite .o { color: #FF79C6 } /* Operator */
+.codehilite .x { color: #F8F8F2 } /* Other */
+.codehilite .p { color: #F8F8F2 } /* Punctuation */
+.codehilite .ch { color: #6272A4 } /* Comment.Hashbang */
+.codehilite .cm { color: #6272A4 } /* Comment.Multiline */
+.codehilite .cp { color: #FF79C6 } /* Comment.Preproc */
+.codehilite .cpf { color: #6272A4 } /* Comment.PreprocFile */
+.codehilite .c1 { color: #6272A4 } /* Comment.Single */
+.codehilite .cs { color: #6272A4 } /* Comment.Special */
+.codehilite .gd { color: #8B080B } /* Generic.Deleted */
+.codehilite .ge { color: #F8F8F2; text-decoration: underline } /* Generic.Emph */
+.codehilite .ges { color: #F8F8F2; text-decoration: underline } /* Generic.EmphStrong */
+.codehilite .gr { color: #F8F8F2 } /* Generic.Error */
+.codehilite .gh { color: #F8F8F2; font-weight: bold } /* Generic.Heading */
+.codehilite .gi { color: #F8F8F2; font-weight: bold } /* Generic.Inserted */
+.codehilite .go { color: #44475A } /* Generic.Output */
+.codehilite .gp { color: #F8F8F2 } /* Generic.Prompt */
+.codehilite .gs { color: #F8F8F2 } /* Generic.Strong */
+.codehilite .gu { color: #F8F8F2; font-weight: bold } /* Generic.Subheading */
+.codehilite .gt { color: #F8F8F2 } /* Generic.Traceback */
+.codehilite .kc { color: #FF79C6 } /* Keyword.Constant */
+.codehilite .kd { color: #8BE9FD; font-style: italic } /* Keyword.Declaration */
+.codehilite .kn { color: #FF79C6 } /* Keyword.Namespace */
+.codehilite .kp { color: #FF79C6 } /* Keyword.Pseudo */
+.codehilite .kr { color: #FF79C6 } /* Keyword.Reserved */
+.codehilite .kt { color: #8BE9FD } /* Keyword.Type */
+.codehilite .ld { color: #F8F8F2 } /* Literal.Date */
+.codehilite .m { color: #FFB86C } /* Literal.Number */
+.codehilite .s { color: #BD93F9 } /* Literal.String */
+.codehilite .na { color: #50FA7B } /* Name.Attribute */
+.codehilite .nb { color: #8BE9FD; font-style: italic } /* Name.Builtin */
+.codehilite .nc { color: #50FA7B } /* Name.Class */
+.codehilite .no { color: #F8F8F2 } /* Name.Constant */
+.codehilite .nd { color: #F8F8F2 } /* Name.Decorator */
+.codehilite .ni { color: #F8F8F2 } /* Name.Entity */
+.codehilite .ne { color: #F8F8F2 } /* Name.Exception */
+.codehilite .nf { color: #50FA7B } /* Name.Function */
+.codehilite .nl { color: #8BE9FD; font-style: italic } /* Name.Label */
+.codehilite .nn { color: #F8F8F2 } /* Name.Namespace */
+.codehilite .nx { color: #F8F8F2 } /* Name.Other */
+.codehilite .py { color: #F8F8F2 } /* Name.Property */
+.codehilite .nt { color: #FF79C6 } /* Name.Tag */
+.codehilite .nv { color: #8BE9FD; font-style: italic } /* Name.Variable */
+.codehilite .ow { color: #FF79C6 } /* Operator.Word */
+.codehilite .pm { color: #F8F8F2 } /* Punctuation.Marker */
+.codehilite .w { color: #F8F8F2 } /* Text.Whitespace */
+.codehilite .mb { color: #FFB86C } /* Literal.Number.Bin */
+.codehilite .mf { color: #FFB86C } /* Literal.Number.Float */
+.codehilite .mh { color: #FFB86C } /* Literal.Number.Hex */
+.codehilite .mi { color: #FFB86C } /* Literal.Number.Integer */
+.codehilite .mo { color: #FFB86C } /* Literal.Number.Oct */
+.codehilite .sa { color: #BD93F9 } /* Literal.String.Affix */
+.codehilite .sb { color: #BD93F9 } /* Literal.String.Backtick */
+.codehilite .sc { color: #BD93F9 } /* Literal.String.Char */
+.codehilite .dl { color: #BD93F9 } /* Literal.String.Delimiter */
+.codehilite .sd { color: #BD93F9 } /* Literal.String.Doc */
+.codehilite .s2 { color: #BD93F9 } /* Literal.String.Double */
+.codehilite .se { color: #BD93F9 } /* Literal.String.Escape */
+.codehilite .sh { color: #BD93F9 } /* Literal.String.Heredoc */
+.codehilite .si { color: #BD93F9 } /* Literal.String.Interpol */
+.codehilite .sx { color: #BD93F9 } /* Literal.String.Other */
+.codehilite .sr { color: #BD93F9 } /* Literal.String.Regex */
+.codehilite .s1 { color: #BD93F9 } /* Literal.String.Single */
+.codehilite .ss { color: #BD93F9 } /* Literal.String.Symbol */
+.codehilite .bp { color: #F8F8F2; font-style: italic } /* Name.Builtin.Pseudo */
+.codehilite .fm { color: #50FA7B } /* Name.Function.Magic */
+.codehilite .vc { color: #8BE9FD; font-style: italic } /* Name.Variable.Class */
+.codehilite .vg { color: #8BE9FD; font-style: italic } /* Name.Variable.Global */
+.codehilite .vi { color: #8BE9FD; font-style: italic } /* Name.Variable.Instance */
+.codehilite .vm { color: #8BE9FD; font-style: italic } /* Name.Variable.Magic */
+.codehilite .il { color: #FFB86C } /* Literal.Number.Integer.Long */
+.codehilite, .codehilite pre{background:#0a0f1e !important;}
+
+</style>
+</head>
+<body>
+<div class="topbar">
+  <a class="back" href="../index.html">&#8592; Prep Home</a>
+  <span class="crumb">cheatsheets/03-pyspark.md</span>
+</div>
+<main class="doc">
+<h1 id="03-pyspark-the-1-hard-skill">03 — PySpark (the #1 hard skill)</h1>
+<p>If you only master one new thing, make it this. Two parts: the <strong>DataFrame API</strong>
+(what you write) and <strong>internals</strong> (what gets you hired at mid-level).</p>
+<h2 id="why-spark">Why Spark</h2>
+<ul>
+<li>Distributed, in-memory processing across a cluster. Handles data bigger than one
+  machine's RAM. Lazy: builds a DAG, optimizes (Catalyst), runs on an <strong>action</strong>.</li>
+</ul>
+<h2 id="core-concepts">Core concepts</h2>
+<ul>
+<li><strong>RDD</strong> (low-level) → <strong>DataFrame/Dataset</strong> (high-level, optimized — use these).</li>
+<li><strong>Transformations</strong> are lazy (<code>select</code>, <code>filter</code>, <code>join</code>, <code>groupBy</code>, <code>withColumn</code>).</li>
+<li><strong>Actions</strong> trigger execution (<code>show</code>, <code>count</code>, <code>collect</code>, <code>write</code>, <code>take</code>).</li>
+<li><strong>Partition</strong> = a chunk of data processed by one task. <strong>Stage</strong> = set of tasks
+  between shuffles. <strong>Job</strong> = triggered by one action.</li>
+</ul>
+<h2 id="dataframe-api-essentials">DataFrame API essentials</h2>
+<div class="codehilite"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">pyspark.sql</span><span class="w"> </span><span class="kn">import</span> <span class="n">SparkSession</span><span class="p">,</span> <span class="n">functions</span> <span class="k">as</span> <span class="n">F</span><span class="p">,</span> <span class="n">Window</span>
+<span class="n">spark</span> <span class="o">=</span> <span class="n">SparkSession</span><span class="o">.</span><span class="n">builder</span><span class="o">.</span><span class="n">appName</span><span class="p">(</span><span class="s2">&quot;billing&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">getOrCreate</span><span class="p">()</span>
+
+<span class="n">df</span> <span class="o">=</span> <span class="n">spark</span><span class="o">.</span><span class="n">read</span><span class="o">.</span><span class="n">parquet</span><span class="p">(</span><span class="s2">&quot;s3://lake/raw/invoices/&quot;</span><span class="p">)</span>
+
+<span class="n">out</span> <span class="o">=</span> <span class="p">(</span><span class="n">df</span>
+    <span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">F</span><span class="o">.</span><span class="n">col</span><span class="p">(</span><span class="s2">&quot;amount&quot;</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span>
+    <span class="o">.</span><span class="n">withColumn</span><span class="p">(</span><span class="s2">&quot;month&quot;</span><span class="p">,</span> <span class="n">F</span><span class="o">.</span><span class="n">month</span><span class="p">(</span><span class="s2">&quot;invoice_date&quot;</span><span class="p">))</span>
+    <span class="o">.</span><span class="n">withColumn</span><span class="p">(</span><span class="s2">&quot;amount_inr&quot;</span><span class="p">,</span> <span class="n">F</span><span class="o">.</span><span class="n">col</span><span class="p">(</span><span class="s2">&quot;amount&quot;</span><span class="p">)</span> <span class="o">*</span> <span class="n">F</span><span class="o">.</span><span class="n">lit</span><span class="p">(</span><span class="mi">83</span><span class="p">))</span>
+    <span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="s2">&quot;customer_id&quot;</span><span class="p">,</span> <span class="s2">&quot;month&quot;</span><span class="p">,</span> <span class="s2">&quot;amount_inr&quot;</span><span class="p">))</span>
+
+<span class="n">agg</span> <span class="o">=</span> <span class="p">(</span><span class="n">out</span><span class="o">.</span><span class="n">groupBy</span><span class="p">(</span><span class="s2">&quot;customer_id&quot;</span><span class="p">,</span> <span class="s2">&quot;month&quot;</span><span class="p">)</span>
+          <span class="o">.</span><span class="n">agg</span><span class="p">(</span><span class="n">F</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="s2">&quot;amount_inr&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">alias</span><span class="p">(</span><span class="s2">&quot;total&quot;</span><span class="p">),</span>
+               <span class="n">F</span><span class="o">.</span><span class="n">count</span><span class="p">(</span><span class="s2">&quot;*&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">alias</span><span class="p">(</span><span class="s2">&quot;n_invoices&quot;</span><span class="p">)))</span>
+
+<span class="n">agg</span><span class="o">.</span><span class="n">write</span><span class="o">.</span><span class="n">mode</span><span class="p">(</span><span class="s2">&quot;overwrite&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">partitionBy</span><span class="p">(</span><span class="s2">&quot;month&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">parquet</span><span class="p">(</span><span class="s2">&quot;s3://lake/curated/&quot;</span><span class="p">)</span>
+</code></pre></div>
+
+<h2 id="joins-and-the-interview-trap-broadcast">Joins (and the interview trap: broadcast)</h2>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Small dimension joined to a huge fact -&gt; broadcast the small one (no shuffle)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pyspark.sql.functions</span><span class="w"> </span><span class="kn">import</span> <span class="n">broadcast</span>
+<span class="n">fact</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">broadcast</span><span class="p">(</span><span class="n">dim_customer</span><span class="p">),</span> <span class="s2">&quot;customer_id&quot;</span><span class="p">,</span> <span class="s2">&quot;left&quot;</span><span class="p">)</span>
+</code></pre></div>
+
+<ul>
+<li>Join types: inner, left/right/full outer, left_semi, left_anti.</li>
+<li><strong>Shuffle join</strong> (sort-merge) is default for big-big; <strong>broadcast join</strong> avoids
+  shuffle when one side is small (&lt; ~10MB, tunable). Naming this is a green flag.</li>
+</ul>
+<h2 id="window-functions-in-spark">Window functions in Spark</h2>
+<div class="codehilite"><pre><span></span><code><span class="n">w</span> <span class="o">=</span> <span class="n">Window</span><span class="o">.</span><span class="n">partitionBy</span><span class="p">(</span><span class="s2">&quot;customer_id&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">orderBy</span><span class="p">(</span><span class="n">F</span><span class="o">.</span><span class="n">desc</span><span class="p">(</span><span class="s2">&quot;invoice_date&quot;</span><span class="p">))</span>
+<span class="n">latest</span> <span class="o">=</span> <span class="p">(</span><span class="n">df</span><span class="o">.</span><span class="n">withColumn</span><span class="p">(</span><span class="s2">&quot;rn&quot;</span><span class="p">,</span> <span class="n">F</span><span class="o">.</span><span class="n">row_number</span><span class="p">()</span><span class="o">.</span><span class="n">over</span><span class="p">(</span><span class="n">w</span><span class="p">))</span>
+            <span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">F</span><span class="o">.</span><span class="n">col</span><span class="p">(</span><span class="s2">&quot;rn&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)</span>        <span class="c1"># dedupe: keep latest per customer</span>
+            <span class="o">.</span><span class="n">drop</span><span class="p">(</span><span class="s2">&quot;rn&quot;</span><span class="p">))</span>
+</code></pre></div>
+
+<h2 id="internals-this-is-where-mid-level-is-won">Internals (this is where mid-level is won)</h2>
+<ul>
+<li><strong>Shuffle</strong>: data redistributed across partitions (after <code>groupBy</code>, <code>join</code>,
+  <code>repartition</code>). Expensive — network + disk. Minimize shuffles.</li>
+<li><strong>repartition(n)</strong> = full shuffle, can increase partitions / rebalance.
+  <strong>coalesce(n)</strong> = merge partitions, no full shuffle, only reduces. Use coalesce
+  before writing few files; repartition to fix skew/parallelism.</li>
+<li><strong>Caching</strong>: <code>df.cache()</code> / <code>persist()</code> when a DataFrame is reused multiple times.</li>
+<li><strong>AQE (Adaptive Query Execution)</strong>: runtime optimization — coalesces shuffle
+  partitions, switches join strategies, handles skew. On by default in Spark 3+.</li>
+<li><strong>Predicate/column pushdown</strong>: filters and column selection pushed to Parquet/
+  source so less data is read. Partitioned data → <strong>partition pruning</strong>.</li>
+<li><strong>Data skew</strong>: one key has way more rows → one task is the bottleneck. Fixes:
+  enable AQE skew handling, <strong>salt</strong> the key, or broadcast the smaller side.</li>
+</ul>
+<h2 id="spark-sql-you-can-lean-on-your-sql-strength">Spark SQL (you can lean on your SQL strength)</h2>
+<div class="codehilite"><pre><span></span><code><span class="n">df</span><span class="o">.</span><span class="n">createOrReplaceTempView</span><span class="p">(</span><span class="s2">&quot;invoices&quot;</span><span class="p">)</span>
+<span class="n">spark</span><span class="o">.</span><span class="n">sql</span><span class="p">(</span><span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">  SELECT customer_id, SUM(amount) total</span>
+<span class="s2">  FROM invoices WHERE amount &gt; 0 GROUP BY customer_id</span>
+<span class="s2">&quot;&quot;&quot;</span><span class="p">)</span>
+</code></pre></div>
+
+<h2 id="readwrite-schemas">Read/write &amp; schemas</h2>
+<div class="codehilite"><pre><span></span><code><span class="n">schema</span> <span class="o">=</span> <span class="s2">&quot;customer_id STRING, amount DOUBLE, invoice_date DATE&quot;</span>
+<span class="n">df</span> <span class="o">=</span> <span class="n">spark</span><span class="o">.</span><span class="n">read</span><span class="o">.</span><span class="n">schema</span><span class="p">(</span><span class="n">schema</span><span class="p">)</span><span class="o">.</span><span class="n">csv</span><span class="p">(</span><span class="s2">&quot;raw.csv&quot;</span><span class="p">,</span> <span class="n">header</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>   <span class="c1"># define schema (don&#39;t infer in prod)</span>
+<span class="n">df</span><span class="o">.</span><span class="n">write</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="s2">&quot;delta&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">mode</span><span class="p">(</span><span class="s2">&quot;append&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="s2">&quot;/lake/curated&quot;</span><span class="p">)</span> <span class="c1"># Delta for ACID/upserts</span>
+</code></pre></div>
+
+<ul>
+<li>Prefer <strong>explicit schema</strong> over <code>inferSchema</code> (faster, safer).</li>
+<li>Write modes: <code>append</code>, <code>overwrite</code>, <code>ignore</code>, <code>error</code>.</li>
+</ul>
+<h2 id="structured-streaming-conceptual-month-2">Structured Streaming (conceptual — month 2)</h2>
+<ul>
+<li>Treat a stream as an unbounded table; micro-batches; checkpointing for
+  exactly-once; watermarks for late data. Read Kafka → transform → write to sink.</li>
+</ul>
+<h2 id="performance-checklist-say-these-out-loud">Performance checklist (say these out loud)</h2>
+<ol>
+<li>Read only needed columns/partitions (pushdown + pruning).</li>
+<li>Filter early; avoid wide transformations when possible.</li>
+<li>Broadcast small dimensions.</li>
+<li>Right-size partitions (~128MB each); <code>coalesce</code> before writing.</li>
+<li>Cache reused DataFrames; avoid <code>collect()</code> on big data.</li>
+<li>Use Parquet/Delta, not CSV/JSON, for processing.</li>
+<li>Watch skew; lean on AQE.</li>
+</ol>
+</main>
+<footer class="docfoot">Data Engineer Prep &middot; Snowflake + dbt + Airflow</footer>
+</body>
+</html>

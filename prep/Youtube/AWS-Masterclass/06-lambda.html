@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Part 6 — Lambda &amp; Triggers | AWS for Data Engineers</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #0b1020; --bg-2: #131a2f; --bg-3: #1f2a44; --card: #131a2f;
+    --text: #e6edf6; --text-dim: #93a4bf; --accent: #60a5fa; --accent-2: #c084fc;
+    --accent-3: #34d399; --success: #22c55e; --warn: #fbbf24; --danger: #f87171;
+    --border: #2a3553; --code-bg: #0a0f1e; --aws: #ff9900;
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: linear-gradient(135deg, #0b1020 0%, #1a0f2e 100%); color: var(--text);
+    line-height: 1.65; min-height: 100vh; }
+  .container { max-width: 1100px; margin: 0 auto; padding: 24px; }
+  header { background: linear-gradient(135deg, #232f3e 0%, #ff9900 140%);
+    border-radius: 16px; padding: 30px; margin-bottom: 18px; box-shadow: 0 20px 60px rgba(255,153,0,0.2); }
+  header .crumb { font-size: 12px; opacity: 0.85; text-transform: uppercase; letter-spacing: 1px; }
+  header h1 { font-size: 30px; margin: 6px 0 8px 0; }
+  header p { opacity: 0.95; font-size: 15px; max-width: 760px; }
+  nav.pager { display: flex; justify-content: space-between; gap: 10px; margin: 14px 0 22px 0; flex-wrap: wrap; }
+  nav.pager a { text-decoration: none; background: var(--card); border: 1px solid var(--border);
+    color: var(--text); padding: 10px 16px; border-radius: 10px; font-size: 13px; font-weight: 600; transition: all 0.2s; }
+  nav.pager a:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+  nav.pager a.home { border-color: var(--accent-2); }
+  .section { background: var(--card); border-radius: 12px; padding: 24px; margin-bottom: 18px; border: 1px solid var(--border); }
+  .section h2 { color: var(--accent); font-size: 22px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+  .section h3 { color: var(--accent-2); font-size: 18px; margin: 20px 0 10px 0; }
+  .section h4 { color: var(--accent-3); font-size: 15px; margin: 14px 0 8px 0; }
+  .section p { color: var(--text); margin-bottom: 10px; }
+  ul.bullet { padding-left: 22px; color: var(--text); font-size: 14.5px; margin: 6px 0 12px 0; }
+  ul.bullet li { padding: 4px 0; }
+  ul.bullet li b { color: var(--accent-3); }
+  table { width: 100%; border-collapse: collapse; background: var(--bg); border-radius: 8px; overflow: hidden; margin: 14px 0; font-size: 13.5px; }
+  th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { background: var(--bg-3); color: var(--accent); text-transform: uppercase; font-size: 11px; letter-spacing: 1px; }
+  tr:last-child td { border-bottom: none; }
+  .alert { padding: 12px 14px; border-radius: 8px; margin: 14px 0; border-left: 4px solid; font-size: 14px; }
+  .alert.warn { background: rgba(251,191,36,0.1); border-color: var(--warn); }
+  .alert.danger { background: rgba(248,113,113,0.1); border-color: var(--danger); }
+  .alert.success { background: rgba(34,197,94,0.1); border-color: var(--success); }
+  .alert.info { background: rgba(96,165,250,0.1); border-color: var(--accent); }
+  .alert strong { color: var(--text); }
+  .diagram { background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 22px; margin: 16px 0; overflow-x: auto; }
+  .diagram .title { text-align: center; color: var(--text-dim); font-size: 12px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 16px; }
+  .flow { display: flex; align-items: stretch; justify-content: center; flex-wrap: wrap; }
+  .flow-box { background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px;
+    min-width: 130px; text-align: center; font-size: 13px; font-weight: 600; display: flex; flex-direction: column; justify-content: center; }
+  .flow-box small { display: block; color: var(--text-dim); font-weight: 400; font-size: 11px; margin-top: 4px; }
+  .flow-arrow { display: flex; align-items: center; padding: 0 8px; color: var(--accent); font-size: 22px; font-weight: 700; }
+  .flow-box.gen { border-top: 3px solid var(--accent); }
+  .flow-box.ing { border-top: 3px solid var(--accent-2); }
+  .flow-box.sto { border-top: 3px solid var(--accent-3); }
+  .flow-box.tra { border-top: 3px solid var(--warn); }
+  .flow-box.ser { border-top: 3px solid var(--danger); }
+  :not(pre) > code { background: var(--bg-3); padding: 2px 6px; border-radius: 4px; font-size: 13px; color: var(--accent-3); font-family: "Consolas","Monaco",monospace; }
+  pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; padding: 14px; overflow-x: auto; margin: 12px 0; font-size: 13px; line-height: 1.5; }
+  pre code { color: var(--text); font-family: "Consolas","Monaco",monospace; background: none; padding: 0; }
+  footer { text-align: center; margin-top: 30px; padding: 20px; color: var(--text-dim); font-size: 13px; }
+  @media (max-width: 640px) { header h1 { font-size: 23px; } .container { padding: 12px; } }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <div class="crumb">Part 6 of 7</div>
+    <h1>Lambda &amp; Triggers</h1>
+    <p>Run code without managing a server. Learn the handler, events, S3 triggers, CloudWatch monitoring, and
+       execution roles — then build a function that moves a file automatically when it's uploaded.</p>
+  </header>
+
+  <nav class="pager">
+    <a class="home" href="index.html">&#127968; Home / Contents</a>
+    <a href="05-sdk-boto3.html">&#8592; Part 5</a>
+    <a href="07-glue-athena.html">Next &#8594; Part 7: Glue, Athena &amp; the Pipeline</a>
+  </nav>
+
+  <div class="section">
+    <h2>1. What is AWS Lambda?</h2>
+    <p><strong>AWS Lambda lets you run code without provisioning or managing servers</strong> — that's the entire
+       story. Write a function (Python, Node.js, Java, Go, &hellip;), upload it (as a file or container image), and
+       Lambda automatically allocates compute and runs it on each incoming request/event, at any scale.</p>
+    <p>(Coming from Azure? It's like Azure Functions.)</p>
+    <h3>Why not just use EC2?</h3>
+    <p>You <em>could</em> run your Python on an EC2 VM. But if the code only runs a few times a day, the VM sits
+       <b>idle</b> the rest of the time — wasted money — and you must <b>scale</b> and <b>manage</b> it yourself.</p>
+    <div class="diagram">
+      <div class="title">EC2 (always on) vs Lambda (on demand)</div>
+      <div class="flow">
+        <div class="flow-box tra">EC2<small>idle most of the day &middot; you manage it</small></div>
+        <div class="flow-arrow">vs</div>
+        <div class="flow-box ser">Lambda<small>runs on demand &middot; pay per run &middot; auto-scales</small></div>
+      </div>
+    </div>
+    <p>Lambda is a <b>serverless</b> compute/interpreter that:</p>
+    <ul class="bullet">
+      <li>Charges you <b>only for the time it runs</b> (e.g. 3,300 ms &amp; 128 MB used).</li>
+      <li><b>Auto-scales</b> up and down with no idle waste.</li>
+      <li>Can be <b>triggered on demand</b> by events.</li>
+      <li>Needs <b>no OS/interpreter upgrades or installs</b> — just submit code and run.</li>
+    </ul>
+    <div class="alert warn"><strong>Not a full EC2 replacement.</strong> Lambda is for small, on-demand functions — not heavy, long-running, critical workloads. Use the right tool for the job.</div>
+  </div>
+
+  <div class="section">
+    <h2>2. Creating a Lambda Function</h2>
+    <p>Search <code>Lambda</code> &rarr; <b>Create function</b> &rarr; <b>Author from scratch</b>:</p>
+    <ul class="bullet">
+      <li>Name it (e.g. <code>lambda-demo</code>).</li>
+      <li>Runtime: pick a stable Python (e.g. <b>Python 3.12</b> — avoid brand-new releases with bugs), arch x86_64.</li>
+      <li>Execution role: <b>Create a new role with basic Lambda permissions</b> — this auto-creates a role that lets the function <em>execute</em> (basic permission). You can add more permissions later.</li>
+    </ul>
+    <p>You get an <b>embedded code editor</b> (VS Code-like, with AI code completion) right in the console.</p>
+    <h3>The handler: <code>event</code> and <code>context</code></h3>
+    <pre><code>def lambda_handler(event, context):
+    print("event is", event)
+    return {
+        "statusCode": 200,
+        "body": "Hello from Lambda!"
+    }</code></pre>
+    <ul class="bullet">
+      <li><b>event</b> (important): the input coming from whatever invoked the function (a trigger, or a test event). Use it to drive your logic.</li>
+      <li><b>context</b> (less important): metadata about the invocation.</li>
+    </ul>
+    <h3>Deploy &amp; Test</h3>
+    <p>There's no "run" button — click <b>Deploy</b> to save your code (it's a live connection, so deploy after
+       every change). Then <b>Test</b>: create a test event (a JSON input) and run it. You'll see the response,
+       e.g. <code>statusCode 200</code> and your body. The <code>print(event)</code> output appears in the logs.</p>
+  </div>
+
+  <div class="section">
+    <h2>3. Monitoring with CloudWatch</h2>
+    <ul class="bullet">
+      <li><b>Monitor tab:</b> shows all invocations of the function over time (in real apps this is busy — functions get called by many APIs, sometimes asynchronously).</li>
+      <li><b>CloudWatch logs:</b> click through to see each invocation, its request ID, the <code>event</code> passed in, your <code>print</code> output, memory used, etc.</li>
+    </ul>
+    <div class="alert info"><strong>CloudWatch</strong> is AWS's monitoring service (like Azure Monitor). Every Lambda run is logged there — your first stop when debugging.</div>
+  </div>
+
+  <div class="section">
+    <h2>4. Triggers</h2>
+    <p>Instead of testing manually, attach a <b>trigger</b> so the function runs automatically on an event.
+       <b>Add trigger</b> shows a long list: API Gateway, IoT, S3, and many more.</p>
+    <div class="diagram">
+      <div class="title">Example: an S3 upload triggers the function</div>
+      <div class="flow">
+        <div class="flow-box gen">&#128228; Upload file to S3<small>e.g. trigger/ folder</small></div>
+        <div class="flow-arrow">&#8594; event</div>
+        <div class="flow-box ing">&#9889; Lambda runs<small>auto-invoked</small></div>
+        <div class="flow-arrow">&#8594;</div>
+        <div class="flow-box ser">&#9881;&#65039; Your logic<small>process the file</small></div>
+      </div>
+    </div>
+    <h3>Setting up an S3 trigger</h3>
+    <ul class="bullet">
+      <li><b>Add trigger</b> &rarr; source = <b>S3</b> &rarr; pick the bucket.</li>
+      <li><b>Event type:</b> <code>PUT</code> (fires when a file is added/created).</li>
+      <li><b>Prefix:</b> optionally limit to a folder (e.g. <code>trigger/</code>).</li>
+    </ul>
+    <div class="alert danger"><strong>Beware recursive loops!</strong> If the function writes back into the <em>same</em> bucket that triggers it, it can re-trigger itself forever (AWS will email you a recursion warning). Read from one location and write to another, or delete the source file.</div>
+  </div>
+
+  <div class="section">
+    <h2>5. Execution Role (custom, reusable)</h2>
+    <p>For the function to touch S3 it needs permission. The auto-created role only has basic execute rights, so
+       create a <b>custom role</b> you can reuse across many functions.</p>
+    <p>IAM &rarr; <b>Create role</b> &rarr; service = <b>Lambda</b> &rarr; attach <code>AWSLambdaExecute</code> (basic +
+       S3 get/put) and <code>AmazonS3FullAccess</code> &rarr; name it <code>lambda-access-s3</code>. Then assign it
+       to the function via Configuration &rarr; Permissions &rarr; Edit &rarr; Existing role.</p>
+    <div class="alert info"><strong>Inside AWS, no access keys needed.</strong> Because the function runs <em>within</em> AWS, it uses its attached role for identity — so your boto3 client doesn't pass any keys/secrets.</div>
+  </div>
+
+  <div class="section">
+    <h2>6. Example — Move a File on Upload</h2>
+    <p>A function that copies a file from one folder to another in the same bucket (then deletes the original to
+       avoid a recursive loop):</p>
+    <pre><code>import boto3
+
+def lambda_handler(event, context):
+    s3 = boto3.client("s3")   # no keys needed: uses the function's IAM role
+    bucket = "my-bucket-26"
+    source_key = "trigger/data1.csv"
+    dest_key = "destination/data1.csv"
+
+    # Copy then delete the original (prevents recursive trigger loop)
+    s3.copy_object(
+        Bucket=bucket,
+        CopySource={"Bucket": bucket, "Key": source_key},
+        Key=dest_key,
+    )
+    s3.delete_object(Bucket=bucket, Key=source_key)
+
+    return {"statusCode": 200, "body": "file moved successfully"}</code></pre>
+    <p><b>Deploy</b>, then upload <code>data1.csv</code> into the <code>trigger/</code> folder. Check
+       <b>Monitor &rarr; CloudWatch logs</b> to confirm it ran, then verify the file now sits in
+       <code>destination/</code> and is gone from <code>trigger/</code>.</p>
+    <div class="alert warn"><strong>Common gotchas from the demo:</strong> the handler must be named correctly (default <code>lambda_handler</code>, not a renamed function), and the bucket name in code must exactly match the real bucket — otherwise you'll see "object not found".</div>
+    <div class="alert success">
+      <strong>Recap of Part 6:</strong> Lambda runs code <b>serverless</b> — pay per run, auto-scale, no servers to
+      manage. The handler takes <b>event</b> (input) and <b>context</b> (metadata); <b>Deploy</b> to save,
+      <b>Test</b> to run, and watch <b>CloudWatch</b> logs. Attach <b>triggers</b> (e.g. S3 <code>PUT</code>) to run
+      automatically, give the function a <b>custom IAM role</b> for permissions, and (inside AWS) skip access keys.
+      Watch out for recursive loops.
+    </div>
+  </div>
+
+  <nav class="pager">
+    <a class="home" href="index.html">&#127968; Home / Contents</a>
+    <a href="05-sdk-boto3.html">&#8592; Part 5</a>
+    <a href="07-glue-athena.html">Next &#8594; Part 7: Glue, Athena &amp; the Pipeline</a>
+  </nav>
+
+  <footer>Part 6 of 7 · AWS Fundamentals for Data Engineers · Source: youtube.com/watch?v=Ae3xyW2Ef0c</footer>
+</div>
+</body>
+</html>

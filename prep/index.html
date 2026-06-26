@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Data Engineering — Prep & Notes | Akshay Bode</title>
+<meta name="description" content="A complete Data Engineering preparation hub by Akshay Bode — plans, cheat sheets, topic guides, video-course notes, and practice material for SQL, Python, PySpark, Snowflake, dbt, Airflow, Kafka and AWS." />
+<meta name="author" content="Akshay Bode" />
+<link rel="icon" type="image/png" href="../logo.png" />
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+
+<style>
+:root {
+  --bg: #070b16; --bg-2: #0b1224; --panel: #0e1729; --panel-2: #131f38;
+  --border: #21314f; --text: #e8eef9; --muted: #94a6c4; --faint: #6b7d9c;
+  --accent: #38bdf8; --accent-2: #22d3ee; --accent-3: #a78bfa;
+  --green: #34d399; --amber: #fbbf24;
+  --grad: linear-gradient(120deg, #38bdf8, #22d3ee 40%, #a78bfa);
+  --radius: 16px;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  font-family: "Inter", system-ui, sans-serif; background: var(--bg); color: var(--text);
+  line-height: 1.6; -webkit-font-smoothing: antialiased;
+}
+a { color: inherit; text-decoration: none; }
+.wrap { max-width: 1180px; margin: 0 auto; padding: 0 24px; }
+
+/* glow backdrop */
+.bg-glow { position: fixed; z-index: 0; filter: blur(110px); border-radius: 50%; opacity: .35; pointer-events: none; }
+.bg-glow.a { width: 480px; height: 480px; background: #1e7fb8; top: -160px; right: -120px; }
+.bg-glow.b { width: 420px; height: 420px; background: #6d3fb0; bottom: -160px; left: -140px; }
+
+/* ===== NAV ===== */
+nav {
+  position: sticky; top: 0; z-index: 100; display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 24px; background: rgba(7,11,22,0.72); backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--border);
+}
+.logo { font-family: "Space Grotesk"; font-weight: 700; font-size: 18px; display: flex; align-items: center; gap: 10px; }
+.logo .badge { width: 32px; height: 32px; border-radius: 9px; background: var(--grad); color: #04121f;
+  display: grid; place-items: center; font-size: 14px; box-shadow: 0 6px 18px rgba(56,189,248,.4); }
+.back-btn { font-size: 13.5px; color: var(--muted); border: 1px solid var(--border); background: var(--panel);
+  padding: 9px 16px; border-radius: 10px; font-weight: 500; transition: all .2s; display: inline-flex; align-items: center; gap: 8px; }
+.back-btn:hover { color: var(--accent); border-color: var(--accent); transform: translateY(-1px); }
+
+/* ===== HERO ===== */
+.hero { position: relative; z-index: 1; padding: 70px 0 30px; text-align: center; }
+.hero .eyebrow { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--accent-2);
+  background: rgba(34,211,238,.08); border: 1px solid rgba(34,211,238,.25); padding: 7px 14px; border-radius: 999px;
+  font-weight: 500; margin-bottom: 20px; font-family: "JetBrains Mono"; }
+.hero h1 { font-family: "Space Grotesk"; font-size: clamp(32px, 6vw, 56px); letter-spacing: -1px; line-height: 1.08; }
+.hero h1 .grad { background: var(--grad); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+.hero p { color: var(--muted); max-width: 640px; margin: 18px auto 0; font-size: 17px; }
+
+.stat-row { display: flex; flex-wrap: wrap; justify-content: center; gap: 14px; margin-top: 30px; }
+.stat { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 14px 22px; min-width: 120px; }
+.stat .v { font-family: "Space Grotesk"; font-size: 26px; font-weight: 700; }
+.stat .v .grad { background: var(--grad); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+.stat .l { font-size: 12px; color: var(--faint); text-transform: uppercase; letter-spacing: 1px; margin-top: 2px; }
+
+/* ===== SEARCH + FILTER ===== */
+.toolbar { position: sticky; top: 61px; z-index: 90; background: rgba(7,11,22,.82); backdrop-filter: blur(12px);
+  padding: 16px 0; margin-top: 26px; border-bottom: 1px solid var(--border); }
+.search-box { position: relative; max-width: 560px; margin: 0 auto 14px; }
+.search-box i { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: var(--faint); }
+.search-box input { width: 100%; background: var(--panel); border: 1px solid var(--border); color: var(--text);
+  border-radius: 12px; padding: 13px 16px 13px 44px; font-size: 15px; font-family: inherit; outline: none; transition: border-color .2s; }
+.search-box input:focus { border-color: var(--accent); }
+.search-box input::placeholder { color: var(--faint); }
+.filters { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.chip { font-size: 13px; color: var(--muted); background: var(--panel); border: 1px solid var(--border);
+  padding: 8px 15px; border-radius: 999px; cursor: pointer; font-weight: 500; transition: all .2s; user-select: none; }
+.chip:hover { color: var(--text); border-color: var(--accent-2); }
+.chip.active { background: var(--grad); color: #04121f; border-color: transparent; font-weight: 600; }
+
+/* ===== SECTIONS ===== */
+section.cat { position: relative; z-index: 1; padding: 44px 0 8px; scroll-margin-top: 130px; }
+.cat-head { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+.cat-head .ic { width: 42px; height: 42px; border-radius: 11px; display: grid; place-items: center; font-size: 18px;
+  background: var(--panel-2); border: 1px solid var(--border); color: var(--accent); flex: none; }
+.cat-head h2 { font-family: "Space Grotesk"; font-size: 23px; letter-spacing: -.3px; }
+.cat-head p { color: var(--faint); font-size: 13.5px; margin-top: 2px; }
+
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 16px; }
+
+.card { position: relative; display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--border);
+  border-radius: 14px; padding: 20px; transition: transform .2s, border-color .2s, box-shadow .2s; overflow: hidden; }
+.card::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--bar, var(--accent)); opacity: .85; }
+.card:hover { transform: translateY(-4px); border-color: var(--accent); box-shadow: 0 18px 40px rgba(0,0,0,.45); }
+.card .top { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.card .ico { width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; font-size: 17px; flex: none;
+  background: color-mix(in srgb, var(--bar, var(--accent)) 16%, transparent); color: var(--bar, var(--accent)); }
+.card .num { font-family: "JetBrains Mono"; font-size: 11px; color: var(--faint); letter-spacing: .5px; text-transform: uppercase; }
+.card h3 { font-size: 16px; font-weight: 600; margin-top: 2px; line-height: 1.3; }
+.card p { color: var(--muted); font-size: 13px; margin-top: auto; padding-top: 10px; }
+.card .go { margin-top: 12px; font-size: 12.5px; color: var(--accent-2); font-weight: 600; display: inline-flex; align-items: center; gap: 6px; }
+.card .go i { transition: transform .2s; }
+.card:hover .go i { transform: translateX(4px); }
+.card .pill { position: absolute; top: 16px; right: 16px; font-size: 10px; font-family: "JetBrains Mono"; letter-spacing: .5px;
+  padding: 3px 8px; border-radius: 999px; background: var(--panel-2); color: var(--muted); border: 1px solid var(--border); }
+
+.no-results { display: none; text-align: center; color: var(--faint); padding: 50px 0; font-size: 15px; }
+.no-results.show { display: block; }
+
+footer { position: relative; z-index: 1; border-top: 1px solid var(--border); margin-top: 60px; padding: 30px 0;
+  text-align: center; color: var(--faint); font-size: 13px; }
+footer a { color: var(--accent-2); }
+
+/* reveal */
+.reveal { opacity: 0; transform: translateY(22px); transition: opacity .6s, transform .6s; }
+.reveal.in { opacity: 1; transform: none; }
+
+@media (max-width: 600px) {
+  .hero { padding: 46px 0 20px; }
+  .toolbar { top: 59px; }
+  section.cat { scroll-margin-top: 150px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition-duration: .001ms !important; }
+  html { scroll-behavior: auto; }
+}
+</style>
+</head>
+<body>
+<div class="bg-glow a"></div>
+<div class="bg-glow b"></div>
+
+<nav>
+  <a href="../index.html" class="logo"><span class="badge">AB</span> Akshay&nbsp;Bode</a>
+  <a href="../index.html" class="back-btn"><i class="fa-solid fa-arrow-left"></i> Back to Portfolio</a>
+</nav>
+
+<header class="hero wrap">
+  <div class="eyebrow"><i class="fa-solid fa-graduation-cap"></i> Data Engineering Knowledge Base</div>
+  <h1>Prep &amp; Notes<br /><span class="grad">everything in one place.</span></h1>
+  <p>My complete Data Engineering study hub — structured plans, cheat sheets, deep-dive guides,
+     video-course notes, and interview practice for the <b>Snowflake · dbt · Airflow · PySpark</b> stack.</p>
+  <div class="stat-row">
+    <div class="stat"><div class="v"><span class="grad">60+</span></div><div class="l">Notes &amp; Guides</div></div>
+    <div class="stat"><div class="v"><span class="grad">10</span></div><div class="l">Cheat Sheets</div></div>
+    <div class="stat"><div class="v"><span class="grad">4</span></div><div class="l">Video Courses</div></div>
+    <div class="stat"><div class="v"><span class="grad">~90</span></div><div class="l">Q&amp;A + Mocks</div></div>
+  </div>
+</header>
+
+<div class="toolbar">
+  <div class="wrap">
+    <div class="search-box">
+      <i class="fa-solid fa-magnifying-glass"></i>
+      <input type="text" id="search" placeholder="Search notes — e.g. window functions, SCD, Snowpipe, Airflow…" autocomplete="off" />
+    </div>
+    <div class="filters" id="filters">
+      <span class="chip active" data-f="all">All</span>
+      <span class="chip" data-f="plan">Plans</span>
+      <span class="chip" data-f="cheatsheet">Cheat Sheets</span>
+      <span class="chip" data-f="guide">Guides</span>
+      <span class="chip" data-f="video">Video Notes</span>
+      <span class="chip" data-f="practice">Practice</span>
+    </div>
+  </div>
+</div>
+
+<main class="wrap">
+
+  <!-- ===== PLANS ===== -->
+  <section class="cat" id="plans" data-cat="plan">
+    <div class="cat-head reveal">
+      <div class="ic"><i class="fa-solid fa-map"></i></div>
+      <div><h2>Plans &amp; Roadmaps</h2><p>Start here — pick a track and follow the sequence.</p></div>
+    </div>
+    <div class="grid">
+      <a class="card reveal" href="de-prep/index.html" data-tags="1 month sprint interview prep kit snowflake dbt airflow dashboard plan" style="--bar:#38bdf8;">
+        <span class="pill">DASHBOARD</span>
+        <div class="top"><div class="ico"><i class="fa-solid fa-bolt"></i></div><div><div class="num">Start Here</div></div></div>
+        <h3>1-Month Interview Prep Kit</h3>
+        <p>The master sprint dashboard: 4-week plan, gaps to close, learning order, cheat sheets, practice &amp; project.</p>
+        <span class="go">Open <i class="fa-solid fa-arrow-right"></i></span>
+      </a>
+      <a class="card reveal" href="daywise_4month_plan.html" data-tags="day by day 120 days schedule 4 month plan" style="--bar:#22d3ee;">
+        <div class="top"><div class="ico"><i class="fa-solid fa-calendar-days"></i></div><div><div class="num">120 Days</div></div></div>
+        <h3>Day-by-Day Plan</h3>
+        <p>A 120-day schedule with read-links to each guide section and per-day progress tracking.</p>
+        <span class="go">Open <i class="fa-solid fa-arrow-right"></i></span>
+      </a>
+      <a class="card reveal" href="data_engineer_plan.html" data-tags="4 month roadmap projects job hunt resources certifications" style="--bar:#a78bfa;">
+        <div class="top"><div class="ico"><i class="fa-solid fa-route"></i></div><div><div class="num">Big Picture</div></div></div>
+        <h3>4-Month Roadmap</h3>
+        <p>Monthly overview, projects, job-hunt strategy, resources and certification targets.</p>
+        <span class="go">Open <i class="fa-solid fa-arrow-right"></i></span>
+      </a>
+      <a class="card reveal" href="data-engineering-roadmap.html" data-tags="roadmap skills path visual" style="--bar:#34d399;">
+        <div class="top"><div class="ico"><i class="fa-solid fa-diagram-project"></i></div><div><div class="num">Visual</div></div></div>
+        <h3>DE Roadmap</h3>
+        <p>The end-to-end skills map — from foundations up to orchestration and the modern data stack.</p>
+        <span class="go">Open <i class="fa-solid fa-arrow-right"></i></span>
+      </a>
+      <a class="card reveal" href="final_plan.html" data-tags="final consolidated plan strategy" style="--bar:#fbbf24;">
+        <div class="top"><div class="ico"><i class="fa-solid fa-flag-checkered"></i></div><div><div class="num">Consolidated</div></div></div>
+        <h3>Final Plan</h3>
+        <p>The consolidated, decision-made study &amp; application strategy.</p>
+        <span class="go">Open <i class="fa-solid fa-arrow-right"></i></span>
+      </a>
+      <a class="card reveal" href="learning-hub.html" data-tags="learning hub guides index aws snowflake stack" style="--bar:#38bdf8;">
+        <div class="top"><div class="ico"><i class="fa-solid fa-compass"></i></div><div><div class="num">Index</div></div></div>
+        <h3>Learning Hub</h3>
+        <p>The original guide index — AWS + Snowflake stack with progress tracking per guide.</p>
+        <span class="go">Open <i class="fa-solid fa-arrow-right"></i></span>
+      </a>
+    </div>
+  </section>
+
+  <!-- ===== CHEAT SHEETS ===== -->
+  <section class="cat" id="cheatsheets" data-cat="cheatsheet">
+    <div class="cat-head reveal">
+      <div class="ic"><i class="fa-solid fa-bookmark"></i></div>
+      <div><h2>Cheat Sheets</h2><p>Dense, interview-ready references — numbered by topic.</p></div>
+    </div>
+    <div class="grid">
+      <a class="card reveal" href="de-prep/cheatsheets/01-sql-for-de.html" data-tags="sql window functions dedupe sessionization merge optimization" style="--bar:#38bdf8;">
+        <div class="top"><div class="ico"><i class="fa-solid fa-database"></i></div><div><div class="num">01</div></div></div>
+        <h3>SQL for DE</h3><p>Windows, dedupe, sessionization, MERGE, query optimization.</p><span class="go">Open <i class="fa-solid fa-arrow-right"></i></span>
+      </a>
+      <a class="card reveal" href="de-prep/cheatsheets/02-python-for-de.html" data-tags="python generators pandas file io production patterns" style="--bar:#22d3ee;">
+        <div class="top"><div class="ico"><i class="fa-brands fa-python"></i></div><div><div class="num">02</div></div></div>
+        <h3>Python for DE</h3><p>Generators, pandas, file I/O, production patterns.</p><span class="go">Open <i class="fa-solid fa-arrow-right"></i></span>
+      </a>
+      <a class="card reveal" href="de-prep/cheatsheets/03-pyspark.html" data-tags="pyspark dataframe internals shuffle broadcast skew" style="--bar:#a78bfa;">
+        <div class="top"><div class="ico"><i class="fa-solid fa-bolt"></i></div><div><div class="num">03</div></div></div>
+        <h3>PySpark</h3><p>DataFrame API + internals — the #1 interview skill.</p><span class="go">Open <i class="fa-solid fa-arrow-right"></i></span>
+      </a>
+      <a class="card reveal" href="de-prep/cheatsheets/04-data-modeling.html" data-tags="data modeling star snowflake schema facts dimensions scd" style="--bar:#34d399;">
+        <div class="top"><div class="ico"><i class="fa-solid fa-cubes"></i></div><div><div class="num">04</div></div></div>
+        <h3>Data Modeling</h3><p>Star/snowflake schemas, facts/dims, SCD types.</p><span class="go">Open <i class="fa-solid fa-arrow-right"></i></span>
+      </a>
+      <a class="card reveal" href="de-prep/cheatsheets/05-data-warehousing.html" data-tags="warehousing etl elt lakehouse parquet incremental" style="--bar:#fbbf24;">
+        <div class="top"><div class="ico"><i class="fa-solid fa-warehouse"></i></div><div><div class="num">05</div></div></div>
+        <h3>Warehousing</h3><p>ETL vs ELT, lakehouse, Parquet, incremental loads.</p><span class="go">Open <i class="fa-solid fa-arrow-right"></i></span>
+      </a>
+      <a class="card reveal" href="de-prep/cheatsheets/06-snowflake.html" data-tags="snowflake architecture micro partitions warehouses cost" style="--bar:#38bdf8;">
+        <div class="top"><div class="ico"><i class="fa-solid fa-snowflake"></i></div><div><div class="num">06</div></div></div>
+        <h3>Snowflake</h3><p>Architecture, micro-partitions, warehouses, cost.</p><span class="go">Open <i class="fa-solid fa-arrow-right"></i></span>
+      </a>
+      <a class="card reveal" href="de-prep/cheatsheets/07-dbt.html" data-tags="dbt models tests snapshots incremental" style="--bar:#22d3ee;">
+        <div class="top"><div class="ico"><i class="fa-solid fa-screwdriver-wrench"></i></div><div><div class="num">07</div></div></div>
+        <h3>dbt</h3><p>Models, tests, snapshots, incremental builds.</p><span class="go">Open <i class="fa-solid fa-arrow-right"></i></span>
+      </a>
+      <a class="card reveal" href="de-prep/cheatsheets/08-airflow.html" data-tags="airflow dags scheduling idempotency backfills" style="--bar:#a78bfa;">
+        <div class="top"><div class="ico"><i class="fa-solid fa-wind"></i></div><div><div class="num">08</div></div></div>
+        <h3>Airflow</h3><p>DAGs, scheduling, idempotency, backfills.</p><span class="go">Open <i class="fa-solid fa-arrow-right"></i></span>
+      </a>
+      <a class="card reveal" href="de-prep/cheatsheets/09-de-system-design.html" data-tags="system design pipeline framework" style="--bar:#34d399;">
+        <div class="top"><div class="ico"><i class="fa-solid fa-sitemap"></i></div><div><div class="num">09</div></div></div>
+        <h3>System Design</h3><p>The "design a data pipeline" framework.</p><span class="go">Open <i class="fa-solid fa-arrow-right"></i></span>
+      </a>
+      <a class="card reveal" href="de-prep/cheatsheets/10-behavioral-star.html" data-tags="behavioral star method story amdocs" style="--bar:#fbbf24;">
+        <div class="top"><div class="ico"><i class="fa-solid fa-star"></i></div><div><div class="num">10</div></div></div>
+        <h3>Behavioral / STAR</h3><p>The Amdocs → Data Engineer story, STAR-formatted.</p><span class="go">Open <i class="fa-solid fa-arrow-right"></i></span>
+      </a>
+    </div>
+  </section>
+
+  <!-- ===== GUIDES ===== -->
+  <section class="cat" id="guides" data-cat="guide">
+    <div class="cat-head reveal">
+      <div class="ic"><i class="fa-solid fa-book-open"></i></div>
+      <div><h2>Deep-Dive Guides</h2><p>Long-form topic guides with examples and patterns.</p></div>
+    </div>
+    <div class="grid">
+      <a class="card reveal" href="python_guide.html" data-tags="python fundamentals oop generators de patterns" style="--bar:#38bdf8;">
+        <div class="top"><div class="ico"><i class="fa-brands fa-python"></i></div></div><h3>Python</h3><p>Fundamentals → OOP → generators → DE patterns.</p><span class="go">Open <i class="fa-solid fa-arrow-right"></i></span>
+      </a>
+      <a class="card reveal" href="pandas_guide.html" data-tags="pandas io cleaning groupby merge time series" style="--bar:#22d3ee;">
+        <div class="top"><div class="ico"><i class="fa-solid fa-table"></i></div></div><h3>Pandas</h3><p>I/O, cleaning, groupby, merge, time series.</p><span class="go">Open <i class="fa-solid fa-arrow-right"></i></span>
+      </a>
+      <a class="card reveal" href="advanced_sql_guide.html" data-tags="advanced sql windows ctes scd interview patterns" style="--bar:#a78bfa;">
+        <div class="top"><div class="ico"><i class="fa-solid fa-database"></i></div></div><h3>Advanced SQL</h3><p>Windows, CTEs, SCD, interview patterns.</p><span class="go">Open <i class="fa-solid fa-arrow-right"></i></span>
+      </a>
+      <a class="card reveal" href="pyspark_guide.html" data-tags="pyspark architecture joins windows streaming" style="--bar:#34d399;">
+        <div class="top"><div class="ico"><i class="fa-solid fa-bolt"></i></div></div><h3>PySpark</h3><p>Architecture, joins, windows, streaming.</p><span class="go">Open <i class="fa-solid fa-arrow-right"></i></span>
+      </a>
+      <a class="card reveal" href="spark_architecture_guide.html" data-tags="spark architecture internals shuffle catalyst aqe" style="--bar:#fbbf24;">
+        <div class="top"><div class="ico"><i class="fa-solid fa-gears"></i></div></div><h3>Spark Architecture</h3><p>Internals: shuffle, Catalyst, AQE, tuning.</p><span class="go">Open <i class="fa-solid fa-arrow-right"></i></span>
+      </a>
+      <a class="card reveal" href="kafka_guide.html" data-tags="kafka streaming essentials topics partitions" style="--bar:#38bdf8;">
+        <div class="top"><div class="ico"><i class="fa-solid fa-tower-broadcast"></i></div></div><h3>Kafka</h3><p>Essentials for streaming pipelines.</p><span class="go">Open <i class="fa-solid fa-arrow-right"></i></span>
+      </a>
+      <a class="card reveal" href="snowflake_guide.html" data-tags="snowflake load snowpipe streams merge rbac" style="--bar:#22d3ee;">
+        <div class="top"><div class="ico"><i class="fa-solid fa-snowflake"></i></div></div><h3>Snowflake</h3><p>Loading, Snowpipe, streams, MERGE, RBAC.</p><span class="go">Open <i class="fa-solid fa-arrow-right"></i></span>
+      </a>
+      <a class="card reveal" href="dbt_guide.html" data-tags="dbt models tests incremental snapshots" style="--bar:#a78bfa;">
+        <div class="top"><div class="ico"><i class="fa-solid fa-screwdriver-wrench"></i></div></div><h3>dbt</h3><p>Models, tests, incremental, snapshots.</p><span class="go">Open <i class="fa-solid fa-arrow-right"></i></span>
+      </a>
+      <a class="card reveal" href="airflow_guide.html" data-tags="airflow dags operators sensors production" style="--bar:#34d399;">
+        <div class="top"><div class="ico"><i class="fa-solid fa-wind"></i></div></div><h3>Apache Airflow</h3><p>DAGs, operators, sensors, production tips.</p><span class="go">Open <i class="fa-solid fa-arrow-right"></i></span>
+      </a>
+      <a class="card reveal" href="aws_de_guide.html" data-tags="aws s3 iam lambda glue athena pipeline" style="--bar:#fbbf24;">
+        <div class="top"><div class="ico"><i class="fa-brands fa-aws"></i></div></div><h3>AWS for DE</h3><p>S3, IAM, Lambda, Glue, Athena, pipelines.</p><span class="go">Open <i class="fa-solid fa-arrow-right"></i></span>
+      </a>
+      <a class="card reveal" href="data_modeling_guide.html" data-tags="data modeling kimball scd medallion architecture" style="--bar:#38bdf8;">
+        <div class="top"><div class="ico"><i class="fa-solid fa-cubes"></i></div></div><h3>Data Modeling</h3><p>Kimball, SCD, medallion architecture.</p><span class="go">Open <i class="fa-solid fa-arrow-right"></i></span>
+      </a>
+      <a class="card reveal" href="devops_guide.html" data-tags="git docker ci cd version control containers" style="--bar:#22d3ee;">
+        <div class="top"><div class="ico"><i class="fa-brands fa-docker"></i></div></div><h3>Git &amp; Docker</h3><p>Version control, containers, CI/CD basics.</p><span class="go">Open <i class="fa-solid fa-arrow-right"></i></span>
+      </a>
+    </div>
+  </section>
+
+  <!-- ===== VIDEO NOTES ===== -->
+  <section class="cat" id="video" data-cat="video">
+    <div class="cat-head reveal">
+      <div class="ic"><i class="fa-solid fa-clapperboard"></i></div>
+      <div><h2>Video-Course Notes</h2><p>Structured notes I built from full YouTube/Udemy courses — with diagrams.</p></div>
+    </div>
+    <div class="grid">
+      <a class="card reveal" href="Youtube/index.html" data-tags="fundamentals data engineering masterclass lifecycle" style="--bar:#a78bfa;">
+        <span class="pill">6 PARTS</span>
+        <div class="top"><div class="ico"><i class="fa-solid fa-layer-group"></i></div></div>
+        <h3>DE Fundamentals Masterclass</h3><p>3-hour masterclass: lifecycle, storage, ETL, architecture, cloud, tools roadmap.</p><span class="go">Open <i class="fa-solid fa-arrow-right"></i></span>
+      </a>
+      <a class="card reveal" href="Youtube/Snowflake/index.html" data-tags="snowflake course architecture rbac loading snowpipe streams tasks time travel" style="--bar:#22d3ee;">
+        <span class="pill">6 PARTS</span>
+        <div class="top"><div class="ico"><i class="fa-solid fa-snowflake"></i></div></div>
+        <h3>Snowflake Course</h3><p>Architecture, RBAC, loading, Snowpipe, streams/tasks, Time Travel &amp; cloning.</p><span class="go">Open <i class="fa-solid fa-arrow-right"></i></span>
+      </a>
+      <a class="card reveal" href="Youtube/AWS-Masterclass/index.html" data-tags="aws masterclass ec2 s3 iam lambda glue athena boto3 datalake" style="--bar:#fbbf24;">
+        <span class="pill">7 PARTS</span>
+        <div class="top"><div class="ico"><i class="fa-brands fa-aws"></i></div></div>
+        <h3>AWS Masterclass</h3><p>Cloud fundamentals, IAM, EC2/EBS, S3 data lake, boto3, Lambda, Glue &amp; Athena.</p><span class="go">Open <i class="fa-solid fa-arrow-right"></i></span>
+      </a>
+      <a class="card reveal" href="Youtube/Python-DE/index.html" data-tags="python for de basics control flow data structures functions oop concurrency" style="--bar:#34d399;">
+        <span class="pill">8 PARTS</span>
+        <div class="top"><div class="ico"><i class="fa-brands fa-python"></i></div></div>
+        <h3>Python for DE</h3><p>Basics, control flow, data structures, functions, OOP, concurrency &amp; modules.</p><span class="go">Open <i class="fa-solid fa-arrow-right"></i></span>
+      </a>
+    </div>
+  </section>
+
+  <!-- ===== PRACTICE ===== -->
+  <section class="cat" id="practice" data-cat="practice">
+    <div class="cat-head reveal">
+      <div class="ic"><i class="fa-solid fa-dumbbell"></i></div>
+      <div><h2>Practice &amp; Build</h2><p>Drill, simulate interviews, and build the portfolio project.</p></div>
+    </div>
+    <div class="grid">
+      <a class="card reveal" href="de-prep/qa-bank.html" data-tags="question bank answers interview" style="--bar:#38bdf8;">
+        <span class="pill">~90 Q&amp;A</span>
+        <div class="top"><div class="ico"><i class="fa-solid fa-circle-question"></i></div></div>
+        <h3>Question Bank</h3><p>Tight, model answers across every DE topic.</p><span class="go">Open <i class="fa-solid fa-arrow-right"></i></span>
+      </a>
+      <a class="card reveal" href="de-prep/mock-drills.html" data-tags="mock interview drills timed rubric rounds" style="--bar:#22d3ee;">
+        <span class="pill">4 ROUNDS</span>
+        <div class="top"><div class="ico"><i class="fa-solid fa-stopwatch"></i></div></div>
+        <h3>Mock Drills</h3><p>Timed mock interviews + a grading rubric.</p><span class="go">Open <i class="fa-solid fa-arrow-right"></i></span>
+      </a>
+      <a class="card reveal" href="de-prep/project/README.html" data-tags="project telecom billing pipeline portfolio end to end" style="--bar:#a78bfa;">
+        <span class="pill">PROJECT</span>
+        <div class="top"><div class="ico"><i class="fa-solid fa-diagram-project"></i></div></div>
+        <h3>Telecom Billing Pipeline</h3><p>The end-to-end portfolio project = your interview story.</p><span class="go">Open <i class="fa-solid fa-arrow-right"></i></span>
+      </a>
+      <a class="card reveal" href="de-prep/snowflake-7day-sprint.html" data-tags="snowflake 7 day sprint snowpro core tracker intensive" style="--bar:#34d399;">
+        <span class="pill">INTENSIVE</span>
+        <div class="top"><div class="ico"><i class="fa-solid fa-gauge-high"></i></div></div>
+        <h3>Snowflake 7-Day Sprint</h3><p>Fast-track Snowflake + project + SnowPro Core, with a tracker.</p><span class="go">Open <i class="fa-solid fa-arrow-right"></i></span>
+      </a>
+      <a class="card reveal" href="interview-questions.html" data-tags="interview questions bank topics" style="--bar:#fbbf24;">
+        <span class="pill">BANK</span>
+        <div class="top"><div class="ico"><i class="fa-solid fa-comments"></i></div></div>
+        <h3>Interview Questions</h3><p>A broad bank of DE interview questions to rehearse.</p><span class="go">Open <i class="fa-solid fa-arrow-right"></i></span>
+      </a>
+    </div>
+  </section>
+
+  <div class="no-results" id="noResults"><i class="fa-solid fa-magnifying-glass"></i> &nbsp;No notes match your search. Try another keyword.</div>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <p>Built &amp; maintained by <b>Akshay Bode</b> · <a href="../index.html">Back to Portfolio</a></p>
+    <p style="margin-top:6px;opacity:.7;">Personal study notes for Data Engineering interviews · Snowflake · dbt · Airflow · PySpark</p>
+  </div>
+</footer>
+
+<script>
+/* ---- reveal on scroll ---- */
+const obs = new IntersectionObserver((entries) => {
+  entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add("in"); obs.unobserve(e.target); } });
+}, { threshold: 0.12 });
+document.querySelectorAll(".reveal").forEach((el, i) => {
+  el.style.transitionDelay = (Math.min(i % 6, 5) * 0.05) + "s";
+  obs.observe(el);
+});
+
+/* ---- search + filter ---- */
+const search = document.getElementById("search");
+const chips = [...document.querySelectorAll(".chip")];
+const cards = [...document.querySelectorAll(".card")];
+const sections = [...document.querySelectorAll("section.cat")];
+const noResults = document.getElementById("noResults");
+let activeFilter = "all";
+
+function apply() {
+  const q = search.value.trim().toLowerCase();
+  let visible = 0;
+  sections.forEach(sec => {
+    const cat = sec.dataset.cat;
+    const inFilter = (activeFilter === "all" || activeFilter === cat);
+    let secVisible = 0;
+    sec.querySelectorAll(".card").forEach(card => {
+      const text = (card.textContent + " " + (card.dataset.tags || "")).toLowerCase();
+      const match = inFilter && (q === "" || text.includes(q));
+      card.style.display = match ? "" : "none";
+      if (match) { secVisible++; visible++; }
+    });
+    sec.style.display = secVisible ? "" : "none";
+  });
+  noResults.classList.toggle("show", visible === 0);
+}
+
+search.addEventListener("input", apply);
+chips.forEach(chip => chip.addEventListener("click", () => {
+  chips.forEach(c => c.classList.remove("active"));
+  chip.classList.add("active");
+  activeFilter = chip.dataset.f;
+  apply();
+}));
+</script>
+</body>
+</html>

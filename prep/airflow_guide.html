@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Apache Airflow for Data Engineers — Complete Guide</title>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  :root{--bg:#0b1020;--card:#131a2f;--bg-3:#1f2a44;--text:#e6edf6;--dim:#93a4bf;--accent:#017cee;--accent2:#22d3ee;--border:#2a3553;--code:#0a0f1e}
+  body{font-family:system-ui,sans-serif;background:linear-gradient(135deg,#0b1020,#051525);color:var(--text);line-height:1.65}
+  .container{max-width:1280px;margin:0 auto;padding:24px}
+  header{background:linear-gradient(135deg,#017cee,#0ea5e9,#22d3ee);border-radius:16px;padding:32px;margin-bottom:24px}
+  header h1{font-size:30px}
+  .tabs,.tab,.tab-content,.section,.check-row,.alert,.btn,.progress-section,.progress-bar,.progress-fill{font-size:inherit}
+  .tabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:20px;background:var(--card);padding:8px;border-radius:12px;border:1px solid var(--border)}
+  .tab{padding:9px 14px;background:transparent;color:var(--dim);border:none;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600}
+  .tab.active{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff}
+  .tab-content{display:none}.tab-content.active{display:block}
+  .section{background:var(--card);border-radius:12px;padding:22px;margin-bottom:16px;border:1px solid var(--border)}
+  .section h2{color:var(--accent2);font-size:20px;margin-bottom:10px;border-bottom:1px solid var(--border);padding-bottom:8px}
+  .section h3{color:#7dd3fc;font-size:16px;margin:14px 0 8px}
+  pre[class*="language-"]{background:var(--code)!important;padding:12px!important;border-radius:8px;font-size:12px;border:1px solid var(--border);overflow-x:auto}
+  :not(pre)>code{background:var(--bg-3);padding:2px 6px;border-radius:4px;color:var(--accent2);font-size:12px}
+  .check-row{display:flex;gap:10px;padding:8px;background:#0a0f1e;border-radius:6px;margin:4px 0;border-left:3px solid var(--accent)}
+  .check-row label{font-size:13px;cursor:pointer}
+  .alert{padding:12px;border-radius:8px;margin:10px 0;border-left:4px solid;font-size:14px}
+  .alert.info{background:rgba(1,124,238,.15);border-color:var(--accent)}
+  .btn{background:var(--bg-3);color:var(--text);border:1px solid var(--border);padding:8px 12px;border-radius:8px;cursor:pointer;font-size:12px;margin-right:8px}
+  .progress-section{background:var(--card);padding:16px;border-radius:12px;margin-bottom:16px;border:1px solid var(--border)}
+  .progress-bar{background:#0a0f1e;height:12px;border-radius:6px;overflow:hidden;margin-top:8px}
+  .progress-fill{background:linear-gradient(90deg,#22c55e,#017cee);height:100%;width:0%;font-size:10px;text-align:right;padding-right:6px;color:#fff}
+</style>
+</head>
+<body>
+<div class="container">
+<header><h1>🌬️ Apache Airflow for Data Engineers</h1><p>Orchestrate ETL: DAGs, operators, scheduling, sensors, production patterns.</p></header>
+<div class="progress-section"><strong>Progress</strong> <span id="progress-text"></span><div class="progress-bar"><div class="progress-fill" id="progress-fill">0%</div></div>
+<button class="btn" onclick="exportProgress()">Export</button><button class="btn" onclick="resetProgress()">Reset</button></div>
+<div class="tabs" id="tab-bar"></div>
+<div id="tab-panels"></div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-bash.min.js"></script>
+<script>
+const TABS=[
+{id:"overview",label:"Overview",html:`<div class="section"><h2>What Airflow does</h2>
+<p>Airflow <strong>orchestrates</strong> workflows (DAGs). It does not transform data itself — it calls Glue, dbt, Python scripts, SQL, etc.</p>
+<table><tr><th>Term</th><th>Meaning</th></tr>
+<tr><td>DAG</td><td>Directed Acyclic Graph — workflow definition</td></tr>
+<tr><td>Task</td><td>One step (operator instance)</td></tr>
+<tr><td>Operator</td><td>Template for a task (Python, Bash, Snowflake...)</td></tr>
+<tr><td>Scheduler</td><td>Triggers DAG runs on cron</td></tr>
+<tr><td>Executor</td><td>Runs tasks (Celery, K8s, local)</td></tr></table>
+<pre><code class="language-bash"># Local with Astro CLI (recommended)
+pip install astro-cli
+astro dev init
+astro dev start   # http://localhost:8080 admin/admin</code></pre></div>`},
+{id:"dag",label:"DAGs & Tasks",html:`<div class="section"><h2>First DAG</h2>
+<pre><code class="language-python">from airflow import DAG
+from airflow.operators.python import PythonOperator
+from airflow.operators.bash import BashOperator
+from datetime import datetime, timedelta
+
+default_args = {
+    "owner": "de_team",
+    "retries": 2,
+    "retry_delay": timedelta(minutes=5),
+}
+
+with DAG(
+    dag_id="daily_etl",
+    default_args=default_args,
+    description="Ingest and transform orders",
+    schedule="0 6 * * *",          # cron: 6 AM UTC daily
+    start_date=datetime(2026, 1, 1),
+    catchup=False,                   # don't backfill past runs
+    tags=["etl", "orders"],
+) as dag:
+
+    extract = BashOperator(
+        task_id="extract_to_s3",
+        bash_command="python /scripts/extract_orders.py --date {{ ds }}",
+    )
+
+    def transform(**context):
+        run_date = context["ds"]  # YYYY-MM-DD
+        # call Glue / Spark / pandas logic
+        print(f"Transforming {run_date}")
+
+    transform_task = PythonOperator(
+        task_id="transform",
+        python_callable=transform,
+    )
+
+    load = BashOperator(
+        task_id="dbt_run",
+        bash_command="cd /dbt && dbt run --vars 'run_date: {{ ds }}'",
+    )
+
+    extract >> transform_task >> load   # dependencies</code></pre>
+<div class="check-row"><input type="checkbox" id="a1"><label for="a1">DAG, schedule, catchup=False</label></div>
+<div class="check-row"><input type="checkbox" id="a2"><label for="a2">Task dependencies with >></label></div></div>`},
+{id:"operators",label:"Operators",html:`<div class="section"><h2>Common operators</h2>
+<pre><code class="language-python">from airflow.providers.amazon.aws.operators.glue import GlueJobOperator
+from airflow.providers.amazon.aws.operators.s3 import S3DeleteObjectsOperator
+from airflow.providers.snowflake.operators.snowflake import SnowflakeOperator
+from airflow.providers.postgres.operators.postgres import PostgresOperator
+
+glue = GlueJobOperator(
+    task_id="run_glue_etl",
+    job_name="orders_curated",
+    script_args={"--run_date": "{{ ds }}"},
+    aws_conn_id="aws_default",
+)
+
+snowflake_load = SnowflakeOperator(
+    task_id="merge_orders",
+    snowflake_conn_id="snowflake_default",
+    sql="CALL merge_orders('{{ ds }}');",
+)</code></pre>
+<p style="color:var(--dim)">Install providers: <code>pip install apache-airflow-providers-amazon apache-airflow-providers-snowflake</code></p>
+<div class="check-row"><input type="checkbox" id="a3"><label for="a3">GlueJobOperator, SnowflakeOperator</label></div></div>`},
+{id:"sensors",label:"Sensors & XCom",html:`<div class="section"><h2>Sensors (wait for condition)</h2>
+<pre><code class="language-python">from airflow.providers.amazon.aws.sensors.s3 import S3KeySensor
+from airflow.sensors.filesystem import FileSensor
+
+wait_for_file = S3KeySensor(
+    task_id="wait_raw_file",
+    bucket_name="my-bucket",
+    bucket_key="raw/orders/{{ ds }}.parquet",
+    aws_conn_id="aws_default",
+    timeout=3600,
+    poke_interval=60,
+)
+
+# XCom — pass small data between tasks
+def push_meta(**ctx):
+    ctx["ti"].xcom_push(key="row_count", value=12345)
+
+def pull_meta(**ctx):
+    n = ctx["ti"].xcom_pull(task_ids="count_rows", key="row_count")</code></pre>
+<div class="alert info">XCom is for metadata (counts, paths) — not large datasets. Pass S3 paths instead.</div>
+<div class="check-row"><input type="checkbox" id="a4"><label for="a4">S3KeySensor</label></div>
+<div class="check-row"><input type="checkbox" id="a5"><label for="a5">XCom push/pull</label></div></div>`},
+{id:"prod",label:"Production",html:`<div class="section"><h2>Production practices</h2>
+<ul style="color:var(--dim);padding-left:20px">
+<li><strong>Idempotent tasks</strong> — safe to re-run same date</li>
+<li><strong>Connections</strong> — store creds in Airflow UI / Secrets Manager, not code</li>
+<li><strong>Variables</strong> — env-specific config</li>
+<li><strong>SLAs + alerts</strong> — email/Slack on failure</li>
+<li><strong>Pool/queue</strong> — limit concurrent Glue jobs</li>
+<li><strong>MWAA</strong> — managed Airflow on AWS</li>
+</ul>
+<pre><code class="language-python">default_args = {
+    "email_on_failure": True,
+    "email": ["de-team@company.com"],
+    "sla": timedelta(hours=2),
+}
+
+# Dynamic task mapping (Airflow 2.3+)
+@task
+def get_dates(): return ["2026-01-01", "2026-01-02"]
+
+@task
+def process(date): ...
+
+process.expand(date=get_dates())</code></pre>
+<div class="check-row"><input type="checkbox" id="a6"><label for="a6">Connections + Variables</label></div>
+<div class="check-row"><input type="checkbox" id="a7"><label for="a7">SLAs and alerting</label></div></div>`},
+{id:"interview",label:"Interview",html:`<div class="section"><h2>Q&A</h2>
+<p><strong>Airflow vs cron?</strong> Airflow = dependency graph, retries, UI, backfill, monitoring. Cron = single command on schedule.</p>
+<p><strong>Executor types?</strong> Sequential (dev), Local, Celery (distributed), Kubernetes.</p>
+<p><strong>catchup=True?</strong> Runs all intervals between start_date and now — usually False in prod.</p>
+<p><strong>{{ ds }}?</strong> Jinja macro for logical run date (YYYY-MM-DD).</p>
+<p>Resources: Astronomer Academy, Marc Lamberti Udemy, <a href="https://airflow.apache.org/docs/" style="color:var(--accent2)">official docs</a></p></div>`}
+];
+const STORAGE_KEY='airflow_guide_v1';
+function buildTabs(){const bar=document.getElementById('tab-bar'),panels=document.getElementById('tab-panels');
+TABS.forEach((t,i)=>{const b=document.createElement('button');b.className='tab'+(i===0?' active':'');b.dataset.tab=t.id;b.textContent=t.label;b.onclick=e=>showTab(e,t.id);bar.appendChild(b);
+const d=document.createElement('div');d.className='tab-content'+(i===0?' active':'');d.id=t.id;d.innerHTML=t.html;panels.appendChild(d);});}
+function showTab(evt,id){document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+document.getElementById(id).classList.add('active');evt.currentTarget.classList.add('active');history.replaceState(null,'','#'+id);if(window.Prism)Prism.highlightAll();}
+function initHash(){const h=location.hash.slice(1);if(!h)return;const b=document.querySelector(`.tab[data-tab="${h}"]`);if(b)showTab({currentTarget:b},h);}
+function updateProgress(){const all=document.querySelectorAll('input[type=checkbox]'),done=document.querySelectorAll('input[type=checkbox]:checked');const p=all.length?Math.round(done.length/all.length*100):0;document.getElementById('progress-fill').style.width=p+'%';document.getElementById('progress-fill').textContent=p+'%';document.getElementById('progress-text').textContent=done.length+'/'+all.length;}
+function saveProgress(){const s={};document.querySelectorAll('input[type=checkbox]').forEach(c=>{if(c.checked)s[c.id]=1});localStorage.setItem(STORAGE_KEY,JSON.stringify(s));updateProgress();}
+function loadProgress(){try{const s=JSON.parse(localStorage.getItem(STORAGE_KEY)||'{}');document.querySelectorAll('input[type=checkbox]').forEach(c=>{if(s[c.id])c.checked=true});}catch(e){}updateProgress();}
+function resetProgress(){if(confirm('Reset?')){localStorage.removeItem(STORAGE_KEY);document.querySelectorAll('input[type=checkbox]').forEach(c=>c.checked=false);updateProgress();}}
+function exportProgress(){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([localStorage.getItem(STORAGE_KEY)||'{}']));a.download='airflow_progress.json';a.click();}
+document.addEventListener('change',e=>{if(e.target.matches('input[type=checkbox]'))saveProgress();});
+buildTabs();loadProgress();initHash();window.addEventListener('hashchange',initHash);if(window.Prism)Prism.highlightAll();
+</script>
+</body>
+</html>

@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Part 3 — ETL, Warehouse & Dimensional Modeling | Data Engineering Notes</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #0b1020; --bg-2: #131a2f; --bg-3: #1f2a44; --card: #131a2f;
+    --text: #e6edf6; --text-dim: #93a4bf; --accent: #60a5fa; --accent-2: #c084fc;
+    --accent-3: #34d399; --success: #22c55e; --warn: #fbbf24; --danger: #f87171;
+    --border: #2a3553; --code-bg: #0a0f1e;
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: linear-gradient(135deg, #0b1020 0%, #1a0f2e 100%); color: var(--text); line-height: 1.65; min-height: 100vh; }
+  .container { max-width: 1100px; margin: 0 auto; padding: 24px; }
+  header { background: linear-gradient(135deg, #2563eb 0%, #7c3aed 50%, #db2777 100%);
+    border-radius: 16px; padding: 30px; margin-bottom: 18px; box-shadow: 0 20px 60px rgba(124,58,237,0.25); }
+  header .crumb { font-size: 12px; opacity: 0.85; text-transform: uppercase; letter-spacing: 1px; }
+  header h1 { font-size: 30px; margin: 6px 0 8px 0; }
+  header p { opacity: 0.92; font-size: 15px; max-width: 760px; }
+  nav.pager { display: flex; justify-content: space-between; gap: 10px; margin: 14px 0 22px 0; flex-wrap: wrap; }
+  nav.pager a { text-decoration: none; background: var(--card); border: 1px solid var(--border);
+    color: var(--text); padding: 10px 16px; border-radius: 10px; font-size: 13px; font-weight: 600; transition: all 0.2s; }
+  nav.pager a:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+  nav.pager a.home { border-color: var(--accent-2); }
+
+  .section { background: var(--card); border-radius: 12px; padding: 24px; margin-bottom: 18px; border: 1px solid var(--border); }
+  .section h2 { color: var(--accent); font-size: 22px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+  .section h3 { color: var(--accent-2); font-size: 18px; margin: 20px 0 10px 0; }
+  .section h4 { color: var(--accent-3); font-size: 15px; margin: 14px 0 8px 0; }
+  .section p { color: var(--text); margin-bottom: 10px; }
+  ul.bullet { padding-left: 22px; color: var(--text); font-size: 14.5px; margin: 6px 0 12px 0; }
+  ul.bullet li { padding: 4px 0; }
+  ul.bullet li b { color: var(--accent-3); }
+
+  table { width: 100%; border-collapse: collapse; background: var(--bg); border-radius: 8px; overflow: hidden; margin: 14px 0; font-size: 13.5px; }
+  th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { background: var(--bg-3); color: var(--accent); text-transform: uppercase; font-size: 11px; letter-spacing: 1px; }
+  tr:last-child td { border-bottom: none; }
+
+  .alert { padding: 12px 14px; border-radius: 8px; margin: 14px 0; border-left: 4px solid; font-size: 14px; }
+  .alert.warn { background: rgba(251,191,36,0.1); border-color: var(--warn); }
+  .alert.danger { background: rgba(248,113,113,0.1); border-color: var(--danger); }
+  .alert.success { background: rgba(34,197,94,0.1); border-color: var(--success); }
+  .alert.info { background: rgba(96,165,250,0.1); border-color: var(--accent); }
+  .alert strong { color: var(--text); }
+
+  .diagram { background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 22px; margin: 16px 0; overflow-x: auto; }
+  .diagram .title { text-align: center; color: var(--text-dim); font-size: 12px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 16px; }
+  .flow { display: flex; align-items: stretch; justify-content: center; flex-wrap: wrap; }
+  .flow-box { background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; min-width: 120px; text-align: center; font-size: 13px; font-weight: 600; display: flex; flex-direction: column; justify-content: center; }
+  .flow-box small { display: block; color: var(--text-dim); font-weight: 400; font-size: 11px; margin-top: 4px; }
+  .flow-arrow { display: flex; align-items: center; padding: 0 8px; color: var(--accent); font-size: 22px; font-weight: 700; }
+
+  /* star/snowflake schema */
+  .schema { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+  .schema-row { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; }
+  .node { border-radius: 10px; padding: 10px 14px; font-size: 12.5px; font-weight: 600; text-align: center; border: 1px solid var(--border); min-width: 120px; }
+  .node.fact { background: var(--danger); color: #2a0606; }
+  .node.dim { background: var(--bg-3); color: var(--text); border-top: 3px solid var(--accent-2); }
+  .node.sub { background: var(--bg); color: var(--text-dim); font-weight: 400; }
+
+  :not(pre) > code { background: var(--bg-3); padding: 2px 6px; border-radius: 4px; font-size: 13px; color: var(--accent-3); font-family: "Consolas","Monaco",monospace; }
+  pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; padding: 14px; overflow-x: auto; margin: 12px 0; font-size: 13px; }
+  pre code { color: #cdd9ee; font-family: "Consolas","Monaco",monospace; }
+  footer { text-align: center; margin-top: 30px; padding: 20px; color: var(--text-dim); font-size: 13px; }
+  @media (max-width: 640px) { header h1 { font-size: 23px; } .container { padding: 12px; } }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <div class="crumb">Part 3 of 6</div>
+    <h1>ETL, Data Warehouse & Dimensional Modeling</h1>
+    <p>How data physically moves into a warehouse, ETL vs ELT, facts & dimensions, star vs snowflake schema,
+       Slowly Changing Dimensions, data marts, and data lakes.</p>
+  </header>
+
+  <nav class="pager">
+    <a class="home" href="index.html">🏠 Home</a>
+    <a href="02-storage-databases.html">← Part 2</a>
+    <a href="04-architecture.html">Next → Part 4: Architecture</a>
+  </nav>
+
+  <div class="section">
+    <h2>1. ETL — Extract, Transform, Load</h2>
+    <p>The real-world implementation of the lifecycle. You extract data, transform it, then load it.</p>
+    <div class="diagram">
+      <div class="title">The ETL pipeline</div>
+      <div class="flow">
+        <div class="flow-box" style="border-top:3px solid var(--accent);">Extract<small>DBMS, APIs, sensors, analytics</small></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-box" style="border-top:3px solid var(--warn);">Transform<small>Remove dups/nulls, fix formats, standardize types</small></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-box" style="border-top:3px solid var(--accent-3);">Load<small>Warehouse (Snowflake/BigQuery/Redshift) or object storage</small></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>2. ETL vs ELT</h2>
+    <div class="diagram">
+      <div class="title">Where transformation happens</div>
+      <div class="flow" style="margin-bottom:12px;">
+        <div class="flow-box">ETL<small>Extract → <b>Transform</b> → Load</small></div>
+        <div class="flow-arrow" style="font-size:14px;">vs</div>
+        <div class="flow-box">ELT<small>Extract → Load → <b>Transform</b> (on the fly via SQL)</small></div>
+      </div>
+    </div>
+    <table>
+      <thead><tr><th></th><th>ETL</th><th>ELT</th></tr></thead>
+      <tbody>
+        <tr><td><b>Order</b></td><td>Transform <em>before</em> loading</td><td>Load raw first, transform later in the warehouse</td></tr>
+        <tr><td><b>Usage</b></td><td>Most used — most structured way to organize data</td><td>Growing; some newer companies prefer it</td></tr>
+        <tr><td><b>Trade-off</b></td><td>Clean, structured loads</td><td>Real-world data is messy → often still needs pre-processing, so ELT is less "successful" universally</td></tr>
+      </tbody>
+    </table>
+    <div class="alert info"><strong>Bottom line:</strong> You'll use <b>ETL</b> most of the time, but know that ELT exists for some use cases.</div>
+  </div>
+
+  <div class="section">
+    <h2>3. Why a Data Warehouse? (Normalization Problem)</h2>
+    <p>Relational models are <b>normalized</b> — many tables, minimal duplication. To answer "which user bought
+       which product and what did they pay?", you may need to join 4+ tables (User → Order → Product → Payment).</p>
+    <p>Relational/OLTP databases are <strong>not designed for analytical workloads</strong>. Aggregating across
+       millions of rows means scanning row by row, then picking one column — slow and painful.</p>
+    <div class="alert warn"><strong>Solution:</strong> store analytical data in a <b>data warehouse</b> (OLAP). But you can't just dump it in — you use a method called <b>dimensional modeling</b>.</div>
+  </div>
+
+  <div class="section">
+    <h2>4. Dimensional Modeling: Facts & Dimensions</h2>
+    <p>Just like data modeling structures a relational DB, <strong>dimensional modeling</strong> structures a warehouse.
+       It has two table types:</p>
+    <table>
+      <thead><tr><th>Table type</th><th>Stores</th><th>Examples</th></tr></thead>
+      <tbody>
+        <tr><td><b>Fact table</b> (center, usually one)</td><td>Quantitative, <em>measurable</em> values</td><td>sales amount, quantity sold, revenue, profit, price, weight</td></tr>
+        <tr><td><b>Dimension tables</b> (many)</td><td>Descriptive attributes / categories</td><td>product name, product category, user name, user city, date</td></tr>
+      </tbody>
+    </table>
+    <p>The fact table sits at the center; dimensions surround it and join via common keys (e.g., <code>product_id</code>).
+       To analyze product + quantity you just join 2 tables — and the OLAP engine handles it efficiently.</p>
+  </div>
+
+  <div class="section">
+    <h2>5. Star vs Snowflake Schema</h2>
+    <p>Two ways to arrange a dimensional model.</p>
+
+    <h3>⭐ Star Schema</h3>
+    <p>Fact table in the center, dimension tables directly attached — looks like a star.</p>
+    <div class="diagram">
+      <div class="title">Star schema</div>
+      <div class="schema">
+        <div class="schema-row"><div class="node dim">Order Dim</div><div class="node dim">Product Dim</div></div>
+        <div class="schema-row">
+          <div class="node dim">User Dim</div>
+          <div class="node fact">ORDER FACT<br/><small style="font-weight:400;">price, qty, weight</small></div>
+          <div class="node dim">Date Dim</div>
+        </div>
+        <div class="schema-row"><div class="node dim">Payment Dim</div><div class="node dim">Seller Dim</div></div>
+      </div>
+    </div>
+
+    <h3>❄️ Snowflake Schema</h3>
+    <p>A more <b>normalized</b> version — dimensions have their own sub-dimension tables attached. Resembles a
+       relational model but still has a fact table in the middle.</p>
+    <div class="diagram">
+      <div class="title">Snowflake schema</div>
+      <div class="schema">
+        <div class="schema-row">
+          <div class="node fact">ORDER FACT</div>
+          <div class="node dim">Product Dim</div>
+          <div class="node sub">Category Sub-Dim</div>
+        </div>
+        <div class="schema-row">
+          <div class="node dim">Date Dim</div>
+          <div class="node sub">Month / Year Sub-Dim</div>
+        </div>
+      </div>
+    </div>
+    <div class="alert danger"><strong>Don't confuse:</strong> the <em>Snowflake schema</em> (a modeling concept) is different from <em>Snowflake</em> the company that offers a database-as-a-service.</div>
+  </div>
+
+  <div class="section">
+    <h2>6. Slowly Changing Dimensions (SCD)</h2>
+    <p>Facts (price, quantity) change frequently. <b>Dimension values</b> (product name, user address) change
+       rarely — but when they do, how do we handle history? That's what SCD strategies define.</p>
+    <table>
+      <thead><tr><th>Type</th><th>Strategy</th><th>Example: city New York → New Jersey</th></tr></thead>
+      <tbody>
+        <tr><td><b>SCD Type 1</b></td><td>Overwrite — no history kept</td><td>New York is replaced by New Jersey. Old value gone forever.</td></tr>
+        <tr><td><b>SCD Type 2</b></td><td>Full history — add a new row each change</td><td>Add new row with an <code>is_active</code> flag (or version number / date ranges). Old rows kept. Move to Miami → another row.</td></tr>
+        <tr><td><b>SCD Type 3</b></td><td>Partial history — current + previous columns</td><td><code>previous_city = New York</code>, <code>current_city = New Jersey</code>.</td></tr>
+        <tr><td><b>SCD Type 6</b></td><td>Hybrid of 1 + 2 + 3</td><td>Captures current city, previous city, start date, end date, and active flag together.</td></tr>
+      </tbody>
+    </table>
+    <h4>SCD Type 2 illustration (flag approach)</h4>
+    <table>
+      <thead><tr><th>user_id</th><th>city</th><th>is_active</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>New York</td><td>false</td></tr>
+        <tr><td>1</td><td>New Jersey</td><td>false</td></tr>
+        <tr><td>1</td><td>Miami</td><td>true</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <h2>7. Data Marts</h2>
+    <p>A <strong>data mart is a subset of a data warehouse</strong> built for one department/team's needs.</p>
+    <div class="diagram">
+      <div class="title">Company → Departments → Teams → Data Marts</div>
+      <div class="flow">
+        <div class="flow-box">🏢 Data Warehouse<small>All facts &amp; dimensions</small></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-box" style="border-top:3px solid var(--accent-3);">📦 Shipping Data Mart<small>Only users + payment + product (100 of 300 cols)</small></div>
+      </div>
+    </div>
+    <p>Example: the shipping team only needs <b>users, payments, products</b>. They pick the ~100 relevant columns
+       (out of 300) and build their own reporting tables. Each department solving its own problem helps the company
+       move forward.</p>
+  </div>
+
+  <div class="section">
+    <h2>8. Data Lake vs Data Warehouse</h2>
+    <p>Changing schema in a warehouse is hard (add a column → all old rows become null, must rework the pipeline).
+       A <strong>data lake</strong> solves this: dump <em>all</em> raw data as-is (CSV, JSON, Parquet) into object
+       storage (S3, Azure Blob/ADLS, Google Cloud Storage). You apply structure only when you read it
+       (<b>schema on read</b>).</p>
+    <div class="diagram">
+      <div class="title">Schema on read</div>
+      <div class="flow">
+        <div class="flow-box">Raw files<small>CSV, JSON, Parquet</small></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-box" style="border-top:3px solid var(--accent-3);">Data Lake (S3)<small>Dump as-is, central repo</small></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-box">Read on demand<small>Athena / Spark / Python — pick only what you need</small></div>
+      </div>
+    </div>
+    <table>
+      <thead><tr><th></th><th>Data Warehouse</th><th>Data Lake</th></tr></thead>
+      <tbody>
+        <tr><td><b>Data</b></td><td>Structured, predefined, smaller, relational</td><td>Raw, unstructured, large, undefined</td></tr>
+        <tr><td><b>Users</b></td><td>Business analysts</td><td>Data analysts & data scientists</td></tr>
+        <tr><td><b>Use case</b></td><td>Batch processing, BI reporting</td><td>Stream processing, ML, real-time analysis</td></tr>
+        <tr><td><b>Schema</b></td><td>Schema on write</td><td>Schema on read</td></tr>
+      </tbody>
+    </table>
+    <div class="alert success"><strong>Neither is "bad":</strong> warehouses give structured-data flexibility for analysis; lakes give you access to <em>any</em> data anytime. Both have a place in a real architecture.</div>
+  </div>
+
+  <nav class="pager">
+    <a class="home" href="index.html">🏠 Home</a>
+    <a href="02-storage-databases.html">← Part 2</a>
+    <a href="04-architecture.html">Next → Part 4: Architecture</a>
+  </nav>
+
+  <footer>Part 3 of 6 · Fundamentals of Data Engineering Masterclass notes</footer>
+</div>
+</body>
+</html>

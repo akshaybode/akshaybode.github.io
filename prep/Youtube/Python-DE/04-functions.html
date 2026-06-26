@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Part 4 — Functions, Lambda &amp; map/filter/reduce — Notes</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #0b1020; --bg-2: #131a2f; --bg-3: #1f2a44; --card: #131a2f;
+    --text: #e6edf6; --text-dim: #93a4bf; --accent: #60a5fa; --accent-2: #c084fc;
+    --accent-3: #34d399; --success: #22c55e; --warn: #fbbf24; --danger: #f87171;
+    --border: #2a3553; --code-bg: #0a0f1e; --py: #ffd43b; --py-blue: #4584b6;
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: linear-gradient(135deg, #0b1020 0%, #1a0f2e 100%); color: var(--text);
+    line-height: 1.65; min-height: 100vh; }
+  .container { max-width: 1100px; margin: 0 auto; padding: 24px; }
+  header { background: linear-gradient(135deg, #4584b6 0%, #7c3aed 100%);
+    border-radius: 16px; padding: 30px; margin-bottom: 18px; box-shadow: 0 20px 60px rgba(124,58,237,0.25); }
+  header .crumb { font-size: 12px; opacity: 0.85; text-transform: uppercase; letter-spacing: 1px; }
+  header h1 { font-size: 30px; margin: 6px 0 8px 0; }
+  header p { opacity: 0.92; font-size: 15px; max-width: 760px; }
+  .section { background: var(--card); border-radius: 12px; padding: 24px; margin-bottom: 18px; border: 1px solid var(--border); }
+  .section h2 { color: var(--accent); font-size: 22px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+  .section h3 { color: var(--accent-2); font-size: 18px; margin: 20px 0 10px 0; }
+  .section h4 { color: var(--accent-3); font-size: 15px; margin: 14px 0 8px 0; }
+  .section p { color: var(--text); margin-bottom: 10px; }
+  ul.bullet { padding-left: 22px; color: var(--text); font-size: 14.5px; margin: 6px 0 12px 0; }
+  ul.bullet li { padding: 4px 0; }
+  ul.bullet li b { color: var(--accent-3); }
+  table { width: 100%; border-collapse: collapse; background: var(--bg); border-radius: 8px; overflow: hidden; margin: 14px 0; font-size: 13.5px; }
+  th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { background: var(--bg-3); color: var(--accent); text-transform: uppercase; font-size: 11px; letter-spacing: 1px; }
+  tr:last-child td { border-bottom: none; }
+  .alert { padding: 12px 14px; border-radius: 8px; margin: 14px 0; border-left: 4px solid; font-size: 14px; }
+  .alert.warn { background: rgba(251,191,36,0.1); border-color: var(--warn); }
+  .alert.danger { background: rgba(248,113,113,0.1); border-color: var(--danger); }
+  .alert.success { background: rgba(34,197,94,0.1); border-color: var(--success); }
+  .alert.info { background: rgba(96,165,250,0.1); border-color: var(--accent); }
+  .alert strong { color: var(--text); }
+  .diagram { background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 22px; margin: 16px 0; overflow-x: auto; }
+  .diagram .title { text-align: center; color: var(--text-dim); font-size: 12px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 16px; }
+  .flow { display: flex; align-items: stretch; justify-content: center; flex-wrap: wrap; }
+  .flow-box { background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; min-width: 130px; text-align: center; font-size: 13px; font-weight: 600; display: flex; flex-direction: column; justify-content: center; }
+  .flow-box small { display: block; color: var(--text-dim); font-weight: 400; font-size: 11px; margin-top: 4px; }
+  .flow-arrow { display: flex; align-items: center; padding: 0 8px; color: var(--accent); font-size: 22px; font-weight: 700; }
+  .flow-box.gen { border-top: 3px solid var(--accent); }
+  .flow-box.ing { border-top: 3px solid var(--accent-2); }
+  .flow-box.sto { border-top: 3px solid var(--accent-3); }
+  .flow-box.tra { border-top: 3px solid var(--warn); }
+  :not(pre) > code { background: var(--bg-3); padding: 2px 6px; border-radius: 4px; font-size: 13px; color: var(--accent-3); font-family: "Consolas","Monaco",monospace; }
+  pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; padding: 14px; overflow-x: auto; margin: 12px 0; font-size: 13px; line-height: 1.5; }
+  pre code { color: var(--text); font-family: "Consolas","Monaco",monospace; }
+  .pager { display: flex; justify-content: space-between; gap: 12px; margin: 8px 0 30px 0; flex-wrap: wrap; }
+  .pager a { flex: 1; min-width: 200px; text-decoration: none; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; color: var(--text); transition: all 0.2s; }
+  .pager a:hover { border-color: var(--accent-2); transform: translateY(-2px); }
+  .pager .dir { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; }
+  .pager .ttl { color: var(--accent); font-weight: 600; margin-top: 3px; }
+  .pager a.next { text-align: right; }
+  footer { text-align: center; margin-top: 30px; padding: 20px; color: var(--text-dim); font-size: 13px; }
+  @media (max-width: 640px) { header h1 { font-size: 23px; } .container { padding: 12px; } }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <div class="crumb">Python for Data Engineers · Part 4 of 8</div>
+    <h1>&#9881;&#65039; Functions, Lambda &amp; map / filter / reduce</h1>
+    <p>Functions stop you rewriting code again and again &mdash; a non-negotiable skill. Then we meet
+       lightweight lambda functions and the three "special forces": map, filter and reduce.</p>
+  </header>
+
+  <div class="section">
+    <h2>Why Functions?</h2>
+    <p>Imagine reusing 50 lines of code 10 times &mdash; that's 500 lines. Register those 50 lines under a
+       function and each reuse becomes a <b>single call</b>. Result: ~60 lines, plus better readability and
+       the ability to vary behaviour via <b>parameters</b>.</p>
+    <div class="diagram">
+      <div class="title">define once, call many times</div>
+      <div class="flow">
+        <div class="flow-box gen">def my_func(p):<small>50 lines once</small></div>
+        <div class="flow-arrow">&#8594;</div>
+        <div class="flow-box ing">my_func(20)<small>call 1</small></div>
+        <div class="flow-arrow">&#8594;</div>
+        <div class="flow-box sto">my_func(30)<small>call 2</small></div>
+        <div class="flow-arrow">&#8594;</div>
+        <div class="flow-box tra">my_func(40)<small>call N</small></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Defining &amp; Calling Functions</h2>
+<pre><code>def my_function(p_x):       # def keyword + name + parameter
+    return p_x              # send a value back
+
+result = my_function(20)    # call it, store the returned value
+print(result)               # 20</code></pre>
+
+    <h3>print vs return &mdash; the crucial difference</h3>
+    <table>
+      <tr><th></th><th>print</th><th>return</th></tr>
+      <tr><td>What it does</td><td>Displays output on screen</td><td>Sends a value back to the caller</td></tr>
+      <tr><td>Can be stored?</td><td>No</td><td><b>Yes</b> &mdash; in a variable for later use</td></tr>
+    </table>
+    <div class="alert info"><strong>In the real world you almost always <code>return</code>.</strong>
+      Functions are meant to produce values you use downstream, not just print.</div>
+
+    <h3>Default values</h3>
+    <p>Give a parameter a default so the code doesn't fail if the caller omits it. A passed value always
+       overrides the default.</p>
+<pre><code>def my_function(p_x, p_y=30):
+    return p_x + p_y
+
+my_function(20)      # 50  (uses default p_y=30)
+my_function(20, 5)   # 25  (override)</code></pre>
+  </div>
+
+  <div class="section">
+    <h2><code>*args</code> and <code>**kwargs</code> &mdash; flexible parameters</h2>
+    <table>
+      <tr><th>Syntax</th><th>Accepts</th><th>Becomes a...</th></tr>
+      <tr><td><code>*args</code></td><td>Any number of <b>values</b></td><td><b>tuple</b></td></tr>
+      <tr><td><code>**kwargs</code></td><td>Any number of <b>key=value</b> pairs</td><td><b>dictionary</b></td></tr>
+    </table>
+<pre><code>def f(*p_x):          # collect many values
+    print(type(p_x))  # &lt;class 'tuple'&gt;
+f(1, 2, 3, 100)       # no limit on how many
+
+def g(**p_x):                  # collect keyword args
+    print(type(p_x))           # &lt;class 'dict'&gt;
+    print(p_x.keys())
+g(x=20, y=60, z=70)            # -> {'x':20, 'y':60, 'z':70}</code></pre>
+  </div>
+
+  <div class="section">
+    <h2>Lambda Functions &mdash; lightweight one-liners</h2>
+    <p>A lambda is a mini, anonymous function for simple logic. Use it when defining a full <code>def</code>
+       would be overkill.</p>
+<pre><code># Regular function
+def addition(x, y):
+    return x + y
+
+# Equivalent lambda
+addition = lambda x, y: x + y
+
+print(addition(10, 20))   # 30</code></pre>
+    <ul class="bullet">
+      <li>Syntax: <code>lambda parameters: return_expression</code> &mdash; no <code>def</code>, no indentation.</li>
+      <li>Best for <b>lightweight</b> logic; use a normal function for complex logic.</li>
+    </ul>
+  </div>
+
+  <div class="section">
+    <h2>The Three Special Forces: map, filter, reduce</h2>
+    <p>These apply a function across an <b>iterable</b> (usually a list &mdash; the most common DE iterable).
+       The key idea: write a function for a <em>single</em> value, then apply it to every element.</p>
+
+    <h3>map &mdash; apply to every element</h3>
+    <p>Runs the function on each item and returns a map object &mdash; convert it to a <code>list</code>
+       (or <code>tuple</code>).</p>
+<pre><code>def square(p_x):
+    return p_x * p_x
+
+my_list = [1, 2, 3, 4, 5]
+result = list(map(square, my_list))   # [1, 4, 9, 16, 25]</code></pre>
+
+    <h3>filter &mdash; keep only what passes a condition</h3>
+    <p>Like map, but only returns elements where the function is true (no <code>None</code>s).</p>
+<pre><code>def is_even(p_x):
+    if (p_x % 2 == 0):
+        return p_x
+
+result = list(filter(is_even, my_list))   # [2, 4]</code></pre>
+
+    <h3>reduce &mdash; collapse the list to one value</h3>
+    <p>Takes the first two elements, applies the function, then keeps folding the result with the next
+       element. <b>Must be imported</b> from <code>functools</code>.</p>
+<pre><code>from functools import reduce
+
+def add(p_x, p_y):
+    return p_x + p_y
+
+result = reduce(add, [1, 2, 3, 4, 5])
+# 1+2=3, 3+3=6, 6+4=10, 10+5=15  ->  15</code></pre>
+
+    <table>
+      <tr><th>Tool</th><th>Behaviour</th><th>How often you'll use it</th></tr>
+      <tr><td><b>map</b></td><td>Function on each item &rarr; new list</td><td>Your go-to &mdash; master this</td></tr>
+      <tr><td><b>filter</b></td><td>Keep items passing a condition</td><td>Sometimes</td></tr>
+      <tr><td><b>reduce</b></td><td>Fold the whole list into one value</td><td>Rare, but know it exists</td></tr>
+    </table>
+  </div>
+
+  <div class="section">
+    <h2>&#9989; Key Takeaways</h2>
+    <ul class="bullet">
+      <li>Functions = reusable code via <code>def</code>; parameters make them flexible.</li>
+      <li><b>return</b> (storable) is more important than <b>print</b> (display only).</li>
+      <li>Default values prevent failures; <code>*args</code> &rarr; tuple, <code>**kwargs</code> &rarr; dict.</li>
+      <li><b>Lambda</b> = one-line function for lightweight logic.</li>
+      <li><b>map</b> is your daily driver; <b>filter</b> adds a condition; <b>reduce</b> (from <code>functools</code>) folds to one value.</li>
+    </ul>
+  </div>
+
+  <div class="pager">
+    <a class="prev" href="03-data-structures.html"><div class="dir">&#8592; Previous</div><div class="ttl">Part 3 · Data Structures</div></a>
+    <a class="next" href="05-exceptions-extras.html"><div class="dir">Next &#8594;</div><div class="ttl">Part 5 · Exceptions &amp; Power-ups</div></a>
+  </div>
+
+  <footer>
+    Notes generated from the "Python Full Course For Data Engineers [6+ HOURS]" transcript ·
+    Source: youtube.com/watch?v=ZvU7lupoXQE
+  </footer>
+</div>
+</body>
+</html>

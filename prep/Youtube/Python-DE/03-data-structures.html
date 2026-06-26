@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Part 3 — Data Structures — Notes</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #0b1020; --bg-2: #131a2f; --bg-3: #1f2a44; --card: #131a2f;
+    --text: #e6edf6; --text-dim: #93a4bf; --accent: #60a5fa; --accent-2: #c084fc;
+    --accent-3: #34d399; --success: #22c55e; --warn: #fbbf24; --danger: #f87171;
+    --border: #2a3553; --code-bg: #0a0f1e; --py: #ffd43b; --py-blue: #4584b6;
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: linear-gradient(135deg, #0b1020 0%, #1a0f2e 100%); color: var(--text);
+    line-height: 1.65; min-height: 100vh; }
+  .container { max-width: 1100px; margin: 0 auto; padding: 24px; }
+  header { background: linear-gradient(135deg, #4584b6 0%, #7c3aed 100%);
+    border-radius: 16px; padding: 30px; margin-bottom: 18px; box-shadow: 0 20px 60px rgba(124,58,237,0.25); }
+  header .crumb { font-size: 12px; opacity: 0.85; text-transform: uppercase; letter-spacing: 1px; }
+  header h1 { font-size: 30px; margin: 6px 0 8px 0; }
+  header p { opacity: 0.92; font-size: 15px; max-width: 760px; }
+  .section { background: var(--card); border-radius: 12px; padding: 24px; margin-bottom: 18px; border: 1px solid var(--border); }
+  .section h2 { color: var(--accent); font-size: 22px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+  .section h3 { color: var(--accent-2); font-size: 18px; margin: 20px 0 10px 0; }
+  .section h4 { color: var(--accent-3); font-size: 15px; margin: 14px 0 8px 0; }
+  .section p { color: var(--text); margin-bottom: 10px; }
+  ul.bullet { padding-left: 22px; color: var(--text); font-size: 14.5px; margin: 6px 0 12px 0; }
+  ul.bullet li { padding: 4px 0; }
+  ul.bullet li b { color: var(--accent-3); }
+  table { width: 100%; border-collapse: collapse; background: var(--bg); border-radius: 8px; overflow: hidden; margin: 14px 0; font-size: 13.5px; }
+  th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { background: var(--bg-3); color: var(--accent); text-transform: uppercase; font-size: 11px; letter-spacing: 1px; }
+  tr:last-child td { border-bottom: none; }
+  .alert { padding: 12px 14px; border-radius: 8px; margin: 14px 0; border-left: 4px solid; font-size: 14px; }
+  .alert.warn { background: rgba(251,191,36,0.1); border-color: var(--warn); }
+  .alert.danger { background: rgba(248,113,113,0.1); border-color: var(--danger); }
+  .alert.success { background: rgba(34,197,94,0.1); border-color: var(--success); }
+  .alert.info { background: rgba(96,165,250,0.1); border-color: var(--accent); }
+  .alert strong { color: var(--text); }
+  .diagram { background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 22px; margin: 16px 0; overflow-x: auto; }
+  .diagram .title { text-align: center; color: var(--text-dim); font-size: 12px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 16px; }
+  .flow { display: flex; align-items: stretch; justify-content: center; flex-wrap: wrap; }
+  .flow-box { background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; min-width: 130px; text-align: center; font-size: 13px; font-weight: 600; display: flex; flex-direction: column; justify-content: center; }
+  .flow-box small { display: block; color: var(--text-dim); font-weight: 400; font-size: 11px; margin-top: 4px; }
+  .flow-arrow { display: flex; align-items: center; padding: 0 8px; color: var(--accent); font-size: 22px; font-weight: 700; }
+  .flow-box.gen { border-top: 3px solid var(--accent); }
+  .flow-box.ing { border-top: 3px solid var(--accent-2); }
+  .flow-box.sto { border-top: 3px solid var(--accent-3); }
+  .flow-box.tra { border-top: 3px solid var(--warn); }
+  :not(pre) > code { background: var(--bg-3); padding: 2px 6px; border-radius: 4px; font-size: 13px; color: var(--accent-3); font-family: "Consolas","Monaco",monospace; }
+  pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; padding: 14px; overflow-x: auto; margin: 12px 0; font-size: 13px; line-height: 1.5; }
+  pre code { color: var(--text); font-family: "Consolas","Monaco",monospace; }
+  .pager { display: flex; justify-content: space-between; gap: 12px; margin: 8px 0 30px 0; flex-wrap: wrap; }
+  .pager a { flex: 1; min-width: 200px; text-decoration: none; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; color: var(--text); transition: all 0.2s; }
+  .pager a:hover { border-color: var(--accent-2); transform: translateY(-2px); }
+  .pager .dir { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; }
+  .pager .ttl { color: var(--accent); font-weight: 600; margin-top: 3px; }
+  .pager a.next { text-align: right; }
+  footer { text-align: center; margin-top: 30px; padding: 20px; color: var(--text-dim); font-size: 13px; }
+  @media (max-width: 640px) { header h1 { font-size: 23px; } .container { padding: 12px; } }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <div class="crumb">Python for Data Engineers · Part 3 of 8</div>
+    <h1>&#129518; Data Structures</h1>
+    <p>How you store and organise data efficiently. For data engineers, <strong>list</strong> and
+       <strong>dictionary</strong> are the top two non-negotiables &mdash; everything is a list.</p>
+  </header>
+
+  <div class="section">
+    <h2>Overview</h2>
+    <table>
+      <tr><th>Structure</th><th>Syntax</th><th>Keys?</th><th>Mutable?</th><th>Duplicates?</th></tr>
+      <tr><td><b>List</b></td><td><code>[1, 2, 3]</code></td><td>No (index-based)</td><td>Yes</td><td>Yes</td></tr>
+      <tr><td><b>Dictionary</b></td><td><code>{"x": 1}</code></td><td>Yes (key&rarr;value)</td><td>Yes</td><td>Keys unique</td></tr>
+      <tr><td><b>Set</b></td><td><code>{1, 2, 3}</code></td><td>No</td><td>Yes</td><td><b>No</b> (auto-dedup)</td></tr>
+      <tr><td><b>Tuple</b></td><td><code>(1, 2, 3)</code></td><td>No</td><td><b>No</b> (immutable)</td><td>Yes</td></tr>
+    </table>
+  </div>
+
+  <div class="section">
+    <h2>1. Lists &mdash; your bread and butter</h2>
+    <p>A list behaves like a 1D array and can hold <b>anything</b> &mdash; numbers, strings, even other lists.</p>
+<pre><code>my_list = [1, 2, "Lamba", [0, "aa", "bb"]]
+print(my_list[0])      # 1
+print(my_list[3][1])   # "aa"  (nested indexing)
+print(my_list[0:3])    # slicing -> [1, 2, 'Lamba']</code></pre>
+
+    <h3>Negative indexing &amp; step</h3>
+<pre><code>my_list = [1, 2, 3, 4, 5, 6]
+print(my_list[-3:])    # last 3 -> [4, 5, 6]
+print(my_list[::2])    # every 2nd -> [1, 3, 5]
+print(my_list[::-1])   # reverse -> [6, 5, 4, 3, 2, 1]</code></pre>
+    <div class="alert info"><strong>What does <code>-3</code> mean?</strong> Python treats it as
+      <code>len(my_list) - 3</code>. Great for "fetch the last 10 digits of a phone number" type tasks.</div>
+
+    <h3>List operations</h3>
+    <table>
+      <tr><th>Method</th><th>Does</th></tr>
+      <tr><td><code>.append(x)</code></td><td>Add <code>x</code> to the <b>end</b></td></tr>
+      <tr><td><code>.insert(i, x)</code></td><td>Insert <code>x</code> at index <code>i</code></td></tr>
+      <tr><td><code>.pop()</code></td><td>Remove &amp; return the <b>last</b> item</td></tr>
+      <tr><td><code>.reverse()</code></td><td>Reverse the list <b>permanently</b> (in place)</td></tr>
+      <tr><td><code>reversed(list)</code></td><td>Reverse temporarily during a loop (doesn't change the list)</td></tr>
+    </table>
+    <div class="alert success"><strong>Lists are mutable.</strong> You don't write
+      <code>my_list = my_list.append(x)</code> &mdash; just <code>my_list.append(x)</code> changes it in place.</div>
+  </div>
+
+  <div class="section">
+    <h2>2. List Comprehension</h2>
+    <p>Collapse a "create list &rarr; loop &rarr; append" pattern into <b>one line</b>. The structure is:
+       <code>[ output  for item in iterable  if condition ]</code>.</p>
+<pre><code># Traditional way
+new_list = []
+for i in my_list:
+    new_list.append(i * i)
+
+# List comprehension (one line!)
+new_list = [i * i for i in my_list]
+
+# With conditions (only even, and not 6)
+new_list = [i * i for i in my_list if (i % 2 == 0) if (i != 6)]</code></pre>
+    <ul class="bullet">
+      <li>The <b>output</b> goes first, then the <b>loop</b>, then any <b>conditions</b>.</li>
+      <li>Conditions can only be applied <em>after</em> the iterable.</li>
+      <li>Both styles are valid &mdash; comprehension shines when it keeps complex code compact.</li>
+    </ul>
+  </div>
+
+  <div class="section">
+    <h2>3. Dictionaries &mdash; key/value pairs</h2>
+    <p>Equally important as lists. A dictionary adds <b>context</b> (keys) to your values, and it maps
+       perfectly onto <b>JSON</b> &mdash; exactly what you get back from API calls.</p>
+<pre><code>my_dict = {"x": 1, "y": 2, "z": 3}
+my_dict["x"] = 10        # mutable: change a value by key
+my_dict.pop("z")         # remove by KEY (not by position)
+
+print(my_dict.keys())    # dict_keys(['x', 'y'])
+print(my_dict.values())  # dict_values([10, 2])
+print(my_dict.items())   # key-value pairs together</code></pre>
+    <h3>Nested dictionaries</h3>
+<pre><code>my_dict = {"demo": {"a": 1, "b": 2, "c": 3}}
+print(my_dict["demo"]["b"])   # 2  -> drill in with keys</code></pre>
+    <div class="alert info"><strong>DE relevance:</strong> API responses come back as JSON = nested
+      dictionaries. Use <code>.items()</code> to read key/value pairs, and chained keys to drill into hierarchy.</div>
+  </div>
+
+  <div class="section">
+    <h2>4. Sets &mdash; the maths area of Python</h2>
+    <p>Sets store unordered data with <b>no keys</b> and <b>no duplicates</b> (auto-removed). They support
+       mathematical operations.</p>
+<pre><code>a = {1, 2, 3, 4, 5}
+b = {10, 11, 2, 5}
+
+print(a.union(b))         # all unique elements from both
+print(a.intersection(b))  # only common: {2, 5}
+a.remove(2)               # remove an element
+a.add(20)                 # add an element
+
+s = {5, 5, 5, 5}
+print(s)                  # {5}  -> duplicates removed automatically</code></pre>
+    <div class="alert danger"><strong>Gotcha:</strong> <code>f = {}</code> creates an empty <b>dictionary</b>,
+      NOT a set. To make an empty set use <code>f = set()</code>.</div>
+  </div>
+
+  <div class="section">
+    <h2>5. Tuples &mdash; immutable lists</h2>
+    <p>Tuples use round braces and behave like lists, but are <b>immutable</b> (can't be changed). Data
+       engineers mostly work with lists, so the practical trick is to <b>convert a tuple to a list</b>, do
+       your work, then convert back if needed.</p>
+<pre><code>my_tup = (1, 2, 3, 4, 5)
+
+t_list = list(my_tup)     # tuple -> list
+t_list.append(6)          # now you can use list methods
+my_tup = tuple(t_list)    # list -> tuple (rarely needed)</code></pre>
+    <div class="alert info"><strong>Why convert?</strong> So you only have to remember <em>list</em> methods
+      (<code>append</code>, <code>pop</code>) instead of memorising a separate tuple API.</div>
+  </div>
+
+  <div class="section">
+    <h2>&#9989; Key Takeaways</h2>
+    <ul class="bullet">
+      <li><b>List</b> &amp; <b>dictionary</b> are the top priorities for data engineering &mdash; master them.</li>
+      <li>Lists: powerful <b>slicing</b> (<code>[-3:]</code>, <code>[::2]</code>, <code>[::-1]</code>) and are <b>mutable</b>.</li>
+      <li><b>List comprehension</b> = create + loop + filter in one line.</li>
+      <li>Dictionaries store <b>key/value</b> pairs and map directly to <b>JSON</b> from APIs.</li>
+      <li>Sets auto-remove duplicates and do union/intersection; <code>{}</code> is a dict, use <code>set()</code> for an empty set.</li>
+      <li>Tuples are immutable &mdash; convert to a list to work with them.</li>
+    </ul>
+  </div>
+
+  <div class="pager">
+    <a class="prev" href="02-control-flow.html"><div class="dir">&#8592; Previous</div><div class="ttl">Part 2 · Conditionals &amp; Loops</div></a>
+    <a class="next" href="04-functions.html"><div class="dir">Next &#8594;</div><div class="ttl">Part 4 · Functions &amp; Lambda</div></a>
+  </div>
+
+  <footer>
+    Notes generated from the "Python Full Course For Data Engineers [6+ HOURS]" transcript ·
+    Source: youtube.com/watch?v=ZvU7lupoXQE
+  </footer>
+</div>
+</body>
+</html>

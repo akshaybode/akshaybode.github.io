@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Snowflake for Data Engineers — Complete Guide</title>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  :root{--bg:#0b1020;--card:#131a2f;--bg-3:#1f2a44;--text:#e6edf6;--dim:#93a4bf;--accent:#29b5e8;--accent2:#a78bfa;--ok:#22c55e;--warn:#fbbf24;--danger:#f87171;--border:#2a3553;--code:#0a0f1e}
+  body{font-family:system-ui,sans-serif;background:linear-gradient(135deg,#0b1020,#0a1628);color:var(--text);line-height:1.65}
+  .container{max-width:1280px;margin:0 auto;padding:24px}
+  header{background:linear-gradient(135deg,#29b5e8,#0ea5e9,#6366f1);border-radius:16px;padding:32px;margin-bottom:24px}
+  header h1{font-size:30px} header p{opacity:.92}
+  .tabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:20px;background:var(--card);padding:8px;border-radius:12px;border:1px solid var(--border)}
+  .tab{padding:9px 14px;background:transparent;color:var(--dim);border:none;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600}
+  .tab.active{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff}
+  .tab-content{display:none}.tab-content.active{display:block}
+  .section{background:var(--card);border-radius:12px;padding:22px;margin-bottom:16px;border:1px solid var(--border)}
+  .section h2{color:var(--accent);font-size:20px;margin-bottom:10px;border-bottom:1px solid var(--border);padding-bottom:8px}
+  .section h3{color:var(--accent2);font-size:16px;margin:14px 0 8px}
+  pre[class*="language-"]{background:var(--code)!important;padding:12px!important;border-radius:8px;font-size:12px;border:1px solid var(--border);overflow-x:auto}
+  :not(pre)>code{background:var(--bg-3);padding:2px 6px;border-radius:4px;color:var(--accent);font-size:12px}
+  .check-row{display:flex;gap:10px;padding:8px;background:#0a0f1e;border-radius:6px;margin:4px 0;border-left:3px solid var(--accent)}
+  .check-row label{font-size:13px;cursor:pointer}
+  .alert{padding:12px;border-radius:8px;margin:10px 0;border-left:4px solid;font-size:14px}
+  .alert.info{background:rgba(41,181,232,.1);border-color:var(--accent)}
+  .alert.warn{background:rgba(251,191,36,.1);border-color:var(--warn)}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin:10px 0}
+  th,td{padding:8px 10px;border-bottom:1px solid var(--border)}
+  th{background:var(--bg-3);color:var(--accent);font-size:11px;text-transform:uppercase}
+  .btn{background:var(--bg-3);color:var(--text);border:1px solid var(--border);padding:8px 12px;border-radius:8px;cursor:pointer;font-size:12px;margin-right:8px}
+  .progress-section{background:var(--card);padding:16px;border-radius:12px;margin-bottom:16px;border:1px solid var(--border)}
+  .progress-bar{background:#0a0f1e;height:12px;border-radius:6px;overflow:hidden;margin-top:8px}
+  .progress-fill{background:linear-gradient(90deg,#22c55e,#29b5e8);height:100%;width:0%;font-size:10px;text-align:right;padding-right:6px;color:#fff}
+</style>
+</head>
+<body>
+<div class="container">
+<header>
+  <h1>❄️ Snowflake for Data Engineers</h1>
+  <p>Warehouse, loading, Snowpipe, Streams, Tasks, security, performance — complete DE reference.</p>
+</header>
+<div class="progress-section"><strong>Progress</strong> <span id="progress-text"></span><div class="progress-bar"><div class="progress-fill" id="progress-fill">0%</div></div>
+<button class="btn" onclick="exportProgress()">Export</button><button class="btn" onclick="resetProgress()">Reset</button></div>
+<div class="tabs" id="tab-bar"></div>
+<div id="tab-panels"></div>
+<footer style="text-align:center;padding:30px;color:var(--dim);font-size:13px">Snowflake DE Guide · Links: <code>snowflake_guide.html#tabid</code></footer>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-sql.min.js"></script>
+<script>
+const TABS=[
+{id:"overview",label:"Overview",html:`<div class="section"><h2>Architecture</h2>
+<p>Snowflake separates <strong>storage</strong>, <strong>compute</strong> (virtual warehouses), and <strong>cloud services</strong> (metadata, security, optimizer).</p>
+<table><tr><th>Layer</th><th>What</th></tr>
+<tr><td>Storage</td><td>Micro-partitions in cloud (S3/Azure/GCS) — columnar, compressed</td></tr>
+<tr><td>Compute</td><td>Virtual warehouses (clusters) — scale independently</td></tr>
+<tr><td>Services</td><td>Auth, query parsing, optimization, transactions</td></tr></table>
+<div class="alert info"><strong>DE role:</strong> Design schemas, load from S3 (Snowpipe), orchestrate with Airflow, model with dbt, optimize cost.</div>
+<h3>Object hierarchy</h3>
+<pre><code class="language-sql">Account → Database → Schema → Table / View / Stage / Pipe / Stream / Task</code></pre>
+<ul style="color:var(--dim);padding-left:20px"><li>Free trial: signup.snowflake.com ($400 credits)</li>
+<li>Practice: quickstarts.snowflake.com</li></ul></div>`},
+{id:"setup",label:"Setup & Objects",html:`<div class="section"><h2>Setup</h2>
+<pre><code class="language-sql">-- Roles & warehouse
+USE ROLE ACCOUNTADMIN;  -- dev only; use least privilege in prod
+CREATE WAREHOUSE DE_WH WITH
+  WAREHOUSE_SIZE = 'XSMALL'
+  AUTO_SUSPEND = 60
+  AUTO_RESUME = TRUE
+  INITIALLY_SUSPENDED = TRUE;
+
+CREATE DATABASE DE_LAKE;
+CREATE SCHEMA DE_LAKE.RAW;
+CREATE SCHEMA DE_LAKE.CURATED;
+CREATE SCHEMA DE_LAKE.MARTS;
+
+USE WAREHOUSE DE_WH;
+USE SCHEMA DE_LAKE.RAW;
+
+CREATE TABLE customers (
+  customer_id   NUMBER NOT NULL,
+  name          VARCHAR(200),
+  email         VARCHAR(320),
+  created_at    TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP(),
+  updated_at    TIMESTAMP_NTZ
+);</code></pre>
+<h3>Data types (common)</h3>
+<table><tr><th>Type</th><th>Use</th></tr>
+<tr><td>VARCHAR</td><td>Strings</td></tr>
+<tr><td>NUMBER(p,s)</td><td>Decimals</td></tr>
+<tr><td>TIMESTAMP_NTZ / _LTZ / _TZ</td><td>Timestamps (prefer NTZ if no TZ)</td></tr>
+<tr><td>VARIANT</td><td>Semi-structured JSON</td></tr>
+<tr><td>ARRAY, OBJECT</td><td>Nested JSON</td></tr></table>
+<div class="check-row"><input type="checkbox" id="s1"><label for="s1">Create WH, DB, schemas, table</label></div></div>`},
+{id:"load",label:"Loading Data",html:`<div class="section"><h2>Stages & COPY</h2>
+<pre><code class="language-sql">-- Internal stage
+CREATE STAGE raw_stage;
+
+-- External stage (S3) — uses STORAGE INTEGRATION + IAM role
+CREATE STORAGE INTEGRATION s3_int
+  TYPE = EXTERNAL_STAGE
+  STORAGE_PROVIDER = 'S3'
+  ENABLED = TRUE
+  STORAGE_AWS_ROLE_ARN = 'arn:aws:iam::123456789012:role/snowflake-s3-role'
+  STORAGE_ALLOWED_LOCATIONS = ('s3://my-bucket/raw/');
+
+CREATE STAGE s3_stage
+  URL = 's3://my-bucket/raw/'
+  STORAGE_INTEGRATION = s3_int
+  FILE_FORMAT = (TYPE = PARQUET);
+
+-- Load from stage
+COPY INTO customers
+FROM @s3_stage/customers/
+FILE_FORMAT = (TYPE = PARQUET)
+MATCH_BY_COLUMN_NAME = CASE_INSENSITIVE
+ON_ERROR = 'CONTINUE';
+
+-- Load from local file (PUT then COPY)
+PUT file:///tmp/customers.csv @raw_stage;
+COPY INTO customers FROM @raw_stage/customers.csv
+  FILE_FORMAT = (TYPE = CSV SKIP_HEADER = 1 FIELD_OPTIONALLY_ENCLOSED_BY = '"');</code></pre>
+<h3>Snowpipe (auto-ingest)</h3>
+<pre><code class="language-sql">CREATE PIPE customer_pipe AS
+  COPY INTO customers FROM @s3_stage/customers/
+  FILE_FORMAT = (TYPE = PARQUET);
+
+-- AWS: SQS + S3 event notification → Snowpipe loads automatically
+ALTER PIPE customer_pipe SET PIPE_EXECUTION_PAUSED = FALSE;
+SELECT SYSTEM$PIPE_STATUS('customer_pipe');</code></pre>
+<div class="alert warn">Snowpipe = near-real-time, pay per file + warehouse for parsing. Batch ETL often uses scheduled COPY or external tools (Airflow).</div>
+<div class="check-row"><input type="checkbox" id="s2"><label for="s2">COPY INTO from stage</label></div>
+<div class="check-row"><input type="checkbox" id="s3"><label for="s3">External stage + storage integration</label></div>
+<div class="check-row"><input type="checkbox" id="s4"><label for="s4">Snowpipe basics</label></div></div>`},
+{id:"sql",label:"SQL & JSON",html:`<div class="section"><h2>Snowflake SQL essentials</h2>
+<pre><code class="language-sql">-- Semi-structured JSON in VARIANT column
+SELECT
+  raw:customer_id::NUMBER AS customer_id,
+  raw:name::STRING AS name,
+  raw:orders[0].amount::FLOAT AS first_order_amt
+FROM events_raw;
+
+-- Flatten arrays
+SELECT e.id, f.value::STRING AS tag
+FROM events e, LATERAL FLATTEN(input => e.raw:tags) f;
+
+-- MERGE (UPSERT)
+MERGE INTO customers t
+USING staging_customers s ON t.customer_id = s.customer_id
+WHEN MATCHED AND (t.email != s.email OR t.name != s.name) THEN
+  UPDATE SET name = s.name, email = s.email, updated_at = CURRENT_TIMESTAMP()
+WHEN NOT MATCHED THEN
+  INSERT (customer_id, name, email) VALUES (s.customer_id, s.name, s.email);
+
+-- Time Travel (query past state)
+SELECT * FROM customers AT(OFFSET => -60*60);  -- 1 hour ago
+SELECT * FROM customers BEFORE(TIMESTAMP => '2026-05-01 00:00:00'::TIMESTAMP);
+
+-- Clone (zero-copy)
+CREATE TABLE customers_backup CLONE customers;</code></pre>
+<div class="check-row"><input type="checkbox" id="s5"><label for="s5">VARIANT + FLATTEN</label></div>
+<div class="check-row"><input type="checkbox" id="s6"><label for="s6">MERGE / Time Travel / CLONE</label></div></div>`},
+{id:"streams",label:"Streams & Tasks",html:`<div class="section"><h2>CDC with Streams + Tasks</h2>
+<pre><code class="language-sql">-- Stream tracks changes on table
+CREATE STREAM customer_changes ON TABLE customers;
+
+-- After inserts/updates, stream has CHANGE_TYPE: INSERT, DELETE, etc.
+SELECT * FROM customer_changes;
+
+-- Task: scheduled SQL (mini-Airflow inside Snowflake)
+CREATE TASK load_marts
+  WAREHOUSE = DE_WH
+  SCHEDULE = 'USING CRON 0 */6 * * * UTC'  -- every 6 hours
+AS
+  INSERT INTO marts.customer_summary
+  SELECT customer_id, COUNT(*) FROM curated.orders GROUP BY 1;
+
+-- Tasks need root task resumed
+ALTER TASK load_marts RESUME;
+
+-- Chain tasks
+CREATE TASK task_b AFTER task_a AS SELECT ...;</code></pre>
+<p style="color:var(--dim)">Pattern: Stream on staging → Task MERGEs into dimension (SCD2). Often replaced by dbt + Airflow in modern stacks.</p>
+<div class="check-row"><input type="checkbox" id="s7"><label for="s7">Streams for change capture</label></div>
+<div class="check-row"><input type="checkbox" id="s8"><label for="s8">Tasks for scheduling</label></div></div>`},
+{id:"security",label:"RBAC & Security",html:`<div class="section"><h2>Roles & Grants</h2>
+<pre><code class="language-sql">CREATE ROLE DE_ROLE;
+GRANT USAGE ON WAREHOUSE DE_WH TO ROLE DE_ROLE;
+GRANT USAGE ON DATABASE DE_LAKE TO ROLE DE_ROLE;
+GRANT USAGE ON ALL SCHEMAS IN DATABASE DE_LAKE TO ROLE DE_ROLE;
+GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA DE_LAKE.RAW TO ROLE DE_ROLE;
+
+GRANT ROLE DE_ROLE TO USER data_engineer;
+
+-- Row access policy (optional)
+CREATE ROW ACCESS POLICY region_policy AS (region VARCHAR)
+  RETURNS BOOLEAN -> region = CURRENT_ROLE();
+
+-- Masking PII
+CREATE MASKING POLICY email_mask AS (val VARCHAR) RETURNS VARCHAR ->
+  CASE WHEN CURRENT_ROLE() IN ('ADMIN') THEN val ELSE '***' END;</code></pre>
+<div class="alert info">Principle: <strong>least privilege</strong> — separate roles for DE, analyst, service account.</div>
+<div class="check-row"><input type="checkbox" id="s9"><label for="s9">Roles, grants, least privilege</label></div></div>`},
+{id:"perf",label:"Performance & Cost",html:`<div class="section"><h2>Optimization</h2>
+<ul style="color:var(--dim);padding-left:20px">
+<li><strong>Clustering keys</strong> — co-locate related micro-partitions (replace manual partitions)</li>
+<li><strong>Result cache</strong> — identical query within 24h may be free</li>
+<li><strong>Warehouse sizing</strong> — XSMALL for dev; scale up for heavy transforms</li>
+<li><strong>Auto-suspend</strong> — stop paying when idle (60s typical)</li>
+<li><strong>Avoid SELECT *</strong> in prod — column pruning in micro-partitions</li>
+</ul>
+<pre><code class="language-sql">ALTER TABLE orders CLUSTER BY (order_date);
+
+-- Query profile in UI: History → Query ID → Profile
+-- Look for: partitions scanned, spill to remote disk
+
+-- Credits monitoring
+SELECT * FROM TABLE(INFORMATION_SCHEMA.WAREHOUSE_METERING_HISTORY(
+  DATE_RANGE_START=>DATEADD('day',-7,CURRENT_DATE())));</code></pre>
+<div class="check-row"><input type="checkbox" id="s10"><label for="s10">Clustering + warehouse sizing</label></div>
+<div class="check-row"><input type="checkbox" id="s11"><label for="s11">Query profile + credit monitoring</label></div></div>`},
+{id:"dbt",label:"dbt Integration",html:`<div class="section"><h2>dbt + Snowflake</h2>
+<pre><code class="language-yaml"># profiles.yml
+de_project:
+  target: dev
+  outputs:
+    dev:
+      type: snowflake
+      account: xy12345.ap-south-1
+      user: "{{ env_var('SNOWFLAKE_USER') }}"
+      password: "{{ env_var('SNOWFLAKE_PASSWORD') }}"
+      role: DE_ROLE
+      database: DE_LAKE
+      warehouse: DE_WH
+      schema: MARTS
+      threads: 4</code></pre>
+<p>dbt runs SQL models in Snowflake — see <a href="dbt_guide.html" style="color:var(--accent)">dbt_guide.html</a>.</p>
+<div class="check-row"><input type="checkbox" id="s12"><label for="s12">Configure dbt profiles.yml for Snowflake</label></div></div>`},
+{id:"interview",label:"Interview Q&A",html:`<div class="section"><h2>Common questions</h2>
+<p><strong>Q: Snowflake vs Redshift?</strong> Separate compute/storage, instant scale, zero-copy clone, no vacuum. Redshift cheaper at huge steady workloads for some teams.</p>
+<p><strong>Q: What is micro-partition?</strong> ~50-500MB compressed columnar chunk; metadata enables pruning without manual partitions.</p>
+<p><strong>Q: Snowpipe vs COPY?</strong> Snowpipe = event-driven continuous load. COPY = batch on demand.</p>
+<p><strong>Q: Fail-safe vs Time Travel?</strong> Time Travel = user-configurable undo window. Fail-safe = 7-day disaster recovery after Time Travel expires.</p>
+<p>Resources: <a href="https://docs.snowflake.com" style="color:var(--accent)">docs.snowflake.com</a>, Snowflake Quickstarts, Udemy SnowPro prep.</p></div>`}
+];
+const STORAGE_KEY='snowflake_guide_v1';
+function buildTabs(){const bar=document.getElementById('tab-bar'),panels=document.getElementById('tab-panels');
+TABS.forEach((t,i)=>{const b=document.createElement('button');b.className='tab'+(i===0?' active':'');b.dataset.tab=t.id;b.textContent=t.label;b.onclick=e=>showTab(e,t.id);bar.appendChild(b);
+const d=document.createElement('div');d.className='tab-content'+(i===0?' active':'');d.id=t.id;d.innerHTML=t.html;panels.appendChild(d);});}
+function showTab(evt,id){document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+document.getElementById(id).classList.add('active');evt.currentTarget.classList.add('active');history.replaceState(null,'','#'+id);Prism.highlightAll();}
+function initHash(){const h=location.hash.slice(1);if(!h)return;const b=document.querySelector(`.tab[data-tab="${h}"]`);if(b)showTab({currentTarget:b},h);}
+function updateProgress(){const all=document.querySelectorAll('input[type=checkbox]'),done=document.querySelectorAll('input[type=checkbox]:checked');const p=all.length?Math.round(done.length/all.length*100):0;document.getElementById('progress-fill').style.width=p+'%';document.getElementById('progress-fill').textContent=p+'%';document.getElementById('progress-text').textContent=done.length+'/'+all.length;}
+function saveProgress(){const s={};document.querySelectorAll('input[type=checkbox]').forEach(c=>{if(c.checked)s[c.id]=1});localStorage.setItem(STORAGE_KEY,JSON.stringify(s));updateProgress();}
+function loadProgress(){try{const s=JSON.parse(localStorage.getItem(STORAGE_KEY)||'{}');document.querySelectorAll('input[type=checkbox]').forEach(c=>{if(s[c.id])c.checked=true});}catch(e){}updateProgress();}
+function resetProgress(){if(confirm('Reset?')){localStorage.removeItem(STORAGE_KEY);document.querySelectorAll('input[type=checkbox]').forEach(c=>c.checked=false);updateProgress();}}
+function exportProgress(){const b=new Blob([localStorage.getItem(STORAGE_KEY)||'{}'],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='snowflake_progress.json';a.click();}
+document.addEventListener('change',e=>{if(e.target.matches('input[type=checkbox]'))saveProgress();});
+buildTabs();loadProgress();initHash();window.addEventListener('hashchange',initHash);Prism.highlightAll();
+</script>
+</body>
+</html>

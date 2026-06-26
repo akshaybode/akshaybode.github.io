@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Part 5 — Accessing AWS: CLI &amp; SDK (boto3) | AWS for Data Engineers</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #0b1020; --bg-2: #131a2f; --bg-3: #1f2a44; --card: #131a2f;
+    --text: #e6edf6; --text-dim: #93a4bf; --accent: #60a5fa; --accent-2: #c084fc;
+    --accent-3: #34d399; --success: #22c55e; --warn: #fbbf24; --danger: #f87171;
+    --border: #2a3553; --code-bg: #0a0f1e; --aws: #ff9900;
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: linear-gradient(135deg, #0b1020 0%, #1a0f2e 100%); color: var(--text);
+    line-height: 1.65; min-height: 100vh; }
+  .container { max-width: 1100px; margin: 0 auto; padding: 24px; }
+  header { background: linear-gradient(135deg, #232f3e 0%, #ff9900 140%);
+    border-radius: 16px; padding: 30px; margin-bottom: 18px; box-shadow: 0 20px 60px rgba(255,153,0,0.2); }
+  header .crumb { font-size: 12px; opacity: 0.85; text-transform: uppercase; letter-spacing: 1px; }
+  header h1 { font-size: 30px; margin: 6px 0 8px 0; }
+  header p { opacity: 0.95; font-size: 15px; max-width: 760px; }
+  nav.pager { display: flex; justify-content: space-between; gap: 10px; margin: 14px 0 22px 0; flex-wrap: wrap; }
+  nav.pager a { text-decoration: none; background: var(--card); border: 1px solid var(--border);
+    color: var(--text); padding: 10px 16px; border-radius: 10px; font-size: 13px; font-weight: 600; transition: all 0.2s; }
+  nav.pager a:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+  nav.pager a.home { border-color: var(--accent-2); }
+  .section { background: var(--card); border-radius: 12px; padding: 24px; margin-bottom: 18px; border: 1px solid var(--border); }
+  .section h2 { color: var(--accent); font-size: 22px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+  .section h3 { color: var(--accent-2); font-size: 18px; margin: 20px 0 10px 0; }
+  .section h4 { color: var(--accent-3); font-size: 15px; margin: 14px 0 8px 0; }
+  .section p { color: var(--text); margin-bottom: 10px; }
+  ul.bullet { padding-left: 22px; color: var(--text); font-size: 14.5px; margin: 6px 0 12px 0; }
+  ul.bullet li { padding: 4px 0; }
+  ul.bullet li b { color: var(--accent-3); }
+  table { width: 100%; border-collapse: collapse; background: var(--bg); border-radius: 8px; overflow: hidden; margin: 14px 0; font-size: 13.5px; }
+  th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { background: var(--bg-3); color: var(--accent); text-transform: uppercase; font-size: 11px; letter-spacing: 1px; }
+  tr:last-child td { border-bottom: none; }
+  .alert { padding: 12px 14px; border-radius: 8px; margin: 14px 0; border-left: 4px solid; font-size: 14px; }
+  .alert.warn { background: rgba(251,191,36,0.1); border-color: var(--warn); }
+  .alert.danger { background: rgba(248,113,113,0.1); border-color: var(--danger); }
+  .alert.success { background: rgba(34,197,94,0.1); border-color: var(--success); }
+  .alert.info { background: rgba(96,165,250,0.1); border-color: var(--accent); }
+  .alert strong { color: var(--text); }
+  .diagram { background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 22px; margin: 16px 0; overflow-x: auto; }
+  .diagram .title { text-align: center; color: var(--text-dim); font-size: 12px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 16px; }
+  .flow { display: flex; align-items: stretch; justify-content: center; flex-wrap: wrap; }
+  .flow-box { background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px;
+    min-width: 130px; text-align: center; font-size: 13px; font-weight: 600; display: flex; flex-direction: column; justify-content: center; }
+  .flow-box small { display: block; color: var(--text-dim); font-weight: 400; font-size: 11px; margin-top: 4px; }
+  .flow-arrow { display: flex; align-items: center; padding: 0 8px; color: var(--accent); font-size: 22px; font-weight: 700; }
+  .flow-box.gen { border-top: 3px solid var(--accent); }
+  .flow-box.ing { border-top: 3px solid var(--accent-2); }
+  .flow-box.sto { border-top: 3px solid var(--accent-3); }
+  .flow-box.tra { border-top: 3px solid var(--warn); }
+  .flow-box.ser { border-top: 3px solid var(--danger); }
+  :not(pre) > code { background: var(--bg-3); padding: 2px 6px; border-radius: 4px; font-size: 13px; color: var(--accent-3); font-family: "Consolas","Monaco",monospace; }
+  pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; padding: 14px; overflow-x: auto; margin: 12px 0; font-size: 13px; line-height: 1.5; }
+  pre code { color: var(--text); font-family: "Consolas","Monaco",monospace; background: none; padding: 0; }
+  footer { text-align: center; margin-top: 30px; padding: 20px; color: var(--text-dim); font-size: 13px; }
+  @media (max-width: 640px) { header h1 { font-size: 23px; } .container { padding: 12px; } }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <div class="crumb">Part 5 of 7</div>
+    <h1>Accessing AWS: CLI &amp; SDK (boto3)</h1>
+    <p>The four ways to talk to AWS, why REST API is the foundation of all of them, and how to access S3 from
+       Python with boto3 — using access keys and a clean <code>.env</code> setup.</p>
+  </header>
+
+  <nav class="pager">
+    <a class="home" href="index.html">&#127968; Home / Contents</a>
+    <a href="04-s3-datalake.html">&#8592; Part 4</a>
+    <a href="06-lambda.html">Next &#8594; Part 6: Lambda &amp; Triggers</a>
+  </nav>
+
+  <div class="section">
+    <h2>1. The Ways to Access AWS</h2>
+    <p>There are a few ways to access resources you've created (S3 or anything else). We access S3 most often,
+       so it's the running example.</p>
+    <table>
+      <thead><tr><th>Way</th><th>What it is</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td><b>AWS Portal (UI)</b></td><td>The web console you click around in.</td><td>Most common for ad-hoc work; great UI.</td></tr>
+        <tr><td><b>AWS CloudShell</b></td><td>A terminal built into the portal (the <em>shell</em> icon in the top bar).</td><td>Run CLI commands in the browser — create/delete resources, upload files. Still "in the portal".</td></tr>
+        <tr><td><b>Local CLI</b></td><td>Install the AWS CLI on your own machine.</td><td>Quick one-liners; uses REST APIs under the hood.</td></tr>
+        <tr><td><b>SDK (e.g. boto3) / REST API</b></td><td>Call AWS from real code in your editor.</td><td>Closest to real development — the DE's preferred way.</td></tr>
+      </tbody>
+    </table>
+    <div class="alert info">
+      <strong>Interview-tricky point:</strong> The <b>fundamental unit is the REST API</b>. The SDK, the local CLI,
+      and the portal are all just <b>wrappers built on top of REST APIs</b> — and this is true for every cloud
+      provider, not just AWS.
+    </div>
+    <div class="diagram">
+      <div class="title">Everything sits on top of REST APIs</div>
+      <div class="flow">
+        <div class="flow-box gen">Portal UI</div>
+        <div class="flow-box ing">Local CLI</div>
+        <div class="flow-box sto">SDK (boto3)</div>
+        <div class="flow-arrow">&#8594; all call</div>
+        <div class="flow-box ser">&#128225; REST API<small>the real foundation</small></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>2. The Security Setup (recap of IAM in action)</h2>
+    <p>Say <b>Anna</b> wants to access an S3 bucket from her local VS Code instead of the UI. S3 is secured, so two
+       things are required:</p>
+    <ul class="bullet">
+      <li><b>Permission (policy):</b> Anna must have an S3 policy, e.g. <code>AmazonS3FullAccess</code> (her "admission to the university").</li>
+      <li><b>Identity proof (access keys):</b> Anna must prove she's Anna — her "ID card" shown to the security guard. That ID card is an <b>access key</b>.</li>
+    </ul>
+    <div class="diagram">
+      <div class="title">Policy = admission · Access key = ID card</div>
+      <div class="flow">
+        <div class="flow-box gen">&#128100; Anna<small>has S3 policy</small></div>
+        <div class="flow-arrow">+ access key &#8594;</div>
+        <div class="flow-box tra">&#128110; Guard<small>checks ID</small></div>
+        <div class="flow-arrow">&#8594;</div>
+        <div class="flow-box ser">&#9989; S3 access granted</div>
+      </div>
+    </div>
+    <h3>Creating access keys</h3>
+    <p>IAM &rarr; Users &rarr; Anna &rarr; <b>Create access key</b> (use case: local code). You get <b>two</b> values:</p>
+    <ul class="bullet">
+      <li><b>Access Key ID</b> — the public identifier.</li>
+      <li><b>Secret Access Key</b> — the secret value (shown only once — save it now).</li>
+    </ul>
+    <div class="alert danger"><strong>Never hardcode or expose secrets.</strong> Treat the secret access key like a password. Store it in a <code>.env</code> file (below), never paste it into shared code.</div>
+  </div>
+
+  <div class="section">
+    <h2>3. Accessing S3 from Python (boto3)</h2>
+    <h4>Step 1 — Store secrets in a <code>.env</code> file</h4>
+    <pre><code># .env  (never commit this file)
+AWS_ACCESS_KEY_ID=your_access_key_here
+AWS_SECRET_ACCESS_KEY=your_secret_value_here</code></pre>
+
+    <h4>Step 2 — Create a virtual environment &amp; install packages</h4>
+    <pre><code>python -m venv .venv
+.venv\Scripts\activate        # Windows
+pip install boto3 python-dotenv</code></pre>
+    <p class="">(<code>boto3</code> is the AWS SDK for Python; <code>python-dotenv</code> loads the <code>.env</code> file.)</p>
+
+    <h4>Step 3 — Create a client and use it</h4>
+    <pre><code>import os
+import boto3
+from dotenv import load_dotenv
+
+load_dotenv()  # loads AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY from .env
+
+s3_client = boto3.client(
+    "s3",
+    region_name="ca-central-1",  # your bucket's region
+    aws_access_key_id=os.environ.get("AWS_ACCESS_KEY_ID"),
+    aws_secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY"),
+)
+
+# List all buckets
+buckets = s3_client.list_buckets()
+for b in buckets["Buckets"]:
+    print(b["Name"], b["CreationDate"])</code></pre>
+    <p>Running this prints every bucket name and creation date — proof your local machine (with no direct AWS
+       link) is talking to AWS through the SDK.</p>
+
+    <h4>More operations</h4>
+    <p>The client exposes tons of functions: <code>upload_file</code> / <code>put_object</code>,
+       <code>copy</code>, <code>list_objects</code>, <code>delete_bucket</code>, and more.</p>
+    <pre><code># Delete an (empty) bucket — note expected owner = your 12-digit account ID
+s3_client.delete_bucket(
+    Bucket="demo-bucket-name",
+    ExpectedBucketOwner="123456789012",
+)</code></pre>
+    <div class="alert warn"><strong>Got "Access Denied" deleting a bucket?</strong> Use your real <b>12-digit account ID</b> for <code>ExpectedBucketOwner</code> — an alias won't work (many accounts can share an alias). Also, a bucket must be empty before deletion.</div>
+    <div class="alert info"><strong>Don't memorize the code.</strong> All of it is in the official <b>boto3 documentation</b> (AWS SDK for Python), organized per service (search "S3", "Glue", etc.) with every function and parameter described. You can also let AI generate it — the value is knowing the <em>concepts</em> (client, credentials, region).</div>
+  </div>
+
+  <div class="section">
+    <h2>4. Why this matters for interviews &amp; the job</h2>
+    <ul class="bullet">
+      <li>Everyone can click around S3 in the portal. What makes you stand out is talking about <b>boto3 clients</b>, creating them programmatically, and automating tasks in code.</li>
+      <li>Real day-to-day work needs scripts — e.g. a Python script that deletes stale data on a schedule. You'd often run such scripts inside a <b>Lambda function</b> (next part), where you <em>don't</em> need access keys because the function uses an attached <b>IAM role</b> instead.</li>
+    </ul>
+    <div class="alert success">
+      <strong>Recap of Part 5:</strong> Four ways to access AWS — Portal, CloudShell, local CLI, and SDK — but all
+      are wrappers over <b>REST APIs</b>. To use the SDK you need a <b>policy</b> (permission) plus <b>access keys</b>
+      (identity). In Python: store keys in <code>.env</code>, load with <code>python-dotenv</code>, create a
+      <code>boto3.client("s3", region, keys)</code>, and call functions like <code>list_buckets()</code>. Inside
+      AWS (e.g. Lambda) you skip keys and rely on an IAM role.
+    </div>
+  </div>
+
+  <nav class="pager">
+    <a class="home" href="index.html">&#127968; Home / Contents</a>
+    <a href="04-s3-datalake.html">&#8592; Part 4</a>
+    <a href="06-lambda.html">Next &#8594; Part 6: Lambda &amp; Triggers</a>
+  </nav>
+
+  <footer>Part 5 of 7 · AWS Fundamentals for Data Engineers · Source: youtube.com/watch?v=Ae3xyW2Ef0c</footer>
+</div>
+</body>
+</html>

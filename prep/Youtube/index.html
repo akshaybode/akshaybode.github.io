@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Fundamentals of Data Engineering — Masterclass Notes</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #0b1020; --bg-2: #131a2f; --bg-3: #1f2a44; --card: #131a2f;
+    --text: #e6edf6; --text-dim: #93a4bf; --accent: #60a5fa; --accent-2: #c084fc;
+    --accent-3: #34d399; --success: #22c55e; --warn: #fbbf24; --danger: #f87171;
+    --border: #2a3553; --code-bg: #0a0f1e;
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: linear-gradient(135deg, #0b1020 0%, #1a0f2e 100%); color: var(--text);
+    line-height: 1.65; min-height: 100vh; }
+  .container { max-width: 1200px; margin: 0 auto; padding: 24px; }
+  header { background: linear-gradient(135deg, #2563eb 0%, #7c3aed 50%, #db2777 100%);
+    border-radius: 16px; padding: 36px; margin-bottom: 24px;
+    box-shadow: 0 20px 60px rgba(124, 58, 237, 0.25); }
+  header h1 { font-size: 34px; margin-bottom: 10px; }
+  header p { opacity: 0.92; font-size: 17px; max-width: 760px; }
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 16px; margin-top: 26px; }
+  .stat { background: rgba(255,255,255,0.13); backdrop-filter: blur(10px); padding: 14px 16px;
+    border-radius: 12px; border: 1px solid rgba(255,255,255,0.2); }
+  .stat-label { font-size: 11px; opacity: 0.85; text-transform: uppercase; letter-spacing: 1px; }
+  .stat-value { font-size: 22px; font-weight: 700; margin-top: 4px; }
+
+  .section { background: var(--card); border-radius: 12px; padding: 24px; margin-bottom: 18px;
+    border: 1px solid var(--border); }
+  .section h2 { color: var(--accent); font-size: 22px; margin-bottom: 12px; padding-bottom: 10px;
+    border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
+  .section h3 { color: var(--accent-2); font-size: 17px; margin: 18px 0 10px 0; }
+  .section p { color: var(--text); margin-bottom: 10px; }
+
+  .card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin-top: 12px; }
+  a.nav-card { display: block; text-decoration: none; background: var(--bg); border: 1px solid var(--border);
+    border-left: 4px solid var(--accent); border-radius: 12px; padding: 18px; transition: all 0.2s; }
+  a.nav-card:hover { transform: translateY(-3px); border-left-color: var(--accent-2);
+    box-shadow: 0 10px 30px rgba(96,165,250,0.15); }
+  a.nav-card .num { font-size: 12px; color: var(--accent-3); font-weight: 700; letter-spacing: 1px; }
+  a.nav-card h4 { color: var(--text); font-size: 17px; margin: 6px 0 8px 0; }
+  a.nav-card p { color: var(--text-dim); font-size: 13px; margin: 0; }
+
+  /* Diagram building blocks */
+  .diagram { background: var(--bg); border: 1px solid var(--border); border-radius: 12px;
+    padding: 22px; margin: 16px 0; overflow-x: auto; }
+  .diagram .title { text-align: center; color: var(--text-dim); font-size: 12px;
+    text-transform: uppercase; letter-spacing: 1px; margin-bottom: 16px; }
+  .flow { display: flex; align-items: stretch; justify-content: center; gap: 0; flex-wrap: wrap; }
+  .flow-box { background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px 14px; min-width: 120px; text-align: center; font-size: 13px; font-weight: 600;
+    display: flex; flex-direction: column; justify-content: center; }
+  .flow-box small { display: block; color: var(--text-dim); font-weight: 400; font-size: 11px; margin-top: 4px; }
+  .flow-arrow { display: flex; align-items: center; padding: 0 8px; color: var(--accent); font-size: 22px; font-weight: 700; }
+  .flow-box.gen { border-top: 3px solid var(--accent); }
+  .flow-box.ing { border-top: 3px solid var(--accent-2); }
+  .flow-box.sto { border-top: 3px solid var(--accent-3); }
+  .flow-box.tra { border-top: 3px solid var(--warn); }
+  .flow-box.ser { border-top: 3px solid var(--danger); }
+  .under { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-top: 16px; }
+  .under .pill { background: rgba(96,165,250,0.12); border: 1px solid var(--border);
+    color: var(--text-dim); font-size: 11px; padding: 5px 10px; border-radius: 20px; }
+
+  .alert { padding: 12px 14px; border-radius: 8px; margin: 12px 0; border-left: 4px solid; font-size: 14px; }
+  .alert.info { background: rgba(96,165,250,0.1); border-color: var(--accent); }
+  .alert strong { color: var(--text); }
+  footer { text-align: center; margin-top: 40px; padding: 20px; color: var(--text-dim); font-size: 13px; }
+  @media (max-width: 640px) { header h1 { font-size: 24px; } .container { padding: 12px; } }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <h1>🛠️ Fundamentals of Data Engineering</h1>
+    <p>Complete study notes from the 3-hour Data Engineering Masterclass — from "what is data engineering"
+       all the way to real-world cloud architectures, the modern data stack, and a learning roadmap.</p>
+    <div class="stats-grid">
+      <div class="stat"><div class="stat-label">Duration</div><div class="stat-value">~3 hrs</div></div>
+      <div class="stat"><div class="stat-label">Note Parts</div><div class="stat-value">6</div></div>
+      <div class="stat"><div class="stat-label">Diagrams</div><div class="stat-value">20+</div></div>
+      <div class="stat"><div class="stat-label">Level</div><div class="stat-value">Beginner → Intermediate</div></div>
+    </div>
+  </header>
+
+  <div class="section">
+    <h2>🧭 The Big Picture</h2>
+    <p>Every business (Amazon, Netflix, Zomato) wants to <strong>understand customers, increase profit, and
+       improve processes</strong>. The most reliable way is to base decisions on <strong>data</strong> instead of
+       assumptions. Data Engineering is the discipline that moves and shapes that data so Data Scientists,
+       Analysts, and ML Engineers can extract value.</p>
+    <div class="alert info">
+      <strong>The golden rule of the whole course:</strong> Everything you build must create value for the
+       business. The fanciest algorithm or tool is useless if it doesn't help cut costs, improve a process,
+       or understand the customer.
+    </div>
+
+    <h3>Where Data Engineering Sits</h3>
+    <p>Data Engineering is the "plumber" between data generation and data consumption — it takes data from a
+       source, transforms it, and delivers it to the next stage.</p>
+    <div class="diagram">
+      <div class="title">From App to Insight</div>
+      <div class="flow">
+        <div class="flow-box gen">📱 Application<small>User interaction</small></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-box ing">🗄️ DBMS<small>Data generated &amp; stored</small></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-box tra">🔧 Data Engineering<small>Move &amp; transform</small></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-box ser">📊 DS / ML / Dashboards<small>Business value</small></div>
+      </div>
+    </div>
+
+    <h3>The Data Engineering Lifecycle</h3>
+    <p>The foundational mental model (from the book <em>Fundamentals of Data Engineering</em>). Every real-world
+       architecture — no matter how complex — maps back onto these stages.</p>
+    <div class="diagram">
+      <div class="title">Lifecycle Stages + Undercurrents</div>
+      <div class="flow">
+        <div class="flow-box gen">Generation<small>APIs, RDBMS, sensors, logs</small></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-box ing">Ingestion<small>Pull data into system</small></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-box sto">Storage<small>Lake / Warehouse</small></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-box tra">Transformation<small>Business logic</small></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-box ser">Serving<small>ML, analytics, BI</small></div>
+      </div>
+      <div class="under">
+        <span class="pill">🔒 Security</span>
+        <span class="pill">📚 Data Management</span>
+        <span class="pill">⚙️ DataOps</span>
+        <span class="pill">🏛️ Data Architecture</span>
+        <span class="pill">🪢 Orchestration</span>
+        <span class="pill">💻 Software Engineering</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>📚 Notes — Read in Order</h2>
+    <p>These notes are split into 6 parts so each topic gets room to breathe. Each part links to the next.</p>
+    <div class="card-grid">
+      <a class="nav-card" href="01-fundamentals.html">
+        <div class="num">PART 1</div>
+        <h4>Fundamentals & Lifecycle</h4>
+        <p>What DE is, where it fits, the roles (SWE, DBA, DE, DS, ML), the DE lifecycle, transformation, and the 6 undercurrents.</p>
+      </a>
+      <a class="nav-card" href="02-storage-databases.html">
+        <div class="num">PART 2</div>
+        <h4>Storage, Databases & Data Modeling</h4>
+        <p>Data generation/storage, DBMS & SQL, relational data modeling, NoSQL, SQL vs NoSQL, OLTP vs OLAP (row vs column).</p>
+      </a>
+      <a class="nav-card" href="03-etl-warehouse.html">
+        <div class="num">PART 3</div>
+        <h4>ETL, Warehouse & Dimensional Modeling</h4>
+        <p>ETL vs ELT, data warehouses, facts & dimensions, star vs snowflake schema, SCD types, data marts, data lakes.</p>
+      </a>
+      <a class="nav-card" href="04-architecture.html">
+        <div class="num">PART 4</div>
+        <h4>Data Architecture</h4>
+        <p>Operational ("why") vs technical ("how") architecture, design principles, and a full e-commerce example.</p>
+      </a>
+      <a class="nav-card" href="05-cloud-realworld.html">
+        <div class="num">PART 5</div>
+        <h4>Cloud & Real-World Architectures</h4>
+        <p>Cloud computing, IaaS/PaaS/SaaS, AWS/GCP/Azure services, the Dream11 case study, and the modern data stack.</p>
+      </a>
+      <a class="nav-card" href="06-tools-roadmap.html">
+        <div class="num">PART 6</div>
+        <h4>Tools & Learning Roadmap</h4>
+        <p>Python, SQL, warehouses, Spark, Kafka, Airflow, data security & masking, file formats, and what to learn first.</p>
+      </a>
+    </div>
+  </div>
+
+  <footer>
+    Notes generated from the "Fundamentals Of Data Engineering Masterclass" transcript ·
+    Source video: youtube.com/watch?v=hf2go3E2m8g
+  </footer>
+</div>
+</body>
+</html>

@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Part 8 — Multi-threading, Requests &amp; OS — Notes</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #0b1020; --bg-2: #131a2f; --bg-3: #1f2a44; --card: #131a2f;
+    --text: #e6edf6; --text-dim: #93a4bf; --accent: #60a5fa; --accent-2: #c084fc;
+    --accent-3: #34d399; --success: #22c55e; --warn: #fbbf24; --danger: #f87171;
+    --border: #2a3553; --code-bg: #0a0f1e; --py: #ffd43b; --py-blue: #4584b6;
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: linear-gradient(135deg, #0b1020 0%, #1a0f2e 100%); color: var(--text);
+    line-height: 1.65; min-height: 100vh; }
+  .container { max-width: 1100px; margin: 0 auto; padding: 24px; }
+  header { background: linear-gradient(135deg, #4584b6 0%, #7c3aed 100%);
+    border-radius: 16px; padding: 30px; margin-bottom: 18px; box-shadow: 0 20px 60px rgba(124,58,237,0.25); }
+  header .crumb { font-size: 12px; opacity: 0.85; text-transform: uppercase; letter-spacing: 1px; }
+  header h1 { font-size: 30px; margin: 6px 0 8px 0; }
+  header p { opacity: 0.92; font-size: 15px; max-width: 760px; }
+  .section { background: var(--card); border-radius: 12px; padding: 24px; margin-bottom: 18px; border: 1px solid var(--border); }
+  .section h2 { color: var(--accent); font-size: 22px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+  .section h3 { color: var(--accent-2); font-size: 18px; margin: 20px 0 10px 0; }
+  .section h4 { color: var(--accent-3); font-size: 15px; margin: 14px 0 8px 0; }
+  .section p { color: var(--text); margin-bottom: 10px; }
+  ul.bullet { padding-left: 22px; color: var(--text); font-size: 14.5px; margin: 6px 0 12px 0; }
+  ul.bullet li { padding: 4px 0; }
+  ul.bullet li b { color: var(--accent-3); }
+  table { width: 100%; border-collapse: collapse; background: var(--bg); border-radius: 8px; overflow: hidden; margin: 14px 0; font-size: 13.5px; }
+  th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { background: var(--bg-3); color: var(--accent); text-transform: uppercase; font-size: 11px; letter-spacing: 1px; }
+  tr:last-child td { border-bottom: none; }
+  .alert { padding: 12px 14px; border-radius: 8px; margin: 14px 0; border-left: 4px solid; font-size: 14px; }
+  .alert.warn { background: rgba(251,191,36,0.1); border-color: var(--warn); }
+  .alert.danger { background: rgba(248,113,113,0.1); border-color: var(--danger); }
+  .alert.success { background: rgba(34,197,94,0.1); border-color: var(--success); }
+  .alert.info { background: rgba(96,165,250,0.1); border-color: var(--accent); }
+  .alert strong { color: var(--text); }
+  .diagram { background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 22px; margin: 16px 0; overflow-x: auto; }
+  .diagram .title { text-align: center; color: var(--text-dim); font-size: 12px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 16px; }
+  .flow { display: flex; align-items: stretch; justify-content: center; flex-wrap: wrap; }
+  .flow-box { background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; min-width: 130px; text-align: center; font-size: 13px; font-weight: 600; display: flex; flex-direction: column; justify-content: center; }
+  .flow-box small { display: block; color: var(--text-dim); font-weight: 400; font-size: 11px; margin-top: 4px; }
+  .flow-arrow { display: flex; align-items: center; padding: 0 8px; color: var(--accent); font-size: 22px; font-weight: 700; }
+  .flow-box.gen { border-top: 3px solid var(--accent); }
+  .flow-box.ing { border-top: 3px solid var(--accent-2); }
+  .flow-box.sto { border-top: 3px solid var(--accent-3); }
+  .flow-box.tra { border-top: 3px solid var(--warn); }
+  .flow-box.ser { border-top: 3px solid var(--danger); }
+  :not(pre) > code { background: var(--bg-3); padding: 2px 6px; border-radius: 4px; font-size: 13px; color: var(--accent-3); font-family: "Consolas","Monaco",monospace; }
+  pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; padding: 14px; overflow-x: auto; margin: 12px 0; font-size: 13px; line-height: 1.5; }
+  pre code { color: var(--text); font-family: "Consolas","Monaco",monospace; }
+  .pager { display: flex; justify-content: space-between; gap: 12px; margin: 8px 0 30px 0; flex-wrap: wrap; }
+  .pager a { flex: 1; min-width: 200px; text-decoration: none; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; color: var(--text); transition: all 0.2s; }
+  .pager a:hover { border-color: var(--accent-2); transform: translateY(-2px); }
+  .pager .dir { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; }
+  .pager .ttl { color: var(--accent); font-weight: 600; margin-top: 3px; }
+  .pager a.next { text-align: right; }
+  footer { text-align: center; margin-top: 30px; padding: 20px; color: var(--text-dim); font-size: 13px; }
+  @media (max-width: 640px) { header h1 { font-size: 23px; } .container { padding: 12px; } }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <div class="crumb">Python for Data Engineers · Part 8 of 8</div>
+    <h1>&#9889; Multi-threading, Requests &amp; OS</h1>
+    <p>The final, highest-impact tools: run work in <b>parallel</b> with threads, pull data from APIs with the
+       <code>requests</code> module, and manage files with the <code>os</code> module.</p>
+  </header>
+
+  <div class="section">
+    <h2>Multi-threading: do many things at once</h2>
+    <p>A normal loop runs in <b>sequence</b> &mdash; table 1 finishes, then table 2, then table 3. With 100
+       tables you wait for all 99 before the last starts. Multi-threading runs them <b>in parallel</b>.</p>
+    <div class="diagram">
+      <div class="title">sequential loop vs parallel threads</div>
+      <div class="flow">
+        <div class="flow-box ser">Sequential<small>t1 &rarr; t2 &rarr; t3 (slow)</small></div>
+        <div class="flow-arrow">vs</div>
+        <div class="flow-box sto">Parallel<small>t1 + t2 + t3 together</small></div>
+      </div>
+    </div>
+    <div class="alert success"><strong>DE win:</strong> processing 100 Spark tables that each do the same thing
+      &mdash; run them all together for an almost 100&times; speed-up instead of waiting in a queue.</div>
+
+    <h3>ThreadPoolExecutor</h3>
+    <p>The best tool for multi-threading. <code>random</code> + <code>time.sleep</code> are used here to
+       simulate tables of different sizes.</p>
+<pre><code>import time, random
+from concurrent.futures import ThreadPoolExecutor
+
+def my_function(p_x):
+    wait = random.randint(1, 10)
+    time.sleep(wait)                       # simulate processing time
+    print(f"I am {p_x}, I took {wait} seconds")
+
+tables = ["orders", "products", "customers", "reviews", "cancels"]</code></pre>
+
+    <h4>Approach 1 — <code>map</code> (creates all futures at once)</h4>
+<pre><code>with ThreadPoolExecutor(max_workers=len(tables)) as executor:
+    futures = executor.map(my_function, tables)</code></pre>
+
+    <h4>Approach 2 — <code>submit</code> (creates futures one by one)</h4>
+<pre><code>with ThreadPoolExecutor(max_workers=len(tables)) as executor:
+    for i in tables:
+        future = executor.submit(my_function, i)</code></pre>
+    <ul class="bullet">
+      <li><b><code>max_workers</code></b>: set to <code>len(tables)</code> so each item gets its own worker, all running in parallel.</li>
+      <li><b><code>map</code></b>: applies the function across the whole iterable simultaneously (the speaker's preference).</li>
+      <li><b><code>submit</code></b>: the loop only <em>assigns</em> each value and releases it to a thread &mdash; it does <b>not</b> wait for completion.</li>
+    </ul>
+    <table>
+      <tr><th>Method</th><th>How it works</th></tr>
+      <tr><td><code>executor.map(fn, iterable)</code></td><td>Maps the function over every item, all at once</td></tr>
+      <tr><td><code>executor.submit(fn, item)</code></td><td>Submits a single task; loop to submit many without blocking</td></tr>
+    </table>
+  </div>
+
+  <div class="section">
+    <h2>The <code>requests</code> Module: calling APIs</h2>
+    <p>As a data engineer you'll make many API calls. An <b>API</b> (Application Programming Interface) is the
+       middleman between you and a third-party application's data &mdash; you can't connect directly.</p>
+    <div class="diagram">
+      <div class="title">how an API call works</div>
+      <div class="flow">
+        <div class="flow-box gen">You<small>data engineer</small></div>
+        <div class="flow-arrow">&#8594;</div>
+        <div class="flow-box ing">API<small>middleman + credentials</small></div>
+        <div class="flow-arrow">&#8594;</div>
+        <div class="flow-box sto">Application<small>databases</small></div>
+        <div class="flow-arrow">&#8594;</div>
+        <div class="flow-box tra">Response<small>JSON back to you</small></div>
+      </div>
+    </div>
+<pre><code>import requests
+
+url = "https://jsonplaceholder.typicode.com/posts/1"
+response = requests.get(url)        # GET request to fetch data
+
+print(response.status_code)         # 200 = success (404 = not found)
+
+data = response.json()              # parse JSON -> Python dict
+print(data)</code></pre>
+    <ul class="bullet">
+      <li><b><code>requests.get(url)</code></b> fetches data from an endpoint.</li>
+      <li><b><code>.status_code</code></b>: <code>200</code> = success, <code>404</code> = error, etc.</li>
+      <li><b><code>.json()</code></b> converts the response into a usable dictionary (most APIs return JSON).</li>
+    </ul>
+    <div class="alert info"><strong>Note:</strong> every API is unique &mdash; always read the provider's
+      documentation. Some online compilers don't ship the <code>requests</code> module; switch compilers if
+      <code>import requests</code> fails.</div>
+  </div>
+
+  <div class="section">
+    <h2>The <code>os</code> Module: file management</h2>
+    <p>The <code>os</code> (operating system) module works with your <b>local machine</b> &mdash; files and
+       folders. Data engineers more often use cloud equivalents (Databricks <code>dbutils</code>, Azure
+       <code>notebookutils</code>), but the concepts are identical, so learning <code>os</code> makes those
+       a piece of cake.</p>
+<pre><code>import os
+
+os.getcwd()                       # current working directory
+os.makedirs("C:/Users/you/folder")# create folder(s)
+os.listdir()                      # list files &amp; folders
+os.path.abspath("main.py")        # absolute path of a file</code></pre>
+    <table>
+      <tr><th>Function</th><th>Does</th></tr>
+      <tr><td><code>os.getcwd()</code></td><td>Get the current working directory</td></tr>
+      <tr><td><code>os.makedirs(path)</code></td><td>Create a folder (and parents)</td></tr>
+      <tr><td><code>os.listdir(path)</code></td><td>List all files/folders in a directory</td></tr>
+      <tr><td><code>os.path.abspath(file)</code></td><td>Get the absolute path of a file</td></tr>
+    </table>
+    <div class="alert warn"><strong>Heads up:</strong> <code>os</code> only works on a real machine, not most
+      online compilers. It's used heavily at deployment time (paths, environment variables).</div>
+  </div>
+
+  <div class="section">
+    <h2>&#9989; Course Wrap-up &amp; Key Takeaways</h2>
+    <ul class="bullet">
+      <li><b>Multi-threading</b> with <code>ThreadPoolExecutor</code> runs tasks in parallel &mdash; huge for processing many tables; use <code>map</code> or <code>submit</code>.</li>
+      <li><b><code>requests</code></b> calls APIs: <code>.get()</code>, check <code>.status_code</code> (200), parse with <code>.json()</code>.</li>
+      <li><b><code>os</code></b> handles local files; cloud <code>dbutils</code> / <code>notebookutils</code> build on the same ideas.</li>
+    </ul>
+    <div class="alert success">
+      <strong>The big picture:</strong> you're a <em>data engineer</em>, not a web developer. You now have a
+      strong base &mdash; basics, data structures, functions, exceptions, OOP, inheritance, concurrency and
+      APIs. From here you can pick up <em>any</em> new module or concept quickly. These were the
+      <strong>non-negotiables</strong>.
+    </div>
+  </div>
+
+  <div class="pager">
+    <a class="prev" href="07-inheritance.html"><div class="dir">&#8592; Previous</div><div class="ttl">Part 7 · Inheritance</div></a>
+    <a class="next" href="index.html"><div class="dir">Back to &#8594;</div><div class="ttl">Index · All parts</div></a>
+  </div>
+
+  <footer>
+    Notes generated from the "Python Full Course For Data Engineers [6+ HOURS]" transcript ·
+    Source: youtube.com/watch?v=ZvU7lupoXQE
+  </footer>
+</div>
+</body>
+</html>

@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Part 5 — Exceptions &amp; Power-ups — Notes</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #0b1020; --bg-2: #131a2f; --bg-3: #1f2a44; --card: #131a2f;
+    --text: #e6edf6; --text-dim: #93a4bf; --accent: #60a5fa; --accent-2: #c084fc;
+    --accent-3: #34d399; --success: #22c55e; --warn: #fbbf24; --danger: #f87171;
+    --border: #2a3553; --code-bg: #0a0f1e; --py: #ffd43b; --py-blue: #4584b6;
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: linear-gradient(135deg, #0b1020 0%, #1a0f2e 100%); color: var(--text);
+    line-height: 1.65; min-height: 100vh; }
+  .container { max-width: 1100px; margin: 0 auto; padding: 24px; }
+  header { background: linear-gradient(135deg, #4584b6 0%, #7c3aed 100%);
+    border-radius: 16px; padding: 30px; margin-bottom: 18px; box-shadow: 0 20px 60px rgba(124,58,237,0.25); }
+  header .crumb { font-size: 12px; opacity: 0.85; text-transform: uppercase; letter-spacing: 1px; }
+  header h1 { font-size: 30px; margin: 6px 0 8px 0; }
+  header p { opacity: 0.92; font-size: 15px; max-width: 760px; }
+  .section { background: var(--card); border-radius: 12px; padding: 24px; margin-bottom: 18px; border: 1px solid var(--border); }
+  .section h2 { color: var(--accent); font-size: 22px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+  .section h3 { color: var(--accent-2); font-size: 18px; margin: 20px 0 10px 0; }
+  .section h4 { color: var(--accent-3); font-size: 15px; margin: 14px 0 8px 0; }
+  .section p { color: var(--text); margin-bottom: 10px; }
+  ul.bullet { padding-left: 22px; color: var(--text); font-size: 14.5px; margin: 6px 0 12px 0; }
+  ul.bullet li { padding: 4px 0; }
+  ul.bullet li b { color: var(--accent-3); }
+  table { width: 100%; border-collapse: collapse; background: var(--bg); border-radius: 8px; overflow: hidden; margin: 14px 0; font-size: 13.5px; }
+  th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { background: var(--bg-3); color: var(--accent); text-transform: uppercase; font-size: 11px; letter-spacing: 1px; }
+  tr:last-child td { border-bottom: none; }
+  .alert { padding: 12px 14px; border-radius: 8px; margin: 14px 0; border-left: 4px solid; font-size: 14px; }
+  .alert.warn { background: rgba(251,191,36,0.1); border-color: var(--warn); }
+  .alert.danger { background: rgba(248,113,113,0.1); border-color: var(--danger); }
+  .alert.success { background: rgba(34,197,94,0.1); border-color: var(--success); }
+  .alert.info { background: rgba(96,165,250,0.1); border-color: var(--accent); }
+  .alert strong { color: var(--text); }
+  .diagram { background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 22px; margin: 16px 0; overflow-x: auto; }
+  .diagram .title { text-align: center; color: var(--text-dim); font-size: 12px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 16px; }
+  .flow { display: flex; align-items: stretch; justify-content: center; flex-wrap: wrap; }
+  .flow-box { background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; min-width: 130px; text-align: center; font-size: 13px; font-weight: 600; display: flex; flex-direction: column; justify-content: center; }
+  .flow-box small { display: block; color: var(--text-dim); font-weight: 400; font-size: 11px; margin-top: 4px; }
+  .flow-arrow { display: flex; align-items: center; padding: 0 8px; color: var(--accent); font-size: 22px; font-weight: 700; }
+  .flow-box.gen { border-top: 3px solid var(--accent); }
+  .flow-box.ing { border-top: 3px solid var(--accent-2); }
+  .flow-box.sto { border-top: 3px solid var(--accent-3); }
+  .flow-box.tra { border-top: 3px solid var(--warn); }
+  :not(pre) > code { background: var(--bg-3); padding: 2px 6px; border-radius: 4px; font-size: 13px; color: var(--accent-3); font-family: "Consolas","Monaco",monospace; }
+  pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; padding: 14px; overflow-x: auto; margin: 12px 0; font-size: 13px; line-height: 1.5; }
+  pre code { color: var(--text); font-family: "Consolas","Monaco",monospace; }
+  .pager { display: flex; justify-content: space-between; gap: 12px; margin: 8px 0 30px 0; flex-wrap: wrap; }
+  .pager a { flex: 1; min-width: 200px; text-decoration: none; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; color: var(--text); transition: all 0.2s; }
+  .pager a:hover { border-color: var(--accent-2); transform: translateY(-2px); }
+  .pager .dir { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; }
+  .pager .ttl { color: var(--accent); font-weight: 600; margin-top: 3px; }
+  .pager a.next { text-align: right; }
+  footer { text-align: center; margin-top: 30px; padding: 20px; color: var(--text-dim); font-size: 13px; }
+  @media (max-width: 640px) { header h1 { font-size: 23px; } .container { padding: 12px; } }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <div class="crumb">Python for Data Engineers · Part 5 of 8</div>
+    <h1>&#128737;&#65039; Exceptions &amp; Power-ups</h1>
+    <p>Handling errors gracefully is a non-negotiable for any pipeline. Plus a handful of small but
+       constantly-used features: f-strings, <code>enumerate</code>, and global vs local variables.</p>
+  </header>
+
+  <div class="section">
+    <h2>Exception Handling: <code>try</code> / <code>except</code></h2>
+    <p>Python's version of try/catch. If a block of code fails, you don't want the <b>whole program</b> to
+       stop &mdash; you want to log the error and carry on.</p>
+    <div class="diagram">
+      <div class="title">try / except flow</div>
+      <div class="flow">
+        <div class="flow-box gen">try:<small>run risky code</small></div>
+        <div class="flow-arrow">&#8594;</div>
+        <div class="flow-box tra">error?<small>jump to except</small></div>
+        <div class="flow-arrow">&#8594;</div>
+        <div class="flow-box ing">except:<small>handle / log</small></div>
+        <div class="flow-arrow">&#8594;</div>
+        <div class="flow-box sto">rest of code<small>keeps running</small></div>
+      </div>
+    </div>
+<pre><code>try:
+    if (x &gt; 10):              # if x is a string, this fails
+        print("greater")
+except Exception as e:
+    print("You have an error")
+    print(e)                  # the actual error message
+
+print("hello world")          # still runs!</code></pre>
+    <ul class="bullet">
+      <li><b><code>except Exception as e</code></b> captures the error object &mdash; print or log <code>e</code> to see what went wrong.</li>
+      <li>Without try/except the program halts at the error and the rest never runs.</li>
+    </ul>
+
+    <h3><code>finally</code> &mdash; always runs</h3>
+    <p>The third member of the group. Whatever is in <code>finally</code> executes <b>no matter what</b> &mdash;
+       error or not. Even works <em>after a <code>return</code></em> inside a function (the one thing that
+       runs past a return).</p>
+<pre><code>def my_function(p_x):
+    try:
+        if (p_x % 2 == 0):
+            return 1          # function exits here...
+    except Exception as e:
+        return e
+    finally:
+        print("hello world")  # ...but finally STILL runs</code></pre>
+  </div>
+
+  <div class="section">
+    <h2>Raising Custom Errors</h2>
+    <p>Sometimes a value is technically valid Python but <b>invalid for your program</b>. You can force an
+       error with <code>raise</code>.</p>
+<pre><code>x = 99
+if (x &lt; 100):
+    raise ValueError("value less than 100 is not allowed")</code></pre>
+    <table>
+      <tr><th>Raise</th><th>Shows as</th></tr>
+      <tr><td><code>raise ValueError(...)</code></td><td>ValueError</td></tr>
+      <tr><td><code>raise Exception(...)</code></td><td>Exception</td></tr>
+      <tr><td><code>raise TypeError(...)</code></td><td>TypeError (e.g. a typo / wrong type)</td></tr>
+    </table>
+    <div class="alert info"><strong>Why?</strong> Your program may have a rule like "values below 100 are
+      forbidden". The message you write becomes the error's context &mdash; great for validation.</div>
+  </div>
+
+  <div class="section">
+    <h2>f-strings &mdash; dynamic strings</h2>
+    <p>The cleanest way to inject variables into a string. Prefix with <code>f</code> and put variables in
+       <code>{ }</code>. Hugely useful for building dynamic cloud paths and error logs.</p>
+<pre><code>name = "Ansh"
+my_string = f"Hello my name is {name}. How are you?"
+print(my_string)     # Hello my name is Ansh. How are you?
+
+# in error handling
+print(f"Hey you got this error: {e}")</code></pre>
+  </div>
+
+  <div class="section">
+    <h2><code>enumerate</code> &mdash; index + value together</h2>
+    <p>When looping, you often want both the <b>position</b> and the <b>value</b>. <code>enumerate</code>
+       gives both as a tuple per iteration.</p>
+<pre><code>my_list = [100, 200, 300, 400, 500]
+for i, x in enumerate(my_list):
+    print(i, x)      # i = position (0,1,2...), x = value</code></pre>
+  </div>
+
+  <div class="section">
+    <h2>Global vs Local Variables</h2>
+    <p>A variable defined <b>inside</b> a function is <em>local</em> and takes priority there. A variable
+       outside is <em>global</em>.</p>
+<pre><code>x = 100                # global
+
+def f():
+    print(x)           # 100 -> uses global
+
+def g():
+    x = 5              # local takes priority
+    print(x)           # 5</code></pre>
+    <ul class="bullet">
+      <li>A function reads the global value <b>by default</b> if no local variable shadows it.</li>
+      <li>A <b>local</b> variable of the same name always wins inside the function.</li>
+      <li>Use the <code>global</code> keyword to modify the global from inside (must declare it <em>before</em> assigning).</li>
+    </ul>
+  </div>
+
+  <div class="section">
+    <h2>&#9989; Key Takeaways</h2>
+    <ul class="bullet">
+      <li><b>try / except</b> keeps your pipeline running when a block fails; capture details with <code>except Exception as e</code>.</li>
+      <li><b>finally</b> always runs &mdash; even after a <code>return</code> inside a function.</li>
+      <li><b>raise</b> your own <code>ValueError</code> / <code>TypeError</code> for program-specific validation.</li>
+      <li><b>f-strings</b> inject variables into text &mdash; perfect for dynamic paths and logs.</li>
+      <li><b>enumerate</b> gives index + value in one loop.</li>
+      <li>Local variables shadow globals inside a function.</li>
+    </ul>
+  </div>
+
+  <div class="pager">
+    <a class="prev" href="04-functions.html"><div class="dir">&#8592; Previous</div><div class="ttl">Part 4 · Functions &amp; Lambda</div></a>
+    <a class="next" href="06-oop.html"><div class="dir">Next &#8594;</div><div class="ttl">Part 6 · Object-Oriented Programming</div></a>
+  </div>
+
+  <footer>
+    Notes generated from the "Python Full Course For Data Engineers [6+ HOURS]" transcript ·
+    Source: youtube.com/watch?v=ZvU7lupoXQE
+  </footer>
+</div>
+</body>
+</html>

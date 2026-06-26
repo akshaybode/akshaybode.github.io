@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Part 6 — Time Travel, Fail-safe & Cloning | Snowflake Notes</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #0b1020; --bg-2: #131a2f; --bg-3: #1f2a44; --card: #131a2f;
+    --text: #e6edf6; --text-dim: #93a4bf; --accent: #29b5e8; --accent-2: #c084fc;
+    --accent-3: #34d399; --success: #22c55e; --warn: #fbbf24; --danger: #f87171;
+    --border: #2a3553; --code-bg: #0a0f1e;
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: linear-gradient(135deg, #0b1020 0%, #0c2233 100%); color: var(--text);
+    line-height: 1.65; min-height: 100vh; }
+  .container { max-width: 1100px; margin: 0 auto; padding: 24px; }
+  header { background: linear-gradient(135deg, #29b5e8 0%, #2563eb 50%, #7c3aed 100%);
+    border-radius: 16px; padding: 30px; margin-bottom: 18px; box-shadow: 0 20px 60px rgba(41,181,232,0.25); }
+  header .crumb { font-size: 12px; opacity: 0.85; text-transform: uppercase; letter-spacing: 1px; }
+  header h1 { font-size: 30px; margin: 6px 0 8px 0; }
+  header p { opacity: 0.92; font-size: 15px; max-width: 760px; }
+  nav.pager { display: flex; justify-content: space-between; gap: 10px; margin: 14px 0 22px 0; flex-wrap: wrap; }
+  nav.pager a { text-decoration: none; background: var(--card); border: 1px solid var(--border);
+    color: var(--text); padding: 10px 16px; border-radius: 10px; font-size: 13px; font-weight: 600; transition: all 0.2s; }
+  nav.pager a:hover { background: var(--accent); color: #04121b; border-color: var(--accent); }
+  nav.pager a.home { border-color: var(--accent-2); }
+
+  .section { background: var(--card); border-radius: 12px; padding: 24px; margin-bottom: 18px; border: 1px solid var(--border); }
+  .section h2 { color: var(--accent); font-size: 22px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+  .section h3 { color: var(--accent-2); font-size: 18px; margin: 20px 0 10px 0; }
+  .section h4 { color: var(--accent-3); font-size: 15px; margin: 14px 0 8px 0; }
+  .section p { color: var(--text); margin-bottom: 10px; }
+  ul.bullet { padding-left: 22px; color: var(--text); font-size: 14.5px; margin: 6px 0 12px 0; }
+  ul.bullet li { padding: 4px 0; }
+  ul.bullet li b { color: var(--accent-3); }
+
+  table { width: 100%; border-collapse: collapse; background: var(--bg); border-radius: 8px;
+    overflow: hidden; margin: 14px 0; font-size: 13.5px; }
+  th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { background: var(--bg-3); color: var(--accent); text-transform: uppercase; font-size: 11px; letter-spacing: 1px; }
+  tr:last-child td { border-bottom: none; }
+
+  .alert { padding: 12px 14px; border-radius: 8px; margin: 14px 0; border-left: 4px solid; font-size: 14px; }
+  .alert.warn { background: rgba(251,191,36,0.1); border-color: var(--warn); }
+  .alert.danger { background: rgba(248,113,113,0.1); border-color: var(--danger); }
+  .alert.success { background: rgba(34,197,94,0.1); border-color: var(--success); }
+  .alert.info { background: rgba(41,181,232,0.1); border-color: var(--accent); }
+  .alert strong { color: var(--text); }
+
+  .diagram { background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 22px; margin: 16px 0; overflow-x: auto; }
+  .diagram .title { text-align: center; color: var(--text-dim); font-size: 12px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 16px; }
+  .timeline { display: flex; align-items: stretch; justify-content: center; flex-wrap: wrap; }
+  .phase { border-radius: 10px; padding: 12px 14px; min-width: 150px; text-align: center; font-size: 13px; font-weight: 600; border: 1px solid var(--border); }
+  .phase small { display: block; color: var(--text-dim); font-weight: 400; font-size: 11px; margin-top: 4px; }
+  .phase.active { border-top: 3px solid var(--accent-3); background: rgba(52,211,153,0.10); }
+  .phase.tt { border-top: 3px solid var(--accent); background: rgba(41,181,232,0.10); }
+  .phase.fs { border-top: 3px solid var(--warn); background: rgba(251,191,36,0.10); }
+  .phase.gone { border-top: 3px solid var(--danger); background: rgba(248,113,113,0.10); }
+  .flow-arrow { display: flex; align-items: center; padding: 0 8px; color: var(--accent); font-size: 22px; font-weight: 700; }
+
+  /* ---- animated pipeline (shared) ---- */
+  .apipe { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 0; margin: 4px 0; }
+  .anode { position: relative; z-index: 1; background: var(--bg-3); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 14px; min-width: 112px; text-align: center; font-size: 12.5px; font-weight: 700;
+    animation: aPulse 3s ease-in-out infinite; }
+  .anode small { display: block; font-weight: 400; color: var(--text-dim); font-size: 11px; margin-top: 4px; }
+  .anode.a { border-top: 3px solid var(--accent); }
+  .anode.b { border-top: 3px solid var(--accent-2); }
+  .anode.c { border-top: 3px solid var(--accent-3); }
+  .anode.d { border-top: 3px solid var(--warn); }
+  .anode.e { border-top: 3px solid var(--danger); }
+  .alink { position: relative; width: 50px; height: 3px; background: var(--border); margin: 0 1px; border-radius: 2px; flex: none; }
+  .alink .apkt { position: absolute; top: -3px; left: 0; width: 9px; height: 9px; border-radius: 50%;
+    background: var(--accent); box-shadow: 0 0 10px 1px var(--accent); animation: aMove 2.4s linear infinite; }
+  .alink .apkt.k2 { animation-delay: 1.2s; background: var(--accent-2); box-shadow: 0 0 10px 1px var(--accent-2); }
+  @keyframes aMove { 0% { left: 0; opacity: 0; } 12% { opacity: 1; } 88% { opacity: 1; } 100% { left: 100%; opacity: 0; } }
+  @keyframes aPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(41,181,232,0); } 50% { box-shadow: 0 0 16px 0 rgba(41,181,232,0.22); } }
+  @media (prefers-reduced-motion: reduce) { .alink .apkt { animation: none; opacity: .7; } .anode { animation: none; } }
+
+  pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px;
+    overflow-x: auto; margin: 12px 0; font-size: 13px; line-height: 1.55; }
+  pre code { color: #cfe3ff; font-family: "Consolas","Monaco",monospace; white-space: pre; }
+  pre .kw { color: #29b5e8; font-weight: 700; }
+  pre .cm { color: #6b7a99; font-style: italic; }
+  pre .st { color: #7ee787; }
+  :not(pre) > code { background: var(--bg-3); padding: 2px 6px; border-radius: 4px; font-size: 13px;
+    color: var(--accent-3); font-family: "Consolas","Monaco",monospace; }
+  footer { text-align: center; margin-top: 30px; padding: 20px; color: var(--text-dim); font-size: 13px; }
+  @media (max-width: 640px) { header h1 { font-size: 23px; } .container { padding: 12px; } }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <div class="crumb">Part 6 of 6</div>
+    <h1>Time Travel, Fail-safe & Cloning</h1>
+    <p>Snowflake's safety net for "oops, I deleted that" moments — plus zero-copy clones that give you instant,
+       free copies of entire databases.</p>
+  </header>
+
+  <nav class="pager">
+    <a class="home" href="index.html">🏠 Home / Contents</a>
+    <a href="index.html" class="home">✓ Final part — back to Contents</a>
+  </nav>
+
+  <div class="section">
+    <h2>1. The Data Lifecycle: Active → Time Travel → Fail-safe</h2>
+    <p>Every change in Snowflake keeps the old data around for a while. Data passes through three phases before it's
+       truly gone.</p>
+    <div class="diagram">
+      <div class="title">What happens to old/dropped data</div>
+      <div class="apipe">
+        <div class="anode c">🟢 Active<small>current data you query normally</small></div>
+        <div class="alink"><span class="apkt"></span></div>
+        <div class="anode a">🔵 Time Travel<small>0–90 days · you can query &amp; restore</small></div>
+        <div class="alink"><span class="apkt"></span></div>
+        <div class="anode d">🟡 Fail-safe<small>7 days · only Snowflake support recovers</small></div>
+        <div class="alink"><span class="apkt"></span></div>
+        <div class="anode e">🔴 Purged<small>permanently gone</small></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>2. Time Travel</h2>
+    <p><strong>Time Travel</strong> lets you access data as it existed at a point in the past — to query historical
+       state, recover from accidental changes, or restore dropped objects.</p>
+    <h4>Retention period</h4>
+    <ul class="bullet">
+      <li>Controlled by <code>DATA_RETENTION_TIME_IN_DAYS</code> (set at account / database / schema / table level).</li>
+      <li><b>Standard edition:</b> 0 or 1 day. <b>Enterprise+:</b> up to <b>90 days</b> for permanent objects.</li>
+      <li>Transient &amp; temporary objects: max 1 day.</li>
+    </ul>
+    <pre><code><span class="kw">ALTER TABLE</span> customer <span class="kw">SET</span> DATA_RETENTION_TIME_IN_DAYS = 30;</code></pre>
+
+    <h4>Querying the past — AT / BEFORE</h4>
+    <pre><code><span class="cm">-- by a timestamp</span>
+<span class="kw">SELECT</span> * <span class="kw">FROM</span> customer
+  <span class="kw">AT</span>(TIMESTAMP => <span class="st">'2026-06-24 20:58:50'</span>::timestamp);
+
+<span class="cm">-- by relative time: 5 minutes ago (offset in seconds)</span>
+<span class="kw">SELECT</span> * <span class="kw">FROM</span> customer <span class="kw">AT</span>(OFFSET => -60*5);
+
+<span class="cm">-- just before a specific statement ran (great for "undo this query")</span>
+<span class="kw">SELECT</span> * <span class="kw">FROM</span> customer
+  <span class="kw">BEFORE</span>(STATEMENT => <span class="st">'01abc...query-id...'</span>);</code></pre>
+    <div class="alert info"><strong>Course example:</strong> insert rows, then delete some, then query the table
+      <code>AT</code> a timestamp from <em>before</em> the delete — you'll see the rows as they were. Use
+      <code>SHOW TABLES</code> to find creation time and reason about what state existed when.</div>
+
+    <h4>Restoring dropped objects — UNDROP</h4>
+    <p>Within the retention window you can instantly bring back a dropped table, schema, or database.</p>
+    <pre><code><span class="kw">DROP TABLE</span> customer;
+<span class="kw">UNDROP TABLE</span> customer;        <span class="cm">-- back in seconds</span>
+
+<span class="kw">UNDROP SCHEMA</span> sales_db.raw;
+<span class="kw">UNDROP DATABASE</span> sales_db;</code></pre>
+    <h4>Restoring data into a table (recover from a bad update/delete)</h4>
+    <pre><code><span class="cm">-- recreate a table from its earlier state</span>
+<span class="kw">CREATE OR REPLACE TABLE</span> customer <span class="kw">AS</span>
+  <span class="kw">SELECT</span> * <span class="kw">FROM</span> customer <span class="kw">BEFORE</span>(STATEMENT => <span class="st">'01abc...'</span>);</code></pre>
+  </div>
+
+  <div class="section">
+    <h2>3. Fail-safe</h2>
+    <ul class="bullet">
+      <li>A <b>non-configurable 7-day</b> period that begins <em>after</em> Time Travel ends — for <b>permanent objects only</b>.</li>
+      <li>Data here is recoverable <b>only by Snowflake Support</b>, not by you, and recovery may take time.</li>
+      <li>It's a last-resort disaster recovery measure, not a feature you query.</li>
+      <li>Fail-safe storage is <b>billable</b> — a reason to use transient tables for easily-reproducible data.</li>
+    </ul>
+    <table>
+      <thead><tr><th></th><th>Time Travel</th><th>Fail-safe</th></tr></thead>
+      <tbody>
+        <tr><td>Duration</td><td>0–90 days (configurable)</td><td>7 days (fixed)</td></tr>
+        <tr><td>Who recovers</td><td>You (self-service SQL)</td><td>Snowflake Support only</td></tr>
+        <tr><td>Access</td><td>Query &amp; restore directly</td><td>No direct access</td></tr>
+        <tr><td>Applies to</td><td>All object types (per limits)</td><td>Permanent objects only</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <h2>4. Zero-Copy Cloning</h2>
+    <p><strong>Cloning</strong> instantly creates a copy of a database, schema, or table <b>without duplicating the
+       underlying storage</b>. The clone shares the original's micro-partitions; Snowflake only stores new data when
+       either copy <b>changes</b> (copy-on-write).</p>
+    <div class="diagram">
+      <div class="title">Clone shares storage until something changes</div>
+      <div class="flow" style="display:flex;justify-content:center;flex-wrap:wrap;gap:0;">
+        <div class="phase tt">📋 Original table<small>micro-partitions A, B, C</small></div>
+        <div class="flow-arrow">⎘</div>
+        <div class="phase active">🧬 Clone<small>points to A, B, C (no copy)</small></div>
+        <div class="flow-arrow">→</div>
+        <div class="phase fs">✏️ Edit clone<small>only the changed partition is new</small></div>
+      </div>
+    </div>
+    <pre><code><span class="kw">CREATE TABLE</span> customer_clone   <span class="kw">CLONE</span> customer;
+<span class="kw">CREATE SCHEMA</span> raw_clone        <span class="kw">CLONE</span> sales_db.raw;
+<span class="kw">CREATE DATABASE</span> sales_db_copy  <span class="kw">CLONE</span> sales_db;
+
+<span class="cm">-- combine with Time Travel: clone a table as it was in the past</span>
+<span class="kw">CREATE TABLE</span> customer_yesterday <span class="kw">CLONE</span> customer
+  <span class="kw">AT</span>(OFFSET => -60*60*24);</code></pre>
+    <ul class="bullet">
+      <li><b>Instant &amp; free</b> at creation — no storage cost until data diverges.</li>
+      <li>Perfect for <b>dev/test/QA</b> environments from production, or quick "what-if" experiments.</li>
+      <li>The clone is <b>independent</b>: changes to it don't affect the original (and vice versa).</li>
+      <li>You can clone <b>at a point in time</b> by combining with Time Travel (<code>AT</code>/<code>BEFORE</code>).</li>
+    </ul>
+    <div class="alert success"><strong>Why it's a flagship feature:</strong> spinning up a full copy of a multi-TB
+      production database for testing is normally slow and expensive. Zero-copy cloning makes it <em>instant</em> and
+      <em>nearly free</em> — you only pay for what you subsequently change.</div>
+  </div>
+
+  <div class="section">
+    <h2>🎓 Course Wrap-up</h2>
+    <p>You now have the full picture of Snowflake as taught in the course:</p>
+    <ul class="bullet">
+      <li><b>Fundamentals:</b> a cloud-only, SQL, SaaS warehouse with separated storage &amp; compute, built on a 3-layer architecture.</li>
+      <li><b>Security:</b> RBAC — privileges → roles → users, with a system role hierarchy.</li>
+      <li><b>Objects:</b> databases/schemas, four table types, three view types.</li>
+      <li><b>Loading:</b> stages + file formats, bulk <code>COPY INTO</code>, and continuous Snowpipe.</li>
+      <li><b>Automation:</b> Streams (CDC) + Tasks (scheduling) for incremental pipelines.</li>
+      <li><b>Recovery &amp; copies:</b> Time Travel, Fail-safe, and zero-copy Cloning.</li>
+    </ul>
+    <div class="alert info"><strong>Next steps suggested in the video:</strong> spin up the free trial, recreate each
+      demo yourself (the only way it sticks), and practice building an end-to-end pipeline:
+      stage → COPY/Snowpipe → stream → task → curated table.</div>
+  </div>
+
+  <nav class="pager">
+    <a class="home" href="index.html">🏠 Home / Contents</a>
+    <a href="01-fundamentals.html">↺ Re-read Part 1</a>
+  </nav>
+
+  <footer>Part 6 of 6 · Learn Snowflake in 2 Hours — study notes</footer>
+</div>
+</body>
+</html>

@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Git & Docker for Data Engineers</title>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  :root{--bg:#0b1020;--card:#131a2f;--bg-3:#1f2a44;--text:#e6edf6;--dim:#93a4bf;--accent:#a78bfa;--accent2:#34d399;--border:#2a3553;--code:#0a0f1e}
+  body{font-family:system-ui,sans-serif;background:linear-gradient(135deg,#0b1020,#150a28);color:var(--text);line-height:1.65}
+  .container{max-width:1280px;margin:0 auto;padding:24px}
+  header{background:linear-gradient(135deg,#a78bfa,#6366f1,#34d399);border-radius:16px;padding:32px;margin-bottom:24px}
+  header h1{font-size:30px}
+  .tabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:20px;background:var(--card);padding:8px;border-radius:12px;border:1px solid var(--border)}
+  .tab{padding:9px 14px;background:transparent;color:var(--dim);border:none;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600}
+  .tab.active{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff}
+  .tab-content{display:none}.tab-content.active{display:block}
+  .section{background:var(--card);border-radius:12px;padding:22px;margin-bottom:16px;border:1px solid var(--border)}
+  .section h2{color:var(--accent);font-size:20px;margin-bottom:10px;border-bottom:1px solid var(--border);padding-bottom:8px}
+  .section h3{color:var(--accent2);font-size:16px;margin:14px 0 8px}
+  pre[class*="language-"]{background:var(--code)!important;padding:12px!important;border-radius:8px;font-size:12px;border:1px solid var(--border);overflow-x:auto}
+  :not(pre)>code{background:var(--bg-3);padding:2px 6px;border-radius:4px;color:var(--accent2);font-size:12px}
+  .check-row{display:flex;gap:10px;padding:8px;background:#0a0f1e;border-radius:6px;margin:4px 0;border-left:3px solid var(--accent)}
+  .check-row label{font-size:13px;cursor:pointer}
+  .btn{background:var(--bg-3);color:var(--text);border:1px solid var(--border);padding:8px 12px;border-radius:8px;cursor:pointer;font-size:12px;margin-right:8px}
+  .progress-section{background:var(--card);padding:16px;border-radius:12px;margin-bottom:16px;border:1px solid var(--border)}
+  .progress-bar{background:#0a0f1e;height:12px;border-radius:6px;overflow:hidden;margin-top:8px}
+  .progress-fill{background:linear-gradient(90deg,#22c55e,#a78bfa);height:100%;width:0%;font-size:10px;text-align:right;padding-right:6px;color:#fff}
+</style>
+</head>
+<body>
+<div class="container">
+<header><h1>🔧 Git & Docker for Data Engineers</h1><p>Version control, containers, docker-compose for local Airflow/Postgres — plus CI/CD basics.</p></header>
+<div class="progress-section"><strong>Progress</strong> <span id="progress-text"></span><div class="progress-bar"><div class="progress-fill" id="progress-fill">0%</div></div>
+<button class="btn" onclick="exportProgress()">Export</button><button class="btn" onclick="resetProgress()">Reset</button></div>
+<div class="tabs" id="tab-bar"></div>
+<div id="tab-panels"></div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-bash.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-yaml.min.js"></script>
+<script>
+const TABS=[
+{id:"git-basics",label:"Git Basics",html:`<div class="section"><h2>Essential Git</h2>
+<pre><code class="language-bash">git config --global user.name "Your Name"
+git config --global user.email "you@email.com"
+
+git init
+git clone https://github.com/user/repo.git
+
+git status
+git add file.py
+git add .
+git commit -m "Add ETL extract script"
+
+git branch feature/orders-etl
+git checkout feature/orders-etl
+# or: git switch -c feature/orders-etl
+
+git merge main
+git pull origin main
+git push -u origin feature/orders-etl</code></pre>
+<div class="check-row"><input type="checkbox" id="g1"><label for="g1">init, add, commit, push</label></div>
+<div class="check-row"><input type="checkbox" id="g2"><label for="g2">branch, checkout, merge</label></div></div>`},
+{id:"git-advanced",label:"Git Workflow",html:`<div class="section"><h2>PR workflow</h2>
+<pre><code class="language-bash"># Update your branch
+git fetch origin
+git rebase origin/main    # or merge main
+
+# Resolve conflicts
+git add conflicted_file.py
+git rebase --continue
+
+# Undo mistakes
+git restore file.py           # discard local changes
+git reset --soft HEAD~1       # undo last commit, keep changes
+git stash / git stash pop     # temporary save
+
+# View history
+git log --oneline -10
+git diff main..feature-branch</code></pre>
+<p><strong>.gitignore</strong> for DE projects:</p>
+<pre><code>__pycache__/
+.env
+*.pyc
+target/          # dbt
+logs/
+.idea/
+.DS_Store
+dbt_packages/</code></pre>
+<div class="check-row"><input type="checkbox" id="g3"><label for="g3">Resolve merge conflicts</label></div>
+<div class="check-row"><input type="checkbox" id="g4"><label for="g4">.gitignore for Python/dbt</label></div></div>`},
+{id:"docker",label:"Docker",html:`<div class="section"><h2>Docker basics</h2>
+<pre><code class="language-bash">docker --version
+docker pull postgres:16
+docker run --name pg -e POSTGRES_PASSWORD=admin -p 5432:5432 -d postgres:16
+docker ps
+docker logs pg
+docker exec -it pg psql -U postgres
+docker stop pg && docker rm pg</code></pre>
+<h3>Dockerfile</h3>
+<pre><code class="language-dockerfile">FROM python:3.11-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY . .
+CMD ["python", "etl_pipeline.py"]</code></pre>
+<pre><code class="language-bash">docker build -t my-etl:1.0 .
+docker run --env-file .env my-etl:1.0</code></pre>
+<div class="check-row"><input type="checkbox" id="d1"><label for="d1">run, build, Dockerfile</label></div></div>`},
+{id:"compose",label:"Docker Compose",html:`<div class="section"><h2>docker-compose.yml</h2>
+<pre><code class="language-yaml">version: "3.8"
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: de
+      POSTGRES_PASSWORD: de
+      POSTGRES_DB: de_lake
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+
+  # Optional: local Airflow via astro dev (preferred) or apache/airflow image
+
+volumes:
+  pg_data:</code></pre>
+<pre><code class="language-bash">docker compose up -d
+docker compose down</code></pre>
+<div class="check-row"><input type="checkbox" id="d2"><label for="d2">docker compose for Postgres</label></div></div>`},
+{id:"cicd",label:"CI/CD",html:`<div class="section"><h2>GitHub Actions (dbt example)</h2>
+<pre><code class="language-yaml">name: dbt CI
+on: [pull_request]
+jobs:
+  dbt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install dbt-snowflake
+      - run: dbt deps
+      - run: dbt run --target ci
+      - run: dbt test</code></pre>
+<div class="check-row"><input type="checkbox" id="c1"><label for="c1">Understand CI on PR</label></div></div>`}
+];
+const STORAGE_KEY='devops_guide_v1';
+function buildTabs(){const bar=document.getElementById('tab-bar'),panels=document.getElementById('tab-panels');
+TABS.forEach((t,i)=>{const b=document.createElement('button');b.className='tab'+(i===0?' active':'');b.dataset.tab=t.id;b.textContent=t.label;b.onclick=e=>showTab(e,t.id);bar.appendChild(b);
+const d=document.createElement('div');d.className='tab-content'+(i===0?' active':'');d.id=t.id;d.innerHTML=t.html;panels.appendChild(d);});}
+function showTab(evt,id){document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+document.getElementById(id).classList.add('active');evt.currentTarget.classList.add('active');history.replaceState(null,'','#'+id);if(window.Prism)Prism.highlightAll();}
+function initHash(){const h=location.hash.slice(1);if(!h)return;const b=document.querySelector(`.tab[data-tab="${h}"]`);if(b)showTab({currentTarget:b},h);}
+function updateProgress(){const all=document.querySelectorAll('input[type=checkbox]'),done=document.querySelectorAll('input[type=checkbox]:checked');const p=all.length?Math.round(done.length/all.length*100):0;document.getElementById('progress-fill').style.width=p+'%';document.getElementById('progress-fill').textContent=p+'%';document.getElementById('progress-text').textContent=done.length+'/'+all.length;}
+function saveProgress(){const s={};document.querySelectorAll('input[type=checkbox]').forEach(c=>{if(c.checked)s[c.id]=1});localStorage.setItem(STORAGE_KEY,JSON.stringify(s));updateProgress();}
+function loadProgress(){try{const s=JSON.parse(localStorage.getItem(STORAGE_KEY)||'{}');document.querySelectorAll('input[type=checkbox]').forEach(c=>{if(s[c.id])c.checked=true});}catch(e){}updateProgress();}
+function resetProgress(){if(confirm('Reset?')){localStorage.removeItem(STORAGE_KEY);document.querySelectorAll('input[type=checkbox]').forEach(c=>c.checked=false);updateProgress();}}
+function exportProgress(){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([localStorage.getItem(STORAGE_KEY)||'{}']));a.download='devops_progress.json';a.click();}
+document.addEventListener('change',e=>{if(e.target.matches('input[type=checkbox]'))saveProgress();});
+buildTabs();loadProgress();initHash();window.addEventListener('hashchange',initHash);if(window.Prism)Prism.highlightAll();
+</script>
+</body>
+</html>

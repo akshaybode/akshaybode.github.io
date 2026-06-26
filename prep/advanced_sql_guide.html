@@ -1,0 +1,2057 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Advanced SQL — Complete Guide for Data Engineers</title>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #0b1020;
+    --bg-2: #131a2f;
+    --bg-3: #1f2a44;
+    --card: #131a2f;
+    --text: #e6edf6;
+    --text-dim: #93a4bf;
+    --accent: #60a5fa;
+    --accent-2: #c084fc;
+    --accent-3: #34d399;
+    --success: #22c55e;
+    --warn: #fbbf24;
+    --danger: #f87171;
+    --border: #2a3553;
+    --code-bg: #0a0f1e;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: linear-gradient(135deg, #0b1020 0%, #1a0f2e 100%);
+    color: var(--text);
+    line-height: 1.65;
+    min-height: 100vh;
+  }
+  .container { max-width: 1280px; margin: 0 auto; padding: 24px; }
+  header {
+    background: linear-gradient(135deg, #2563eb 0%, #7c3aed 50%, #db2777 100%);
+    border-radius: 16px;
+    padding: 32px;
+    margin-bottom: 24px;
+    box-shadow: 0 20px 60px rgba(124, 58, 237, 0.25);
+  }
+  header h1 { font-size: 32px; margin-bottom: 8px; }
+  header p { opacity: 0.92; font-size: 16px; }
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 16px;
+    margin-top: 24px;
+  }
+  .stat {
+    background: rgba(255,255,255,0.13);
+    backdrop-filter: blur(10px);
+    padding: 14px 16px;
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.2);
+  }
+  .stat-label { font-size: 11px; opacity: 0.85; text-transform: uppercase; letter-spacing: 1px; }
+  .stat-value { font-size: 22px; font-weight: 700; margin-top: 4px; }
+
+  .progress-section {
+    background: var(--card);
+    border-radius: 12px;
+    padding: 18px;
+    margin-bottom: 20px;
+    border: 1px solid var(--border);
+  }
+  .progress-bar {
+    background: var(--bg);
+    height: 14px;
+    border-radius: 8px;
+    overflow: hidden;
+    margin-top: 8px;
+  }
+  .progress-fill {
+    background: linear-gradient(90deg, #22c55e, #60a5fa);
+    height: 100%;
+    width: 0%;
+    transition: width 0.5s ease;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding-right: 8px;
+    font-size: 10px;
+    color: white;
+    font-weight: 700;
+  }
+
+  .tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 24px;
+    background: var(--card);
+    padding: 8px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+  }
+  .tab {
+    padding: 9px 16px;
+    background: transparent;
+    color: var(--text-dim);
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    transition: all 0.2s;
+  }
+  .tab:hover { background: var(--bg-3); color: var(--text); }
+  .tab.active {
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    color: white;
+  }
+
+  .tab-content { display: none; animation: fadeIn 0.3s; }
+  .tab-content.active { display: block; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+  .section {
+    background: var(--card);
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 18px;
+    border: 1px solid var(--border);
+  }
+  .section h2 {
+    color: var(--accent);
+    font-size: 22px;
+    margin-bottom: 12px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .section h3 {
+    color: var(--accent-2);
+    font-size: 17px;
+    margin: 18px 0 10px 0;
+  }
+  .section h4 {
+    color: var(--accent-3);
+    font-size: 15px;
+    margin: 14px 0 8px 0;
+  }
+  .section p { color: var(--text); margin-bottom: 10px; }
+
+  pre[class*="language-"] {
+    border-radius: 8px;
+    background: var(--code-bg) !important;
+    padding: 14px !important;
+    font-size: 13px;
+    margin: 10px 0;
+    border: 1px solid var(--border);
+    overflow-x: auto;
+  }
+  code[class*="language-"] { font-family: "Consolas", "Monaco", monospace; }
+  :not(pre) > code {
+    background: var(--bg-3);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 13px;
+    color: var(--accent-3);
+    font-family: "Consolas", "Monaco", monospace;
+  }
+
+  .check-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 8px 12px;
+    background: var(--bg);
+    border-radius: 6px;
+    margin: 6px 0;
+    border-left: 3px solid var(--accent);
+  }
+  .check-row input[type="checkbox"] {
+    margin-top: 4px;
+    width: 16px;
+    height: 16px;
+    accent-color: var(--success);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .check-row label {
+    flex: 1;
+    cursor: pointer;
+    color: var(--text);
+    font-size: 13px;
+  }
+  .check-row input:checked + label {
+    text-decoration: line-through;
+    color: var(--text-dim);
+  }
+
+  .alert {
+    padding: 12px 14px;
+    border-radius: 8px;
+    margin: 12px 0;
+    border-left: 4px solid;
+    font-size: 14px;
+  }
+  .alert.warn { background: rgba(251, 191, 36, 0.1); border-color: var(--warn); }
+  .alert.danger { background: rgba(248, 113, 113, 0.1); border-color: var(--danger); }
+  .alert.success { background: rgba(34, 197, 94, 0.1); border-color: var(--success); }
+  .alert.info { background: rgba(96, 165, 250, 0.1); border-color: var(--accent); }
+  .alert strong { color: var(--text); }
+
+  .qa-card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--accent-2);
+    border-radius: 8px;
+    padding: 14px;
+    margin: 12px 0;
+  }
+  .qa-q { color: var(--accent-2); font-weight: 700; margin-bottom: 8px; }
+  .qa-a { color: var(--text-dim); font-size: 14px; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--bg);
+    border-radius: 8px;
+    overflow: hidden;
+    margin: 12px 0;
+    font-size: 13px;
+  }
+  th, td {
+    padding: 10px 12px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+  th {
+    background: var(--bg-3);
+    color: var(--accent);
+    text-transform: uppercase;
+    font-size: 11px;
+    letter-spacing: 1px;
+  }
+  tr:last-child td { border-bottom: none; }
+
+  .controls {
+    display: flex;
+    gap: 10px;
+    margin-top: 14px;
+    flex-wrap: wrap;
+  }
+  .btn {
+    background: var(--bg-3);
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 8px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+    transition: all 0.2s;
+  }
+  .btn:hover { background: var(--accent); color: white; border-color: var(--accent); }
+  .btn.danger:hover { background: var(--danger); border-color: var(--danger); }
+
+  .badge {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    margin-left: 6px;
+  }
+  .badge.must { background: var(--danger); color: white; }
+  .badge.tip { background: var(--accent); color: white; }
+  .badge.frequent { background: var(--warn); color: #1a1500; }
+  .badge.free { background: var(--success); color: white; }
+
+  ul.bullet { padding-left: 20px; color: var(--text-dim); font-size: 14px; }
+  ul.bullet li { padding: 4px 0; }
+
+  .grid-2 {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+    gap: 14px;
+  }
+
+  footer {
+    text-align: center;
+    margin-top: 40px;
+    padding: 20px;
+    color: var(--text-dim);
+    font-size: 13px;
+  }
+
+  @media (max-width: 640px) {
+    header h1 { font-size: 22px; }
+    .container { padding: 12px; }
+    .tab { padding: 7px 10px; font-size: 11px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <h1>📘 Advanced SQL — Complete Guide</h1>
+    <p>Everything you need to crack Data Engineering interviews and write production SQL.</p>
+    <div class="stats-grid">
+      <div class="stat"><div class="stat-label">Topics</div><div class="stat-value">12</div></div>
+      <div class="stat"><div class="stat-label">Code Examples</div><div class="stat-value">100+</div></div>
+      <div class="stat"><div class="stat-label">Interview Q&A</div><div class="stat-value">40+</div></div>
+      <div class="stat"><div class="stat-label">Difficulty</div><div class="stat-value">Beginner → Advanced</div></div>
+    </div>
+  </header>
+
+  <div class="progress-section">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <strong>📊 Your Learning Progress</strong>
+      <span id="progress-text" style="color: var(--accent); font-weight: 700;">0 / 0</span>
+    </div>
+    <div class="progress-bar"><div class="progress-fill" id="progress-fill">0%</div></div>
+    <div class="controls">
+      <button class="btn" onclick="exportProgress()">💾 Export</button>
+      <button class="btn danger" onclick="resetProgress()">♻ Reset</button>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="showTab(event,'overview')">Overview</button>
+    <button class="tab" onclick="showTab(event,'fundamentals')">1. Fundamentals</button>
+    <button class="tab" onclick="showTab(event,'joins')">2. Joins</button>
+    <button class="tab" onclick="showTab(event,'window')">3. Window Functions</button>
+    <button class="tab" onclick="showTab(event,'cte')">4. CTEs & Subqueries</button>
+    <button class="tab" onclick="showTab(event,'aggregations')">5. Aggregations</button>
+    <button class="tab" onclick="showTab(event,'functions')">6. Functions</button>
+    <button class="tab" onclick="showTab(event,'performance')">7. Performance</button>
+    <button class="tab" onclick="showTab(event,'advanced')">8. Procs & Transactions</button>
+    <button class="tab" onclick="showTab(event,'de-sql')">9. DE Patterns (SCD/ETL)</button>
+    <button class="tab" onclick="showTab(event,'interview')">10. Interview Patterns</button>
+    <button class="tab" onclick="showTab(event,'practice')">11. Practice & Resources</button>
+  </div>
+
+  <!-- OVERVIEW -->
+  <div class="tab-content active" id="overview">
+    <div class="section">
+      <h2>🎯 What This Guide Covers</h2>
+      <p>This is a complete reference for mastering SQL for Data Engineering roles. Each topic includes theory, working examples, common pitfalls, and interview questions.</p>
+
+      <h3>📋 Topic Map</h3>
+      <table>
+        <thead><tr><th>#</th><th>Topic</th><th>Why It Matters</th><th>Interview Weight</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td>Fundamentals</td><td>SELECT, WHERE, GROUP BY, HAVING, ORDER BY mastery</td><td>⭐⭐</td></tr>
+          <tr><td>2</td><td>Joins</td><td>Combine data across tables (INNER/LEFT/RIGHT/FULL/CROSS/SELF)</td><td>⭐⭐⭐⭐⭐</td></tr>
+          <tr><td>3</td><td>Window Functions</td><td>The #1 differentiator — ROW_NUMBER, RANK, LAG, LEAD</td><td>⭐⭐⭐⭐⭐</td></tr>
+          <tr><td>4</td><td>CTEs & Subqueries</td><td>Readable, recursive, modular queries</td><td>⭐⭐⭐⭐⭐</td></tr>
+          <tr><td>5</td><td>Advanced Aggregations</td><td>ROLLUP, CUBE, GROUPING SETS, PIVOT</td><td>⭐⭐⭐</td></tr>
+          <tr><td>6</td><td>String/Date/JSON</td><td>Real-world data cleaning</td><td>⭐⭐⭐⭐</td></tr>
+          <tr><td>7</td><td>Performance & Indexes</td><td>EXPLAIN, indexes, partitioning</td><td>⭐⭐⭐⭐</td></tr>
+          <tr><td>8</td><td>Procs/Triggers/Transactions</td><td>ACID, isolation levels, stored logic</td><td>⭐⭐</td></tr>
+          <tr><td>9</td><td>DE Patterns (SCD/ETL)</td><td>Type 1/2/3, MERGE, dedup</td><td>⭐⭐⭐⭐⭐</td></tr>
+          <tr><td>10</td><td>Interview Patterns</td><td>Top 30 reusable solving patterns</td><td>⭐⭐⭐⭐⭐</td></tr>
+        </tbody>
+      </table>
+
+      <div class="alert info">
+        <strong>💡 How to use this guide:</strong> Go through tabs in order. Each tab has checkboxes to mark concepts as understood. Type out (don't copy!) each example into a real database (PostgreSQL or Snowflake free trial) and run it.
+      </div>
+
+      <div class="alert warn">
+        <strong>⚠ SQL dialect note:</strong> Examples are mostly ANSI SQL (works on PostgreSQL, Snowflake, MySQL 8+, SQL Server, Oracle). Where dialect-specific syntax matters, it's labeled.
+      </div>
+    </div>
+  </div>
+
+  <!-- FUNDAMENTALS -->
+  <div class="tab-content" id="fundamentals">
+    <div class="section">
+      <h2>1. SQL Fundamentals (Quick Refresher)</h2>
+
+      <h3>Logical Query Processing Order</h3>
+      <p>SQL is written in one order but executed in another. Understanding this is critical:</p>
+      <table>
+        <thead><tr><th>Written Order</th><th>Executed Order</th></tr></thead>
+        <tbody>
+          <tr><td>SELECT</td><td>5. SELECT</td></tr>
+          <tr><td>FROM</td><td>1. FROM / JOIN</td></tr>
+          <tr><td>WHERE</td><td>2. WHERE</td></tr>
+          <tr><td>GROUP BY</td><td>3. GROUP BY</td></tr>
+          <tr><td>HAVING</td><td>4. HAVING</td></tr>
+          <tr><td>ORDER BY</td><td>6. ORDER BY</td></tr>
+          <tr><td>LIMIT</td><td>7. LIMIT</td></tr>
+        </tbody>
+      </table>
+      <div class="alert info"><strong>Why it matters:</strong> You cannot use a column alias defined in SELECT inside WHERE — because WHERE runs before SELECT. You CAN use it in ORDER BY.</div>
+
+      <h3>WHERE vs HAVING</h3>
+<pre><code class="language-sql">-- WHERE filters ROWS before aggregation
+SELECT department, COUNT(*) AS emp_count
+FROM employees
+WHERE salary > 50000          -- filters individual rows
+GROUP BY department;
+
+-- HAVING filters GROUPS after aggregation
+SELECT department, COUNT(*) AS emp_count
+FROM employees
+GROUP BY department
+HAVING COUNT(*) > 10;         -- filters groups</code></pre>
+
+      <h3>NULL Handling (Common Bug Source!)</h3>
+      <p>SQL uses <strong>three-valued logic (3VL)</strong>: <code>TRUE</code>, <code>FALSE</code>, and <code>UNKNOWN</code>. <strong>Any</strong> comparison involving NULL — even <code>NULL = NULL</code> — returns UNKNOWN. In most engines this is displayed as NULL, and <code>WHERE</code> only keeps rows where the predicate is TRUE (UNKNOWN rows are filtered out).</p>
+
+      <h4>NULL Comparison Truth Table</h4>
+      <table>
+        <thead><tr><th>Expression</th><th>Result</th><th>Why</th></tr></thead>
+        <tbody>
+          <tr><td><code>NULL = NULL</code></td><td>UNKNOWN</td><td>NULL means "unknown value" — can't say if two unknowns are equal</td></tr>
+          <tr><td><code>5 = NULL</code></td><td>UNKNOWN</td><td>Unknown value could be anything, can't compare</td></tr>
+          <tr><td><code>NULL &lt;&gt; NULL</code></td><td>UNKNOWN</td><td>Same reason — can't say if two unknowns differ</td></tr>
+          <tr><td><code>5 &lt;&gt; NULL</code></td><td>UNKNOWN</td><td>Can't compare with unknown</td></tr>
+          <tr><td><code>NULL &lt; 10</code></td><td>UNKNOWN</td><td>Unknown could be anything — could be &lt; 10 or not</td></tr>
+          <tr><td><code>NULL &gt; NULL</code></td><td>UNKNOWN</td><td>Comparing two unknowns</td></tr>
+          <tr><td><code>NULL &lt;= 5</code></td><td>UNKNOWN</td><td>Same logic</td></tr>
+          <tr><td><code>NULL &gt;= 5</code></td><td>UNKNOWN</td><td>Same logic</td></tr>
+          <tr><td><code>NULL IS NULL</code></td><td>TRUE ✅</td><td>Special operator <code>IS</code> handles NULL explicitly</td></tr>
+          <tr><td><code>NULL IS NOT NULL</code></td><td>FALSE</td><td>Same — handled by <code>IS</code> operator</td></tr>
+          <tr><td><code>NULL + 5</code></td><td>NULL</td><td>Arithmetic with NULL propagates NULL</td></tr>
+          <tr><td><code>NULL || 'abc'</code></td><td>NULL*</td><td>String concat with NULL = NULL (except in Oracle, where NULL = '')</td></tr>
+        </tbody>
+      </table>
+
+      <h4>Three-Valued Logic — Boolean Operators</h4>
+      <table>
+        <thead><tr><th>A</th><th>B</th><th>A AND B</th><th>A OR B</th></tr></thead>
+        <tbody>
+          <tr><td>TRUE</td><td>UNKNOWN</td><td>UNKNOWN</td><td>TRUE</td></tr>
+          <tr><td>FALSE</td><td>UNKNOWN</td><td>FALSE</td><td>UNKNOWN</td></tr>
+          <tr><td>UNKNOWN</td><td>UNKNOWN</td><td>UNKNOWN</td><td>UNKNOWN</td></tr>
+        </tbody>
+      </table>
+      <div class="alert info"><strong>Key takeaway:</strong> <code>FALSE AND UNKNOWN = FALSE</code> (because false short-circuits). <code>TRUE OR UNKNOWN = TRUE</code> (because true short-circuits). All other UNKNOWN combinations stay UNKNOWN.</div>
+
+<pre><code class="language-sql">-- NULL is NOT equal to anything, including itself
+SELECT NULL = NULL;          -- returns NULL/UNKNOWN (not TRUE!)
+SELECT NULL = 0;             -- returns NULL/UNKNOWN
+SELECT NULL != NULL;         -- returns NULL/UNKNOWN
+
+-- Use IS NULL / IS NOT NULL — the only safe way
+SELECT * FROM users WHERE email IS NULL;
+SELECT * FROM users WHERE email IS NOT NULL;
+
+-- IS DISTINCT FROM treats NULLs as equal (Postgres / Snowflake / ANSI)
+SELECT NULL IS DISTINCT FROM NULL;          -- FALSE (they're "the same")
+SELECT NULL IS NOT DISTINCT FROM NULL;      -- TRUE
+SELECT 5 IS DISTINCT FROM NULL;             -- TRUE (they differ)
+-- Useful in JOIN conditions: ON a.col IS NOT DISTINCT FROM b.col
+
+-- COALESCE: returns first non-null value
+SELECT COALESCE(phone, email, 'No contact') AS contact FROM users;
+
+-- NULLIF: returns NULL if both are equal
+SELECT NULLIF(salary, 0);    -- protects against divide-by-zero
+
+-- IFNULL (MySQL) / ISNULL (SQL Server) / NVL (Oracle)</code></pre>
+      <div class="alert danger"><strong>Gotcha:</strong> <code>COUNT(*)</code> includes NULLs. <code>COUNT(column_name)</code> excludes NULLs.</div>
+
+      <h3>DISTINCT</h3>
+<pre><code class="language-sql">SELECT DISTINCT department FROM employees;
+
+-- DISTINCT applies to ALL columns in SELECT
+SELECT DISTINCT department, job_title FROM employees;
+-- Returns unique combinations of (department, job_title)
+
+-- Counting distinct values
+SELECT COUNT(DISTINCT customer_id) FROM orders;</code></pre>
+
+      <h3>LIMIT / OFFSET / FETCH</h3>
+<pre><code class="language-sql">-- PostgreSQL / MySQL / Snowflake
+SELECT * FROM products ORDER BY price DESC LIMIT 10 OFFSET 20;
+
+-- ANSI standard / SQL Server / Oracle 12c+
+SELECT * FROM products
+ORDER BY price DESC
+OFFSET 20 ROWS FETCH NEXT 10 ROWS ONLY;
+
+-- SQL Server (legacy)
+SELECT TOP 10 * FROM products ORDER BY price DESC;</code></pre>
+
+      <h3>Concepts Checklist</h3>
+      <div class="check-row"><input type="checkbox" id="f1"><label for="f1">SQL logical processing order (FROM → WHERE → GROUP → HAVING → SELECT → ORDER)</label></div>
+      <div class="check-row"><input type="checkbox" id="f2"><label for="f2">WHERE vs HAVING distinction</label></div>
+      <div class="check-row"><input type="checkbox" id="f3"><label for="f3">NULL behavior (3-valued logic) and IS NULL / IS NOT NULL</label></div>
+      <div class="check-row"><input type="checkbox" id="f4"><label for="f4">COALESCE, NULLIF, IFNULL/NVL</label></div>
+      <div class="check-row"><input type="checkbox" id="f5"><label for="f5">DISTINCT (single column vs multiple)</label></div>
+      <div class="check-row"><input type="checkbox" id="f6"><label for="f6">LIMIT / OFFSET / FETCH (cross-dialect)</label></div>
+      <div class="check-row"><input type="checkbox" id="f7"><label for="f7">CASE WHEN ... THEN ... ELSE ... END</label></div>
+    </div>
+  </div>
+
+  <!-- JOINS -->
+  <div class="tab-content" id="joins">
+    <div class="section">
+      <h2>2. Joins — Combining Tables</h2>
+
+      <h3>Sample Tables (for examples)</h3>
+<pre><code class="language-sql">-- employees
++----+-------+---------+
+| id | name  | dept_id |
++----+-------+---------+
+|  1 | Asha  |   10    |
+|  2 | Ravi  |   20    |
+|  3 | Priya |   NULL  |
++----+-------+---------+
+
+-- departments
++----+-----------+
+| id |   name    |
++----+-----------+
+| 10 | Engineering|
+| 20 | Sales     |
+| 30 | HR        |
++----+-----------+</code></pre>
+
+      <h3>INNER JOIN — Only matching rows</h3>
+<pre><code class="language-sql">SELECT e.name, d.name AS department
+FROM employees e
+INNER JOIN departments d ON e.dept_id = d.id;
+-- Result: Asha-Engineering, Ravi-Sales
+-- Priya is excluded (NULL dept_id)
+-- HR is excluded (no employees)</code></pre>
+
+      <h3>LEFT JOIN — All rows from left + matching from right</h3>
+<pre><code class="language-sql">SELECT e.name, d.name AS department
+FROM employees e
+LEFT JOIN departments d ON e.dept_id = d.id;
+-- Result: Asha-Engineering, Ravi-Sales, Priya-NULL
+-- All employees kept, even Priya with no department</code></pre>
+
+      <h3>RIGHT JOIN — All from right + matching from left</h3>
+<pre><code class="language-sql">SELECT e.name, d.name AS department
+FROM employees e
+RIGHT JOIN departments d ON e.dept_id = d.id;
+-- Result: Asha-Engineering, Ravi-Sales, NULL-HR
+-- All departments kept, including HR with no employees</code></pre>
+
+      <h3>FULL OUTER JOIN — All rows from both</h3>
+<pre><code class="language-sql">SELECT e.name, d.name AS department
+FROM employees e
+FULL OUTER JOIN departments d ON e.dept_id = d.id;
+-- Result: Asha-Engineering, Ravi-Sales, Priya-NULL, NULL-HR</code></pre>
+
+      <h3>CROSS JOIN — Cartesian product</h3>
+<pre><code class="language-sql">SELECT e.name, d.name
+FROM employees e
+CROSS JOIN departments d;
+-- Returns 3 × 3 = 9 rows (every combination)
+-- Useful for generating date sequences, test data</code></pre>
+
+      <h3>SELF JOIN — Table joins to itself</h3>
+<pre><code class="language-sql">-- Find employees and their managers
+-- employees(id, name, manager_id)
+SELECT e.name AS employee, m.name AS manager
+FROM employees e
+LEFT JOIN employees m ON e.manager_id = m.id;</code></pre>
+
+      <h3>ANTI JOIN (NOT EXISTS / LEFT JOIN ... IS NULL)</h3>
+<pre><code class="language-sql">-- Find departments with NO employees
+-- Method 1: NOT EXISTS (cleanest)
+SELECT d.name
+FROM departments d
+WHERE NOT EXISTS (
+  SELECT 1 FROM employees e WHERE e.dept_id = d.id
+);
+
+-- Method 2: LEFT JOIN ... IS NULL
+SELECT d.name
+FROM departments d
+LEFT JOIN employees e ON e.dept_id = d.id
+WHERE e.id IS NULL;
+
+-- Method 3: NOT IN (BEWARE: breaks if right side has NULLs!)
+SELECT name FROM departments
+WHERE id NOT IN (SELECT dept_id FROM employees);  -- DANGER if dept_id can be NULL</code></pre>
+      <div class="alert danger"><strong>Critical gotcha:</strong> <code>NOT IN (subquery with NULL)</code> returns 0 rows because <code>x != NULL</code> is unknown. Always use <code>NOT EXISTS</code> instead.</div>
+
+      <h3>SEMI JOIN (EXISTS / IN)</h3>
+<pre><code class="language-sql">-- Find departments that have at least one employee
+SELECT d.name
+FROM departments d
+WHERE EXISTS (SELECT 1 FROM employees e WHERE e.dept_id = d.id);
+
+-- Same with IN
+SELECT name FROM departments
+WHERE id IN (SELECT dept_id FROM employees WHERE dept_id IS NOT NULL);</code></pre>
+
+      <h3>Multiple Joins</h3>
+<pre><code class="language-sql">SELECT o.order_id, c.name AS customer, p.name AS product, oi.quantity
+FROM orders o
+INNER JOIN customers c ON o.customer_id = c.id
+INNER JOIN order_items oi ON oi.order_id = o.id
+INNER JOIN products p ON oi.product_id = p.id
+WHERE o.order_date >= '2026-01-01';</code></pre>
+
+      <h3>USING vs ON</h3>
+<pre><code class="language-sql">-- ON: explicit, works with different column names
+SELECT * FROM employees e JOIN departments d ON e.dept_id = d.id;
+
+-- USING: shorthand when column names match
+SELECT * FROM orders JOIN customers USING (customer_id);
+-- Returns customer_id only ONCE in output</code></pre>
+
+      <h3>Concepts Checklist</h3>
+      <div class="check-row"><input type="checkbox" id="j1"><label for="j1">INNER JOIN behavior</label></div>
+      <div class="check-row"><input type="checkbox" id="j2"><label for="j2">LEFT/RIGHT/FULL OUTER JOIN behavior</label></div>
+      <div class="check-row"><input type="checkbox" id="j3"><label for="j3">CROSS JOIN use cases</label></div>
+      <div class="check-row"><input type="checkbox" id="j4"><label for="j4">SELF JOIN (manager-employee, hierarchical data)</label></div>
+      <div class="check-row"><input type="checkbox" id="j5"><label for="j5">ANTI JOIN (NOT EXISTS vs NOT IN — NULL gotcha)</label></div>
+      <div class="check-row"><input type="checkbox" id="j6"><label for="j6">SEMI JOIN (EXISTS / IN)</label></div>
+      <div class="check-row"><input type="checkbox" id="j7"><label for="j7">Multi-table joins (5+ tables)</label></div>
+      <div class="check-row"><input type="checkbox" id="j8"><label for="j8">USING vs ON syntax</label></div>
+    </div>
+  </div>
+
+  <!-- WINDOW FUNCTIONS -->
+  <div class="tab-content" id="window">
+    <div class="section">
+      <h2>3. Window Functions <span class="badge frequent">Very Frequent</span></h2>
+      <p>Window functions perform calculations across a "window" of rows related to the current row — without collapsing rows like GROUP BY does. <strong>This is the #1 differentiator in SQL interviews.</strong></p>
+
+      <h3>Syntax</h3>
+<pre><code class="language-sql">function_name(args) OVER (
+  PARTITION BY col1, col2     -- divides rows into groups
+  ORDER BY col3                -- orders rows within each group
+  ROWS BETWEEN ... AND ...     -- defines window frame (optional)
+)</code></pre>
+
+      <h3>Ranking Functions</h3>
+<pre><code class="language-sql">-- Sample data: sales(emp_id, region, amount)
+
+SELECT emp_id, region, amount,
+  ROW_NUMBER() OVER (PARTITION BY region ORDER BY amount DESC) AS row_num,
+  RANK()       OVER (PARTITION BY region ORDER BY amount DESC) AS rnk,
+  DENSE_RANK() OVER (PARTITION BY region ORDER BY amount DESC) AS dense_rnk,
+  NTILE(4)     OVER (PARTITION BY region ORDER BY amount DESC) AS quartile
+FROM sales;
+
+-- Differences:
+-- ROW_NUMBER:  1, 2, 3, 4   (always unique)
+-- RANK:        1, 2, 2, 4   (gaps after ties)
+-- DENSE_RANK:  1, 2, 2, 3   (no gaps after ties)
+-- NTILE(4):    distributes rows into 4 equal buckets</code></pre>
+
+      <div class="alert info"><strong>When to use which:</strong>
+        <ul style="margin: 6px 0 0 20px;">
+          <li><code>ROW_NUMBER</code> — when you need unique ordering (deduplication, pagination)</li>
+          <li><code>RANK</code> — Olympic-style ranking with gaps (2 silver → next is 4th)</li>
+          <li><code>DENSE_RANK</code> — gap-less ranking (top N distinct salaries)</li>
+          <li><code>NTILE(n)</code> — divide into n equal buckets (quartiles, deciles)</li>
+        </ul>
+      </div>
+
+      <h3>LAG and LEAD — Access previous/next row</h3>
+<pre><code class="language-sql">-- Compare each day's sales with previous day
+SELECT
+  sale_date,
+  amount,
+  LAG(amount, 1) OVER (ORDER BY sale_date) AS prev_day_amount,
+  LEAD(amount, 1) OVER (ORDER BY sale_date) AS next_day_amount,
+  amount - LAG(amount, 1) OVER (ORDER BY sale_date) AS day_over_day_change
+FROM daily_sales;
+
+-- LAG/LEAD with default value
+LAG(amount, 1, 0) OVER (ORDER BY sale_date)  -- returns 0 if no previous row
+
+-- LAG with offset 7 for week-over-week
+LAG(amount, 7) OVER (ORDER BY sale_date)</code></pre>
+
+      <h3>FIRST_VALUE, LAST_VALUE, NTH_VALUE</h3>
+<pre><code class="language-sql">SELECT
+  product, sale_date, amount,
+  FIRST_VALUE(amount) OVER (
+    PARTITION BY product ORDER BY sale_date
+  ) AS first_sale,
+  LAST_VALUE(amount) OVER (
+    PARTITION BY product ORDER BY sale_date
+    ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+  ) AS last_sale
+FROM sales;</code></pre>
+      <div class="alert warn"><strong>LAST_VALUE trap:</strong> Without explicit frame <code>UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING</code>, default frame is <code>RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW</code> — so LAST_VALUE returns current row, not the actual last!</div>
+
+      <h3>Aggregate Functions as Windows</h3>
+<pre><code class="language-sql">-- Running total
+SELECT
+  order_date,
+  amount,
+  SUM(amount) OVER (ORDER BY order_date) AS running_total,
+  AVG(amount) OVER (ORDER BY order_date ROWS BETWEEN 6 PRECEDING AND CURRENT ROW) AS rolling_7day_avg,
+  COUNT(*) OVER (PARTITION BY customer_id) AS total_orders_by_customer
+FROM orders;</code></pre>
+
+      <h3>Window Frame Clauses</h3>
+<pre><code class="language-sql">-- ROWS: physical row count
+ROWS BETWEEN 2 PRECEDING AND CURRENT ROW           -- 3 rows total
+ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW   -- running total
+ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING   -- remaining sum
+ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING  -- full partition
+
+-- RANGE: value-based (used with ORDER BY date for date ranges)
+RANGE BETWEEN INTERVAL '7' DAY PRECEDING AND CURRENT ROW</code></pre>
+
+      <h3>Real-World Examples</h3>
+
+      <h4>① Top N per group (Top 3 highest-paid per department)</h4>
+<pre><code class="language-sql">SELECT *
+FROM (
+  SELECT name, department, salary,
+         DENSE_RANK() OVER (PARTITION BY department ORDER BY salary DESC) AS rnk
+  FROM employees
+) ranked
+WHERE rnk &lt;= 3;</code></pre>
+
+      <h4>② Deduplication (keep latest record per customer)</h4>
+<pre><code class="language-sql">SELECT *
+FROM (
+  SELECT *, ROW_NUMBER() OVER (PARTITION BY customer_id ORDER BY updated_at DESC) AS rn
+  FROM customer_records
+) t
+WHERE rn = 1;</code></pre>
+
+      <h4>③ Find sessions (gap between events &gt; 30 min)</h4>
+<pre><code class="language-sql">WITH events_with_gap AS (
+  SELECT user_id, event_time,
+         event_time - LAG(event_time) OVER (PARTITION BY user_id ORDER BY event_time) AS gap
+  FROM user_events
+),
+session_starts AS (
+  SELECT *,
+         CASE WHEN gap IS NULL OR gap > INTERVAL '30 minutes' THEN 1 ELSE 0 END AS is_new_session
+  FROM events_with_gap
+),
+session_ids AS (
+  SELECT *,
+         SUM(is_new_session) OVER (PARTITION BY user_id ORDER BY event_time) AS session_id
+  FROM session_starts
+)
+SELECT user_id, session_id, MIN(event_time) AS session_start, MAX(event_time) AS session_end
+FROM session_ids
+GROUP BY user_id, session_id;</code></pre>
+
+      <h4>④ Percentage of total</h4>
+<pre><code class="language-sql">SELECT product, amount,
+       amount * 100.0 / SUM(amount) OVER () AS pct_of_total,
+       amount * 100.0 / SUM(amount) OVER (PARTITION BY category) AS pct_of_category
+FROM products;</code></pre>
+
+      <h4>⑤ Find gaps in a sequence (missing IDs)</h4>
+<pre><code class="language-sql">SELECT id + 1 AS missing_start, next_id - 1 AS missing_end
+FROM (
+  SELECT id, LEAD(id) OVER (ORDER BY id) AS next_id
+  FROM tickets
+) t
+WHERE next_id - id > 1;</code></pre>
+
+      <h3>Concepts Checklist</h3>
+      <div class="check-row"><input type="checkbox" id="w1"><label for="w1">OVER() clause syntax with PARTITION BY and ORDER BY</label></div>
+      <div class="check-row"><input type="checkbox" id="w2"><label for="w2">ROW_NUMBER vs RANK vs DENSE_RANK</label></div>
+      <div class="check-row"><input type="checkbox" id="w3"><label for="w3">NTILE for percentiles/quartiles</label></div>
+      <div class="check-row"><input type="checkbox" id="w4"><label for="w4">LAG and LEAD for time-series comparisons</label></div>
+      <div class="check-row"><input type="checkbox" id="w5"><label for="w5">FIRST_VALUE / LAST_VALUE (and frame trap)</label></div>
+      <div class="check-row"><input type="checkbox" id="w6"><label for="w6">Aggregate windows (running totals, rolling averages)</label></div>
+      <div class="check-row"><input type="checkbox" id="w7"><label for="w7">Frame clauses (ROWS vs RANGE)</label></div>
+      <div class="check-row"><input type="checkbox" id="w8"><label for="w8">Top-N per group pattern</label></div>
+      <div class="check-row"><input type="checkbox" id="w9"><label for="w9">Deduplication pattern</label></div>
+      <div class="check-row"><input type="checkbox" id="w10"><label for="w10">Sessionization pattern (gaps and islands)</label></div>
+    </div>
+  </div>
+
+  <!-- CTE / SUBQUERIES -->
+  <div class="tab-content" id="cte">
+    <div class="section">
+      <h2>4. CTEs & Subqueries</h2>
+
+      <h3>Common Table Expression (CTE) — Basic</h3>
+<pre><code class="language-sql">WITH high_value_orders AS (
+  SELECT customer_id, SUM(amount) AS total
+  FROM orders
+  GROUP BY customer_id
+  HAVING SUM(amount) > 10000
+)
+SELECT c.name, h.total
+FROM customers c
+JOIN high_value_orders h ON c.id = h.customer_id;</code></pre>
+
+      <h3>Multiple CTEs (chained)</h3>
+<pre><code class="language-sql">WITH
+monthly_sales AS (
+  SELECT DATE_TRUNC('month', order_date) AS month, SUM(amount) AS total
+  FROM orders
+  GROUP BY DATE_TRUNC('month', order_date)
+),
+growth AS (
+  SELECT month, total,
+         LAG(total) OVER (ORDER BY month) AS prev_month,
+         (total - LAG(total) OVER (ORDER BY month)) * 100.0
+           / NULLIF(LAG(total) OVER (ORDER BY month), 0) AS growth_pct
+  FROM monthly_sales
+)
+SELECT * FROM growth WHERE growth_pct > 10;</code></pre>
+
+      <h3>Recursive CTE — Hierarchies, Sequences</h3>
+<pre><code class="language-sql">-- Generate dates from 2026-01-01 to 2026-12-31
+WITH RECURSIVE dates AS (
+  SELECT DATE '2026-01-01' AS dt
+  UNION ALL
+  SELECT dt + INTERVAL '1 day'
+  FROM dates
+  WHERE dt < DATE '2026-12-31'
+)
+SELECT * FROM dates;
+
+-- Employee hierarchy (org chart)
+WITH RECURSIVE org_chart AS (
+  -- Anchor: top-level (CEO has no manager)
+  SELECT id, name, manager_id, 1 AS level, name AS path
+  FROM employees
+  WHERE manager_id IS NULL
+
+  UNION ALL
+
+  -- Recursive: find reports
+  SELECT e.id, e.name, e.manager_id, oc.level + 1, oc.path || ' > ' || e.name
+  FROM employees e
+  JOIN org_chart oc ON e.manager_id = oc.id
+)
+SELECT * FROM org_chart ORDER BY level, name;
+
+-- Bill of Materials (parts containing parts)
+WITH RECURSIVE bom AS (
+  SELECT part_id, component_id, quantity, 1 AS depth
+  FROM parts_components
+  WHERE part_id = 'PRODUCT_X'
+
+  UNION ALL
+
+  SELECT pc.part_id, pc.component_id, pc.quantity * b.quantity, b.depth + 1
+  FROM parts_components pc
+  JOIN bom b ON pc.part_id = b.component_id
+)
+SELECT component_id, SUM(quantity) AS total_qty
+FROM bom
+GROUP BY component_id;</code></pre>
+
+      <div class="alert warn"><strong>Recursive CTE caution:</strong> Always include a stopping condition (e.g., depth limit, IS NULL check) or you'll get infinite recursion / errors.</div>
+
+      <h3>Subquery Types</h3>
+
+      <h4>Scalar Subquery (returns single value)</h4>
+<pre><code class="language-sql">SELECT name, salary,
+       (SELECT AVG(salary) FROM employees) AS company_avg,
+       salary - (SELECT AVG(salary) FROM employees) AS diff_from_avg
+FROM employees;</code></pre>
+
+      <h4>Row Subquery</h4>
+<pre><code class="language-sql">SELECT * FROM employees
+WHERE (dept_id, salary) = (SELECT dept_id, MAX(salary) FROM employees WHERE dept_id = 10);</code></pre>
+
+      <h4>Table Subquery (in FROM)</h4>
+<pre><code class="language-sql">SELECT dept, avg_sal
+FROM (
+  SELECT dept_id AS dept, AVG(salary) AS avg_sal
+  FROM employees
+  GROUP BY dept_id
+) AS dept_stats
+WHERE avg_sal > 50000;</code></pre>
+
+      <h4>Correlated Subquery (runs per outer row)</h4>
+<pre><code class="language-sql">-- Find employees earning above their department's average
+SELECT e1.name, e1.salary, e1.dept_id
+FROM employees e1
+WHERE e1.salary > (
+  SELECT AVG(e2.salary)
+  FROM employees e2
+  WHERE e2.dept_id = e1.dept_id    -- correlation with outer query
+);</code></pre>
+
+      <div class="alert info"><strong>Correlated subquery vs window function:</strong> Window functions are usually faster than correlated subqueries. Above query rewritten:
+<pre style="margin-top: 6px;"><code class="language-sql">SELECT * FROM (
+  SELECT name, salary, dept_id, AVG(salary) OVER (PARTITION BY dept_id) AS dept_avg
+  FROM employees
+) t WHERE salary > dept_avg;</code></pre>
+      </div>
+
+      <h3>CTE vs Subquery — When to Use What</h3>
+      <table>
+        <thead><tr><th>Use CTE when</th><th>Use Subquery when</th></tr></thead>
+        <tbody>
+          <tr><td>Logic is complex / multi-step</td><td>Simple, single-use logic</td></tr>
+          <tr><td>Need to reference result multiple times</td><td>Used only once inline</td></tr>
+          <tr><td>Need recursion</td><td>No recursion needed</td></tr>
+          <tr><td>Improving readability</td><td>Inline brevity is fine</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Concepts Checklist</h3>
+      <div class="check-row"><input type="checkbox" id="c1"><label for="c1">Basic CTE syntax (WITH ... AS)</label></div>
+      <div class="check-row"><input type="checkbox" id="c2"><label for="c2">Multiple chained CTEs</label></div>
+      <div class="check-row"><input type="checkbox" id="c3"><label for="c3">Recursive CTE (anchor + recursive part)</label></div>
+      <div class="check-row"><input type="checkbox" id="c4"><label for="c4">Scalar / Row / Table / Correlated subqueries</label></div>
+      <div class="check-row"><input type="checkbox" id="c5"><label for="c5">When to choose CTE vs subquery vs window function</label></div>
+      <div class="check-row"><input type="checkbox" id="c6"><label for="c6">Generate date sequences using recursive CTE</label></div>
+      <div class="check-row"><input type="checkbox" id="c7"><label for="c7">Hierarchical queries (org chart, BOM)</label></div>
+    </div>
+  </div>
+
+  <!-- AGGREGATIONS -->
+  <div class="tab-content" id="aggregations">
+    <div class="section">
+      <h2>5. Advanced Aggregations</h2>
+
+      <h3>Standard Aggregates</h3>
+<pre><code class="language-sql">SELECT
+  COUNT(*),                    -- all rows incl. NULLs
+  COUNT(column),               -- non-null values
+  COUNT(DISTINCT column),
+  SUM(amount),
+  AVG(amount),
+  MIN(amount), MAX(amount),
+  STDDEV(amount),              -- standard deviation
+  VARIANCE(amount),
+  STRING_AGG(name, ', ')       -- Postgres / SQL Server (LISTAGG in Oracle, GROUP_CONCAT in MySQL)
+FROM sales;</code></pre>
+
+      <h3>GROUP BY with multiple columns</h3>
+<pre><code class="language-sql">SELECT region, product_category, SUM(amount) AS total
+FROM sales
+GROUP BY region, product_category
+ORDER BY region, total DESC;</code></pre>
+
+      <h3>ROLLUP — Hierarchical subtotals</h3>
+<pre><code class="language-sql">SELECT region, product, SUM(amount) AS total
+FROM sales
+GROUP BY ROLLUP (region, product);
+
+-- Adds subtotals at:
+--   1. (region, product) - regular groups
+--   2. (region, NULL)    - subtotal per region
+--   3. (NULL, NULL)      - grand total</code></pre>
+
+      <h3>CUBE — All possible combinations</h3>
+<pre><code class="language-sql">SELECT region, product, SUM(amount)
+FROM sales
+GROUP BY CUBE (region, product);
+
+-- Includes:
+-- (region, product), (region, NULL), (NULL, product), (NULL, NULL)</code></pre>
+
+      <h3>GROUPING SETS — Custom grouping</h3>
+<pre><code class="language-sql">SELECT region, product, SUM(amount)
+FROM sales
+GROUP BY GROUPING SETS (
+  (region, product),    -- per region per product
+  (region),             -- per region total
+  ()                    -- grand total
+);
+
+-- Use GROUPING() to distinguish NULL vs subtotal NULL
+SELECT
+  COALESCE(region, 'ALL REGIONS') AS region,
+  COALESCE(product, 'ALL PRODUCTS') AS product,
+  SUM(amount),
+  GROUPING(region) AS is_region_total,
+  GROUPING(product) AS is_product_total
+FROM sales
+GROUP BY GROUPING SETS ((region, product), (region), (product), ());</code></pre>
+
+      <h3>PIVOT — Rows to Columns</h3>
+<pre><code class="language-sql">-- Standard SQL (works everywhere using CASE)
+SELECT
+  product,
+  SUM(CASE WHEN region = 'North' THEN amount ELSE 0 END) AS north,
+  SUM(CASE WHEN region = 'South' THEN amount ELSE 0 END) AS south,
+  SUM(CASE WHEN region = 'East'  THEN amount ELSE 0 END) AS east,
+  SUM(CASE WHEN region = 'West'  THEN amount ELSE 0 END) AS west
+FROM sales
+GROUP BY product;
+
+-- SQL Server / Oracle native PIVOT
+SELECT * FROM sales
+PIVOT (
+  SUM(amount) FOR region IN ('North', 'South', 'East', 'West')
+);
+
+-- Snowflake
+SELECT * FROM sales
+PIVOT (SUM(amount) FOR region IN ('North', 'South', 'East', 'West'));</code></pre>
+
+      <h3>UNPIVOT — Columns to Rows</h3>
+<pre><code class="language-sql">-- Standard SQL using UNION ALL
+SELECT product, 'north' AS region, north AS amount FROM pivoted
+UNION ALL
+SELECT product, 'south' AS region, south AS amount FROM pivoted
+UNION ALL
+SELECT product, 'east'  AS region, east  AS amount FROM pivoted
+UNION ALL
+SELECT product, 'west'  AS region, west  AS amount FROM pivoted;
+
+-- Snowflake / SQL Server native
+SELECT * FROM pivoted
+UNPIVOT (amount FOR region IN (north, south, east, west));</code></pre>
+
+      <h3>FILTER Clause (PostgreSQL / Snowflake / SQLite)</h3>
+<pre><code class="language-sql">SELECT
+  COUNT(*) AS total_orders,
+  COUNT(*) FILTER (WHERE status = 'shipped') AS shipped_orders,
+  COUNT(*) FILTER (WHERE status = 'cancelled') AS cancelled_orders,
+  SUM(amount) FILTER (WHERE region = 'North') AS north_sales
+FROM orders;</code></pre>
+
+      <h3>HAVING with Aggregates</h3>
+<pre><code class="language-sql">-- Customers with > 5 orders and total spend > 10000
+SELECT customer_id, COUNT(*) AS orders, SUM(amount) AS total
+FROM orders
+GROUP BY customer_id
+HAVING COUNT(*) > 5 AND SUM(amount) > 10000;</code></pre>
+
+      <h3>Concepts Checklist</h3>
+      <div class="check-row"><input type="checkbox" id="a1"><label for="a1">All basic aggregates incl. STRING_AGG/LISTAGG</label></div>
+      <div class="check-row"><input type="checkbox" id="a2"><label for="a2">ROLLUP for subtotals</label></div>
+      <div class="check-row"><input type="checkbox" id="a3"><label for="a3">CUBE for all combinations</label></div>
+      <div class="check-row"><input type="checkbox" id="a4"><label for="a4">GROUPING SETS for custom groupings</label></div>
+      <div class="check-row"><input type="checkbox" id="a5"><label for="a5">PIVOT/UNPIVOT (CASE-based and native)</label></div>
+      <div class="check-row"><input type="checkbox" id="a6"><label for="a6">FILTER clause for conditional aggregates</label></div>
+    </div>
+  </div>
+
+  <!-- FUNCTIONS -->
+  <div class="tab-content" id="functions">
+    <div class="section">
+      <h2>6. Built-in Functions</h2>
+
+      <h3>String Functions</h3>
+<pre><code class="language-sql">-- Length
+LENGTH('hello')               -- 5 (Postgres/MySQL/Snowflake)
+LEN('hello')                  -- SQL Server
+
+-- Case
+UPPER('hello'), LOWER('HELLO'), INITCAP('hello world')   -- 'Hello World'
+
+-- Concatenation
+CONCAT('Hello', ' ', 'World')
+'Hello' || ' ' || 'World'     -- standard SQL
+
+-- Substring
+SUBSTRING('hello world' FROM 7 FOR 5)    -- 'world'
+SUBSTR('hello', 1, 3)                    -- 'hel'
+LEFT('hello', 3), RIGHT('hello', 3)      -- 'hel', 'llo'
+
+-- Trim and pad
+TRIM('   hello   ')           -- 'hello'
+LTRIM('   hello'), RTRIM('hello   ')
+LPAD('5', 3, '0')             -- '005'
+RPAD('hi', 5, '!')            -- 'hi!!!'
+
+-- Replace
+REPLACE('hello world', 'world', 'SQL')   -- 'hello SQL'
+
+-- Search
+POSITION('llo' IN 'hello')    -- 3
+INSTR('hello', 'llo')         -- 3 (Oracle/MySQL)
+CHARINDEX('llo', 'hello')     -- SQL Server
+
+-- Split
+SPLIT_PART('a,b,c', ',', 2)   -- 'b' (Postgres/Snowflake)
+STRING_SPLIT('a,b,c', ',')    -- SQL Server table-valued
+
+-- Regex
+REGEXP_REPLACE(email, '@.*', '@example.com')
+REGEXP_LIKE(phone, '^\+91[0-9]{10}$')
+REGEXP_SUBSTR('order-12345', '[0-9]+')   -- '12345'</code></pre>
+
+      <h3>Date/Time Functions</h3>
+<pre><code class="language-sql">-- Current
+CURRENT_DATE, CURRENT_TIMESTAMP, NOW()
+SYSDATE                       -- Oracle
+GETDATE()                     -- SQL Server
+
+-- Extract parts
+EXTRACT(YEAR FROM order_date)
+EXTRACT(MONTH FROM order_date)
+EXTRACT(DOW FROM order_date)  -- day of week
+DATE_PART('hour', timestamp_col)
+
+-- Truncate
+DATE_TRUNC('month', order_date)    -- 2026-05-01 from 2026-05-22
+DATE_TRUNC('week', order_date)
+DATE_TRUNC('quarter', order_date)
+
+-- Arithmetic
+order_date + INTERVAL '7 days'
+order_date - INTERVAL '1 month'
+DATEADD(day, 7, order_date)        -- SQL Server
+DATEDIFF(day, start_date, end_date)
+
+-- Format
+TO_CHAR(NOW(), 'YYYY-MM-DD HH24:MI:SS')
+TO_DATE('2026-05-22', 'YYYY-MM-DD')
+
+-- Age / interval
+AGE(end_date, start_date)          -- Postgres
+end_date - start_date              -- days between
+
+-- Last day of month / day of week
+LAST_DAY(order_date)
+DAYNAME(order_date)</code></pre>
+
+      <h3>Numeric Functions</h3>
+<pre><code class="language-sql">ROUND(3.14159, 2)             -- 3.14
+CEIL(3.2), FLOOR(3.8)         -- 4, 3
+ABS(-5)                        -- 5
+MOD(10, 3) or 10 % 3          -- 1
+POWER(2, 10)                   -- 1024
+SQRT(16)                       -- 4
+SIGN(-5)                       -- -1
+
+-- Safe division
+amount / NULLIF(quantity, 0)   -- returns NULL instead of error</code></pre>
+
+      <h3>Conditional Functions</h3>
+<pre><code class="language-sql">-- CASE expression (most universal)
+SELECT
+  CASE
+    WHEN age < 13 THEN 'child'
+    WHEN age < 20 THEN 'teen'
+    WHEN age < 60 THEN 'adult'
+    ELSE 'senior'
+  END AS age_group
+FROM users;
+
+-- Simple CASE
+CASE status
+  WHEN 'A' THEN 'Active'
+  WHEN 'I' THEN 'Inactive'
+  ELSE 'Unknown'
+END
+
+-- COALESCE / NULLIF
+COALESCE(nickname, first_name, 'Anonymous')
+NULLIF(amount, 0)             -- NULL if amount = 0
+
+-- IIF (SQL Server) / IF (MySQL)
+IIF(score > 50, 'pass', 'fail')
+IF(score > 50, 'pass', 'fail')
+
+-- GREATEST / LEAST
+GREATEST(col1, col2, col3)    -- max of values per row
+LEAST(col1, col2, col3)</code></pre>
+
+      <h3>Type Conversion</h3>
+<pre><code class="language-sql">CAST('123' AS INTEGER)
+CAST(price AS DECIMAL(10,2))
+'123'::INTEGER                -- Postgres shorthand
+CONVERT(INT, '123')           -- SQL Server
+TO_NUMBER('123'), TO_DATE('2026-01-01', 'YYYY-MM-DD')</code></pre>
+
+      <h3>JSON Functions (PostgreSQL / Snowflake)</h3>
+<pre><code class="language-sql">-- Sample: {"user": {"name": "Asha", "age": 30}, "items": ["a", "b"]}
+
+-- Extract
+SELECT data->'user'->>'name'           -- 'Asha' (Postgres, ->> returns text)
+SELECT data:user.name::string          -- Snowflake
+SELECT JSON_VALUE(data, '$.user.name') -- SQL Server / Oracle
+SELECT data['user']['name']            -- Some dialects
+
+-- Array element
+SELECT data->'items'->>0               -- 'a' (Postgres)
+SELECT data:items[0]                   -- Snowflake
+
+-- Construct JSON
+SELECT JSON_BUILD_OBJECT('name', name, 'age', age) FROM users;     -- Postgres
+SELECT OBJECT_CONSTRUCT('name', name, 'age', age) FROM users;      -- Snowflake
+
+-- Flatten array
+SELECT id, t.value
+FROM orders, LATERAL FLATTEN(input => items) t;    -- Snowflake
+
+SELECT id, jsonb_array_elements(items) FROM orders;  -- Postgres</code></pre>
+
+      <h3>Concepts Checklist</h3>
+      <div class="check-row"><input type="checkbox" id="fn1"><label for="fn1">String manipulation (SUBSTRING, REPLACE, TRIM, regex)</label></div>
+      <div class="check-row"><input type="checkbox" id="fn2"><label for="fn2">Date arithmetic and DATE_TRUNC</label></div>
+      <div class="check-row"><input type="checkbox" id="fn3"><label for="fn3">EXTRACT for date parts</label></div>
+      <div class="check-row"><input type="checkbox" id="fn4"><label for="fn4">CASE WHEN (universal conditional)</label></div>
+      <div class="check-row"><input type="checkbox" id="fn5"><label for="fn5">COALESCE / NULLIF / GREATEST / LEAST</label></div>
+      <div class="check-row"><input type="checkbox" id="fn6"><label for="fn6">CAST and dialect type conversion</label></div>
+      <div class="check-row"><input type="checkbox" id="fn7"><label for="fn7">JSON extraction (Postgres / Snowflake)</label></div>
+    </div>
+  </div>
+
+  <!-- PERFORMANCE -->
+  <div class="tab-content" id="performance">
+    <div class="section">
+      <h2>7. Performance & Optimization</h2>
+
+      <h3>Indexes</h3>
+<pre><code class="language-sql">-- B-tree (default, for equality and range)
+CREATE INDEX idx_orders_customer ON orders(customer_id);
+
+-- Composite (column order matters!)
+CREATE INDEX idx_orders_cust_date ON orders(customer_id, order_date);
+-- Useful for: WHERE customer_id = X AND order_date > Y
+-- Also useful for: WHERE customer_id = X
+-- NOT useful for: WHERE order_date > Y (alone)
+
+-- Unique
+CREATE UNIQUE INDEX idx_users_email ON users(email);
+
+-- Partial / Filtered
+CREATE INDEX idx_active_orders ON orders(customer_id) WHERE status = 'active';
+
+-- Functional / Expression
+CREATE INDEX idx_lower_email ON users(LOWER(email));
+
+-- Covering / Include (Postgres / SQL Server)
+CREATE INDEX idx_cover ON orders(customer_id) INCLUDE (amount, order_date);
+
+-- Drop
+DROP INDEX idx_orders_customer;</code></pre>
+
+      <div class="alert info"><strong>Index leftmost prefix rule:</strong> A composite index on (a, b, c) helps queries filtering by a, (a,b), or (a,b,c) — but NOT just b or c.</div>
+
+      <h3>EXPLAIN PLAN</h3>
+<pre><code class="language-sql">EXPLAIN SELECT * FROM orders WHERE customer_id = 100;
+EXPLAIN ANALYZE SELECT * FROM orders WHERE customer_id = 100;  -- runs query
+EXPLAIN (FORMAT JSON, ANALYZE) SELECT ...;                     -- Postgres detailed
+
+-- Look for:
+-- Seq Scan         → full table scan (bad for large tables)
+-- Index Scan       → using index (good)
+-- Index Only Scan  → best (covered by index)
+-- Nested Loop      → small joins OK; bad for large
+-- Hash Join        → great for large unsorted joins
+-- Merge Join       → great for pre-sorted data
+-- Filter           → rows filtered AFTER scan (often missing index)</code></pre>
+
+      <h3>Common Performance Anti-Patterns</h3>
+      <div class="grid-2">
+        <div>
+          <h4>❌ Functions on indexed columns</h4>
+<pre><code class="language-sql">-- BAD: index not used
+WHERE YEAR(order_date) = 2026
+
+-- GOOD: use range
+WHERE order_date >= '2026-01-01'
+  AND order_date < '2027-01-01'</code></pre>
+        </div>
+        <div>
+          <h4>❌ Leading wildcard in LIKE</h4>
+<pre><code class="language-sql">-- BAD: index not used
+WHERE name LIKE '%smith'
+
+-- GOOD or use full-text/trigram index
+WHERE name LIKE 'smith%'</code></pre>
+        </div>
+        <div>
+          <h4>❌ SELECT *</h4>
+<pre><code class="language-sql">-- BAD: pulls unused columns
+SELECT * FROM orders;
+
+-- GOOD: only what you need
+SELECT id, customer_id, amount FROM orders;</code></pre>
+        </div>
+        <div>
+          <h4>❌ OR conditions on different columns</h4>
+<pre><code class="language-sql">-- BAD: hard to index
+WHERE col1 = 'a' OR col2 = 'b'
+
+-- GOOD: UNION ALL
+SELECT ... WHERE col1 = 'a'
+UNION ALL
+SELECT ... WHERE col2 = 'b' AND col1 != 'a'</code></pre>
+        </div>
+        <div>
+          <h4>❌ Implicit type casting</h4>
+<pre><code class="language-sql">-- BAD: customer_id is INT
+WHERE customer_id = '100'   -- forces conversion
+
+-- GOOD
+WHERE customer_id = 100</code></pre>
+        </div>
+        <div>
+          <h4>❌ DISTINCT to hide bad joins</h4>
+<pre><code class="language-sql">-- BAD: DISTINCT hiding cartesian
+SELECT DISTINCT c.* FROM customers c, orders o
+WHERE c.id = o.customer_id
+
+-- GOOD: use EXISTS
+SELECT * FROM customers c
+WHERE EXISTS (SELECT 1 FROM orders WHERE customer_id = c.id)</code></pre>
+        </div>
+      </div>
+
+      <h3>Partitioning</h3>
+<pre><code class="language-sql">-- Range partitioning by date (Postgres)
+CREATE TABLE orders (
+  id BIGSERIAL,
+  customer_id INT,
+  order_date DATE NOT NULL,
+  amount DECIMAL
+) PARTITION BY RANGE (order_date);
+
+CREATE TABLE orders_2026_q1 PARTITION OF orders
+  FOR VALUES FROM ('2026-01-01') TO ('2026-04-01');
+
+CREATE TABLE orders_2026_q2 PARTITION OF orders
+  FOR VALUES FROM ('2026-04-01') TO ('2026-07-01');
+
+-- Benefits: queries with date filter only scan relevant partition (partition pruning)
+-- Easier archival: DROP TABLE orders_2024_q1;
+
+-- Hash partitioning (distribute evenly)
+CREATE TABLE users (...) PARTITION BY HASH (user_id);
+
+-- List partitioning (specific values)
+CREATE TABLE sales PARTITION BY LIST (region);
+CREATE TABLE sales_apac PARTITION OF sales FOR VALUES IN ('IN', 'SG', 'JP');</code></pre>
+
+      <h3>Materialized Views</h3>
+<pre><code class="language-sql">-- Precomputed query result, stored physically
+CREATE MATERIALIZED VIEW daily_sales_summary AS
+SELECT order_date, region, SUM(amount) AS total
+FROM orders
+GROUP BY order_date, region;
+
+-- Refresh (Postgres)
+REFRESH MATERIALIZED VIEW daily_sales_summary;
+REFRESH MATERIALIZED VIEW CONCURRENTLY daily_sales_summary;  -- no read lock
+
+-- Snowflake: auto-maintained
+CREATE MATERIALIZED VIEW mv_sales AS SELECT ... FROM orders;</code></pre>
+
+      <h3>Query Optimization Checklist</h3>
+      <div class="check-row"><input type="checkbox" id="p1"><label for="p1">Add indexes on JOIN keys and WHERE filter columns</label></div>
+      <div class="check-row"><input type="checkbox" id="p2"><label for="p2">Composite index column order = selectivity high → low</label></div>
+      <div class="check-row"><input type="checkbox" id="p3"><label for="p3">Read EXPLAIN ANALYZE output</label></div>
+      <div class="check-row"><input type="checkbox" id="p4"><label for="p4">Avoid functions on indexed columns in WHERE</label></div>
+      <div class="check-row"><input type="checkbox" id="p5"><label for="p5">Avoid SELECT * in production</label></div>
+      <div class="check-row"><input type="checkbox" id="p6"><label for="p6">Replace NOT IN with NOT EXISTS</label></div>
+      <div class="check-row"><input type="checkbox" id="p7"><label for="p7">Use LIMIT for pagination, paginate via keyset (not OFFSET) for huge tables</label></div>
+      <div class="check-row"><input type="checkbox" id="p8"><label for="p8">Partition large fact tables by date</label></div>
+      <div class="check-row"><input type="checkbox" id="p9"><label for="p9">Materialize expensive aggregations</label></div>
+      <div class="check-row"><input type="checkbox" id="p10"><label for="p10">UPDATE statistics regularly (ANALYZE)</label></div>
+    </div>
+  </div>
+
+  <!-- ADVANCED -->
+  <div class="tab-content" id="advanced">
+    <div class="section">
+      <h2>8. Stored Procedures, Triggers & Transactions</h2>
+
+      <h3>Stored Procedure</h3>
+<pre><code class="language-sql">-- PostgreSQL
+CREATE OR REPLACE PROCEDURE archive_old_orders(cutoff DATE)
+LANGUAGE plpgsql AS $$
+BEGIN
+  INSERT INTO orders_archive
+    SELECT * FROM orders WHERE order_date < cutoff;
+  DELETE FROM orders WHERE order_date < cutoff;
+  COMMIT;
+END;
+$$;
+
+CALL archive_old_orders('2024-01-01');</code></pre>
+
+      <h3>Function (returns value)</h3>
+<pre><code class="language-sql">CREATE OR REPLACE FUNCTION get_customer_total(cust_id INT)
+RETURNS DECIMAL AS $$
+DECLARE
+  total DECIMAL;
+BEGIN
+  SELECT COALESCE(SUM(amount), 0) INTO total
+  FROM orders WHERE customer_id = cust_id;
+  RETURN total;
+END;
+$$ LANGUAGE plpgsql;
+
+SELECT get_customer_total(100);</code></pre>
+
+      <h3>Triggers</h3>
+<pre><code class="language-sql">CREATE OR REPLACE FUNCTION audit_changes()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO audit_log(table_name, action, row_id, changed_at, old_data, new_data)
+  VALUES (
+    TG_TABLE_NAME, TG_OP, NEW.id, NOW(),
+    row_to_json(OLD), row_to_json(NEW)
+  );
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_orders_audit
+AFTER INSERT OR UPDATE OR DELETE ON orders
+FOR EACH ROW EXECUTE FUNCTION audit_changes();</code></pre>
+      <div class="alert warn"><strong>Triggers caveat:</strong> They're invisible logic — easy to forget. Prefer application-level logic for business rules.</div>
+
+      <h3>Transactions & ACID</h3>
+<pre><code class="language-sql">BEGIN;  -- or START TRANSACTION
+
+UPDATE accounts SET balance = balance - 100 WHERE id = 1;
+UPDATE accounts SET balance = balance + 100 WHERE id = 2;
+
+-- If anything failed:
+-- ROLLBACK;
+
+COMMIT;
+
+-- Savepoints
+BEGIN;
+INSERT INTO orders (...) VALUES (...);
+SAVEPOINT after_order;
+INSERT INTO items (...) VALUES (...);
+-- if items fail:
+ROLLBACK TO SAVEPOINT after_order;
+COMMIT;</code></pre>
+
+      <h3>Isolation Levels</h3>
+      <table>
+        <thead><tr><th>Level</th><th>Dirty Read</th><th>Non-repeatable Read</th><th>Phantom Read</th></tr></thead>
+        <tbody>
+          <tr><td>READ UNCOMMITTED</td><td>Possible</td><td>Possible</td><td>Possible</td></tr>
+          <tr><td>READ COMMITTED (default Postgres)</td><td>No</td><td>Possible</td><td>Possible</td></tr>
+          <tr><td>REPEATABLE READ (default MySQL)</td><td>No</td><td>No</td><td>Possible*</td></tr>
+          <tr><td>SERIALIZABLE</td><td>No</td><td>No</td><td>No</td></tr>
+        </tbody>
+      </table>
+<pre><code class="language-sql">SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+BEGIN;
+SELECT ...;
+COMMIT;</code></pre>
+
+      <h3>Locking</h3>
+<pre><code class="language-sql">-- Row-level lock
+SELECT * FROM orders WHERE id = 100 FOR UPDATE;       -- exclusive
+SELECT * FROM orders WHERE id = 100 FOR SHARE;        -- shared (read)
+
+-- Skip locked rows (queue processing)
+SELECT * FROM jobs
+WHERE status = 'pending'
+ORDER BY priority
+LIMIT 1
+FOR UPDATE SKIP LOCKED;
+
+-- Deadlock = two transactions waiting for each other's locks
+-- Best practice: always lock resources in same order</code></pre>
+
+      <h3>Views (Logical)</h3>
+<pre><code class="language-sql">CREATE VIEW active_customers AS
+SELECT * FROM customers WHERE status = 'active' AND deleted_at IS NULL;
+
+-- Updatable view (simple ones only)
+UPDATE active_customers SET email = 'new@example.com' WHERE id = 100;
+
+-- WITH CHECK OPTION enforces WHERE clause on writes
+CREATE VIEW indian_customers AS
+SELECT * FROM customers WHERE country = 'IN'
+WITH CHECK OPTION;</code></pre>
+
+      <h3>Concepts Checklist</h3>
+      <div class="check-row"><input type="checkbox" id="adv1"><label for="adv1">Create and call stored procedures</label></div>
+      <div class="check-row"><input type="checkbox" id="adv2"><label for="adv2">Create scalar / table functions</label></div>
+      <div class="check-row"><input type="checkbox" id="adv3"><label for="adv3">Triggers (BEFORE/AFTER, INSERT/UPDATE/DELETE)</label></div>
+      <div class="check-row"><input type="checkbox" id="adv4"><label for="adv4">BEGIN / COMMIT / ROLLBACK / SAVEPOINT</label></div>
+      <div class="check-row"><input type="checkbox" id="adv5"><label for="adv5">ACID properties</label></div>
+      <div class="check-row"><input type="checkbox" id="adv6"><label for="adv6">Isolation levels and trade-offs</label></div>
+      <div class="check-row"><input type="checkbox" id="adv7"><label for="adv7">Row locks (FOR UPDATE, SKIP LOCKED)</label></div>
+      <div class="check-row"><input type="checkbox" id="adv8"><label for="adv8">Views (regular, with check option, materialized)</label></div>
+    </div>
+  </div>
+
+  <!-- DE PATTERNS -->
+  <div class="tab-content" id="de-sql">
+    <div class="section">
+      <h2>9. Data Engineering SQL Patterns <span class="badge must">Critical for DE Interviews</span></h2>
+
+      <h3>MERGE / UPSERT (Insert-or-Update)</h3>
+<pre><code class="language-sql">-- ANSI SQL / Snowflake / SQL Server
+MERGE INTO target t
+USING staging s ON t.id = s.id
+WHEN MATCHED THEN
+  UPDATE SET t.name = s.name, t.updated_at = NOW()
+WHEN NOT MATCHED THEN
+  INSERT (id, name, created_at) VALUES (s.id, s.name, NOW());
+
+-- PostgreSQL (ON CONFLICT)
+INSERT INTO customers (id, name, email)
+VALUES (100, 'Asha', 'asha@example.com')
+ON CONFLICT (id) DO UPDATE
+SET name = EXCLUDED.name, updated_at = NOW();
+
+-- MySQL
+INSERT INTO customers (id, name) VALUES (100, 'Asha')
+ON DUPLICATE KEY UPDATE name = VALUES(name);</code></pre>
+
+      <h3>SCD Type 1 — Overwrite (no history)</h3>
+<pre><code class="language-sql">-- Just update the target row
+MERGE INTO dim_customer t
+USING stg_customer s ON t.customer_id = s.customer_id
+WHEN MATCHED AND (t.name != s.name OR t.email != s.email) THEN
+  UPDATE SET t.name = s.name, t.email = s.email, t.updated_at = NOW()
+WHEN NOT MATCHED THEN
+  INSERT (customer_id, name, email) VALUES (s.customer_id, s.name, s.email);</code></pre>
+
+      <h3>SCD Type 2 — Full history with version flag</h3>
+<pre><code class="language-sql">-- dim_customer has: customer_id, name, email, valid_from, valid_to, is_current
+
+-- Step 1: close out changed records
+UPDATE dim_customer t
+SET valid_to = CURRENT_DATE - INTERVAL '1 day', is_current = FALSE
+FROM stg_customer s
+WHERE t.customer_id = s.customer_id
+  AND t.is_current = TRUE
+  AND (t.name != s.name OR t.email != s.email);
+
+-- Step 2: insert new versions for changed + brand-new records
+INSERT INTO dim_customer (customer_id, name, email, valid_from, valid_to, is_current)
+SELECT s.customer_id, s.name, s.email, CURRENT_DATE, NULL, TRUE
+FROM stg_customer s
+LEFT JOIN dim_customer t
+  ON t.customer_id = s.customer_id AND t.is_current = TRUE
+WHERE t.customer_id IS NULL
+   OR (t.name != s.name OR t.email != s.email);</code></pre>
+
+      <h3>SCD Type 3 — Limited history (previous value column)</h3>
+<pre><code class="language-sql">-- dim_customer: customer_id, name, current_email, previous_email, change_date
+UPDATE dim_customer t
+SET previous_email = t.current_email,
+    current_email = s.email,
+    change_date = CURRENT_DATE
+FROM stg_customer s
+WHERE t.customer_id = s.customer_id
+  AND t.current_email != s.email;</code></pre>
+
+      <h3>Deduplication (keep latest)</h3>
+<pre><code class="language-sql">DELETE FROM events e
+USING (
+  SELECT id, ROW_NUMBER() OVER (PARTITION BY event_key ORDER BY received_at DESC) AS rn
+  FROM events
+) ranked
+WHERE e.id = ranked.id AND ranked.rn > 1;
+
+-- Or in a query (keep only latest)
+SELECT * FROM (
+  SELECT *, ROW_NUMBER() OVER (PARTITION BY event_key ORDER BY received_at DESC) AS rn
+  FROM events
+) t WHERE rn = 1;</code></pre>
+
+      <h3>Incremental Load Pattern</h3>
+<pre><code class="language-sql">-- Watermark-based incremental
+INSERT INTO target_table
+SELECT * FROM source_table
+WHERE updated_at > (SELECT MAX(updated_at) FROM target_table);
+
+-- With staging + merge for idempotency
+CREATE TEMPORARY TABLE stg AS
+SELECT * FROM source_table
+WHERE updated_at > '{{ last_run_time }}';
+
+MERGE INTO target USING stg ON target.id = stg.id
+WHEN MATCHED THEN UPDATE SET ...
+WHEN NOT MATCHED THEN INSERT ...;</code></pre>
+
+      <h3>CDC (Change Data Capture) Replay</h3>
+<pre><code class="language-sql">-- From a changelog (id, op, after_data, op_ts)
+WITH latest AS (
+  SELECT id, op, after_data, op_ts,
+         ROW_NUMBER() OVER (PARTITION BY id ORDER BY op_ts DESC) AS rn
+  FROM changes
+)
+MERGE INTO target t
+USING (SELECT * FROM latest WHERE rn = 1) c ON t.id = c.id
+WHEN MATCHED AND c.op = 'U' THEN UPDATE SET t.data = c.after_data
+WHEN MATCHED AND c.op = 'D' THEN DELETE
+WHEN NOT MATCHED AND c.op IN ('I', 'U') THEN INSERT (id, data) VALUES (c.id, c.after_data);</code></pre>
+
+      <h3>Data Quality Checks</h3>
+<pre><code class="language-sql">-- Null check
+SELECT COUNT(*) AS null_count FROM customers WHERE email IS NULL;
+
+-- Duplicate check
+SELECT customer_id, COUNT(*) AS cnt FROM customers
+GROUP BY customer_id HAVING COUNT(*) > 1;
+
+-- Referential integrity
+SELECT o.customer_id FROM orders o
+LEFT JOIN customers c ON o.customer_id = c.id
+WHERE c.id IS NULL;
+
+-- Range check
+SELECT * FROM orders WHERE amount < 0 OR amount > 1000000;
+
+-- Freshness
+SELECT MAX(updated_at) AS last_update FROM orders;
+-- Alert if < NOW() - INTERVAL '1 hour'
+
+-- Row count anomaly (compared to yesterday)
+WITH daily AS (
+  SELECT DATE(created_at) AS d, COUNT(*) AS c FROM orders GROUP BY DATE(created_at)
+)
+SELECT d, c, AVG(c) OVER (ORDER BY d ROWS BETWEEN 7 PRECEDING AND 1 PRECEDING) AS avg_7d
+FROM daily;</code></pre>
+
+      <h3>Date Spine (gap filling)</h3>
+<pre><code class="language-sql">-- Generate continuous dates and LEFT JOIN actuals
+WITH RECURSIVE dates AS (
+  SELECT DATE '2026-01-01' AS dt
+  UNION ALL
+  SELECT dt + INTERVAL '1 day' FROM dates WHERE dt < DATE '2026-12-31'
+)
+SELECT d.dt, COALESCE(SUM(o.amount), 0) AS daily_total
+FROM dates d
+LEFT JOIN orders o ON DATE(o.order_date) = d.dt
+GROUP BY d.dt
+ORDER BY d.dt;</code></pre>
+
+      <h3>Concepts Checklist</h3>
+      <div class="check-row"><input type="checkbox" id="de1"><label for="de1">MERGE / UPSERT (all dialects)</label></div>
+      <div class="check-row"><input type="checkbox" id="de2"><label for="de2">SCD Type 1 implementation</label></div>
+      <div class="check-row"><input type="checkbox" id="de3"><label for="de3">SCD Type 2 implementation (full history)</label></div>
+      <div class="check-row"><input type="checkbox" id="de4"><label for="de4">SCD Type 3 (previous value column)</label></div>
+      <div class="check-row"><input type="checkbox" id="de5"><label for="de5">Deduplication patterns</label></div>
+      <div class="check-row"><input type="checkbox" id="de6"><label for="de6">Incremental load with watermarks</label></div>
+      <div class="check-row"><input type="checkbox" id="de7"><label for="de7">CDC replay logic</label></div>
+      <div class="check-row"><input type="checkbox" id="de8"><label for="de8">Data quality checks (null, dup, range, freshness)</label></div>
+      <div class="check-row"><input type="checkbox" id="de9"><label for="de9">Date spine / gap filling</label></div>
+    </div>
+  </div>
+
+  <!-- INTERVIEW PATTERNS -->
+  <div class="tab-content" id="interview">
+    <div class="section">
+      <h2>10. Top Interview Patterns <span class="badge frequent">Asked 80% of Time</span></h2>
+
+      <h3>Pattern 1: Nth Highest Salary</h3>
+<pre><code class="language-sql">-- Nth highest salary using DENSE_RANK
+WITH ranked AS (
+  SELECT salary, DENSE_RANK() OVER (ORDER BY salary DESC) AS rnk
+  FROM employees
+)
+SELECT DISTINCT salary FROM ranked WHERE rnk = 3;
+
+-- Alternative (subquery)
+SELECT MAX(salary) FROM employees
+WHERE salary < (SELECT MAX(salary) FROM employees);  -- 2nd highest
+
+-- LIMIT + OFFSET (Postgres/MySQL)
+SELECT DISTINCT salary FROM employees ORDER BY salary DESC LIMIT 1 OFFSET 2;</code></pre>
+
+      <h3>Pattern 2: Top N per Group</h3>
+<pre><code class="language-sql">-- Top 3 highest-paid per department
+SELECT * FROM (
+  SELECT name, dept, salary,
+         DENSE_RANK() OVER (PARTITION BY dept ORDER BY salary DESC) AS r
+  FROM employees
+) t WHERE r &lt;= 3;</code></pre>
+
+      <h3>Pattern 3: Find Duplicates</h3>
+<pre><code class="language-sql">SELECT email, COUNT(*) AS dup_count
+FROM users
+GROUP BY email
+HAVING COUNT(*) > 1;
+
+-- Find which rows are dups (keep one)
+SELECT * FROM (
+  SELECT *, ROW_NUMBER() OVER (PARTITION BY email ORDER BY created_at) AS rn
+  FROM users
+) t WHERE rn > 1;</code></pre>
+
+      <h3>Pattern 4: Consecutive Logins / Streaks</h3>
+<pre><code class="language-sql">-- Find users with 3+ consecutive day logins
+WITH numbered AS (
+  SELECT user_id, login_date,
+         login_date - INTERVAL '1 day' * ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY login_date) AS grp
+  FROM logins
+),
+streaks AS (
+  SELECT user_id, grp, COUNT(*) AS streak_length,
+         MIN(login_date) AS streak_start, MAX(login_date) AS streak_end
+  FROM numbered
+  GROUP BY user_id, grp
+)
+SELECT * FROM streaks WHERE streak_length >= 3;</code></pre>
+
+      <h3>Pattern 5: Median</h3>
+<pre><code class="language-sql">-- Using PERCENTILE_CONT
+SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY salary) AS median
+FROM employees;
+
+-- Per group
+SELECT dept, PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY salary) AS median_sal
+FROM employees GROUP BY dept;
+
+-- Manual (no PERCENTILE_CONT)
+WITH ordered AS (
+  SELECT salary, ROW_NUMBER() OVER (ORDER BY salary) AS rn,
+         COUNT(*) OVER () AS cnt
+  FROM employees
+)
+SELECT AVG(salary) AS median
+FROM ordered
+WHERE rn IN ((cnt + 1) / 2, (cnt + 2) / 2);</code></pre>
+
+      <h3>Pattern 6: Pivot Without PIVOT</h3>
+<pre><code class="language-sql">SELECT
+  product,
+  SUM(CASE WHEN quarter = 'Q1' THEN amount END) AS Q1,
+  SUM(CASE WHEN quarter = 'Q2' THEN amount END) AS Q2,
+  SUM(CASE WHEN quarter = 'Q3' THEN amount END) AS Q3,
+  SUM(CASE WHEN quarter = 'Q4' THEN amount END) AS Q4
+FROM sales
+GROUP BY product;</code></pre>
+
+      <h3>Pattern 7: Running Total / Cumulative</h3>
+<pre><code class="language-sql">SELECT order_date, amount,
+       SUM(amount) OVER (ORDER BY order_date) AS running_total,
+       SUM(amount) OVER (PARTITION BY customer_id ORDER BY order_date) AS cust_running
+FROM orders;</code></pre>
+
+      <h3>Pattern 8: Month-over-Month Growth</h3>
+<pre><code class="language-sql">WITH monthly AS (
+  SELECT DATE_TRUNC('month', order_date) AS mth, SUM(amount) AS total
+  FROM orders GROUP BY 1
+)
+SELECT mth, total,
+       LAG(total) OVER (ORDER BY mth) AS prev_total,
+       (total - LAG(total) OVER (ORDER BY mth)) * 100.0
+         / NULLIF(LAG(total) OVER (ORDER BY mth), 0) AS growth_pct
+FROM monthly;</code></pre>
+
+      <h3>Pattern 9: Customers Who Bought X AND Y</h3>
+<pre><code class="language-sql">SELECT customer_id
+FROM orders
+WHERE product IN ('A', 'B')
+GROUP BY customer_id
+HAVING COUNT(DISTINCT product) = 2;</code></pre>
+
+      <h3>Pattern 10: Find Users Active in N Consecutive Months</h3>
+<pre><code class="language-sql">WITH user_months AS (
+  SELECT DISTINCT user_id, DATE_TRUNC('month', activity_date) AS mth FROM activity
+),
+gaps AS (
+  SELECT user_id, mth,
+         mth - INTERVAL '1 month' * ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY mth) AS grp
+  FROM user_months
+)
+SELECT user_id, COUNT(*) AS consec_months, MIN(mth), MAX(mth)
+FROM gaps GROUP BY user_id, grp HAVING COUNT(*) >= 3;</code></pre>
+
+      <h3>Pattern 11: Department with Highest Average Salary</h3>
+<pre><code class="language-sql">SELECT dept FROM (
+  SELECT dept, AVG(salary) AS avg_sal,
+         RANK() OVER (ORDER BY AVG(salary) DESC) AS r
+  FROM employees GROUP BY dept
+) t WHERE r = 1;</code></pre>
+
+      <h3>Pattern 12: Self-Join (Employee-Manager)</h3>
+<pre><code class="language-sql">SELECT e.name AS employee, m.name AS manager
+FROM employees e
+LEFT JOIN employees m ON e.manager_id = m.id;
+
+-- Employees earning more than their manager
+SELECT e.name FROM employees e
+JOIN employees m ON e.manager_id = m.id
+WHERE e.salary > m.salary;</code></pre>
+
+      <h3>Pattern 13: Find Missing Numbers / Gaps</h3>
+<pre><code class="language-sql">SELECT id + 1 AS gap_start, next_id - 1 AS gap_end
+FROM (SELECT id, LEAD(id) OVER (ORDER BY id) AS next_id FROM tickets) t
+WHERE next_id - id > 1;</code></pre>
+
+      <h3>Pattern 14: Last Activity per Customer</h3>
+<pre><code class="language-sql">SELECT customer_id, last_order_date, total_orders
+FROM (
+  SELECT customer_id,
+         MAX(order_date) OVER (PARTITION BY customer_id) AS last_order_date,
+         COUNT(*) OVER (PARTITION BY customer_id) AS total_orders,
+         ROW_NUMBER() OVER (PARTITION BY customer_id ORDER BY order_date DESC) AS rn
+  FROM orders
+) t WHERE rn = 1;</code></pre>
+
+      <h3>Pattern 15: Cohort Retention</h3>
+<pre><code class="language-sql">WITH cohort AS (
+  SELECT user_id, DATE_TRUNC('month', MIN(activity_date)) AS cohort_month
+  FROM activity GROUP BY user_id
+),
+activity_months AS (
+  SELECT DISTINCT user_id, DATE_TRUNC('month', activity_date) AS active_month FROM activity
+)
+SELECT c.cohort_month,
+       EXTRACT(MONTH FROM AGE(am.active_month, c.cohort_month)) AS months_since_signup,
+       COUNT(DISTINCT am.user_id) AS active_users
+FROM cohort c
+JOIN activity_months am ON c.user_id = am.user_id
+GROUP BY c.cohort_month, months_since_signup
+ORDER BY c.cohort_month, months_since_signup;</code></pre>
+
+      <h2 style="margin-top: 30px;">💬 Common Q&A</h2>
+
+      <div class="qa-card">
+        <div class="qa-q">Q1. What is the difference between RANK, DENSE_RANK, and ROW_NUMBER?</div>
+        <div class="qa-a">ROW_NUMBER assigns a unique sequential number. RANK assigns same rank to ties but skips next ranks (1, 2, 2, 4). DENSE_RANK assigns same rank to ties without gaps (1, 2, 2, 3).</div>
+      </div>
+
+      <div class="qa-card">
+        <div class="qa-q">Q2. What is the difference between WHERE and HAVING?</div>
+        <div class="qa-a">WHERE filters rows BEFORE aggregation. HAVING filters AFTER aggregation. WHERE cannot use aggregate functions; HAVING can.</div>
+      </div>
+
+      <div class="qa-card">
+        <div class="qa-q">Q3. What is a CTE? Why use it over a subquery?</div>
+        <div class="qa-a">A CTE (Common Table Expression) is a named temporary result set defined with WITH. Use CTEs for readability, when reusing the same logic multiple times in a query, or for recursive queries (which subqueries can't do).</div>
+      </div>
+
+      <div class="qa-card">
+        <div class="qa-q">Q4. What is the difference between UNION and UNION ALL?</div>
+        <div class="qa-a">UNION removes duplicates (expensive sort). UNION ALL keeps all rows including duplicates (faster). Use UNION ALL whenever duplicates aren't a problem.</div>
+      </div>
+
+      <div class="qa-card">
+        <div class="qa-q">Q5. What is the difference between DELETE, TRUNCATE, and DROP?</div>
+        <div class="qa-a">DELETE removes rows (row-by-row, can use WHERE, can rollback). TRUNCATE removes all rows fast (DDL, no WHERE, may not rollback). DROP removes the entire table including structure.</div>
+      </div>
+
+      <div class="qa-card">
+        <div class="qa-q">Q6. What is an index? When NOT to use one?</div>
+        <div class="qa-a">An index is a data structure (typically B-tree) that speeds up lookups at the cost of slower writes and more storage. Avoid indexes on small tables, heavily-written tables, or columns with low cardinality (e.g., boolean).</div>
+      </div>
+
+      <div class="qa-card">
+        <div class="qa-q">Q7. What's the difference between clustered and non-clustered indexes?</div>
+        <div class="qa-a">Clustered: data physically sorted by index key (one per table; PRIMARY KEY in many DBs). Non-clustered: separate structure pointing to row locations (multiple per table allowed).</div>
+      </div>
+
+      <div class="qa-card">
+        <div class="qa-q">Q8. Explain ACID properties.</div>
+        <div class="qa-a">Atomicity (all-or-nothing), Consistency (valid state transitions), Isolation (concurrent transactions don't interfere), Durability (committed data survives crashes).</div>
+      </div>
+
+      <div class="qa-card">
+        <div class="qa-q">Q9. What is normalization? What are 1NF, 2NF, 3NF?</div>
+        <div class="qa-a">Normalization reduces redundancy. 1NF: atomic values, no repeating groups. 2NF: 1NF + no partial dependency on composite key. 3NF: 2NF + no transitive dependency.</div>
+      </div>
+
+      <div class="qa-card">
+        <div class="qa-q">Q10. Star schema vs Snowflake schema?</div>
+        <div class="qa-a">Star: central fact table with denormalized dimensions (faster reads). Snowflake: dimensions are normalized into sub-dimensions (less redundancy but more joins).</div>
+      </div>
+
+      <div class="qa-card">
+        <div class="qa-q">Q11. What is SCD Type 2?</div>
+        <div class="qa-a">Slowly Changing Dimension Type 2 tracks full history by inserting new rows for changes and using valid_from/valid_to/is_current columns to mark versions.</div>
+      </div>
+
+      <div class="qa-card">
+        <div class="qa-q">Q12. How would you handle a slow-running query?</div>
+        <div class="qa-a">Use EXPLAIN ANALYZE; check for full scans; add or fix indexes; rewrite to avoid functions on indexed columns; use covering indexes; partition large tables; check stats are fresh; consider materialized views for expensive aggregations.</div>
+      </div>
+
+      <div class="qa-card">
+        <div class="qa-q">Q13. Difference between NOT IN and NOT EXISTS?</div>
+        <div class="qa-a">NOT IN returns 0 rows if the subquery has any NULL (due to 3-valued logic). NOT EXISTS handles NULLs correctly. Always prefer NOT EXISTS for anti-joins.</div>
+      </div>
+
+      <div class="qa-card">
+        <div class="qa-q">Q14. What is a materialized view?</div>
+        <div class="qa-a">A view whose result is physically stored (cached). Faster reads but needs periodic refresh. Useful for expensive aggregations queried frequently.</div>
+      </div>
+
+      <div class="qa-card">
+        <div class="qa-q">Q15. Difference between OLTP and OLAP?</div>
+        <div class="qa-a">OLTP (Online Transaction Processing): many small writes, normalized, low latency (e.g., Postgres for app DB). OLAP (Online Analytical Processing): bulk reads, denormalized/columnar, complex aggregations (e.g., Snowflake, Redshift).</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PRACTICE -->
+  <div class="tab-content" id="practice">
+    <div class="section">
+      <h2>11. Practice Platforms & Resources</h2>
+
+      <h3>🔥 Top Practice Platforms (Recommended Order)</h3>
+      <div class="grid-2">
+        <div class="qa-card">
+          <div class="qa-q">StrataScratch <span class="badge must">Must</span></div>
+          <div class="qa-a">Real DE/Analytics interview questions from FAANG. <a href="https://www.stratascratch.com" target="_blank" style="color: var(--accent);">stratascratch.com</a> — free tier has plenty.</div>
+        </div>
+        <div class="qa-card">
+          <div class="qa-q">DataLemur <span class="badge must">Must</span></div>
+          <div class="qa-a">Free SQL interview questions, beautifully organized by topic. <a href="https://datalemur.com" target="_blank" style="color: var(--accent);">datalemur.com</a></div>
+        </div>
+        <div class="qa-card">
+          <div class="qa-q">LeetCode SQL</div>
+          <div class="qa-a">50 SQL problems, easy to hard. Database tab. <a href="https://leetcode.com/problemset/database/" target="_blank" style="color: var(--accent);">leetcode.com</a></div>
+        </div>
+        <div class="qa-card">
+          <div class="qa-q">HackerRank SQL</div>
+          <div class="qa-a">Beginner-friendly progression. <a href="https://www.hackerrank.com/domains/sql" target="_blank" style="color: var(--accent);">hackerrank.com/domains/sql</a></div>
+        </div>
+        <div class="qa-card">
+          <div class="qa-q">Mode SQL Tutorial</div>
+          <div class="qa-a">Excellent free interactive course. <a href="https://mode.com/sql-tutorial/" target="_blank" style="color: var(--accent);">mode.com/sql-tutorial</a></div>
+        </div>
+        <div class="qa-card">
+          <div class="qa-q">SQLZoo</div>
+          <div class="qa-a">Old but gold — quick exercises by topic. <a href="https://sqlzoo.net" target="_blank" style="color: var(--accent);">sqlzoo.net</a></div>
+        </div>
+      </div>
+
+      <h3>📺 YouTube Channels</h3>
+      <ul class="bullet">
+        <li><a href="https://www.youtube.com/@techTFQ" target="_blank" style="color: var(--accent);">techTFQ</a> — practical SQL for DE interviews (Indian creator)</li>
+        <li><a href="https://www.youtube.com/@AmpcodeOfficial" target="_blank" style="color: var(--accent);">Ampcode</a> — SQL deep dives</li>
+        <li><a href="https://www.youtube.com/@DataWithDanny" target="_blank" style="color: var(--accent);">Data With Danny</a> — 8 Week SQL Challenge (free)</li>
+        <li><a href="https://www.youtube.com/@AnsiSQL" target="_blank" style="color: var(--accent);">Ansi SQL</a> — advanced topics</li>
+      </ul>
+
+      <h3>📚 Books</h3>
+      <ul class="bullet">
+        <li><strong>SQL Cookbook</strong> by Anthony Molinaro — pattern-by-pattern reference (~₹1,500)</li>
+        <li><strong>SQL Performance Explained</strong> by Markus Winand (free at <a href="https://use-the-index-luke.com/" target="_blank" style="color: var(--accent);">use-the-index-luke.com</a>)</li>
+        <li><strong>The Art of SQL</strong> by Stephane Faroult — query tuning mindset</li>
+        <li><strong>Designing Data-Intensive Applications</strong> by Martin Kleppmann — for the DB internals chapter</li>
+      </ul>
+
+      <h3>🎯 30-Day Practice Plan</h3>
+<pre><code class="language-sql">-- Week 1: Foundations (5 problems/day)
+--   StrataScratch Easy + DataLemur Easy
+--   Focus: JOINs, GROUP BY, basic aggregates
+
+-- Week 2: Window Functions (5 problems/day)
+--   LeetCode Medium tagged "Window Function"
+--   Focus: ROW_NUMBER, RANK, LAG, LEAD, running totals
+
+-- Week 3: Complex Queries (3 problems/day)
+--   StrataScratch Medium/Hard
+--   Focus: Multi-CTE solutions, sub-aggregations
+
+-- Week 4: Mixed practice + Real interview Qs
+--   Solve 50 real interview questions from Glassdoor/Leetcode
+--   Time yourself: max 15 min per medium, 25 min per hard</code></pre>
+
+      <h3>💻 Practice Environment Setup</h3>
+<pre><code class="language-sql">-- Option 1: Free online sandbox
+-- https://www.db-fiddle.com (Postgres/MySQL)
+-- https://sqlfiddle.com
+
+-- Option 2: Local Postgres via Docker
+docker run --name pg -e POSTGRES_PASSWORD=admin -p 5432:5432 -d postgres:16
+-- Connect via DBeaver / DataGrip / pgAdmin / VSCode SQLTools
+
+-- Option 3: Snowflake free trial (30 days, $400 credits)
+-- https://signup.snowflake.com
+
+-- Option 4: SQLite locally
+sqlite3 mydb.db</code></pre>
+
+      <h3>🏆 Sample Datasets to Practice On</h3>
+      <ul class="bullet">
+        <li><strong>Northwind</strong> — classic orders DB (download for Postgres/MySQL/SQL Server)</li>
+        <li><strong>Sakila</strong> — DVD rental store schema</li>
+        <li><strong>IMDb</strong> — movies/actors (large, real-world)</li>
+        <li><strong>NYC Yellow Taxi</strong> — billions of rows, great for performance testing</li>
+        <li><strong>StackOverflow data dump</strong> — free, huge tables for joins/CTEs</li>
+      </ul>
+
+      <h3>Practice Checklist</h3>
+      <div class="check-row"><input type="checkbox" id="pr1"><label for="pr1">Solve 30 problems on StrataScratch (Easy + Medium)</label></div>
+      <div class="check-row"><input type="checkbox" id="pr2"><label for="pr2">Solve 25 problems on DataLemur</label></div>
+      <div class="check-row"><input type="checkbox" id="pr3"><label for="pr3">Complete LeetCode SQL 50 study plan</label></div>
+      <div class="check-row"><input type="checkbox" id="pr4"><label for="pr4">Complete Data with Danny's 8 Week SQL Challenge</label></div>
+      <div class="check-row"><input type="checkbox" id="pr5"><label for="pr5">Set up local Postgres + Northwind dataset</label></div>
+      <div class="check-row"><input type="checkbox" id="pr6"><label for="pr6">Read "SQL Performance Explained" (free book)</label></div>
+      <div class="check-row"><input type="checkbox" id="pr7"><label for="pr7">Practice 10 mock SQL interviews with timer</label></div>
+    </div>
+  </div>
+
+  <footer>
+    📘 Advanced SQL — Complete Guide · Self-paced · Track your progress · Built for Data Engineering interviews
+  </footer>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-sql.min.js"></script>
+<script>
+  function showTab(evt, tabId) {
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.getElementById(tabId).classList.add('active');
+    evt.currentTarget.classList.add('active');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  const STORAGE_KEY = 'sql_guide_progress_v1';
+
+  function loadProgress() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+      document.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+        if (saved[cb.id]) cb.checked = true;
+      });
+    } catch (e) { console.warn(e); }
+    updateProgress();
+  }
+
+  function saveProgress() {
+    const state = {};
+    document.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+      if (cb.checked) state[cb.id] = true;
+    });
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    updateProgress();
+  }
+
+  function updateProgress() {
+    const all = document.querySelectorAll('input[type="checkbox"]');
+    const done = document.querySelectorAll('input[type="checkbox"]:checked');
+    const pct = all.length ? Math.round((done.length / all.length) * 100) : 0;
+    const fill = document.getElementById('progress-fill');
+    fill.style.width = pct + '%';
+    fill.textContent = pct + '%';
+    document.getElementById('progress-text').textContent = done.length + ' / ' + all.length;
+  }
+
+  function resetProgress() {
+    if (!confirm('Reset all progress?')) return;
+    localStorage.removeItem(STORAGE_KEY);
+    document.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = false);
+    updateProgress();
+  }
+
+  function exportProgress() {
+    const state = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+    const blob = new Blob([JSON.stringify(state, null, 2)], {type: 'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'sql_progress_' + new Date().toISOString().split('T')[0] + '.json';
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  document.addEventListener('change', e => {
+    if (e.target.matches('input[type="checkbox"]')) saveProgress();
+  });
+
+  document.addEventListener('DOMContentLoaded', loadProgress);
+  if (document.readyState !== 'loading') loadProgress();
+</script>
+</body>
+</html>
