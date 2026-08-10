@@ -1,0 +1,1006 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Real-world AWS data engineering interview prep: cross-cutting troubleshooting, design, cost, SQL modelling and behavioural scenario questions with detailed answers for DEA-C01 graduates.">
+<title>Real-World Interview Prep | AWS Data Engineer DEA-C01 Notes</title>
+<link rel="stylesheet" href="assets/aws.css">
+<script defer src="assets/search-index.js"></script>
+<script defer src="assets/code-highlight.js"></script>
+<script defer src="assets/aws.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">Interview preparation · AWS data engineering</p>
+    <h1>Real-World Interview Prep</h1>
+    <p class="subtitle">Open-ended scenario questions a real data engineering interview asks — troubleshooting runaway jobs, designing pipelines under constraints, cutting cloud bills, modelling warehouses, and communicating incidents. Answers show the reasoning interviewers listen for, not bullet lists of service names.</p>
+    <div class="hero-meta">
+      <span class="chip">70+ scenario questions</span>
+      <span class="chip">Troubleshooting · Design · Cost</span>
+      <span class="chip">Read after the course</span>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <nav class="pager" aria-label="Section navigation">
+    <a href="extras.html">← Beyond the Course</a>
+    <a href="index.html">Course contents</a>
+    <a href="s01-introduction.html">Back to Section 1 →</a>
+  </nav>
+
+  <main id="main">
+    <div class="layout">
+      <div class="content">
+
+        <section class="section" id="how-to-answer">
+          <h2>How to structure an answer</h2>
+          <p class="lead">Interviewers score <strong>reasoning under constraints</strong>, not whether you memorised every AWS quota. A strong answer follows the same skeleton every time — it sounds conversational but is deliberate.</p>
+          <ol>
+            <li><strong>Clarify the requirement.</strong> Restate the business need in one sentence. "Dashboards in five minutes" is different from "sub-second fraud decline." Ask one clarifying question if the prompt is ambiguous — interviewers reward it.</li>
+            <li><strong>State the constraint you are optimising for.</strong> Latency, cost, operational overhead, compliance, replayability, team skill — pick the one the scenario emphasises and say it aloud.</li>
+            <li><strong>Name the option you would pick and why.</strong> Tie each service to the constraint. "Firehose because near-real-time is acceptable and we want least ops" beats "Firehose, Kinesis, Lambda, S3" with no glue between them.</li>
+            <li><strong>Name the option you rejected and why.</strong> One sentence: "Not EMR because the job is 20 minutes nightly and a cluster left idle dominates cost."</li>
+            <li><strong>Say how you would measure success.</strong> A metric (<code>IteratorAgeMilliseconds</code>, Athena TB scanned per day, row-count reconciliation tolerance), an alarm, or a data-quality check.</li>
+            <li><strong>Say what would make you change your mind.</strong> "If QPS exceeds 5,000 sustained, I'd revisit on-demand Kinesis vs provisioned shard maths."</li>
+          </ol>
+
+
+          <div class="diagram">
+            <p class="diagram-title">The answer skeleton (say this order aloud)</p>
+            <div class="flow">
+              <div class="node is-source"><b>Clarify</b><small>requirement · SLA</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-compute"><b>Constraint</b><small>cost · latency · ops</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-store pulse"><b>Choose + reject</b><small>services · why</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-serve"><b>Measure</b><small>metric · alarm</small></div>
+            </div>
+          </div>
+
+
+          <h3>Worked example — weak versus strong</h3>
+          <p><strong>Prompt:</strong> "A Glue job that used to take 20 minutes now takes three hours. What do you do?"</p>
+          <div class="grid-2">
+            <div class="mini-card">
+              <h4>Weak answer</h4>
+              <p>"I would check Glue logs and add more DPUs. Maybe run VACUUM. Could also check if S3 is slow."</p>
+              <p class="muted">Lists actions with no diagnosis order, no metrics, no prevention — interviewer learns you guess.</p>
+            </div>
+            <div class="mini-card">
+              <h4>Strong answer (abbreviated)</h4>
+              <p>"I'd confirm input volume first — compare <code>Records read</code> and S3 prefix listing for today's partition against last week. If volume is flat, I'd open Spark stages for skew or a stage doing a full shuffle because a pushdown predicate was removed. CloudWatch <code>glue.ALL.s3.filesystem.read_bytes</code> tells me if we're reading ten times more data. Fix: restore partition filter, compact small files, or salt a hot join key — only then add DPUs if CPU-saturated. Prevent with a duration p95 alarm and CI check that job parameters still include the predicate."</p>
+            </div>
+          </div>
+          <div class="callout exam"><strong>Exam overlap.</strong> The same structure wins DEA-C01 scenario questions — the qualifier (<em>most cost-effective</em>, <em>least operational overhead</em>) is step 2 in the skeleton above. See <a href="s21-exam-prep.html#decisions">Section 21 decision tables</a> after you finish the course sections.</div>
+
+          <h3>Where to drill before this page</h3>
+          <p class="svc-pills">
+            <a href="s04-glue.html#interview">Glue</a>
+            <a href="s06-streaming.html#interview">Kinesis</a>
+            <a href="s03-athena.html#interview">Athena</a>
+            <a href="s10-redshift.html#interview">Redshift</a>
+            <a href="s09-dynamodb.html#interview">DynamoDB</a>
+            <a href="s05-lambda.html#interview">Lambda</a>
+            <a href="s15-app-integration.html#step-functions">Step Functions</a>
+            <a href="s13-analytics.html#lake-formation">Lake Formation</a>
+            <a href="s16-management.html#iam">IAM</a>
+          </p>
+        </section>
+
+        <section class="section" id="interview">
+          <h2>Interview questions</h2>
+          <p class="muted">Answer each one out loud before opening it. These are cross-cutting scenarios — for service-specific drills, use each section's <a href="s04-glue.html#interview">interview block</a> first, then return here the week before your interview.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <p class="lead">Questions are grouped below: <a href="#troubleshooting">It is broken</a> (19), <a href="#design">Design me a pipeline</a> (16), <a href="#cost">Cost</a> (11), <a href="#modelling-sql">Modelling and SQL</a> (11), <a href="#behavioural">Ownership and process</a> (9), and <a href="#rapid-fire">Rapid-fire</a> (15).</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Day</th><th>Focus</th><th>Time</th></tr></thead>
+              <tbody>
+                <tr><td>Mon–Wed</td><td>Section interview questions (s04, s06, s10) aloud</td><td>45 min/day</td></tr>
+                <tr><td>Thu</td><td>This page — Troubleshooting group cold</td><td>60 min</td></tr>
+                <tr><td>Fri</td><td>Design + Cost groups; one whiteboard drill</td><td>60 min</td></tr>
+                <tr><td>Sat</td><td>Modelling/SQL + rapid-fire table</td><td>45 min</td></tr>
+                <tr><td>Sun</td><td>Behavioural frameworks; mock with peer</td><td>45 min</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout tip"><strong>Timing.</strong> Do this the week before interviews, after finishing course sections — not instead of them. Service-specific depth still lives in each section's <code>#interview</code> block.</div>
+
+        </section>
+
+        <section class="section" id="troubleshooting">
+          <h2>"It is broken" — troubleshooting scenarios</h2>
+          <p class="lead">Highest-value interview questions: confirm the diagnosis with a specific metric or system table, fix it, prevent recurrence. Each answer follows that order.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Symptom</th><th>First metric or table</th><th>Service</th></tr></thead>
+              <tbody>
+                <tr><td>Stream consumer lagging</td><td><code>GetRecords.IteratorAgeMilliseconds</code></td><td>Kinesis</td></tr>
+                <tr><td>Producer throttled</td><td><code>WriteProvisionedThroughputExceeded</code></td><td>Kinesis / DynamoDB</td></tr>
+                <tr><td>Query cost spike</td><td>Athena <code>DataScannedInBytes</code></td><td>Athena</td></tr>
+                <tr><td>Zero rows after load</td><td><code>SHOW PARTITIONS</code> / MSCK</td><td>Glue catalog</td></tr>
+                <tr><td>Query queued forever</td><td><code>SVL_QUERY_STATE</code>, WLM queues</td><td>Redshift</td></tr>
+                <tr><td>Disk almost full</td><td><code>SVV_TABLE_INFO</code>, <code>PercentageDiskSpaceUsed</code></td><td>Redshift</td></tr>
+                <tr><td>COPY partial failure</td><td><code>STL_LOAD_ERRORS</code></td><td>Redshift</td></tr>
+                <tr><td>Lambda duplicates</td><td>Logs — same S3 key, different <code>requestId</code></td><td>Lambda / S3</td></tr>
+                <tr><td>Step Function stuck</td><td>Execution event history — active state</td><td>Step Functions</td></tr>
+                <tr><td>Firehose data loss</td><td>S3 error prefix + <code>DeliveryToS3.Success</code></td><td>Firehose</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="muted">Memorise this table as a mental index — interviews often give you the symptom and expect you to name the metric before the fix.</p>
+          <div class="qa-list">
+            <details class="qa">
+              <summary>A Glue ETL job that used to finish in 20 minutes now takes three hours. Walk me through your investigation.<span class="qa-tag">Troubleshooting</span></summary>
+              <div class="qa-body">
+<p>I would start by confirming the symptom is real and isolated: compare the last ten successful runs in the Glue console (<strong>Job runs → Duration, DPU hours, Records read</strong>) against today's run. Check whether input volume actually grew — a crawler may have registered new partitions, or upstream dropped ten times more files into the same prefix. CloudWatch metrics <code>Glue.driver.ExecutorRunTime</code>, <code>glue.ALL.s3.filesystem.read_bytes</code>, and Spark UI stages (enable the job's Spark UI or check continuous logging to S3) tell you whether time went into reading, shuffling, or writing.</p>
+<p>The usual culprits for a sudden 9× slowdown without a code deploy: <strong>partition explosion</strong> (someone removed a pushdown predicate and the job now lists every file under the table root), <strong>small-file problem</strong> (millions of tiny JSON files instead of consolidated Parquet), <strong>data skew</strong> (one key dominates a join so one executor runs long while others idle), or <strong>concurrency contention</strong> (another job on the same account hit the Glue DPU quota and yours queued in Flex mode). I would query the Data Catalog for partition count, run <code>aws s3 ls s3://bucket/prefix/ --recursive --summarize</code> on a sample day, and open the slowest Spark stage.</p>
+<p>Fix depends on diagnosis: re-enable pushdown predicates and partition filters; compact small files with a one-off job writing <code>coalesce(1)</code> or <code>repartition</code> by date to Parquet; salt skewed join keys; increase worker DPUs only after confirming the job is CPU-bound, not I/O-bound. Prevent with a daily CloudWatch alarm on job duration p95, a crawler schedule that does not re-list stale partitions, and a file-size guardrail (Firehose/Glue writes target 128–256 MB objects). See <a href="s04-glue.html#interview">Section 4</a> for Glue-specific tuning.</p>
+<p>Ongoing monitoring: watch <code>Duration</code>, error rate, and data-volume reconciliation alarms in CloudWatch (<a href="s16-management.html#cloudwatch">Section 16</a>). Document findings in the pipeline runbook so the next on-call engineer starts from evidence, not guesswork.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>A Glue Spark job fails with executor OutOfMemoryError. How do you diagnose and fix it?<span class="qa-tag">Troubleshooting</span></summary>
+              <div class="qa-body">
+<p>Confirm in CloudWatch Logs under <code>/aws-glue/jobs/error</code> or the Spark driver log: is it driver OOM (collecting too much to the driver) or executor OOM (shuffle, wide transformations, or caching)? The stack trace usually names the stage. Enable Spark UI or set <code>--enable-continuous-cloudwatch-log</code> and <code>--enable-metrics</code> so you can correlate the failure with the stage that spiked memory.</p>
+<p>Executor OOM fixes: increase <code>--executor-memory</code> and worker count; avoid <code>.collect()</code> and huge broadcasts; drop unnecessary <code>.cache()</code>; repartition before a wide join so each task gets a manageable slice; use Glue's <code>resolveChoice</code> and column pruning early to shrink rows. Driver OOM often comes from <code>groupBy</code> on high-cardinality keys sent to the driver — push aggregation to executors or write intermediate results to S3 instead of collecting.</p>
+<p>Prevent by sizing DPUs from a benchmark on a representative partition, setting job bookmarking so re-runs do not re-read history, and adding a CloudWatch alarm on <code>glue.driver.aggregate.numFailedTasks</code>. For recurring wide joins, document the expected shuffle size and cap input with pushdown predicates. Cross-reference <a href="s04-glue.html#budgets">Section 4 DPU pricing</a> before permanently doubling workers.</p>
+<p>Ongoing monitoring: watch <code>Duration</code>, error rate, and data-volume reconciliation alarms in CloudWatch (<a href="s16-management.html#cloudwatch">Section 16</a>). Document findings in the pipeline runbook so the next on-call engineer starts from evidence, not guesswork.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>A Kinesis consumer's IteratorAgeMilliseconds keeps climbing. What is happening and what do you do?<span class="qa-tag">Troubleshooting</span></summary>
+              <div class="qa-body">
+<p>Rising iterator age means the consumer is falling behind the head of the stream — records are arriving faster than they are processed, or processing is stalled. Confirm in CloudWatch on the stream: <code>GetRecords.IteratorAgeMilliseconds</code> (per consumer), <code>IncomingRecords</code>, and <code>ReadProvisionedThroughputExceeded</code>. Check the consumer: Lambda <code>Duration</code> and <code>Errors</code>, or KCL checkpoint lag in DynamoDB (<code>LeaseTable</code> timestamps).</p>
+<p>Common causes: insufficient Lambda concurrency or batch size too small; a downstream call (RDS, API) timing out inside the handler; a hot shard because partition keys are skewed; too many consumers sharing standard-mode 2 MB/s read per shard; or a poison record causing repeated retries. Fix: scale Lambda reserved concurrency, increase batch window cautiously, add shards or switch to on-demand mode, enable enhanced fan-out for multiple heavy consumers, fix or route poison records to a DLQ, and optimise handler code to avoid synchronous blocking I/O.</p>
+<p>Prevent with an alarm on iterator age (e.g. > 60 seconds for near-real-time SLAs), load tests before launch, and idempotent handlers so safe retries do not corrupt state. Architecture note: if replay matters, keep Data Streams as the buffer and treat Firehose as a delivery path only — see <a href="s06-streaming.html#interview">Section 6</a>.</p>
+<p>Ongoing monitoring: watch <code>Duration</code>, error rate, and data-volume reconciliation alarms in CloudWatch (<a href="s16-management.html#cloudwatch">Section 16</a>). Document findings in the pipeline runbook so the next on-call engineer starts from evidence, not guesswork.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Producers are getting ProvisionedThroughputExceededException on Kinesis. Walk me through the fix.<span class="qa-tag">Troubleshooting</span></summary>
+              <div class="qa-body">
+<p>Check CloudWatch <code>WriteProvisionedThroughputExceeded</code> per shard. If one shard spikes while others are idle, the partition key is hot — all traffic hashes to one shard and hits the 1 MB/s or 1,000 records/s per-shard write limit. If all shards throttle evenly, aggregate write rate exceeds total shard capacity.</p>
+<p>Fix hot keys by increasing cardinality: use <code>deviceId</code> or <code>userId</code> instead of <code>country</code>, or append a random suffix (<code>userId#n</code>) and deduplicate in the consumer with a window on event time. Fix capacity limits by adding shards (UpdateShardCount), switching to on-demand mode, or using KPL aggregation to pack more records per PutRecords call. Implement exponential backoff with jitter on retries — tight loops amplify throttling.</p>
+<p>Prevent with producer-side monitoring on throttled records, shard metrics dashboards, and load tests that simulate peak traffic including Black Friday multiples. Document partition-key design in the runbook so a new service does not reuse a low-cardinality key.</p>
+<p>Ongoing monitoring: watch <code>Duration</code>, error rate, and data-volume reconciliation alarms in CloudWatch (<a href="s16-management.html#cloudwatch">Section 16</a>). Document findings in the pipeline runbook so the next on-call engineer starts from evidence, not guesswork.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>An Athena query that scanned 200 GB yesterday suddenly scans 2 TB today with the same SQL. Why?<span class="qa-tag">Troubleshooting</span></summary>
+              <div class="qa-body">
+<p>First verify in Athena query history: <code>DataScannedInBytes</code> and the exact SQL — did someone remove a <code>WHERE</code> on partition columns, change a join, or point at a different table/database? Run <code>SHOW PARTITIONS table</code> or check the Glue catalog: new partitions may have landed outside the filter range, or a crawler registered partitions that do not match the path layout so partition pruning failed.</p>
+<p>Other causes: table switched from Parquet to raw JSON (no column pruning benefit); <code>SELECT *</code> replaced a column list; a view was recreated without predicates; MSCK REPAIR added thousands of empty or duplicate partitions; or someone dropped and recreated the table without <code>partition_projection</code> so Athena now scans all prefixes under the root.</p>
+<p>Fix: restore partition filters and column projection; convert to Parquet with Snappy; use partition projection for high-cardinality date partitions; run <code>ANALYZE</code> or Glue crawler for stats. Prevent with AWS Lake Formation or IAM policies that block full-table scans for analysts, Cost Explorer alerts on Athena spend, and query audit via CloudTrail data events on S3. Details in <a href="s03-athena.html#interview">Section 3</a>.</p>
+<p>Ongoing monitoring: watch <code>Duration</code>, error rate, and data-volume reconciliation alarms in CloudWatch (<a href="s16-management.html#cloudwatch">Section 16</a>). Document findings in the pipeline runbook so the next on-call engineer starts from evidence, not guesswork.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>New files landed in S3 but Athena returns zero rows. How do you debug?<span class="qa-tag">Troubleshooting</span></summary>
+              <div class="qa-body">
+<p>Work through the stack: (1) Are the files under the prefix the table expects? Compare S3 path to <code>LOCATION</code> in <code>SHOW CREATE TABLE</code>. (2) Does the Glue catalog know about new partitions? Run <code>MSCK REPAIR TABLE</code> or trigger the crawler; check <code>SHOW PARTITIONS</code>. (3) File format mismatch — CSV headers, wrong delimiter, or Parquet schema drift. (4) SerDe and column names: partition keys in the path must match catalog keys exactly (<code>year=2026/month=08/</code>).</p>
+<p>Confirm with a direct S3 read: <code>aws s3 ls s3://bucket/prefix/</code> and a small <code>SELECT * FROM table$partitions</code>. Check Lake Formation permissions if the table is governed — zero rows can mean access denied on new prefixes. Athena engine version differences occasionally affect timestamp parsing.</p>
+<p>Fix: repair partitions, align path template, fix crawler schedule, or add partition projection so new dates appear without repair. Prevent with an EventBridge rule on S3 <code>ObjectCreated</code> triggering a Lambda that calls <code>batch_create_partition</code>, plus a data-quality check comparing S3 object count to catalog partition count nightly.</p>
+<p>Ongoing monitoring: watch <code>Duration</code>, error rate, and data-volume reconciliation alarms in CloudWatch (<a href="s16-management.html#cloudwatch">Section 16</a>). Document findings in the pipeline runbook so the next on-call engineer starts from evidence, not guesswork.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>A Redshift query has been queued in WLM for 40 minutes. What do you check?<span class="qa-tag">Troubleshooting</span></summary>
+              <div class="qa-body">
+<p>Open <strong>Query Monitoring Rules</strong> and <code>STL_WLM_QUERY</code> / <code>SVL_QUERY_STATE</code> to see which queue holds the query and whether concurrency slots are exhausted. Check <code>STV_WLM_SERVICE_CLASS_STATE</code> for running vs queued count. Often a long-running ETL job or a rogue scan occupies all slots in the same queue as the analyst query.</p>
+<p>Also check for locks: <code>STL_TR_CONFLICT</code> and <code>SVV_TRANSACTIONS</code> — a COPY or VACUUM may block DDL. Review query priority: short-query acceleration (WLM queue config) may need a dedicated queue for dashboards. On RA3, confirm compute scaling is not starved.</p>
+<p>Fix: kill or reschedule the blocking query (<code>CANCEL</code> / <code>PG_TERMINATE_BACKEND</code>), move ETL to a separate queue with fewer concurrent slots but higher memory, enable concurrency scaling for burst (watch cost), or rewrite the queued query (distribution key mismatch causes massive redistribution). Prevent with WLM auto rules, query timeouts, and separating BI from batch workloads — see <a href="s10-redshift.html#interview">Section 10</a>.</p>
+<p>Ongoing monitoring: watch <code>Duration</code>, error rate, and data-volume reconciliation alarms in CloudWatch (<a href="s16-management.html#cloudwatch">Section 16</a>). Document findings in the pipeline runbook so the next on-call engineer starts from evidence, not guesswork.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Redshift cluster disk usage is at 95%. What is your plan before it hits 100%?<span class="qa-tag">Troubleshooting</span></summary>
+              <div class="qa-body">
+<p>Check <code>SVV_DISKUSAGE</code> and <code>STV_PARTITIONS</code> to see which tables consume space. On RA3, local SSD is primarily for cache — high usage may mean unsorted rows needing vacuum or too many temp tables from large sorts. Run <code>SELECT "table", size, tbl_rows FROM SVV_TABLE_INFO ORDER BY size DESC LIMIT 20</code>.</p>
+<p>Immediate actions: run <code>VACUUM DELETE ONLY</code> on tables with heavy deletes; <code>VACUUM FULL</code> during a maintenance window for deep reclaim; drop staging tables left from failed loads; archive cold data to S3 and use Spectrum for historical queries (<a href="s10-redshift.html#spectrum">Section 10 Spectrum</a>); enable automatic table optimization or consider resizing to a node type with more local storage on DC2 (legacy).</p>
+<p>Prevent with lifecycle policies moving data older than N months to S3 Parquet, monitoring <code>PercentageDiskSpaceUsed</code> in CloudWatch, and enforcing sort keys that match delete patterns. RA3 clusters offload to S3 — still monitor because large unsorted tables hurt performance before they hurt disk.</p>
+<p>Ongoing monitoring: watch <code>Duration</code>, error rate, and data-volume reconciliation alarms in CloudWatch (<a href="s16-management.html#cloudwatch">Section 16</a>). Document findings in the pipeline runbook so the next on-call engineer starts from evidence, not guesswork.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>A Redshift COPY from S3 fails on 12 rows out of 40 million. How do you handle it?<span class="qa-tag">Troubleshooting</span></summary>
+              <div class="qa-body">
+<pre data-lang="sql" data-title="Redshift — inspect COPY errors"><code>SELECT starttime, filename, line_number, colname, type, raw_line, err_reason
+FROM stl_load_errors
+WHERE query = pg_last_copy_id()
+ORDER BY line_number
+LIMIT 50;</code></pre>
+<p>Query <code>STL_LOAD_ERRORS</code> (or <code>sys_load_error_detail</code> on RA3/serverless) for the load ID: it shows line number, column, error reason (type mismatch, truncation, invalid date). With <code>COPY ... COMPUPDATE OFF STATUPDATE OFF</code> for speed, errors still land here. Check whether <code>MAXERROR</code> was set — default is abort on first error unless you raised it.</p>
+<p>Fix the 12 bad rows at source or quarantine them: run COPY with <code>MAXERROR 100</code> and <code>ACCEPTINVCHARS</code> / <code>TRUNCATECOLUMNS</code> if appropriate, or use a staging table with VARCHAR columns, load all rows, insert clean rows to prod with casts and filters, route bad rows to an error table for partner notification. For Parquet, schema evolution mismatches show as column count errors — align Glue catalog schema.</p>
+<p>Prevent with Glue Data Quality or a pre-COPY Lambda validating CSV against a contract, SNS alert on any load error count &gt; 0, and partner SLAs requiring schema validation before drop. Idempotent loads use a manifest and <code>COPY</code> from a curated prefix only.</p>
+<p>Ongoing monitoring: watch <code>Duration</code>, error rate, and data-volume reconciliation alarms in CloudWatch (<a href="s16-management.html#cloudwatch">Section 16</a>). Document findings in the pipeline runbook so the next on-call engineer starts from evidence, not guesswork.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>DynamoDB is throttling writes on one partition key only. Explain and fix.<span class="qa-tag">Troubleshooting</span></summary>
+              <div class="qa-body">
+<p>DynamoDB partitions have a per-partition throughput ceiling (~3,000 RCU / 1,000 WCU per second per partition, with burst). CloudWatch <code>ThrottledRequests</code> split by operation, plus <code>ConsumedWriteCapacityUnits</code> with dimension <code>TableName</code>, shows throttling. If one hot key dominates (e.g. all counters updating <code>global#counter</code>), only that partition throttles while table-level metrics look healthy.</p>
+<p>Fix: redesign the access pattern — shard the hot key (<code>counter#0</code> … <code>counter#9</code> and sum on read), use write sharding for high-frequency status updates, or switch to on-demand if traffic is spiky and unpredictable. For transient spikes, enable auto scaling on provisioned mode with target tracking at 70% utilization.</p>
+<p>Prevent with partition key design reviews, item collection size monitoring (<code>ItemCollectionMetrics</code> for LSI hot spots), and load tests. See <a href="s09-dynamodb.html#interview">Section 9</a> for WCU maths and GSI write amplification.</p>
+<p>Ongoing monitoring: watch <code>Duration</code>, error rate, and data-volume reconciliation alarms in CloudWatch (<a href="s16-management.html#cloudwatch">Section 16</a>). Document findings in the pipeline runbook so the next on-call engineer starts from evidence, not guesswork.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>A Lambda triggered by S3 events processes some files twice. How do you find out why and stop duplicates?<span class="qa-tag">Troubleshooting</span></summary>
+              <div class="qa-body">
+<p>S3 event notifications deliver <strong>at least once</strong> — retries after Lambda failures, duplicate events on versioning overwrites, or overlapping prefix filters can invoke twice for the same object. Check CloudWatch Logs for duplicate <code>requestId</code> values with the same object key and timestamp; S3 server access logs show multiple <code>POST</code> notifications.</p>
+<p>Confirm whether the handler is idempotent: does it INSERT blindly or UPSERT on a natural key? Check SQS DLQ if using async invocation. Lambda's account-level concurrency retries can re-drive the same batch.</p>
+<p>Fix: make processing idempotent — write to deterministic paths (<code>curated/date=…/file.parquet</code> overwrite), use DynamoDB conditional writes on a file-ETag primary key, or maintain a processed-files table. Optionally insert SQS between S3 and Lambda for single-consumer ordering per prefix. Prevent with idempotency keys in the design doc and integration tests that invoke the handler twice. Covered in <a href="s05-lambda.html#interview">Section 5</a>.</p>
+<p>Ongoing monitoring: watch <code>Duration</code>, error rate, and data-volume reconciliation alarms in CloudWatch (<a href="s16-management.html#cloudwatch">Section 16</a>). Document findings in the pipeline runbook so the next on-call engineer starts from evidence, not guesswork.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>A Lambda function keeps hitting its 15-minute timeout. What are your options?<span class="qa-tag">Troubleshooting</span></summary>
+              <div class="qa-body">
+<p>Inspect CloudWatch Logs for where time goes — X-Ray segments show downstream calls. If the function processes large S3 objects synchronously, downloads, or runs heavy pandas work, 15 minutes is a hard Lambda limit and cannot be raised.</p>
+<p>Options in order: (1) <strong>Split the work</strong> — S3 trigger sends a message to SQS with key ranges; Step Functions Map state processes prefixes in parallel Lambdas. (2) <strong>Move compute to Glue or EMR</strong> for batch transformation. (3) <strong>Stream processing</strong> with partial progress in DynamoDB. (4) <strong>Increase memory</strong> (which proportionally increases CPU) if the bottleneck is single-threaded compute within one invocation.</p>
+<p>Prevent by sizing workloads to the right service upfront — Lambda for seconds of work, Glue for Spark minutes-to-hours. Set CloudWatch alarm on <code>Duration</code> p99 approaching 900 seconds and use reserved concurrency to avoid retry storms.</p>
+<p>Ongoing monitoring: watch <code>Duration</code>, error rate, and data-volume reconciliation alarms in CloudWatch (<a href="s16-management.html#cloudwatch">Section 16</a>). Document findings in the pipeline runbook so the next on-call engineer starts from evidence, not guesswork.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>A nightly pipeline silently produced half the expected row count. How do you investigate?<span class="qa-tag">Troubleshooting</span></summary>
+              <div class="qa-body">
+<p>Compare row counts at each layer: source system export count, S3 object metrics (<code>NumberOfObjects</code> custom metric or S3 Inventory), Glue job <code>RecordsWritten</code> in the run metrics, and target table <code>COUNT(*)</code> for the load date partition. Identify the first layer where count drops — that is where the bug lives.</p>
+<p>Check Glue job bookmarks: did a partial run commit bookmark state and skip files? Check for filters (<code>pushdown predicate</code> too aggressive), inner joins that drop unmatched rows, and late-arriving data excluded by a watermark. Review Step Functions execution history for a skipped branch. Query orchestrator logs for SUCCESS despite partial writes.</p>
+<p>Fix the transform and backfill the missing partition after resetting bookmark for that day only. Prevent with <strong>data quality gates</strong>: assert row count within ±5% of trailing average, fail the Step Function if check fails, SNS to on-call. Store expected counts in a manifest file alongside each drop.</p>
+<p>Ongoing monitoring: watch <code>Duration</code>, error rate, and data-volume reconciliation alarms in CloudWatch (<a href="s16-management.html#cloudwatch">Section 16</a>). Document findings in the pipeline runbook so the next on-call engineer starts from evidence, not guesswork.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Duplicate rows appeared in a fact table after a pipeline re-run. What happened and how do you fix it?<span class="qa-tag">Troubleshooting</span></summary>
+              <div class="qa-body">
+<pre data-lang="sql" data-title="Redshift — dedupe before MERGE"><code>DELETE FROM fact_daily
+WHERE load_date = CURRENT_DATE;
+
+COPY fact_daily FROM 's3://bucket/curated/fact_daily/load_date=2026-08-03/'
+IAM_ROLE 'arn:aws:iam::123456789012:role/RedshiftCopy'
+FORMAT AS PARQUET;</code></pre>
+<p>Re-runs without idempotency append a second copy of the same business keys. Confirm with <code>SELECT business_key, COUNT(*) FROM fact GROUP BY 1 HAVING COUNT(*) &gt; 1</code> limited to the affected date partition. Check whether the job uses INSERT vs MERGE, whether the target is append-only Parquet on S3 or Redshift.</p>
+<p>Fix: delete the duplicate partition (<code>DELETE FROM fact WHERE load_date = '…'</code> or remove S3 prefix) and re-run with idempotent logic. Implement MERGE on natural key + load_date, or delete-before-insert for the partition boundary. For Iceberg/Delta, use MERGE INTO.</p>
+<p>Prevent: design pipelines idempotent from day one; use Step Functions with deterministic execution names; document replay procedure. See <a href="s01-introduction.html#interview">Section 1</a> on idempotency.</p>
+<p>Ongoing monitoring: watch <code>Duration</code>, error rate, and data-volume reconciliation alarms in CloudWatch (<a href="s16-management.html#cloudwatch">Section 16</a>). Document findings in the pipeline runbook so the next on-call engineer starts from evidence, not guesswork.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>On EMR, one Spark task takes 90% of total job runtime — classic data skew. What do you do?<span class="qa-tag">Troubleshooting</span></summary>
+              <div class="qa-body">
+<p>Open the Spark UI → Stages → sort by duration → skew column shows max task vs median. The stage is usually a shuffle join or groupBy where one key (null, empty string, or a mega-customer) owns most rows.</p>
+<p>Fixes: filter null keys early; <strong>salting</strong> — add random suffix to hot keys on both sides of join, join, then aggregate away salt; use broadcast join if one side is small enough; repartition by a higher-cardinality column; use Adaptive Query Execution (Spark 3.x) with skew join hints. On EMR, increase executor count only helps if tasks are balanced.</p>
+<p>Prevent with data profiling before production joins, AQE enabled in cluster config, and CloudWatch alarm on job duration p95. For recurring skew, pre-aggregate hot keys in a separate pipeline stage. See <a href="s13-analytics.html#emr">Section 13 EMR</a>.</p>
+<p>Ongoing monitoring: watch <code>Duration</code>, error rate, and data-volume reconciliation alarms in CloudWatch (<a href="s16-management.html#cloudwatch">Section 16</a>). Document findings in the pipeline runbook so the next on-call engineer starts from evidence, not guesswork.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>A Step Functions execution is stuck in Running for hours. How do you debug?<span class="qa-tag">Troubleshooting</span></summary>
+              <div class="qa-body">
+<p>Open the execution graph in the Step Functions console — the currently active state is highlighted. Common stuck states: <code>Wait</code> with a far-future timestamp, <code>Task</code> waiting on a sync job (Glue <code>StartJobRun.sync</code>, EMR create cluster) that failed without heartbeat, or <code>Callback</code> waiting for <code>SendTaskSuccess</code> that never arrives.</p>
+<p>Check CloudWatch Logs for the state machine and the integrated service. For Glue sync tasks, verify the job actually started — IAM pass-role errors sometimes leave the execution polling. Lambda retries may exhaust without transitioning to Fail if <code>Catch</code> is misconfigured.</p>
+<p>Fix: stop the execution if safe, fix IAM or timeout config, add <code>HeartbeatSeconds</code> and task tokens with deadlines. Prevent with execution timeouts at the state machine level, CloudWatch alarm on <code>ExecutionsTimedOut</code>, and idempotent task handlers. Reference <a href="s15-app-integration.html#step-functions">Section 15</a>.</p>
+<p>Ongoing monitoring: watch <code>Duration</code>, error rate, and data-volume reconciliation alarms in CloudWatch (<a href="s16-management.html#cloudwatch">Section 16</a>). Document findings in the pipeline runbook so the next on-call engineer starts from evidence, not guesswork.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>A Kinesis Data Firehose delivery stream is dropping records. Walk me through diagnosis.<span class="qa-tag">Troubleshooting</span></summary>
+              <div class="qa-body">
+<p>CloudWatch metrics: <code>DeliveryToS3.Success</code>, <code>DeliveryToS3.DataFreshness</code>, and critically <code>ExecuteProcessing.Duration</code> plus <code>ThrottledRecords</code>. Check the S3 error prefix configured on the stream — failed records land there with error codes after retry exhaustion.</p>
+<p>Causes: Lambda transformation timeouts or exceptions (check transformation CloudWatch logs), destination S3 permissions or KMS key policy denying Firehose role, buffer size too aggressive for tiny records, OpenSearch/Redshift destination rejecting malformed documents, or account-wide Firehose throughput limits.</p>
+<p>Fix permissions, fix or disable the transformer, adjust buffering hint (size vs interval), validate record format against destination schema. Prevent with alarms on <code>IncomingRecords - DeliveryToS3.Success</code> delta, integration tests on sample records, and dual-write to Data Streams if you need replayability.</p>
+<p>Ongoing monitoring: watch <code>Duration</code>, error rate, and data-volume reconciliation alarms in CloudWatch (<a href="s16-management.html#cloudwatch">Section 16</a>). Document findings in the pipeline runbook so the next on-call engineer starts from evidence, not guesswork.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>An Amazon OpenSearch Service domain is in yellow cluster health. What does that mean and what do you do?<span class="qa-tag">Troubleshooting</span></summary>
+              <div class="qa-body">
+<p><strong>Yellow</strong> means all primary shards are assigned but at least one replica shard is unassigned — you can still query and index, but you have no redundancy. Check cluster health API: <code>GET _cluster/health</code> and <code>GET _cat/shards?v</code> for UNASSIGNED shards. Common on single-AZ domains with replica count = 1 when a node is down, or when disk watermark triggered relocation.</p>
+<p>Also check JVM memory pressure (<code>JVMMemoryPressure</code> &gt; 85% causes throttling), UltraWarm/Cold tier issues, and blue/green deployment in progress. CloudWatch logs for slow indexing and bulk rejections.</p>
+<p>Fix: add a node or AZ for replica placement, free disk (delete old indices, curator ILM), reduce shard count on new indices, or temporarily set <code>number_of_replicas</code> to 0 on dev clusters (not prod). Prevent with three-AZ deployment for production, automated snapshots to S3, and alarms on storage and JVM pressure.</p>
+<p>Ongoing monitoring: watch <code>Duration</code>, error rate, and data-volume reconciliation alarms in CloudWatch (<a href="s16-management.html#cloudwatch">Section 16</a>). Document findings in the pipeline runbook so the next on-call engineer starts from evidence, not guesswork.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Glue Crawler completes but Athena still cannot see new partitions. What do you check?<span class="qa-tag">Troubleshooting</span></summary>
+              <div class="qa-body">
+<p>Verify crawler target path matches where files landed — crawlers only register partitions under the target S3 prefix. Check the crawler's last run <strong>Tables created/updated</strong> count in Glue console and query <code>aws glue get-partitions</code> for the table. Schema change settings may have created a new table version instead of updating the existing one.</p>
+<p>IAM: crawler role needs <code>s3:ListBucket</code> on the bucket and Glue Data Catalog permissions. Lake Formation may grant table but not new partition locations. If using partition indexes, run MSCK REPAIR as a fallback.</p>
+<p>Fix crawler schedule, merge duplicate tables, run MSCK REPAIR, or switch to partition projection for date dimensions. Prevent with EventBridge-triggered partition registration on S3 events and a nightly reconciliation job comparing S3 path listing to catalog partitions.</p>
+<p>Ongoing monitoring: watch <code>Duration</code>, error rate, and data-volume reconciliation alarms in CloudWatch (<a href="s16-management.html#cloudwatch">Section 16</a>). Document findings in the pipeline runbook so the next on-call engineer starts from evidence, not guesswork.</p>
+              </div>
+            </details>
+          </div>
+        </section>
+
+        <section class="section" id="design">
+          <h2>Design me a pipeline</h2>
+          <p class="lead">Real prompts with architecture, reasoning, and an explicit trade-off. Draw the reference flow ingest → store → transform → serve while you speak.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Requirement</th><th>Typical AWS pattern</th><th>Trade-off accepted</th></tr></thead>
+              <tbody>
+                <tr><td>Sub-second stream processing</td><td>Kinesis Data Streams + Flink/Lambda</td><td>Ops complexity vs Firehose simplicity</td></tr>
+                <tr><td>Near-real-time lake load</td><td>Firehose → S3 Parquet</td><td>No replay from Firehose itself</td></tr>
+                <tr><td>Nightly batch ETL</td><td>Glue Spark + Step Functions</td><td>DPU cost vs EMR tuning control</td></tr>
+                <tr><td>CDC from relational DB</td><td>DMS → Kinesis or S3 → MERGE</td><td>DMS task maintenance on DDL</td></tr>
+                <tr><td>Ad-hoc SQL on lake</td><td>Athena + partition projection</td><td>Per-TB scan cost at high QPS</td></tr>
+                <tr><td>Concurrent BI</td><td>Redshift + Spectrum for cold data</td><td>Cluster cost vs Athena latency</td></tr>
+                <tr><td>Key-value lookups</td><td>DynamoDB + DAX optional</td><td>Access-pattern rigidity</td></tr>
+                <tr><td>Multi-tenant isolation</td><td>Lake Formation row filters</td><td>Policy testing burden</td></tr>
+                <tr><td>GDPR erasure</td><td>Iceberg DELETE + orchestrated sweep</td><td>Compaction and audit overhead</td></tr>
+                <tr><td>Replay 30 days</td><td>Immutable S3 raw + idempotent MERGE</td><td>Storage cost for raw retention</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="qa-list">
+            <details class="qa">
+              <summary>Design ingestion and serving for 1 TB/day of clickstream data with dashboards refreshed every five minutes.<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+<p>Ingest: <strong>Kinesis Data Streams</strong> (or on-demand mode) with high-cardinality partition keys (<code>sessionId</code>) for even shard load. Producers use KPL aggregation. Two consumer paths: (1) <strong>Managed Flink</strong> or Lambda for five-minute tumbling-window aggregates written to <strong>DynamoDB</strong> or <strong>ElastiCache</strong> for sub-second dashboard reads; (2) <strong>Firehose</strong> to S3 Parquet partitioned by <code>event_date/hour</code> for historical Athena/Redshift analysis.</p>
+<p>Serving: QuickSight SPICE refreshed every five minutes from the aggregate table, or direct query to Redshift materialized views refreshed on schedule. Trade-off accepted: five-minute latency is not true real time — we avoided per-event dashboard queries against the lake, which would destroy Athena economics.</p>
+<p>Why not Firehose-only: five-minute aggregates need stateful processing Firehose cannot do. Why not EMR batch: cannot meet refresh SLA. Cost levers: on-demand Kinesis for spike handling, Parquet compaction nightly via Glue, SPICE vs direct query based on concurrent user count.</p>
+<p>Validate the design with a back-of-envelope cost estimate using named billing units before the interview ends — interviewers notice when you close the loop on cost.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Design a batch pipeline for 200 nightly CSV drops from partners, each with a different schema.<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+<p>Landing: each partner writes to <code>s3://lake/raw/{partner_id}/ingest_date=…/</code> via SFTP (Transfer Family) or presigned URLs. <strong>EventBridge</strong> on ObjectCreated triggers a <strong>Step Functions</strong> execution per file with partner_id in the input.</p>
+<p>Transform: Glue workflow per partner (or parameterized job) with a Data Catalog table per partner schema, DataBrew recipes for known cleaning patterns, output to <code>staging/</code> in a canonical Parquet schema. Use Glue Schema Registry or a contract JSON in S3 for validation. Failed files → quarantine prefix + SNS.</p>
+<p>Curated layer: star schema in Redshift or Iceberg tables with conformed dimensions; partner-specific columns map through a metadata table. Trade-off: 200 Glue jobs vs one parameterized job — I would use one job with partner config in DynamoDB for operability, accepting slightly more complex code. Orchestration visibility in Step Functions beats 200 cron rules.</p>
+<p>Validate the design with a back-of-envelope cost estimate using named billing units before the interview ends — interviewers notice when you close the loop on cost.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Design CDC from an on-premises Oracle database into a warehouse with under five minutes of lag.<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+<p>Use <strong>AWS DMS</strong> with ongoing replication (CDC) from Oracle (LogMiner or ASM) to a staging layer — either S3 Parquet (cheap, replayable) or directly to <strong>Redshift</strong> / <strong>Aurora</strong> for lower latency. For &lt;5 min lag, DMS → Kinesis Data Streams → consumer writing merge upserts to Redshift beats batch S3 landing.</p>
+<p>Network: Direct Connect or Site-to-Site VPN; DMS replication instance in a private subnet with security group to Oracle port. Transform: lightweight Lambda or Flink normalizes types; heavy modelling stays in Redshift SQL or dbt-on-Redshift.</p>
+<p>Trade-off: DMS adds operational overhead vs Oracle GoldenGate, but fits AWS-native exam answers. Accept DMS task restart procedures for DDL changes; use S3 as dead-letter archive for replay. Monitor <code>CDCLatencySource</code> and <code>CDCLatencyTarget</code> in CloudWatch.</p>
+<p>Validate the design with a back-of-envelope cost estimate using named billing units before the interview ends — interviewers notice when you close the loop on cost.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Design a system that must serve sub-10-millisecond lookups and monthly analytics over the same underlying data.<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+<p>This is a classic <strong>Lambda architecture</strong> pattern on AWS: operational store plus analytical store fed from the same event stream. Ingest once via Kinesis or DMS; fan out to <strong>DynamoDB</strong> (key-value lookups by customer_id with GSIs for alternate access paths) and to S3 Parquet via Firehose for the lake.</p>
+<p>Monthly analytics: Athena or Redshift Spectrum over S3, or nightly COPY into Redshift fact tables. Do not point QuickSight monthly reports at DynamoDB — scans are the wrong economics and wrong tool.</p>
+<p>Trade-off: eventual consistency between stores (seconds to minutes) — acceptable for most analytics if documented. Use DynamoDB Streams + Lambda for cache invalidation if a separate API cache sits in front. Zero-ETL integrations (Aurora → Redshift) are an alternative when source is already on AWS.</p>
+<p>Validate the design with a back-of-envelope cost estimate using named billing units before the interview ends — interviewers notice when you close the loop on cost.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Design a GDPR-compliant data lake where a customer's records must be deletable within 30 days.<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+<p>Store PII in identifiable form only where necessary; use a surrogate <code>customer_token</code> in the lake keyed to identity in a secured mapping table. Partition by nothing that embeds PII. Enable S3 versioning with lifecycle expiration on delete markers.</p>
+<p>Deletion workflow: request arrives → Step Functions orchestrates (1) locate all objects/rows via Glue catalog + Athena query on <code>customer_id</code> index table, (2) delete or overwrite Parquet partitions (Iceberg <code>DELETE FROM</code> is cleaner), (3) propagate to Redshift, OpenSearch, and backups. Macie scans for stray PII. CloudTrail audit of every deletion API.</p>
+<p>Trade-off: true erasure in append-only lakes is hard — Iceberg/Hudi row-level deletes beat rewriting entire partitions. 30-day SLA requires automated pipeline, not manual tickets. Lake Formation column masking for analysts who never need raw PII.</p>
+<p>Validate the design with a back-of-envelope cost estimate using named billing units before the interview ends — interviewers notice when you close the loop on cost.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Design a multi-tenant lake where each tenant sees only their own rows.<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+<p>Physical isolation: separate S3 prefixes per tenant (<code>s3://lake/tenant_a/</code>) with bucket policies or Lake Formation LF-Tags (<code>tenant=A</code>). Logical isolation: shared tables with <code>tenant_id</code> column and <strong>Lake Formation row-level security</strong> filters, or Redshift <a href="s10-redshift.html#fgac">row access policies</a>.</p>
+<p>IAM alone is insufficient at SQL layer — analysts use Athena/Redshift credentials that LF or RLS enforce. Glue catalog registers one table; LF grants SELECT with filter <code>tenant_id=$${user.tenant_id}</code> from IAM session context.</p>
+<p>Trade-off: prefix-per-tenant simplifies compliance audits but multiplies crawler cost; shared table + RLS simplifies ops but demands rigorous testing so one filter bug exposes all tenants. Never rely on convention ("analysts promise to add WHERE tenant_id") — enforce in the engine.</p>
+<p>Validate the design with a back-of-envelope cost estimate using named billing units before the interview ends — interviewers notice when you close the loop on cost.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Design a pipeline replayable from any point in the last 30 days.<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+<p>Requirements: immutable raw layer retained 30+ days on S3 Standard-IA or Intelligent-Tiering; catalogued partitions; processing logic versioned (Glue job script in Git with job parameters for start/end date). Orchestration: Step Functions with input <code>{"replay_from": "2026-07-05", "replay_to": "2026-07-07"}</code> driving Map over date partitions.</p>
+<p>Disable or reset job bookmarks for replay runs; write to staging prefix first, validate row counts, atomic swap to curated (<code>ALTER TABLE … ADD PARTITION</code> swap). For streaming sources, Kinesis retention (max 365 days) or MSK with retention covers the buffer; Firehose-only is insufficient without S3 raw archive.</p>
+<p>Trade-off: storing 30 days raw is storage cost; not storing it makes replay impossible. Idempotent MERGE at curated layer so overlapping replays do not duplicate.</p>
+<p>Validate the design with a back-of-envelope cost estimate using named billing units before the interview ends — interviewers notice when you close the loop on cost.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Design for a 10× traffic spike on Black Friday without manual scaling.<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+<p>Front door: <strong>Kinesis on-demand</strong> or pre-scaled shard count based on last year's peak × 1.5; API Gateway with throttling limits per client. Compute: Lambda with reserved concurrency baseline + on-demand burst; Glue Flex jobs for non-urgent transforms; Redshift concurrency scaling enabled for analyst queries.</p>
+<p>Storage: DynamoDB on-demand mode for session state; S3 handles scale automatically. Caching: CloudFront for static assets; ElastiCache for hot keys. Queue smoothing: SQS between ingest and processing absorbs bursts.</p>
+<p>Trade-off: on-demand and concurrency scaling cost more than provisioned baseline — acceptable for one weekend vs lost revenue from dropped events. Run game day load test at 12× two weeks before. Alarms on iterator age, Lambda throttles, and DynamoDB throttles with runbook.</p>
+<p>Validate the design with a back-of-envelope cost estimate using named billing units before the interview ends — interviewers notice when you close the loop on cost.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Design a data-quality framework for a lake without slowing every ingest job to a crawl.<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+<p>Layer checks: lightweight checks inline (row count, null rate on key columns) in Glue job — fail fast. Heavy checks (referential integrity, distribution drift) async on staging data via Glue Data Quality rulesets or Deequ-style custom Spark, results to DynamoDB + QuickSight dashboard.</p>
+<p>Orchestration: Step Functions — ingest → minimal validate → promote if pass → trigger deep quality workflow. Quarantine failed partitions; do not merge to curated.</p>
+<p>Trade-off: not every rule runs on every row every time — sample-based profiling on large tables, full scans nightly. Uses metadata table of check results for audit rather than blocking human analysts.</p>
+<p>Validate the design with a back-of-envelope cost estimate using named billing units before the interview ends — interviewers notice when you close the loop on cost.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Design near-real-time anomaly detection on VPC Flow Logs at scale.<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+<p>Ingest: VPC Flow Logs to S3 (Parquet via Kinesis Data Firehose) or directly to Kinesis. Process with Managed Flink: parse, aggregate bytes per srcAddr per minute, compare to trailing baseline, alert SNS/PagerDuty on z-score breach.</p>
+<p>Store aggregates in Timestream or DynamoDB for dashboard; raw logs stay in S3 for forensics with lifecycle to Glacier. Trade-off: S3 delivery adds ~60s latency vs Kinesis sub-second — pick based on detection SLA.</p>
+<p>Validate the design with a back-of-envelope cost estimate using named billing units before the interview ends — interviewers notice when you close the loop on cost.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Design cross-account data sharing for a central data platform team serving multiple business units.<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+<p>Producer account lands data in S3; <strong>Lake Formation</strong> resource links and RAM shares grant consumer accounts access without copying data. Glue catalog resource links expose tables in consumer Athena workspaces. IAM roles in consumer accounts assume LF-granted permissions.</p>
+<p>Trade-off: shared bucket vs replicated bucket — LF share avoids duplicate storage but adds governance complexity. Audit via CloudTrail data events and LF audit logs.</p>
+<p>Validate the design with a back-of-envelope cost estimate using named billing units before the interview ends — interviewers notice when you close the loop on cost.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Design a slowly changing product catalog sync from RDS to the lake twice daily with schema evolution support.<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+<p>Glue JDBC extract with bookmark on <code>updated_at</code> incremental column; raw JSON to S3; crawler + schema evolution merge to staging; curated Iceberg table with MERGE. Schema changes: Glue Schema Registry detects incompatible change → route to manual review queue.</p>
+<p>Alternative: zero-ETL Aurora → Redshift for warehouse path, lake fed by DMS. Trade-off: Iceberg adds MERGE capability; plain Parquet needs partition rewrite.</p>
+<p>Validate the design with a back-of-envelope cost estimate using named billing units before the interview ends — interviewers notice when you close the loop on cost.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Design log aggregation for 500 microservices with search and 90-day retention.<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+<p>Application → CloudWatch Logs subscription filter → Kinesis Data Streams → Firehose → S3 Parquet (cheap long-term) + OpenSearch for search (hot 14 days). OpenSearch ISM policy deletes/local indices after 14 days; S3 lifecycle to Glacier for remainder.</p>
+<p>Trade-off: OpenSearch indexing cost vs Athena on S3 for search — full-text search needs OpenSearch; structured SQL queries can use Athena alone.</p>
+<p>Validate the design with a back-of-envelope cost estimate using named billing units before the interview ends — interviewers notice when you close the loop on cost.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Design a feature store pipeline for ML training and real-time inference.<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+<p>Batch features: Glue/EMR compute from lake → SageMaker Feature Store offline store (S3) + online store (DynamoDB) for low-latency serving. Streaming features: Flink from Kinesis updates online store; periodic sync reconciles offline.</p>
+<p>Trade-off: Feature Store cost vs DIY DynamoDB — exam answer with least ops overhead when SageMaker is already in scope.</p>
+<p>Validate the design with a back-of-envelope cost estimate using named billing units before the interview ends — interviewers notice when you close the loop on cost.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Design a batch pipeline that must survive partner file delays of up to 72 hours without blocking downstream.<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+<p>Orchestration: Step Functions with a Wait state is wrong for 72 hours — use EventBridge Scheduler or a daily gate that checks S3 for expected manifest file. Downstream jobs key off <code>manifest_ready=true</code> partition metadata in DynamoDB, not wall-clock time alone.</p>
+<p>Landing: partners drop to SFTP/Transfer Family; manifest lists expected files and checksums. Glue job validates completeness before promoting staging → curated. Missing files trigger SNS to partner manager, not a silent partial load.</p>
+<p>Trade-off: late data means dashboards update after the 72-hour window — document SLA as "T+72h after complete manifest" not "daily at 6am." Iceberg MERGE handles rows arriving for an already-closed business date.</p>
+<p>Validate the design with a back-of-envelope cost estimate using named billing units before the interview ends — interviewers notice when you close the loop on cost.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Design observability for a multi-stage lake pipeline so on-call can pinpoint failing stage in under five minutes.<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+<p>Each stage emits structured logs with <code>pipeline_run_id</code>, <code>stage</code>, <code>partition</code>, row counts in/out. Step Functions execution ARN links stages. CloudWatch dashboard: one widget per stage duration p95, one for row-count delta vs trailing average.</p>
+<p>Alarms: Glue job failure, Step Functions <code>ExecutionsFailed</code>, iterator age, Athena reconciliation query returning &gt;1% variance. X-Ray optional for Lambda chains. Data lineage in Glue or OpenLineage if team maturity allows.</p>
+<p>Trade-off: metric cardinality cost vs debug speed — use partition date in dimensions, not unbounded file names. Runbook maps alarm → likely root cause → first CLI command to run.</p>
+<p>Validate the design with a back-of-envelope cost estimate using named billing units before the interview ends — interviewers notice when you close the loop on cost.</p>
+              </div>
+            </details>
+          </div>
+        </section>
+
+        <section class="section" id="cost">
+          <h2>Cost optimisation scenarios</h2>
+          <p class="lead">Every answer names the billing unit and the lever you would pull — not vague "optimise queries."</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Service</th><th>Billing unit</th><th>Primary levers</th></tr></thead>
+              <tbody>
+                <tr><td>Athena</td><td>TB scanned</td><td>Parquet, partitions, column select, CTAS, workgroup limits</td></tr>
+                <tr><td>Glue</td><td>DPU-hour</td><td>Right-size DPUs, Flex, pushdown, Python Shell for small jobs</td></tr>
+                <tr><td>Redshift</td><td>Node-hour / RPU-second</td><td>Pause, resize, Spectrum offload, concurrency scaling tuning</td></tr>
+                <tr><td>Kinesis</td><td>Shard-hour / payload GB</td><td>On-demand, KPL aggregation, right-size shards</td></tr>
+                <tr><td>DynamoDB</td><td>RCU/WCU-hour or request units</td><td>On-demand vs provisioned, GSIs, item size</td></tr>
+                <tr><td>S3</td><td>GB-month + requests + transfer</td><td>Lifecycle tiers, gateway endpoint, object consolidation</td></tr>
+                <tr><td>NAT Gateway</td><td>Hour + GB processed</td><td>VPC endpoints for S3/DynamoDB/APIs</td></tr>
+                <tr><td>Lambda</td><td>GB-second + requests</td><td>Memory tuning, Step Functions orchestration, SQS batching</td></tr>
+                <tr><td>EMR</td><td>EC2 + EMR premium</td><td>Spot, transient clusters, right instance family</td></tr>
+                <tr><td>Firehose</td><td>GB ingested</td><td>Compression, aggregation, direct PUT vs agent</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="qa-list">
+            <details class="qa">
+              <summary>Our Athena bill is 40,000 USD per month. How would you halve it?<span class="qa-tag">Cost</span></summary>
+              <div class="qa-body">
+<p>Athena bills <strong>per terabyte scanned</strong> ($5/TB in us-east-1 standard pricing). Pull Cost Explorer filtered by service Athena and query history for top ten queries by <code>DataScannedInBytes</code>. The usual winners: convert CSV/JSON to <strong>Parquet + Snappy</strong> (80–90% scan reduction), enforce partition filters (reject queries missing <code>WHERE year AND month</code> via workgroup settings or LF), replace <code>SELECT *</code> with column lists, and compact small files.</p>
+<p>Structural fixes: materialize heavy repeated queries to curated tables (CTAS scheduled Glue job — pays once, read cheap many times); use partition projection to avoid MSCK scanning empty paths; move high-QPS dashboards to Redshift Serverless or QuickSight SPICE fed by a nightly summary.</p>
+<p>Governance: per-team workgroups with CloudWatch alarms on data scanned daily; AWS Budgets on Athena line item. Trade-off: CTAS staleness vs scan cost — for dashboards that tolerate one-hour lag, CTAS wins.</p>
+<p>Revisit in Cost Explorer after 30 days; optimisation is iterative and the first lever rarely captures all savings.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Redshift costs more than the value it delivers. What is your review process?<span class="qa-tag">Cost</span></summary>
+              <div class="qa-body">
+<p>Redshift bills <strong>node-hours</strong> (provisioned), <strong>RPU-hours</strong> (Serverless), plus concurrency scaling seconds and managed storage GB/month on RA3. Pull: cluster uptime (is dev cluster running 24/7?), average CPU &lt; 20% (downsize node type or count), concurrency scaling charges (optimize WLM instead), and Spectrum scan volume (push filters to S3).</p>
+<p>Decision tree: if queries are sporadic and light → <strong>Redshift Serverless</strong> or migrate dashboards to Athena on curated Parquet. If cluster is idle nights → pause/resume schedules or Serverless. If data is cold → unload old partitions to S3, drop from cluster, query via Spectrum.</p>
+<p>Trade-off: migration effort vs monthly savings — pilot one workload on Athena+Iceberg before decommissioning cluster. Tag clusters with <code>CostCenter</code> for chargeback conversation with stakeholders.</p>
+<p>Revisit in Cost Explorer after 30 days; optimisation is iterative and the first lever rarely captures all savings.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>S3 storage GB-month stayed flat but the S3 bill went up. What line items do you check?<span class="qa-tag">Cost</span></summary>
+              <div class="qa-body">
+<p>S3 cost is not only storage: <strong>PUT/COPY/POST/LIST requests</strong>, GET requests, <strong>data transfer out</strong> to internet or cross-region, replication (SRR/CRR), inventory and analytics charges, and early deletion fees on IA/Glacier tiers. Cost Explorer → S3 → group by usage type.</p>
+<p>Common surprises: a crawler or inventory job issuing millions of LIST requests; CloudFront origin pulls billed as S3 egress; cross-AZ traffic from EC2/Glue in another AZ reading the bucket; lifecycle transitions adding transition request fees; KMS API costs on SSE-KMS per-object keys.</p>
+<p>Fix: S3 request metrics alarm; VPC gateway endpoint for S3 to avoid NAT charges on LIST/GET; consolidate small objects; same-AZ compute; review replication necessity. See <a href="s07-s3.html#interview">Section 7</a>.</p>
+<p>Revisit in Cost Explorer after 30 days; optimisation is iterative and the first lever rarely captures all savings.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Is Glue or EMR cheaper for a nightly 500 GB PySpark transform?<span class="qa-tag">Cost</span></summary>
+              <div class="qa-body">
+<p>Compare at the billing unit: Glue = <strong>DPU-hours</strong> (~$0.44/DPU-hr, 1-min minimum on 2.0+); EMR = <strong>EC2 instance-hours</strong> + EMR premium (~25% on top of EC2) minus spot discounts. A 10-DPU Glue job for 30 minutes ≈ 5 DPU-hours ≈ $2.20. Equivalent EMR: 5 × m5.xlarge spot might be cheaper at scale but you pay for cluster spin-up and ops.</p>
+<p>Glue wins on: intermittent jobs, minimal ops, under ~1 hour, no custom AMI/cluster tuning. EMR wins on: sustained multi-hour jobs, spot-heavy workloads, existing Spark tuning investment, needing exactly the same Spark version as on-prem.</p>
+<p>Run both once with identical logic and compare wall-clock × unit price. Flex execution lowers Glue cost if schedule allows queueing.</p>
+<p>Revisit in Cost Explorer after 30 days; optimisation is iterative and the first lever rarely captures all savings.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>When do you choose on-demand versus provisioned capacity for DynamoDB?<span class="qa-tag">Cost</span></summary>
+              <div class="qa-body">
+<p>Provisioned bills <strong>WCU/RCU-hours</strong> — cheapest at steady, predictable traffic you can right-size with auto scaling. On-demand bills <strong>per request unit</strong> (~$1.25 per million write request units in us-east-1) — wins for spiky/unpredictable traffic, new apps without traffic history, and short-lived workloads.</p>
+<p>Rule of thumb: if average utilization of provisioned capacity is &gt;70% and traffic is flat, provisioned + auto scaling saves 50%+ vs on-demand. If traffic varies 10× between day and night, on-demand avoids over-provisioning waste.</p>
+<p>Hybrid: provisioned base + on-demand burst mode (where available) for tables with a steady floor and occasional spikes.</p>
+<p>Revisit in Cost Explorer after 30 days; optimisation is iterative and the first lever rarely captures all savings.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How do you attribute pipeline cost to a team?<span class="qa-tag">Cost</span></summary>
+              <div class="qa-body">
+<p>Tag everything at creation: <code>CostCenter</code>, <code>Team</code>, <code>Environment</code>, <code>Pipeline</code> on Glue jobs, Lambda, Step Functions, S3 buckets (tag-based cost allocation), Kinesis streams. Activate cost allocation tags in Billing console; enable CUR (Cost and Usage Report) to Athena for granular SQL.</p>
+<p>Split shared services: NAT Gateway and shared Glue catalog — allocate by percentage of S3 bytes stored per team or DPU-hours consumed per job tag. Cost Explorer resource tags report monthly; publish dashboard in QuickSight.</p>
+<p>Trade-off: tag enforcement via SCP or CloudFormation-only provisioning — untagged resources go to "unallocated" and escalate.</p>
+<p>Revisit in Cost Explorer after 30 days; optimisation is iterative and the first lever rarely captures all savings.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>NAT Gateway is our third-largest line item. How do you reduce it?<span class="qa-tag">Cost</span></summary>
+              <div class="qa-body">
+<p>NAT Gateway bills <strong>per hour per AZ</strong> (~$0.045/hr) plus <strong>$0.045/GB processed</strong>. Data engineering workloads trigger NAT when Glue/Lambda/EMR in private subnets read S3, DynamoDB, or APIs over the internet path instead of VPC endpoints.</p>
+<p>Fix: add <strong>S3 Gateway Endpoint</strong> (free) and <strong>DynamoDB Gateway Endpoint</strong> (free); Interface endpoints for Glue, STS, CloudWatch Logs, ECR, Secrets Manager (~$0.01/hr + data). Route tables must prefer endpoints over NAT. Reduce cross-region traffic; pull public Docker images to private ECR once.</p>
+<p>Trade-off: interface endpoint hourly cost vs NAT GB — at scale endpoints almost always win. For dev, consider public subnet + security group lockdown vs NAT (exam caution: production usually private). See <a href="s19-vpc.html#interview">Section 19</a>.</p>
+<p>Revisit in Cost Explorer after 30 days; optimisation is iterative and the first lever rarely captures all savings.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Kinesis shard hours are 15% of our bill. Optimise without losing throughput headroom.<span class="qa-tag">Cost</span></summary>
+              <div class="qa-body">
+<p>Shard-hour pricing applies to provisioned mode 24/7 whether you use capacity or not. Pull <code>IncomingBytes</code> vs shard count — if average utilisation &lt; 20%, you over-sharded. On-demand mode auto-scales and removes idle shard cost for variable workloads.</p>
+<p>Producer-side KPL aggregation increases records per PUT, reducing effective shard need. Right-size enhanced fan-out consumers — each EFO consumer adds cost; drop EFO if only one consumer reads.</p>
+<p>Trade-off: on-demand premium per GB vs ops cost of manual resharding — calculate break-even at your baseline throughput.</p>
+<p>Revisit in Cost Explorer after 30 days; optimisation is iterative and the first lever rarely captures all savings.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How do you decide between Redshift provisioned and Serverless for a new warehouse?<span class="qa-tag">Cost</span></summary>
+              <div class="qa-body">
+<p>Serverless bills <strong>RPU-seconds</strong> (~$0.375/RPU-hour equivalent) only while queries run — ideal for intermittent BI, dev/test, unpredictable workloads. Provisioned bills 24/7 node-hours — ideal for sustained high concurrency, predictable SLAs, heavy ETL co-located on cluster.</p>
+<p>Estimate: multiply p95 daily query runtime × RPU estimate vs cheapest node type that meets concurrency. If cluster would idle &gt;50% of day, Serverless likely wins. If nightly COPY + constant analyst load, provisioned RA3 with pause schedule may win.</p>
+<p>Revisit in Cost Explorer after 30 days; optimisation is iterative and the first lever rarely captures all savings.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Data transfer charges between regions are growing. What do you change?<span class="qa-tag">Cost</span></summary>
+              <div class="qa-body">
+<p>Cross-region S3 replication, Global tables DynamoDB, and querying S3 in us-east-1 from Redshift in eu-west-1 all bill <strong>$0.02/GB</strong> (varies by direction). Fix: colocate compute with data — run Athena in the same region as bucket; use regional endpoints; compress before transfer.</p>
+<p>For multi-region DR, replicate only critical subsets; use S3 Batch Operations in-region instead of pulling cross-region for processing.</p>
+<p>Revisit in Cost Explorer after 30 days; optimisation is iterative and the first lever rarely captures all savings.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Glue DPU costs doubled after a platform team added more jobs. Your optimisation plan?<span class="qa-tag">Cost</span></summary>
+              <div class="qa-body">
+<p>Audit DPU allocation per job — many jobs default to 10 DPUs unnecessarily. Enable job metrics; right-size to 2–5 for small files. Use <strong>Flex</strong> for non-SLA batches (lower $/DPU-hr). Python Shell for sub-16 GB transforms at 0.0625 DPU minimum.</p>
+<p>Consolidate sequential micro-jobs into one workflow to avoid repeated 1-minute minimums. Push filters early (pushdown predicates) to cut runtime. Schedule crawlers less frequently. Reference <a href="s04-glue.html#budgets">Section 4 budgets</a>.</p>
+<p>Revisit in Cost Explorer after 30 days; optimisation is iterative and the first lever rarely captures all savings.</p>
+              </div>
+            </details>
+          </div>
+        </section>
+
+        <section class="section" id="modelling-sql">
+          <h2>Data modelling and SQL</h2>
+          <p class="lead">Warehouse design and SQL patterns that appear in onsite rounds and in Redshift/Athena work tests.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Aspect</th><th>Star schema</th><th>Snowflake schema</th></tr></thead>
+              <tbody>
+                <tr><td>Dimension shape</td><td>Denormalised wide tables</td><td>Normalised hierarchy tables</td></tr>
+                <tr><td>Query complexity</td><td>Fewer joins</td><td>More joins</td></tr>
+                <tr><td>Redshift fit</td><td>Usually better — columnar compression on wide dims</td><td>Join-heavy on MPP</td></tr>
+                <tr><td>Update anomalies</td><td>Region name duplicated across rows</td><td>Update once in region table</td></tr>
+                <tr><td>When to pick</td><td>Default for analytics</td><td>Huge shared hierarchies, strict norm rules</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="qa-list">
+            <details class="qa">
+              <summary>Star schema versus snowflake — when does denormalisation win?<span class="qa-tag">SQL</span></summary>
+              <div class="qa-body">
+<p>Star: dimensions denormalised (one wide <code>dim_customer</code> with city, state, region columns). Snowflake: dimensions normalised to 3NF (customer → city → region tables). Denormalisation wins in <strong>Redshift/Athena</strong> when query patterns join fact to many dimension attributes frequently — fewer joins, better columnar compression on wide dimensions, simpler SQL for analysts.</p>
+<p>Snowflake schema wins when dimensions are huge shared hierarchies (org chart, product catalog) updated centrally — normalise to avoid inconsistent duplicates. On columnar MPP, the join cost of snowflake is often worse than storing redundant dimension strings.</p>
+<p>Exam/interview answer: default to star for analytics warehouses; snowflake only when update anomalies or storage dedup of slow-changing hierarchies justify the join cost.</p>
+<p>Test SQL in a staging cluster or Athena workgroup with production-like volume — correct logic on 1,000 rows still skews on 1 billion.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How would you model a slowly changing dimension, and why Type 2?<span class="qa-tag">SQL</span></summary>
+              <div class="qa-body">
+<p><strong>Type 1</strong> overwrites (lose history). <strong>Type 2</strong> adds new row with new surrogate key, <code>effective_from</code>, <code>effective_to</code>, <code>is_current</code> flag — preserves history for "what did we know at close?" reporting. <strong>Type 3</strong> keeps limited previous value column — rarely enough.</p>
+<p>Type 2 wins when historical accuracy matters: customer address at time of order, pricing tier when contract signed. Implementation: Glue MERGE on natural key detects hash change on tracked columns → close old row (<code>effective_to = yesterday</code>), insert new row.</p>
+<p>Trade-off: row count growth and join complexity (match fact to dimension where <code>order_date BETWEEN effective_from AND effective_to</code>). Type 1 fine for correcting typos, not business changes.</p>
+<p>Test SQL in a staging cluster or Athena workgroup with production-like volume — correct logic on 1,000 rows still skews on 1 billion.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How do you pick Redshift distribution key and sort key for a given query pattern?<span class="qa-tag">SQL</span></summary>
+              <div class="qa-body">
+<p><strong>DISTKEY</strong>: co-locate rows that join together on the same slice — choose the column in the largest fact table's most common equi-join (often <code>customer_id</code>). <strong>DISTSTYLE ALL</strong> for small dimensions (&lt;2 GB). <strong>DISTSTYLE EVEN</strong> when no dominant join to avoid skew.</p>
+<p><strong>SORTKEY</strong>: physical order for zone-map pruning — put most common range filter first (usually <code>event_date</code>). Compound sort for multi-column filters; interleaved for equal-importance filters (legacy, rarely used now).</p>
+<p>Validate with <code>EXPLAIN</code> — watch for DS_DIST_NONE vs DS_BCAST_INNER (bad on large tables). Revisit after query patterns change.</p>
+<p>Test SQL in a staging cluster or Athena workgroup with production-like volume — correct logic on 1,000 rows still skews on 1 billion.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How would you find and fix distribution skew in Redshift?<span class="qa-tag">SQL</span></summary>
+              <div class="qa-body">
+<pre data-lang="sql" data-title="Redshift — table skew"><code>SELECT trim(name) AS table, slice, count(*) AS rows
+FROM stv_slices s
+JOIN stv_blocklist b ON s.slice = b.slice
+JOIN stv_tbl_perm p ON b.tbl = p.id
+JOIN pg_table_def d ON d.tablename = p.name
+GROUP BY 1, 2
+ORDER BY 1, rows DESC;</code></pre>
+<p>Query <code>SVV_DISKUSAGE</code> or <code>stv_tbl_perm</code> joined with slice counts — skew ratio = max slice rows / min slice rows. High skew on DISTKEY value (NULL or mega-key) causes one slice to own most data.</p>
+<p>Fix: change DISTKEY to higher-cardinality column; use DISTSTYLE EVEN and rely on sort keys; pre-aggregate mega-keys; for NULL-heavy columns, filter NULLs to side table. After change, deep copy or <code>ALTER TABLE ALTER DISTSTYLE</code> (where supported) and vacuum.</p>
+<p>Test SQL in a staging cluster or Athena workgroup with production-like volume — correct logic on 1,000 rows still skews on 1 billion.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Write a deduplication query using a window function.<span class="qa-tag">SQL</span></summary>
+              <div class="qa-body">
+<pre data-lang="sql" data-title="Dedupe with ROW_NUMBER"><code>WITH ranked AS (
+  SELECT *,
+         ROW_NUMBER() OVER (
+           PARTITION BY customer_id, order_id
+           ORDER BY updated_at DESC, ingest_ts DESC
+         ) AS rn
+  FROM staging.orders
+)
+SELECT * FROM ranked WHERE rn = 1;</code></pre>
+<p>In production, MERGE into curated rather than SELECT-only — delete+insert partition or Iceberg MERGE.</p>
+<p>Keep the latest row per business key with <code>ROW_NUMBER()</code>:</p>
+<p>Test SQL in a staging cluster or Athena workgroup with production-like volume — correct logic on 1,000 rows still skews on 1 billion.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How do you write an anti-join to find missing records?<span class="qa-tag">SQL</span></summary>
+              <div class="qa-body">
+<pre data-lang="sql" data-title="Anti-join — missing records"><code>SELECT s.order_id
+FROM source.orders s
+LEFT JOIN warehouse.fact_orders w ON s.order_id = w.order_id
+WHERE w.order_id IS NULL;</code></pre>
+<p>Or <code>NOT EXISTS</code> (often same plan). For large tables, filter both sides to the same <code>load_date</code> partition first. In Spark/Glue, left_anti join is the equivalent.</p>
+<p>Find orders in source not in warehouse:</p>
+<p>Test SQL in a staging cluster or Athena workgroup with production-like volume — correct logic on 1,000 rows still skews on 1 billion.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Show a MERGE pattern for upserting into a slowly changing fact table.<span class="qa-tag">SQL</span></summary>
+              <div class="qa-body">
+<pre data-lang="sql" data-title="Redshift MERGE (or use Iceberg on Athena)"><code>MERGE INTO curated.fact_sales AS t
+USING staging.daily_sales AS s
+ON t.order_id = s.order_id AND t.line_item = s.line_item
+WHEN MATCHED AND s.updated_at > t.updated_at THEN UPDATE SET
+  amount = s.amount, updated_at = s.updated_at
+WHEN NOT MATCHED THEN INSERT (order_id, line_item, amount, updated_at)
+VALUES (s.order_id, s.line_item, s.amount, s.updated_at);</code></pre>
+<p>Requires idempotent staging load per batch. Alternative: delete affected keys then insert.</p>
+<p>Test SQL in a staging cluster or Athena workgroup with production-like volume — correct logic on 1,000 rows still skews on 1 billion.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How would you test that a transformation is correct?<span class="qa-tag">SQL</span></summary>
+              <div class="qa-body">
+<p>Layer tests: (1) <strong>Schema/constraints</strong> — row count, null rate on PK, unique keys. (2) <strong>Reconciliation</strong> — sum(amount) in source vs target by day, tolerance 0.01%. (3) <strong>Row-level samples</strong> — hash compare random 1% join on natural key. (4) <strong>Business rules</strong> — no future dates, status enum valid.</p>
+<p>Implement in Glue Data Quality, dbt tests, or Great Expectations on staging before promote. Fail Step Functions branch if any check fails. Store test results in a metadata table for audit.</p>
+<p>Test SQL in a staging cluster or Athena workgroup with production-like volume — correct logic on 1,000 rows still skews on 1 billion.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Surrogate keys versus natural keys in the warehouse — what do you choose?<span class="qa-tag">SQL</span></summary>
+              <div class="qa-body">
+<p>Surrogate keys (auto-increment or hash) decouple warehouse identity from source system changes — essential for Type 2 dimensions. Natural keys (order_id from OLTP) work as fact table PK when stable and globally unique.</p>
+<p>In AWS: Redshift <code>IDENTITY</code> columns or MD5 hash of business keys in Glue. Never use mutable natural keys alone as PK when source can reuse IDs across systems.</p>
+<p>Test SQL in a staging cluster or Athena workgroup with production-like volume — correct logic on 1,000 rows still skews on 1 billion.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How do you model a fact table that can be updated retroactively?<span class="qa-tag">SQL</span></summary>
+              <div class="qa-body">
+<p>Use <strong>transactional fact</strong> or <strong>snapshot fact</strong> pattern: append correction rows with adjustment type, or periodic snapshot partition per day. Iceberg/ Delta time travel helps audit. Avoid UPDATE-in-place without MERGE infrastructure.</p>
+<p>Pipeline: late-arriving facts land in staging; nightly MERGE adjusts aggregates; dashboards use as-of date parameter.</p>
+<p>Test SQL in a staging cluster or Athena workgroup with production-like volume — correct logic on 1,000 rows still skews on 1 billion.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>When would you normalise during ELT instead of loading raw?<span class="qa-tag">SQL</span></summary>
+              <div class="qa-body">
+<p>Normalise when: multiple source feeds duplicate nested entities (order + line items in one JSON) — explode in Spark then load 3NF staging. Denormalise at curated star layer for query performance.</p>
+<p>Glue DynamicFrame <code>relationalize</code> helps explode nested structures before Redshift load.</p>
+<p>Test SQL in a staging cluster or Athena workgroup with production-like volume — correct logic on 1,000 rows still skews on 1 billion.</p>
+              </div>
+            </details>
+          </div>
+        </section>
+
+        <section class="section" id="behavioural">
+          <h2>Ownership, process and communication</h2>
+          <p class="lead">Framework answers — describe how a strong candidate thinks, not a fabricated personal anecdote.</p>
+          <div class="qa-list">
+            <details class="qa">
+              <summary>A pipeline broke overnight and stakeholders need data by 9 a.m. How do you handle it?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+<p>First triage in order: (1) Is data still wrong or just late? (2) Blast radius — one table or entire lake? (3) Safe to re-run or need rollback? Check Step Functions/Glue last status, CloudWatch alarms, and #incidents channel. Communicate within 15 minutes: "investigating, ETA unknown, affected datasets X Y, workaround Z (yesterday's partition)."</p>
+<p>Fix path: identify failing component from logs, re-run from last good checkpoint if idempotent, validate row counts, notify when curated is green. Post-incident: timeline, root cause, corrective action — not blame.</p>
+<p>The goal is predictable, calm execution — frameworks beat heroic improvisation under sleep deprivation.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How do you communicate a data incident to non-technical stakeholders?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+<p>Structure: <strong>Impact</strong> (which reports/decisions affected), <strong>Timeline</strong> (when broken, when detected, when fixed), <strong>Root cause</strong> one plain sentence, <strong>Resolution</strong>, <strong>Prevention</strong>. Avoid jargon — say "customer counts were understated by ~5%" not "partition predicate failed."</p>
+<p>Match urgency to audience: exec email summary; analyst Slack with workaround query using yesterday's table. Never silent-fix without telling consumers who already made decisions on bad data.</p>
+<p>The goal is predictable, calm execution — frameworks beat heroic improvisation under sleep deprivation.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How do you decide fix-forward versus roll back?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+<p>Fix-forward when: failure is understood, re-run is idempotent, rollback would lose valid new data, SLA pressure high. Roll back when: bad data toxic (wrong prices), re-run time &gt; SLA, rollback is a partition swap (<code>curated_v20260802</code> alias), or root cause unknown (do not append more garbage).</p>
+<p>Document decision criteria in runbook; require second pair of eyes for rollback in prod.</p>
+<p>The goal is predictable, calm execution — frameworks beat heroic improvisation under sleep deprivation.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>You join a team with an undocumented pipeline. How do you onboard safely?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+<p>Map from edges: S3 event notifications, EventBridge rules, Glue workflows, Step Functions state machines — draw data lineage backward to sources. Read CloudWatch log groups names, IAM role policies (what each role touches), and last 30 days of job run history for schedule and duration baselines.</p>
+<p>Run read-only: trace one record from raw to curated in non-prod or with date filter. Interview previous owner if possible. Write the doc you wished existed before touching code.</p>
+<p>The goal is predictable, calm execution — frameworks beat heroic improvisation under sleep deprivation.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How would you introduce data quality checks to a team that has none?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+<p>Start with <strong>one high-value table</strong> and three checks: row count vs yesterday, PK uniqueness, sum reconciliation. Wire failure to stop promote to curated — prove value when one bad partner file gets caught. Expand coverage incrementally; publish pass/fail dashboard.</p>
+<p>Frame as risk reduction, not bureaucracy. Pair with self-serve quarantine bucket so producers fix their own files.</p>
+<p>The goal is predictable, calm execution — frameworks beat heroic improvisation under sleep deprivation.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>A product manager asks for real-time dashboards but budget fits batch. How do you say no?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+<p>Clarify requirement: what decision in what timeframe? Often "real time" means hourly. Present options with cost order-of-magnitude: batch nightly ($X), micro-batch 15 min ($3X), true streaming ($10X+). Recommend minimum viable latency that meets the decision clock.</p>
+<p>Document accepted trade-off in writing. Offer phased path if budget grows.</p>
+<p>The goal is predictable, calm execution — frameworks beat heroic improvisation under sleep deprivation.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How do you keep pipeline cost visible to the teams that cause it?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+<p>Monthly showback report by tag: Athena TB scanned per team workgroup, Glue DPU-hours per job name, S3 storage per prefix owner. Review in recurring meeting — not to punish, to align incentives. Alert team leads when their spend 2× trailing average.</p>
+<p>Self-service: Cost Explorer saved report link; optional Slack bot on Budget threshold.</p>
+<p>The goal is predictable, calm execution — frameworks beat heroic improvisation under sleep deprivation.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Two urgent pipeline requests arrive simultaneously with one engineer. How do you prioritize?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+<p>Score by: revenue/regulatory impact × number of users × SLA deadline ÷ effort. Communicate queue transparently to both requesters. If tie, exec sponsor breaks tie. Never silently pick favorites — document rationale.</p>
+<p>The goal is predictable, calm execution — frameworks beat heroic improvisation under sleep deprivation.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How do you hand off on-call for data platforms?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+<p>Runbook: architecture diagram, alarm catalog with links, rollback steps, escalation matrix. Shadow shift before solo. Ensure alarms actionable (iterator age threshold tuned, not noise). Weekly review of near-misses.</p>
+<p>The goal is predictable, calm execution — frameworks beat heroic improvisation under sleep deprivation.</p>
+              </div>
+            </details>
+          </div>
+        </section>
+
+
+        <section class="section" id="rapid-fire">
+          <h2>Rapid-fire technical</h2>
+          <p class="muted">Short questions, short answers — use for warm-up the morning of the interview.</p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Question</th><th>Answer</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Firehose vs Data Streams?</strong></td><td>Firehose: managed delivery to S3/Redshift/OpenSearch, buffered (~60s+), no replay, least ops. Data Streams: durable log, custom consumers, replay within retention, sub-second, you build consumers (Lambda/Flink/KCL).</td></tr>
+                <tr><td><strong>When does Spectrum beat Athena?</strong></td><td>Spectrum: SQL inside Redshift joining local tables to S3 without egress/second engine. Athena: standalone SQL on S3, no cluster, pay per scan. Spectrum wins when data already in Redshift queries; Athena when no cluster or cross-account lake queries.</td></tr>
+                <tr><td><strong>What does a Glue job bookmark do?</strong></td><td>Persists processed file/partition state between runs so incremental jobs skip already-seen data. Reset for full reload. State in Glue Data Catalog.</td></tr>
+                <tr><td><strong>What does VACUUM do in Redshift?</strong></td><td>Reclaims space from deleted rows and re-sorts rows per sort key. VACUUM DELETE ONLY is lighter; FULL reclaims maximum space. Needed after large DELETEs or loads with suboptimal sort.</td></tr>
+                <tr><td><strong>LSI vs GSI in DynamoDB?</strong></td><td>LSI: same partition key, alternate sort key, must define at creation, shares throughput, strong consistency available. GSI: different PK/SK, eventual consistency default, separate throughput, create anytime — use for alternate access patterns.</td></tr>
+                <tr><td><strong>SQS visibility timeout?</strong></td><td>Time a consumed message is hidden from other consumers after receive. Must exceed Lambda max processing time; if too short, duplicate processing; too long, slow retry on failure.</td></tr>
+                <tr><td><strong>Gateway vs interface VPC endpoint?</strong></td><td>Gateway (S3, DynamoDB): free, route table entry, no ENI. Interface (most AWS APIs): ENI in subnet, hourly + data charge, private IP DNS — needed for Glue, STS, etc.</td></tr>
+                <tr><td><strong>SSE-KMS vs SSE-S3?</strong></td><td>SSE-S3: AWS-managed keys, free, audit via CloudTrail. SSE-KMS: CMK control, key policy/grants, rotation, per-request KMS charge, CloudTrail shows which key decrypted.</td></tr>
+                <tr><td><strong>Standard vs Express Step Functions?</strong></td><td>Standard: exactly-once semantics, up to 1 year, async integrations, $25/1M transitions. Express: at-least-once, &lt;5 min, high volume, $1/1M + duration — streaming/event rates.</td></tr>
+                <tr><td><strong>Partition projection?</strong></td><td>Athena/Glue feature defining partition values in metadata instead of listing S3 — avoids MSCK/crawler for high-cardinality dates. Requires predictable path template.</td></tr>
+                <tr><td><strong>Splittable file format?</strong></td><td>Format where readers split work across parallel tasks on byte boundaries — Parquet, ORC, line-delimited JSON/CSV. Whole-file gzip JSON is not splittable — one task reads entire file.</td></tr>
+                <tr><td><strong>At-least-once vs exactly-once?</strong></td><td>At-least-once: duplicates possible on retry (SQS, Lambda, Kinesis). Exactly-once: end-to-end once semantics (hard; Kafka idempotent producer + transactional; Step Functions Standard state transitions). Design idempotent consumers.</td></tr>
+                <tr><td><strong>What is a pushdown predicate in Glue?</strong></td><td>Filter passed to catalog so only matching S3 partitions are read — saves DPU and time.</td></tr>
+                <tr><td><strong>Redshift concurrency scaling?</strong></td><td>Burst compute adds transient clusters billed per second when WLM queues — for unpredictable analyst spikes, not ETL default.</td></tr>
+                <tr><td><strong>Glue Flex execution?</strong></td><td>Queued cheaper DPU pricing for non-urgent jobs — trade latency for cost.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+
+          <h3>Additional rapid-fire (expand for detail)</h3>
+          <div class="qa-list">
+            <details class="qa">
+              <summary>What is the difference between AWS Glue Data Catalog and Hive Metastore?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>Glue Data Catalog is AWS's managed metastore — integrated with Athena, Redshift Spectrum, EMR, and Lake Formation. Hive Metastore is the open-source interface; on AWS you can run it on EMR or use the Glue Data Catalog as a drop-in replacement via the Hive metastore client. For new builds, default to Glue Catalog for IAM and LF integration.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>When would you pick MSK over Kinesis Data Streams?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p>MSK when you need full Kafka protocol compatibility, existing Kafka clients/connectors, longer retention with Kafka semantics, or on-prem Kafka migration with minimal code change. Kinesis when you want native AWS integration, serverless/on-demand scaling, and least ops — exam default unless the question says "Kafka" explicitly.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What does Lake Formation govern that IAM alone cannot?<span class="qa-tag">Security</span></summary>
+              <div class="qa-body">
+                <p>Column-level, row-level, and tag-based access on Glue catalog tables across principals — enforced at query engines (Athena, Redshift Spectrum) without duplicating S3 bucket policies per prefix. IAM controls API access; LF controls which rows/columns appear in SQL results. See <a href="s13-analytics.html#lake-formation">Section 13</a>.</p>
+              </div>
+            </details>
+          </div>
+
+        </section>
+
+        <section class="section" id="practice">
+          <h2>Interview readiness practice</h2>
+          <p class="muted">These exercises build interview skills — whiteboard design, metrics-only diagnosis, cost communication — not console certification drills.</p>
+          <ol class="practice-list">
+
+            <li class="practice">
+              <p class="practice-task"><strong>45-minute whiteboard design drill.</strong> Prompt: "Design ingestion and serving for 500 GB/day of IoT telemetry with 1-minute alerting and 7-year archival." Set a timer; draw producers, stream, storage, compute, serving, and observability. Grade yourself with the rubric below.</p>
+              <p class="practice-expect">A one-page architecture you can explain in five minutes, with at least one trade-off stated aloud.</p>
+              <details class="qa">
+                <summary>Show approach<span class="qa-tag">Interview</span></summary>
+                <div class="qa-body">
+                  <div class="table-wrap">
+                    <table>
+                      <thead><tr><th>Rubric (1–5 each)</th><th>What good looks like</th></tr></thead>
+                      <tbody>
+                        <tr><td>Requirements clarified</td><td>Asked latency for alerts vs archive, query patterns, retention legal constraints</td></tr>
+                        <tr><td>Service fit</td><td>Kinesis/IoT Core, Firehose to S3 Glacier tier, Flink/Lambda for 1-min windows, Timestream or DynamoDB for hot path</td></tr>
+                        <tr><td>Failure modes</td><td>Iterator age, DLQ, idempotent writes, multi-AZ</td></tr>
+                        <tr><td>Cost awareness</td><td>Named billing units (shard-hour, GB-month, Lambda GB-s)</td></tr>
+                        <tr><td>Observability</td><td>CloudWatch alarms, data quality on ingest rate drop</td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <p class="muted">Repeat weekly with a different prompt from the Design section above.</p>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task"><strong>Metrics-only troubleshooting drill.</strong> In a lab account, deliberately break three things (not all at once): throttle a Kinesis stream with a hot partition key, remove an Athena partition registration, oversubscribe a Redshift WLM queue. Diagnose each from CloudWatch and system tables only — no reading application code.</p>
+              <span class="console-path">CloudWatch → Metrics · Athena → Query history · Redshift → Query editor</span>
+              <p class="practice-expect">Written diagnosis for each: metric name, threshold observed, root cause, fix, prevention — under ten minutes per scenario.</p>
+              <details class="qa">
+                <summary>Show approach<span class="qa-tag">Troubleshooting</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Hot key: script PutRecords with constant partition key until <code>WriteProvisionedThroughputExceeded</code> &gt; 0.</li>
+                    <li>Athena zero rows: upload CSV to S3 prefix without MSCK/crawler.</li>
+                    <li>WLM queue: run several long-running cross joins while a small query waits — watch <code>SVL_QUERY_STATE</code>.</li>
+                  </ol>
+                  <p class="muted">Cleanup: stop producer script, repair partitions, cancel long queries, scale shards back.</p>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task"><strong>Cost audit on your lab account.</strong> Open Cost Explorer for the last 30 days; identify top three services and one surprise usage type (e.g. NAT Gateway Processing, Athena DataScanned, Glue DPU). Propose one concrete optimisation per line item.</p>
+              <span class="console-path">Billing and Cost Management → Cost Explorer → Cost and usage</span>
+              <p class="practice-expect">Half-page memo: service, spend, billing unit, lever, estimated savings — suitable to send a manager.</p>
+              <details class="qa">
+                <summary>Show approach<span class="qa-tag">Cost</span></summary>
+                <div class="qa-body">
+                  <p>Enable cost allocation tags first if empty. Filter by linked account and region. Cross-check Athena with query history <code>DataScannedInBytes</code>. Compare to <a href="s04-glue.html#budgets">AWS Budgets</a> setup from Section 4.</p>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task"><strong>Explain-this-to-a-non-engineer drill.</strong> Pick one concept (iterator age, partition pruning, distkey skew, or idempotency). Record a two-minute spoken explanation without jargon, then transcribe and tighten.</p>
+              <p class="practice-expect">A colleague who runs finance could repeat the idea back correctly.</p>
+              <details class="qa">
+                <summary>Show approach<span class="qa-tag">Communication</span></summary>
+                <div class="qa-body">
+                  <p>Template: everyday analogy → why it matters to the business → what we do when it goes wrong. Example for iterator age: "Our checkout stream is a conveyor belt; iterator age is how far behind the packing station is — if the gap grows, customers see stale inventory."</p>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task"><strong>Cold mock: 30-minute troubleshooting triad.</strong> Have a peer ask you three "it broke" questions from the Troubleshooting section cold. Answer aloud with diagnose → fix → prevent structure; peer scores using whether you named a specific metric or system table.</p>
+              <p class="practice-expect">All three answers mention at least one CloudWatch metric or catalog table by name.</p>
+              <details class="qa">
+                <summary>Show approach<span class="qa-tag">Interview</span></summary>
+                <div class="qa-body">
+                  <p>Use the framework in <a href="#how-to-answer">How to structure an answer</a>. Peer notes filler words and missing prevention step — common gap.</p>
+                </div>
+              </details>
+            </li>
+
+          </ol>
+        </section>
+
+        <section class="section" id="recap">
+          <h2>Recap</h2>
+          <div class="recap">
+            <ul class="checklist">
+              <li>Open with clarify requirement → constraint → chosen option → rejected option → measure success → what would change your mind.</li>
+              <li>Troubleshooting answers name a metric, a log or system table, then fix, then prevention.</li>
+              <li>Design answers draw ingest → store → transform → serve and state the trade-off you accepted.</li>
+              <li>Cost answers name the billing unit (TB scanned, DPU-hour, shard-hour, RPU-second) and the specific lever.</li>
+              <li>Cross-cutting failures are usually idempotency, partition design, or capacity — check those first.</li>
+              <li>At-least-once delivery is the AWS default; design MERGE, deterministic paths, and dedupe keys.</li>
+              <li>Prefer same-region compute and S3 gateway endpoints before blaming application code for slowness.</li>
+              <li>Lake Formation row filters and Redshift RLS beat trust-me WHERE clauses for multi-tenant isolation.</li>
+              <li>Replay requires immutable raw retention — Firehose alone is not a replay log.</li>
+              <li>Say "I would verify X in CloudWatch Y" even in design questions — interviewers reward operational thinking.</li>
+              <li>Weak answers list services; strong answers chain reasoning to constraints.</li>
+              <li>Answer behavioural questions with frameworks, not fabricated war stories.</li>
+              <li>Practice aloud: section interview questions first, then this page's scenario groups.</li>
+              <li>Link deep dives to course sections — breadth here, depth in s04, s06, s10, s13.</li>
+            </ul>
+            <p style="margin-top:1rem;">
+              <button type="button" data-complete="interview-prep">Mark complete</button>
+            </p>
+          </div>
+        </section>
+
+      </div>
+
+      <aside class="toc" aria-label="On this page">
+        <strong>On this page</strong>
+        <ol>
+          <li><a href="#how-to-answer">How to answer</a></li>
+          <li><a href="#interview">Interview questions</a></li>
+          <li><a href="#troubleshooting">Troubleshooting</a></li>
+          <li><a href="#design">Pipeline design</a></li>
+          <li><a href="#cost">Cost</a></li>
+          <li><a href="#modelling-sql">Modelling &amp; SQL</a></li>
+          <li><a href="#behavioural">Behavioural</a></li>
+          <li><a href="#rapid-fire">Rapid-fire</a></li>
+          <li><a href="#practice">Practice</a></li>
+          <li><a href="#recap">Recap</a></li>
+        </ol>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<footer class="footer">AWS Certified Data Engineer Associate (DEA-C01) · Interview preparation · Offline study edition</footer>
+</body>
+</html>

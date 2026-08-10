@@ -1,0 +1,855 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="COF-C03 Section 11: encryption, network policies, MFA, SSO, key-pair and OAuth auth, access history, and object tags.">
+<title>Section 11 — Security : Authentication and Authorization | Snowflake COF-C03 Course Notes</title>
+<link rel="stylesheet" href="assets/snowflake.css">
+<script defer src="assets/search-index.js"></script>
+<script defer src="assets/sql-glossary.js"></script>
+<script defer src="assets/sql-highlight.js"></script>
+<script defer src="assets/snowflake.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">Course section 11 of 17 · SnowPro Core (COF-C03)</p>
+    <h1>Security : Authentication and Authorization</h1>
+    <p class="subtitle">How you prove who you are and how Snowflake protects data in transit and at rest: network policies, private connectivity, MFA and SSO, key-pair and OAuth, audit views, and object tags.</p>
+    <div class="hero-meta">
+      <span class="chip">17 lectures · 1hr 3min</span>
+      <span class="chip">Exam domain: Security &amp; Access Control</span>
+      <span class="chip">Last verified: 28 Jul 2026</span>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <nav class="pager" aria-label="Section navigation">
+    <a href="s10-access-control.html">← Access Control</a>
+    <a href="../index.html">Course contents</a>
+    <a href="s12-data-sharing.html">Next: Data Sharing →</a>
+  </nav>
+
+  <main id="main">
+    <div class="layout">
+      <div class="content">
+
+        <section class="section" id="lectures">
+          <h2>Lectures in this section</h2>
+          <p class="muted">Every lecture below links to the notes that cover it.</p>
+          <ol class="lecture-list">
+            <li class="lecture">
+              <a class="lec-title" href="#security-overview">Security Overview</a>
+              <span class="lec-time">1:45</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#encryption">Data Encryption</a>
+              <span class="lec-time">5:46</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#network-policies">Network Policies and External Access</a>
+              <span class="lec-time">6:35</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#network-policies">[Demo] Network Policies</a>
+              <span class="lec-time">6:02</span>
+              <span class="lec-src">Security  Authentication and Authorization/Network Policy.txt</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#private-connectivity">Private Connectivity</a>
+              <span class="lec-time">2:01</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#authentication-policies">IAM Authentication Policies</a>
+              <span class="lec-time">1:48</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#federated-auth">IAM Federated Auth</a>
+              <span class="lec-time">3:38</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#mfa">IAM Multi Factor Authentication (MFA)</a>
+              <span class="lec-time">2:31</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#mfa">[Demo] IAM Multi Factor Authentication (MFA)</a>
+              <span class="lec-time">3:41</span>
+              <span class="lec-src">Security  Authentication and Authorization/MFA Unenroll.txt</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#key-pair-auth">IAM Key Pair Authentication</a>
+              <span class="lec-time">1:18</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#oauth">IAM OAuth</a>
+              <span class="lec-time">4:36</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#security-integrations">Security Integration</a>
+              <span class="lec-time">2:25</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#auth-best-practices">Authentication Best Practices</a>
+              <span class="lec-time">2:02</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#info-vs-account">Demo : Information Schema and Account Usage</a>
+              <span class="lec-time">6:26</span>
+              <span class="lec-src">Security  Authentication and Authorization/Inform and Account Schema.txt</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#access-history">Demo : Access History</a>
+              <span class="lec-time">3:29</span>
+              <span class="lec-src">Security  Authentication and Authorization/Access History.txt</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#object-tags">Object Tag Concept</a>
+              <span class="lec-time">1:59</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#object-tags">Demo : Object Tag</a>
+              <span class="lec-time">7:10</span>
+              <span class="lec-src">Security  Authentication and Authorization/Object Tag.txt</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#recap">Quiz</a>
+            </li>
+          </ol>
+        </section>
+
+        <section class="section" id="security-overview">
+          <h2>Security Overview</h2>
+          <p class="lead">Snowflake security spans two layers: <strong>authentication</strong> (proving identity) and <strong>authorisation</strong> (what that identity may do). Role grants and policies — covered in <a href="s10-access-control.html">Section 10</a> — answer authorisation. This section covers encryption, network boundaries, identity methods, and audit tooling.</p>
+
+          <div class="grid-3 card-grid">
+            <div class="mini-card">
+              <h4>Data protection</h4>
+              <p>Encryption at rest and in transit; optional Tri-Secret Secure / customer-managed keys on Business Critical.</p>
+            </div>
+            <div class="mini-card">
+              <h4>Network &amp; identity</h4>
+              <p>Network policies, PrivateLink, MFA, SSO, key-pair, OAuth, authentication policies.</p>
+            </div>
+            <div class="mini-card">
+              <h4>Audit &amp; classification</h4>
+              <p>Login history, Access History, object tags for cost and sensitivity labelling.</p>
+            </div>
+          </div>
+
+          <div class="callout exam">
+            <strong>COF-C03 exam tip:</strong> Know the split — RBAC/masking/row policies = who can see what (Section 10). MFA/SSO/network/encryption = how trust is established (this section).
+          </div>
+        </section>
+
+        <section class="section" id="encryption">
+          <h2>Data Encryption</h2>
+          <p>Snowflake encrypts all data by default. You do not need to configure column encryption for standard table storage — micro-partitions are encrypted in cloud object storage.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Layer</th><th>Mechanism</th><th>Notes</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>At rest</strong></td>
+                  <td>AES-256 on stored data (tables, stages, internal files)</td>
+                  <td>Included in all editions; keys managed by Snowflake or customer (Business Critical+)</td>
+                </tr>
+                <tr>
+                  <td><strong>In transit</strong></td>
+                  <td>TLS 1.2 for client connections and inter-service traffic</td>
+                  <td>All JDBC/ODBC/Python/Snowsight sessions use HTTPS</td>
+                </tr>
+                <tr>
+                  <td><strong>Tri-Secret Secure</strong></td>
+                  <td>Combination of customer-managed key (CMK) and Snowflake-managed key (SMK) forming a composite master key</td>
+                  <td>Business Critical or higher; revoking the CMK makes data undecryptable — three levels of protection: encryption, authentication, and control</td>
+                </tr>
+                <tr>
+                  <td><strong>Stage encryption</strong></td>
+                  <td><code>ENCRYPTION = (TYPE = 'SNOWFLAKE_SSE')</code> or stronger</td>
+                  <td>Required for some document-AI features on stages</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Periodic key rotation</h3>
+          <p>Snowflake automatically rotates encryption keys every <strong>30 days</strong>. After 30 days, active keys are retired. Rotation happens without downtime or action on your part.</p>
+
+          <h3>Periodic rekeying</h3>
+          <p><strong>Periodic rekeying</strong> (Enterprise edition or higher) is manually enabled. It destroys retired keys after one year and ensures data is re-encrypted with current technology — stronger than rotation alone when you need to eliminate old key material entirely.</p>
+
+          <div class="slide-row">
+            <figure class="slide-fig">
+              <a href="assets/slides/slide-265-key-rotation.png" target="_blank" rel="noopener">
+                <img src="assets/slides/slide-265-key-rotation.png" alt="Periodic key rotation diagram: Snowflake auto-rotates keys every 30 days and retires active keys after rotation" loading="lazy" width="1920" height="1080">
+              </a>
+              <figcaption><span class="slide-no">Slide 265</span>Automatic rotation every 30 days — active keys retire after rotation.</figcaption>
+            </figure>
+            <figure class="slide-fig">
+              <a href="assets/slides/slide-266-rekeying.png" target="_blank" rel="noopener">
+                <img src="assets/slides/slide-266-rekeying.png" alt="Periodic rekeying diagram: manually enabled on Enterprise or higher, destroys retired keys after one year, re-encrypts with latest technology" loading="lazy" width="1920" height="1080">
+              </a>
+              <figcaption><span class="slide-no">Slide 266</span>Rekeying (Enterprise+) destroys retired keys after a year and re-encrypts data.</figcaption>
+            </figure>
+          </div>
+
+          <div class="callout tip">
+            <strong>Exam distinction:</strong> Dynamic data masking hides values at query time — it is <em>not</em> encryption. Encryption protects bytes on disk/wire; masking protects column visibility per role. <strong>Rotation</strong> is automatic; <strong>rekeying</strong> is manual and Enterprise+.
+          </div>
+        </section>
+
+        <section class="section" id="network-policies">
+          <h2>Network Policies &amp; External Access</h2>
+          <p><strong>Network policies</strong> restrict access to Snowflake based on IP address using an allowed list and a blocked list. <code>SECURITYADMIN</code> or higher (e.g. <code>ACCOUNTADMIN</code>) can create them. They can be set at <strong>account</strong>, <strong>security integration</strong>, or <strong>user</strong> level — only one policy per account, per security integration, and per user. Precedence (most specific wins): <strong>user → security integration → account</strong>. The blocked list takes precedence over the allowed list.</p>
+
+          <ul>
+            <li>Supports CIDR notation — e.g. <code>192.168.1.0/24</code> covers <code>192.168.1.0</code> through <code>192.168.1.255</code>.</li>
+            <li>Supports only IPv4 addresses — not IPv6.</li>
+            <li>Modern approach: define <strong>network rules</strong> and add them to a network policy.</li>
+          </ul>
+
+          <div class="callout danger">
+            <strong>Lockout risk:</strong> An account-level network policy blocks logins from every non-allowed IP. Always test on a single user first, keep a break-glass admin path from an allowed IP, and know recovery commands before enforcing account-wide.
+          </div>
+
+          <p class="muted">Course file: <code>Security  Authentication and Authorization/Network Policy.txt</code></p>
+          <div class="callout warn">
+            <strong>Source correction:</strong> Course file uses legacy <code>ALLOWED_IP_LIST</code> on <code>CREATE NETWORK POLICY</code> — modern deployments also use <strong>network rules</strong> referenced by policies. IPv6 is not supported in classic allow lists.
+          </div>
+          <pre><code>CREATE NETWORK POLICY corp_access
+  ALLOWED_IP_LIST = ('203.0.113.0/24')
+  BLOCKED_IP_LIST = ('203.0.113.50');
+
+-- Test on one user before account-wide enforcement
+ALTER USER &lt;username&gt; SET NETWORK_POLICY = corp_access;
+
+-- Account-wide (ACCOUNTADMIN) — ensure your current IP is in ALLOWED_IP_LIST first
+ALTER ACCOUNT SET NETWORK_POLICY = corp_access;
+
+-- Recovery if locked out (from an allowed IP or via support):
+ALTER ACCOUNT UNSET NETWORK_POLICY;
+ALTER USER &lt;username&gt; UNSET NETWORK_POLICY;
+
+DESC NETWORK POLICY corp_access;
+SHOW PARAMETERS LIKE 'NETWORK_POLICY' IN USER &lt;username&gt;;</code></pre>
+        </section>
+
+        <section class="section" id="private-connectivity">
+          <h2>Private Connectivity</h2>
+          <p><strong>Private connectivity</strong> (AWS PrivateLink, Azure Private Link, Google Cloud Private Service Connect) routes traffic between your VPC/VNet and Snowflake without traversing the public internet. Use when compliance or security policy forbids public endpoints.</p>
+
+          <ul>
+            <li>Requires Business Critical edition or higher for full private-link patterns (exam-level expectation).</li>
+            <li>You still authenticate users normally — PrivateLink changes the network path, not RBAC.</li>
+            <li>Pair with network policies for defence in depth when hybrid access exists.</li>
+            <li>External stages and outbound integrations may need separate egress controls — distinct from inbound login policies.</li>
+          </ul>
+        </section>
+
+        <section class="section" id="authentication-policies">
+          <h2>Authentication Policies</h2>
+          <p><strong>Authentication policies</strong> centralise MFA requirements, password rules, and allowed methods. Attach at account or user level similar to network policies. They complement — do not replace — role-based authorisation in Section 10.</p>
+
+          <pre><code>CREATE AUTHENTICATION POLICY require_mfa
+  MFA_AUTHENTICATION_METHODS = ('PASSWORD')
+  MFA_ENROLLMENT = 'REQUIRED'
+  MFA_POLICY = (ALLOWED_METHODS = ('PASSKEY', 'TOTP'));
+
+ALTER ACCOUNT SET AUTHENTICATION POLICY = require_mfa;
+-- Or per user: ALTER USER &lt;username&gt; SET AUTHENTICATION POLICY = require_mfa;</code></pre>
+        </section>
+
+        <section class="section" id="federated-auth">
+          <h2>Federated Authentication (SSO)</h2>
+          <p>In a federated environment, user authentication is separated from user access through one or more external entities that independently authenticate user credentials. Snowflake is the <strong>service provider (SP)</strong>. The <strong>identity provider (IdP)</strong> creates and maintains user credentials and profile information and authenticates users for SSO access to the SP. Snowflake supports most SAML 2.0-compliant vendors as an IdP.</p>
+
+          <ul>
+            <li>SSO handles <em>authentication</em>; Snowflake roles still control <em>authorisation</em>.</li>
+            <li>Configure via <strong>security integrations</strong> (see below).</li>
+            <li><strong>SCIM</strong> can provision users/roles from the IdP automatically.</li>
+            <li>Three distinct workflows: <strong>Snowflake-initiated login</strong>, <strong>IdP-initiated login</strong>, and <strong>Snowflake-initiated logout</strong>.</li>
+          </ul>
+
+          <div class="slide-row">
+            <figure class="slide-fig">
+              <a href="assets/slides/slide-257-sso-sf-initiated.png" target="_blank" rel="noopener">
+                <img src="assets/slides/slide-257-sso-sf-initiated.png" alt="Snowflake-initiated SSO login workflow: user starts at Snowflake login page, redirects to IdP for authentication, returns to Snowflake with SAML assertion" loading="lazy" width="1920" height="1080">
+              </a>
+              <figcaption><span class="slide-no">Slide 257</span>Snowflake-initiated login — user starts at Snowflake, redirects to IdP.</figcaption>
+            </figure>
+            <figure class="slide-fig">
+              <a href="assets/slides/slide-258-sso-idp-initiated.png" target="_blank" rel="noopener">
+                <img src="assets/slides/slide-258-sso-idp-initiated.png" alt="IdP-initiated SSO login workflow: user starts at corporate IdP portal, selects Snowflake app, IdP sends SAML assertion directly to Snowflake" loading="lazy" width="1920" height="1080">
+              </a>
+              <figcaption><span class="slide-no">Slide 258</span>IdP-initiated login — user starts at the corporate portal, not Snowflake.</figcaption>
+            </figure>
+          </div>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-259-sso-logout.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-259-sso-logout.png" alt="Snowflake-initiated logout workflow: user logs out from Snowflake, Snowflake sends logout request to IdP to terminate the SSO session" loading="lazy" width="1920" height="1080">
+            </a>
+            <figcaption><span class="slide-no">Slide 259</span>Snowflake-initiated logout terminates the SSO session at the IdP as well.</figcaption>
+          </figure>
+
+          <div class="callout exam">
+            <strong>Exam tip:</strong> SSO separates authentication (IdP) from authorisation (Snowflake roles). Users must still be granted roles after SSO login succeeds.
+          </div>
+        </section>
+
+        <section class="section" id="mfa">
+          <h2>Multi-Factor Authentication (MFA)</h2>
+          <p>MFA adds factors beyond a password — device, fingerprint, location — to prove identity. Snowflake MFA is powered by the <strong>Duo Security</strong> service, managed by Snowflake, and not enabled by default.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-251-mfa-factors.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-251-mfa-factors.png" alt="MFA authentication factors diagram: password plus device, fingerprint, and location as additional verification layers" loading="lazy" width="1920" height="1080">
+            </a>
+            <figcaption><span class="slide-no">Slide 251</span>MFA combines something you know (password) with something you have or are.</figcaption>
+          </figure>
+
+          <ul>
+            <li>Recommended for every user with the <code>ACCOUNTADMIN</code> role.</li>
+            <li>Aimed at Snowsight but fully supported for SnowSQL and JDBC/ODBC drivers.</li>
+            <li>Methods include TOTP and passkeys per authentication policy.</li>
+            <li>SnowSQL with MFA-in-password: <code>&lt;mfa_code&gt;-&lt;password&gt;</code> when enabled.</li>
+          </ul>
+
+          <div class="callout danger">
+            <strong>MFA lockout / recovery:</strong> Disabling MFA (<code>ALTER USER … SET DISABLE_MFA = TRUE</code>) is an emergency troubleshooting step only — re-enrol MFA immediately after. Combine with authentication policies carefully; a misconfigured policy can block legitimate logins. Keep a break-glass <code>ACCOUNTADMIN</code> with known recovery path.
+          </div>
+
+          <p class="muted">Course file: <code>Security  Authentication and Authorization/MFA Unenroll.txt</code></p>
+          <pre><code>SHOW MFA METHODS FOR USER &lt;username&gt;;
+
+CREATE AUTHENTICATION POLICY require_mfa_policy
+  MFA_AUTHENTICATION_METHODS = ('PASSWORD')
+  MFA_ENROLLMENT = 'REQUIRED'
+  MFA_POLICY = (ALLOWED_METHODS = ('PASSKEY', 'TOTP'));
+
+-- Emergency only — re-enable MFA after troubleshooting
+ALTER USER &lt;username&gt; SET DISABLE_MFA = TRUE;
+
+-- SnowSQL login format when MFA-in-password enabled:
+-- &lt;MFA_CODE&gt;-&lt;PASSWORD&gt;</code></pre>
+        </section>
+
+        <section class="section" id="key-pair-auth">
+          <h2>Key-Pair Authentication</h2>
+          <p>Snowflake supports key-pair authentication for enhanced security as an alternative to basic authentication. Minimum <strong>2048-bit RSA</strong> key pair. Assign public key to user; client signs JWT. Common for SnowSQL, drivers, Snowpipe, and automation. Prefer key-pair over long-lived passwords for service accounts.</p>
+
+          <h3>Setup workflow</h3>
+          <ol>
+            <li>Generate the private key (OpenSSL).</li>
+            <li>Generate the public key (OpenSSL).</li>
+            <li>Store the private and public keys securely.</li>
+            <li>Assign the public key to a Snowflake user.</li>
+            <li>Verify the user's public key fingerprint.</li>
+            <li>Configure the Snowflake client to use key-pair authentication.</li>
+          </ol>
+
+          <ul>
+            <li><strong>Human users</strong> — password + MFA, SSO, or passkey depending on policy.</li>
+            <li><strong>Service users</strong> — non-interactive; prefer key-pair or OAuth.</li>
+            <li><strong>Snowpipe</strong> — key-pair + JWT for automated ingestion.</li>
+            <li><strong>Snowflake SQL API</strong> — OAuth or key-pair (no PUT/GET).</li>
+          </ul>
+
+          <pre><code>-- Generate key pair off-box (openssl or Snowflake docs workflow)
+ALTER USER etl_service SET RSA_PUBLIC_KEY='&lt;your_public_key_pem_body&gt;';
+
+-- Disable password auth when key-pair enforced via authentication policy</code></pre>
+        </section>
+
+        <section class="section" id="oauth">
+          <h2>OAuth</h2>
+          <p><strong>OAuth</strong> lets applications obtain tokens for Snowflake access without embedding passwords. Typical for the Snowflake SQL API, custom apps, and some driver configurations. Tokens are short-lived compared to static passwords.</p>
+
+          <ul>
+            <li>Configure an OAuth security integration with redirect URI, client ID/secret from your IdP or Snowflake-native OAuth app.</li>
+            <li>Scopes and role restrictions can limit what the token may do.</li>
+            <li>Pair with least-privilege roles — OAuth proves identity, roles still govern data access.</li>
+          </ul>
+        </section>
+
+        <section class="section" id="security-integrations">
+          <h2>Security Integrations</h2>
+          <p>A <strong>security integration</strong> is a Snowflake object that stores trust settings for external identity or API systems — SAML SSO, OAuth, SCIM provisioning, and API authentication.</p>
+
+          <ul>
+            <li><code>CREATE SECURITY INTEGRATION … TYPE = SAML2</code> — federated SSO.</li>
+            <li><code>TYPE = OAUTH</code> — programmatic OAuth clients.</li>
+            <li>SCIM integrations automate user/role lifecycle from corporate IdP.</li>
+            <li>Network policy can attach at integration level (precedence between user and account).</li>
+          </ul>
+
+          <h3>Trust Center</h3>
+          <p>Snowsight scanner recommendations: enforce MFA, limit ACCOUNTADMIN count, find stale users (90+ days), detect over-privileged roles.</p>
+        </section>
+
+        <section class="section" id="auth-best-practices">
+          <h2>Authentication Best Practices</h2>
+          <ul class="checklist">
+            <li>Enforce MFA for all human users with powerful roles; never share <code>ACCOUNTADMIN</code> credentials.</li>
+            <li>Use SSO + SCIM for corporate users; key-pair or OAuth for service accounts.</li>
+            <li>Test network policies on one user before account-wide enforcement; document recovery steps.</li>
+            <li>Rotate keys and OAuth secrets; disable unused users promptly.</li>
+            <li>Prefer authentication policies over ad-hoc per-user exceptions.</li>
+            <li>Audit login history regularly; investigate failed attempts and stale accounts.</li>
+            <li>Combine encryption, network controls, RBAC, and masking — no single control is sufficient.</li>
+          </ul>
+        </section>
+
+        <section class="section" id="info-vs-account">
+          <h2>INFORMATION_SCHEMA vs ACCOUNT_USAGE</h2>
+          <p>The <strong>Snowflake Information Schema</strong> (also called the data dictionary) is a set of system-defined views and table functions providing metadata about objects in your account. It is based on the SQL-92 ANSI Information Schema with Snowflake-specific additions. <strong>Account Usage</strong> provides views showing object metadata and usage metrics for the account, split into <code>ACCOUNT_USAGE</code> and <code>READER_ACCOUNT_USAGE</code>. Both are similar, but they differ in scope, latency, retention, and whether dropped objects appear.</p>
+
+          <h3>Information Schema characteristics</h3>
+          <ul>
+            <li>Read-only schema available for every database you create.</li>
+            <li>Maintains data about all database objects and some account-level information as views.</li>
+            <li>Provides table functions for historical and usage data across your account.</li>
+            <li>Requires privileges on underlying objects or functions.</li>
+          </ul>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-191-account-usage-vs-is.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-191-account-usage-vs-is.png" alt="Comparison table: Account Usage includes dropped objects, has 45 minutes to 3 hours latency, and 1 year retention; Information Schema excludes dropped objects, is instant, and retains 7 days to 6 months" loading="lazy" width="1920" height="1080">
+            </a>
+            <figcaption><span class="slide-no">Slide 191</span>The three comparison rows most often tested: dropped objects, latency, and retention.</figcaption>
+          </figure>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Parameter</th><th>ACCOUNT_USAGE</th><th>INFORMATION_SCHEMA</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Location</td>
+                  <td>Shared <code>SNOWFLAKE</code> database, <code>ACCOUNT_USAGE</code> schema</td>
+                  <td>Inside <strong>each database</strong> you create</td>
+                </tr>
+                <tr>
+                  <td>Includes dropped objects</td>
+                  <td><strong>Yes</strong></td>
+                  <td><strong>No</strong></td>
+                </tr>
+                <tr>
+                  <td>Latency of data</td>
+                  <td>45 minutes – 3 hours</td>
+                  <td>Instant</td>
+                </tr>
+                <tr>
+                  <td>Retention period</td>
+                  <td>1 year</td>
+                  <td>7 days to 6 months</td>
+                </tr>
+                <tr>
+                  <td>Query style</td>
+                  <td>Views (e.g. <code>account_usage.login_history</code>)</td>
+                  <td>Views + <strong>table functions</strong> (e.g. <code>TABLE(information_schema.login_history())</code>)</td>
+                </tr>
+                <tr>
+                  <td>Privileges</td>
+                  <td>Typically restricted to admin/audit roles</td>
+                  <td>Need privileges on underlying objects / functions</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p class="muted">Course file: <code>Security  Authentication and Authorization/Inform and Account Schema.txt</code></p>
+          <pre><code>USE DATABASE &lt;YOUR_DB&gt;;
+SELECT *
+FROM TABLE(INFORMATION_SCHEMA.LOGIN_HISTORY(RESULT_LIMIT =&gt; 100));
+
+USE DATABASE SNOWFLAKE;
+USE SCHEMA ACCOUNT_USAGE;
+SELECT *
+FROM ACCOUNT_USAGE.LOGIN_HISTORY
+ORDER BY EVENT_TIMESTAMP DESC
+LIMIT 100;</code></pre>
+
+          <div class="callout warn">
+            <strong>Common mistake:</strong> Querying <code>information_schema.login_history</code> as a view — it is a <strong>table function</strong>. You must use <code>TABLE(information_schema.login_history())</code>.
+          </div>
+        </section>
+
+        <section class="section" id="access-history">
+          <h2>Access History</h2>
+          <p><strong>Access History</strong> maintains a history of read and write operations — invaluable for compliance auditing and data-lineage investigations. Lives in <code>SNOWFLAKE.ACCOUNT_USAGE.ACCESS_HISTORY</code>. Requires <strong>Enterprise edition or higher</strong>.</p>
+
+          <ul>
+            <li>Stores data on source columns and objects accessed both directly and indirectly (through views).</li>
+            <li>Used for compliance auditing — who touched which columns, not just what SQL text ran.</li>
+            <li>Key columns: <code>QUERY_ID</code>, <code>QUERY_START_TIME</code>, <code>USER_NAME</code>, <code>DIRECT_OBJECTS_ACCESSED</code>, <code>BASE_OBJECTS_ACCESSED</code>, <code>OBJECTS_MODIFIED</code>, <code>OBJECT_MODIFIED_BY_DDL</code>, <code>POLICIES_REFERENCED</code>.</li>
+            <li>Latency: like other ACCOUNT_USAGE views — 45 minutes to 3 hours; not real-time.</li>
+          </ul>
+
+          <p class="muted">Course file: <code>Security  Authentication and Authorization/Access History.txt</code></p>
+          <pre><code>SELECT query_id, query_start_time, user_name,
+       direct_objects_accessed, base_objects_accessed
+FROM SNOWFLAKE.ACCOUNT_USAGE.ACCESS_HISTORY
+WHERE user_name = '&lt;YOUR_USERNAME&gt;'
+ORDER BY query_start_time DESC
+LIMIT 50;</code></pre>
+
+          <div class="callout exam">
+            <strong>Exam distinction:</strong> <code>QUERY_HISTORY</code> tells you <em>what SQL ran</em>. <code>ACCESS_HISTORY</code> tells you <em>which tables/columns that SQL actually touched</em> — including through views.
+          </div>
+        </section>
+
+        <section class="section" id="organization">
+          <h2>Organization &amp; Accounts</h2>
+          <p>An <strong>organization</strong> is a first-class Snowflake object that links the accounts owned by the org. It simplifies account management and billing, replication and failover/failback, and Snowflake secure data sharing and administration tasks. Manage it with the <code>ORGADMIN</code> role — which has access to account properties but <strong>not</strong> to account data.</p>
+
+          <p>An <strong>account identifier</strong> uniquely identifies a Snowflake account in the form:</p>
+          <pre data-lang="text" data-title="Account URL shape" data-explain="The identifier is either orgname-accountname or the older account locator, and it prefixes the fixed snowflakecomputing.com host that every client and integration connects to."><code>&lt;account_identifier&gt;.snowflakecomputing.com</code></pre>
+
+          <div class="callout exam">
+            <strong>Exam distinction:</strong> <code>ORGADMIN</code> sees org-wide account metadata and usage — not the data inside individual accounts. Account-level admin roles (<code>ACCOUNTADMIN</code>, etc.) operate inside one account.
+          </div>
+        </section>
+
+        <section class="section" id="object-tags">
+          <h2>Object Tags</h2>
+          <p><strong>Object tags</strong> are schema-level objects that attach metadata as a key-value pair to other Snowflake objects such as tables, views, and columns. Requires <strong>Enterprise edition or higher</strong>.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-275-object-tags.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-275-object-tags.png" alt="Object tag inheritance diagram: a tag applied at database or schema level flows down to tables and columns in the securable object hierarchy" loading="lazy" width="1920" height="1080">
+            </a>
+            <figcaption><span class="slide-no">Slide 275</span>Tags applied once inherit down the object hierarchy — tag a schema and child tables pick it up.</figcaption>
+          </figure>
+
+          <p>Tags help monitor sensitive data for compliance, discovery, protection, and resource usage. They work in both centralised and decentralised data governance models. Tags can be queried to monitor usage, facilitate governance operations, and ensure compliance.</p>
+
+          <ul>
+            <li>Limited to <strong>50 unique tags per object</strong>; each tag supports up to <strong>5,000 allowed values</strong>.</li>
+            <li>Tags inherit based on the Snowflake securable object hierarchy.</li>
+            <li>Tag assignments can be replicated within databases.</li>
+            <li>Optional <code>ALLOWED_VALUES</code> restrict what can be assigned (e.g. cost centre <code>MKT</code> or <code>ADVT</code>).</li>
+            <li>Chargeback via <code>SNOWFLAKE.ACCOUNT_USAGE.TAG_REFERENCES</code> and <code>QUERY_ATTRIBUTION_HISTORY</code>.</li>
+          </ul>
+
+          <p class="muted">Course file: <code>Security  Authentication and Authorization/Object Tag.txt</code></p>
+          <div class="callout warn">
+            <strong>Source correction:</strong> Course <code>Object Tag.txt</code> inserts duplicate primary-key id <code>1</code> twice — use unique ids in your lab table.
+          </div>
+          <pre><code>CREATE TAG IF NOT EXISTS cost_center
+  ALLOWED_VALUES 'MKT', 'ADVT'
+  COMMENT = 'Chargeback tag';
+
+CREATE TAG IF NOT EXISTS sensitivity
+  ALLOWED_VALUES 'PUBLIC', 'INTERNAL', 'CONFIDENTIAL';
+
+ALTER WAREHOUSE study_gov_lab_wh SET TAG cost_center = 'MKT';
+ALTER TABLE gov_tag_demo SET TAG cost_center = 'MKT';
+ALTER TABLE gov_tag_demo SET TAG sensitivity = 'CONFIDENTIAL';
+
+SELECT SYSTEM$GET_TAG_ALLOWED_VALUES('COST_CENTER');
+SHOW TAGS;
+
+SELECT tag_name, tag_value, object_name
+FROM SNOWFLAKE.ACCOUNT_USAGE.TAG_REFERENCES
+WHERE object_database = 'STUDY_GOV_LAB'
+ORDER BY tag_name;</code></pre>
+
+          <div class="callout tip">
+            <strong>Design habit:</strong> Tag at warehouse and database level for cost; tag at column level when you need fine-grained policy or discovery.
+          </div>
+
+          <h4>Cleanup</h4>
+          <pre><code>ALTER WAREHOUSE IF EXISTS study_gov_lab_wh UNSET TAG cost_center;
+ALTER TABLE IF EXISTS gov_tag_demo UNSET TAG cost_center;
+ALTER TABLE IF EXISTS gov_tag_demo UNSET TAG sensitivity;
+DROP TAG IF EXISTS cost_center;
+DROP TAG IF EXISTS sensitivity;</code></pre>
+        </section>
+
+        <section class="section" id="mistakes">
+          <h2>Common Mistakes</h2>
+          <ul>
+            <li>Locking yourself out with account network policy — maintain break-glass IP or user exemption.</li>
+            <li>Embedding passwords in worksheets or using course demo passwords.</li>
+            <li>Using ACCOUNT_USAGE for “right now” monitoring — latency is too high; use INFORMATION_SCHEMA functions or Query History UI.</li>
+            <li>Assuming SSO replaces role grants — users still need Snowflake roles.</li>
+            <li>Disabling MFA without re-enrolment plan — treat as temporary emergency only.</li>
+            <li>Storing real IPs from lab scripts — use placeholders in documentation.</li>
+          </ul>
+        </section>
+
+        <section class="section" id="interview">
+          <h2>Interview questions</h2>
+          <p class="muted">Try to answer each one before opening it.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+            <details class="qa">
+              <summary>How does Snowflake encrypt data at rest and in transit, and what is the key hierarchy?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>At rest, Snowflake encrypts all stored data — tables, stages, internal files — with AES-256 in cloud object storage. In transit, all client connections use TLS 1.2+. Snowflake manages encryption keys by default. On Business Critical and VPS, <strong>Tri-Secret Secure</strong> adds a customer-held key fragment with the cloud KMS — Snowflake alone cannot decrypt if the customer revokes their key. Dynamic data masking is separate — it hides values at query time, not bytes on disk.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How does OAuth differ from password and key-pair authentication?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p>OAuth lets applications obtain short-lived tokens for Snowflake access without embedding passwords — typical for the Snowflake SQL API, custom apps, and some driver configurations. Configure via an OAuth security integration with redirect URI and client credentials from your IdP or a Snowflake-native OAuth app. Scopes and role restrictions limit what the token may do. Key-pair suits non-interactive service accounts; OAuth suits apps with user consent flows. Both prove identity — Snowflake roles still govern data access.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How do network policies work at account versus user level, and what is the lockout risk?<span class="qa-tag">Scenario</span></summary>
+              <div class="qa-body">
+                <p>Network policies restrict inbound login traffic by IPv4 CIDR allow/block lists. Precedence (most specific wins): <strong>user → security integration → account</strong>. Blocked IPs override allowed ranges. Classic policies use embedded <code>ALLOWED_IP_LIST</code>; modern deployments may reference reusable <strong>network rules</strong> instead. An account-level policy blocks every login from non-allowed IPs — if you omit your own IP, you lock yourself out. Always test on a single user first, keep a break-glass admin path from an allowed IP, and know recovery: <code>ALTER ACCOUNT UNSET NETWORK_POLICY</code>.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What is private connectivity and how does it differ from network policies?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>Private connectivity (AWS PrivateLink, Azure Private Link, Google Cloud Private Service Connect) routes traffic between your VPC/VNet and Snowflake without traversing the public internet. It changes the <em>network path</em>, not RBAC — you still authenticate normally. Typically requires Business Critical or higher for full private-link patterns. Network policies filter which IPs may connect; PrivateLink removes public exposure entirely. Pair both when hybrid access exists.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What are authentication policies and how do they relate to MFA?<span class="qa-tag">Security</span></summary>
+              <div class="qa-body">
+                <p>Authentication policies centralise MFA requirements, password rules, and allowed methods. Attach at account or user level. Example: <code>CREATE AUTHENTICATION POLICY require_mfa MFA_ENROLLMENT = 'REQUIRED' MFA_POLICY = (ALLOWED_METHODS = ('PASSKEY', 'TOTP'))</code>. They complement RBAC — proving identity is separate from authorising data access. A misconfigured policy can block legitimate logins; test carefully and keep break-glass recovery paths.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What happens when a user loses their MFA device, and how does an admin unenrol them?<span class="qa-tag">Scenario</span></summary>
+              <div class="qa-body">
+                <p>An admin with sufficient privileges can inspect enrolled methods with <code>SHOW MFA METHODS FOR USER &lt;username&gt;</code>. Emergency recovery uses <code>ALTER USER &lt;username&gt; SET DISABLE_MFA = TRUE</code> — this is troubleshooting only; re-enrol MFA immediately after. SnowSQL with MFA-in-password uses <code>&lt;mfa_code&gt;-&lt;password&gt;</code> when enabled. Combine with authentication policies carefully — disabling MFA without a re-enrolment plan leaves the account exposed.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Why is key-pair authentication preferred for service accounts, and how do you rotate keys?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>Service accounts are non-interactive — key-pair auth uses a minimum 2048-bit RSA pair where the client signs a JWT; no password to leak or rotate manually in scripts. Assign with <code>ALTER USER etl_service SET RSA_PUBLIC_KEY='…'</code>. Rotation: generate a new pair, set <code>RSA_PUBLIC_KEY_2</code>, migrate clients, then clear the old key. Pair with authentication policies to disable password auth entirely for service users. Common for SnowSQL, drivers, Snowpipe, and the SQL API.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How does SSO/federated authentication work with Snowflake roles and SCIM?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p>Snowflake is the service provider; your corporate IdP (Okta, Azure AD, etc.) is the identity provider via SAML 2.0 configured through a security integration. SSO handles <em>authentication</em> only — users must still be granted Snowflake roles for <em>authorisation</em>. <strong>SCIM</strong> provisions users and role assignments from the IdP automatically, reducing manual user lifecycle work. SSO login success does not imply data access without role grants.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What is a security integration object?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>A security integration stores trust settings for external identity or API systems inside Snowflake. Types include <code>SAML2</code> for federated SSO, <code>OAUTH</code> for programmatic token access, and SCIM for automated user/role provisioning. Network policies can attach at integration level (precedence between user and account). OAuth integrations define redirect URIs, client credentials, and scopes — tokens are short-lived compared to static passwords.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What are the key differences between INFORMATION_SCHEMA and ACCOUNT_USAGE?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p><strong>INFORMATION_SCHEMA</strong> lives inside each database you create — uses views and table functions (e.g. <code>TABLE(information_schema.login_history())</code>), fresher for recent activity, shorter retention (~7 days for query history). <strong>ACCOUNT_USAGE</strong> is in the shared <code>SNOWFLAKE</code> database — account-wide views with longer retention (~365 days for query history) but delayed latency (often 45 min – 3 hours). ACCOUNT_USAGE typically requires admin/audit roles. Common trap: querying <code>information_schema.login_history</code> as a plain view — it is a table function and requires <code>TABLE(…)</code> syntax.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How does access history differ from query history?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p><code>QUERY_HISTORY</code> records the SQL text that ran. <code>ACCESS_HISTORY</code> (Enterprise+, in <code>SNOWFLAKE.ACCOUNT_USAGE</code>) records which objects and columns were actually read or written — including indirect access through views. Key columns: <code>DIRECT_OBJECTS_ACCESSED</code>, <code>BASE_OBJECTS_ACCESSED</code>, <code>OBJECTS_MODIFIED</code>, <code>POLICIES_REFERENCED</code>. Like other ACCOUNT_USAGE views, latency is hours — not suitable for real-time monitoring. Do not query <code>information_schema.login_history</code> as a plain view — it is a table function.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How do object tags support classification and cost attribution?<span class="qa-tag">Scenario</span></summary>
+              <div class="qa-body">
+                <p>Object tags are schema-level metadata attached to warehouses, databases, schemas, tables, columns, and more. Define allowed values: <code>CREATE TAG cost_center ALLOWED_VALUES 'MKT', 'ADVT'</code>. Up to 50 tags per object. Tags inherit in the object hierarchy for discovery. For chargeback, query <code>SNOWFLAKE.ACCOUNT_USAGE.TAG_REFERENCES</code> and <code>QUERY_ATTRIBUTION_HISTORY</code>. Tag at warehouse/database level for cost; column level for fine-grained sensitivity labelling. Tag inheritance helps downstream objects pick up parent tags automatically.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What is the difference between key rotation and periodic rekeying?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p><strong>Periodic key rotation</strong> is automatic — Snowflake rotates encryption keys every 30 days and retires active keys after rotation. No action required. <strong>Periodic rekeying</strong> (Enterprise+) is manually enabled. It destroys retired keys after one year and re-encrypts data with current technology. Rotation retires keys on a schedule; rekeying eliminates old key material entirely and ensures data uses the latest encryption standards.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What is an organization in Snowflake and what can ORGADMIN do?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>An organization is a first-class Snowflake object linking accounts owned by the org. It simplifies account management, billing, replication/failover, and secure data sharing administration. <code>ORGADMIN</code> manages org-level operations — create accounts, view all accounts and regions via <code>SHOW ORGANIZATION ACCOUNTS</code> and <code>SHOW REGIONS</code>, check usage across the org — but has access to account <em>properties</em>, not account <em>data</em>. Account identifier format: <code>&lt;account_identifier&gt;.snowflakecomputing.com</code>.</p>
+              </div>
+            </details>
+          </div>
+        </section>
+
+        <section class="section" id="practice">
+          <h2>Hands-on practice</h2>
+          <p class="muted">Run these in a trial account on an X-Small warehouse with <code>AUTO_SUSPEND = 60</code>. Clean up when you finish.</p>
+          <ol class="practice-list">
+            <li class="practice">
+              <p class="practice-task">Compare login history from INFORMATION_SCHEMA (table function) and ACCOUNT_USAGE. Run both queries and note scope and row timestamps.</p>
+              <p class="practice-expect">INFORMATION_SCHEMA returns recent logins for the current database context via a table function. ACCOUNT_USAGE returns account-wide history with potentially older rows and delayed ingestion — timestamps may lag by up to a few hours.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">SQL</span></summary>
+                <div class="qa-body">
+<pre><code>USE DATABASE &lt;YOUR_DB&gt;;
+SELECT event_timestamp, user_name, client_ip, reported_client_type
+FROM TABLE(INFORMATION_SCHEMA.LOGIN_HISTORY(RESULT_LIMIT =&gt; 20))
+ORDER BY event_timestamp DESC;
+
+USE DATABASE SNOWFLAKE;
+USE SCHEMA ACCOUNT_USAGE;
+SELECT event_timestamp, user_name, client_ip, reported_client_type
+FROM ACCOUNT_USAGE.LOGIN_HISTORY
+ORDER BY event_timestamp DESC
+LIMIT 20;</code></pre>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task"><strong>Lockout warning:</strong> Before any network policy work, look up your current IPv4 address and confirm it will be in the allow list. Create policy <code>corp_access</code>, attach it to your user only (not account-wide), verify login still works, then unset it.</p>
+              <p class="practice-expect">Login succeeds while the policy is attached because your current IP is in <code>ALLOWED_IP_LIST</code>. After <code>ALTER USER … UNSET NETWORK_POLICY</code>, the user has no network restriction. Never set account-wide policy until user-level test passes.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">SQL</span></summary>
+                <div class="qa-body">
+<pre><code>-- Replace &lt;YOUR_IPV4_CIDR&gt; with your actual IPv4, e.g. '203.0.113.45/32'
+CREATE OR REPLACE NETWORK POLICY corp_access
+  ALLOWED_IP_LIST = ('&lt;YOUR_IPV4_CIDR&gt;')
+  BLOCKED_IP_LIST = ();
+
+ALTER USER &lt;your_user&gt; SET NETWORK_POLICY = corp_access;
+-- Confirm you can still run queries, then:
+ALTER USER &lt;your_user&gt; UNSET NETWORK_POLICY;
+DROP NETWORK POLICY IF EXISTS corp_access;</code></pre>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Create tags <code>cost_center</code> and <code>sensitivity</code>, attach them to warehouse <code>study_gov_lab_wh</code> and table <code>gov_tag_demo</code>, then query <code>TAG_REFERENCES</code>.</p>
+              <p class="practice-expect"><code>SHOW TAGS</code> lists both tags. <code>TAG_REFERENCES</code> shows <code>cost_center = 'MKT'</code> and <code>sensitivity = 'CONFIDENTIAL'</code> on the tagged objects. Use unique primary-key values in <code>gov_tag_demo</code> — the course file inserts duplicate id 1 twice.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">SQL</span></summary>
+                <div class="qa-body">
+<pre><code>CREATE OR REPLACE WAREHOUSE study_gov_lab_wh WAREHOUSE_SIZE = XSMALL AUTO_SUSPEND = 60;
+
+CREATE TAG IF NOT EXISTS cost_center
+  ALLOWED_VALUES 'MKT', 'ADVT'
+  COMMENT = 'Chargeback tag';
+CREATE TAG IF NOT EXISTS sensitivity
+  ALLOWED_VALUES 'PUBLIC', 'INTERNAL', 'CONFIDENTIAL';
+
+CREATE OR REPLACE TABLE gov_tag_demo (id INT PRIMARY KEY, payload STRING);
+INSERT INTO gov_tag_demo VALUES (1, 'alpha'), (2, 'beta');
+
+ALTER WAREHOUSE study_gov_lab_wh SET TAG cost_center = 'MKT';
+ALTER TABLE gov_tag_demo SET TAG cost_center = 'MKT';
+ALTER TABLE gov_tag_demo SET TAG sensitivity = 'CONFIDENTIAL';
+
+SELECT tag_name, tag_value, object_name
+FROM SNOWFLAKE.ACCOUNT_USAGE.TAG_REFERENCES
+WHERE object_name IN ('STUDY_GOV_LAB_WH', 'GOV_TAG_DEMO')
+ORDER BY tag_name;</code></pre>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Memorise the three ACCOUNT_USAGE vs INFORMATION_SCHEMA comparison rows: dropped objects, latency, and retention. Query both login history sources and note which shows older rows and which responds instantly.</p>
+              <p class="practice-expect">ACCOUNT_USAGE may include dropped-object metadata and retains up to 1 year with 45 min–3 hr latency. INFORMATION_SCHEMA is instant but excludes dropped objects and retains 7 days to 6 months.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">SQL</span></summary>
+                <div class="qa-body">
+<pre><code>-- INFORMATION_SCHEMA: instant, no dropped objects
+USE DATABASE &lt;YOUR_DB&gt;;
+SELECT event_timestamp, user_name FROM TABLE(INFORMATION_SCHEMA.LOGIN_HISTORY(RESULT_LIMIT =&gt; 5));
+
+-- ACCOUNT_USAGE: delayed, includes dropped objects, 1-year retention
+USE DATABASE SNOWFLAKE;
+SELECT event_timestamp, user_name FROM ACCOUNT_USAGE.LOGIN_HISTORY LIMIT 5;</code></pre>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Run a SELECT on <code>gov_tag_demo</code>, then query ACCESS_HISTORY for your username. Finish by cleaning up all objects from this section.</p>
+              <p class="practice-expect">ACCESS_HISTORY may take hours to show the query — if empty, that is expected latency, not failure. Cleanup unsets tags before drops.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">SQL</span></summary>
+                <div class="qa-body">
+<pre><code>SELECT * FROM gov_tag_demo;
+
+SELECT query_id, query_start_time, user_name, direct_objects_accessed
+FROM SNOWFLAKE.ACCOUNT_USAGE.ACCESS_HISTORY
+WHERE user_name = '&lt;YOUR_USERNAME&gt;'
+ORDER BY query_start_time DESC
+LIMIT 10;
+
+-- Cleanup
+ALTER WAREHOUSE IF EXISTS study_gov_lab_wh UNSET TAG cost_center;
+ALTER TABLE IF EXISTS gov_tag_demo UNSET TAG cost_center;
+ALTER TABLE IF EXISTS gov_tag_demo UNSET TAG sensitivity;
+DROP TABLE IF EXISTS gov_tag_demo;
+DROP WAREHOUSE IF EXISTS study_gov_lab_wh;
+DROP TAG IF EXISTS cost_center;
+DROP TAG IF EXISTS sensitivity;</code></pre>
+                </div>
+              </details>
+            </li>
+          </ol>
+        </section>
+
+        <section class="section" id="recap">
+          <h2>Recap</h2>
+          <div class="recap">
+            <ul class="checklist">
+              <li>Encryption at rest (AES-256) and in transit (TLS 1.2) are default.</li>
+              <li>Key rotation: automatic every 30 days; rekeying: manual, Enterprise+, destroys keys after 1 year.</li>
+              <li>Tri-Secret Secure (Business Critical+): CMK + SMK composite key; revoking CMK blocks decryption.</li>
+              <li>Network policies: IPv4 CIDR allow/block; one policy per account/integration/user; blocked list wins.</li>
+              <li>PrivateLink keeps traffic off the public internet; distinct from RBAC.</li>
+              <li>MFA: Duo-powered, not default; required for ACCOUNTADMIN; works in SnowSQL and drivers.</li>
+              <li>SSO: SP vs IdP; SF-initiated, IdP-initiated, and SF-initiated logout workflows.</li>
+              <li>Key-pair: 2048-bit RSA minimum; six-step setup; preferred for service accounts.</li>
+              <li>Organization links accounts; ORGADMIN manages properties, not data.</li>
+              <li>INFO_SCHEMA: instant, no dropped objects, 7 days–6 months; ACCOUNT_USAGE: 45 min–3 hr latency, 1 year, includes dropped objects.</li>
+              <li>Access History (Enterprise+): column-level read/write audit; <code>OBJECT_MODIFIED_BY_DDL</code> column.</li>
+              <li>Object tags (Enterprise+): schema-level, 50/object, inherit down hierarchy, replicate within DBs.</li>
+            </ul>
+            <p style="margin-top:1rem;">
+              <button type="button" data-complete="section-11">Mark complete</button>
+            </p>
+          </div>
+        </section>
+
+      </div>
+
+      <aside class="toc" aria-label="On this page">
+        <strong>On this page</strong>
+        <ol>
+          <li><a href="#lectures">Lectures</a></li>
+          <li><a href="#security-overview">Overview</a></li>
+          <li><a href="#encryption">Encryption</a></li>
+          <li><a href="#network-policies">Network policies</a></li>
+          <li><a href="#private-connectivity">Private connectivity</a></li>
+          <li><a href="#authentication-policies">Auth policies</a></li>
+          <li><a href="#federated-auth">Federated auth</a></li>
+          <li><a href="#mfa">MFA</a></li>
+          <li><a href="#key-pair-auth">Key-pair</a></li>
+          <li><a href="#oauth">OAuth</a></li>
+          <li><a href="#security-integrations">Integrations</a></li>
+          <li><a href="#auth-best-practices">Best practices</a></li>
+          <li><a href="#organization">Organization</a></li>
+          <li><a href="#info-vs-account">INFO_SCHEMA vs ACCOUNT_USAGE</a></li>
+          <li><a href="#access-history">Access history</a></li>
+          <li><a href="#object-tags">Object tags</a></li>
+          <li><a href="#mistakes">Common mistakes</a></li>
+          <li><a href="#interview">Interview questions</a></li>
+          <li><a href="#practice">Hands-on practice</a></li>
+          <li><a href="#recap">Recap</a></li>
+        </ol>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<footer class="footer">Snowflake COF-C03 Course Notes · Section 11 · Offline study edition</footer>
+</body>
+</html>

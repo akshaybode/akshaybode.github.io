@@ -1,0 +1,1163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="dbt bootcamp Section 9: seeds for CSV reference data, sources.yml for raw tables, source() versus ref(), identifier mapping, source freshness, and the mart_fullmoon_reviews mart.">
+<title>Section 9 — Seeds and Sources | The Complete dbt Bootcamp Notes</title>
+<link rel="stylesheet" href="assets/dbt.css">
+<script defer src="assets/search-index.js"></script>
+<script defer src="assets/code-highlight.js"></script>
+<script defer src="assets/dbt.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">Course section 9 of 22 · The Complete dbt Bootcamp: Zero to Hero</p>
+    <h1>Seeds and Sources</h1>
+    <p class="subtitle">Two ways dbt knows about data it did not build: seeds load small CSV reference files into your warehouse, and sources declare the raw tables your loader already placed there. This section wires both into the Airbnb DAG, adds freshness checks on reviews, and builds the full-moon mart that joins them.</p>
+    <div class="hero-meta">
+      <span class="chip">7 lectures · ~35min</span>
+      <span class="chip">sources.yml and seeds</span>
+      <span class="chip">source freshness</span>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <nav class="pager" aria-label="Section navigation">
+    <a href="s08-materializations.html">← Materializations</a>
+    <a href="index.html">Course contents</a>
+    <a href="s10-snapshots.html">Next: Snapshots →</a>
+  </nav>
+
+  <main id="main">
+    <div class="layout">
+      <div class="content">
+
+        <section class="section" id="lectures">
+          <h2>Lectures in this section</h2>
+          <ol class="lecture-list">
+            <li class="lecture">
+              <a class="lec-title" href="#seeds">What seeds are and when to use them</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">course-resources.md · Sources and Seeds</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#seeds">Adding seed_full_moon_dates.csv</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">seeds/seed_full_moon_dates.csv</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#seeds">Running dbt seed</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">course-resources.md · Sources and Seeds</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#sources-yml">Declaring sources in sources.yml</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">models/sources.yml</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#source-vs-ref">The source() function versus ref()</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">models/src/src_listings.sql</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#identifier">The identifier escape hatch</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">models/sources.yml</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#source-freshness">Source freshness and dbt source freshness</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">course-resources.md · Source Freshness</span>
+            </li>
+          </ol>
+          <p class="muted">By the end you have a seed table of lunar dates, three declared raw sources, freshness monitoring on reviews, and <code>mart_fullmoon_reviews</code> joining facts to the seed. Staging models from <a href="s07-models.html">Section 7</a> switch from hard-coded schema names to <code>{{ source('airbnb', ...) }}</code>.</p>
+        </section>
+
+        <section class="section" id="seeds">
+          <h2>Seeds: CSV reference data in the warehouse</h2>
+          <p class="lead">A seed is a CSV file dbt loads into a table. Use seeds for small, static or slowly changing reference datasets that belong in version control &mdash; country codes, holiday calendars, manual mappings &mdash; not for data your ELT pipeline already loads.</p>
+
+          <h3>What dbt seed does</h3>
+          <p>When you run <code>dbt seed</code>, dbt reads every CSV in the <code>seeds/</code> folder (configured by <code>seed-paths</code> in <code>dbt_project.yml</code>), infers column types, and creates or replaces a table in your target schema. The table name is the filename without the extension: <code>seed_full_moon_dates.csv</code> becomes <code>seed_full_moon_dates</code>.</p>
+
+          <p>Downstream models reference seeds with <code>{{ ref('seed_full_moon_dates') }}</code> &mdash; the same function used for models. dbt treats seeds as first-class nodes in the DAG: they appear in lineage, respect build order, and run before models that depend on them when you use <code>dbt build</code>.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Seeds are for</th><th>Seeds are not for</th></tr></thead>
+              <tbody>
+                <tr><td>Reference lookups under a few hundred thousand rows</td><td>Large fact tables your loader already owns</td></tr>
+                <tr><td>Data that changes only when you commit a PR</td><td>High-frequency updates from an API</td></tr>
+                <tr><td>CSV files you want in git next to the models that use them</td><td>PII-heavy extracts that should never be in version control</td></tr>
+                <tr><td>One-off mappings the business maintains in a spreadsheet</td><td>Anything Fivetran or Airbyte already lands in <code>raw</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout tip"><strong>Rule of thumb:</strong> if the row count fits comfortably in Excel and updates when an analyst edits a file, it is probably a seed. If a loader job appends millions of rows nightly, it is a source.</div>
+
+          <h3>Project layout after adding the seed</h3>
+          <div class="filetree">
+            <ul>
+              <li><span class="dir">airbnb/</span>
+                <ul>
+                  <li><span class="dir">seeds/</span>
+                    <ul>
+                      <li><span class="file">seed_full_moon_dates.csv</span> <span class="new">← new in this section</span></li>
+                    </ul>
+                  </li>
+                  <li><span class="dir">models/</span>
+                    <ul>
+                      <li><span class="file">sources.yml</span> <span class="new">← new in this section</span></li>
+                      <li><span class="dir">mart/</span>
+                        <ul>
+                          <li><span class="file">mart_fullmoon_reviews.sql</span> <span class="new">← new in this section</span></li>
+                        </ul>
+                      </li>
+                    </ul>
+                  </li>
+                  <li><span class="file">dbt_project.yml</span> <span class="note">seed-paths: ["seeds"]</span></li>
+                </ul>
+              </li>
+            </ul>
+          </div>
+
+          <h3>seed_full_moon_dates.csv</h3>
+          <p>The course uses a calendar of full-moon dates from 2009 through 2030. Download it from the lesson Resources tab or directly from the instructor's S3 bucket, then place it in <code>seeds/</code>.</p>
+
+          <p>On Mac or Linux:</p>
+
+<pre data-lang="shell" data-title="Download seed CSV (Mac/Linux)" data-explain="curl saves the instructor's CSV straight into the seeds folder."><code>curl https://dbt-datasets.s3.us-east-2.amazonaws.com/seed_full_moon_dates.csv -o seeds/seed_full_moon_dates.csv</code></pre>
+
+          <p>On Windows PowerShell from the <code>airbnb</code> directory:</p>
+
+<pre data-lang="shell" data-title="Download seed CSV (Windows PowerShell)" data-explain="Invoke-WebRequest is the native PowerShell equivalent of curl -o."><code>Invoke-WebRequest `
+  -Uri "https://dbt-datasets.s3.us-east-2.amazonaws.com/seed_full_moon_dates.csv" `
+  -OutFile "seeds\seed_full_moon_dates.csv"</code></pre>
+
+          <p>The file has one column, <code>full_moon_date</code>, with one row per lunar event. The first rows look like this:</p>
+
+<pre data-lang="text" data-title="seeds/seed_full_moon_dates.csv (first rows)" data-explain="A single date column. dbt infers DATE type on load."><code>full_moon_date
+2009-01-11
+2009-02-09
+2009-03-11
+2009-04-09
+2009-05-09
+2009-06-07
+...</code></pre>
+
+          <p>The full file runs to 273 data rows plus the header &mdash; small enough that reloading the entire seed on every <code>dbt seed</code> is negligible cost.</p>
+
+          <h3>Running dbt seed</h3>
+          <p>From the <code>airbnb</code> folder with your virtualenv active:</p>
+
+          <div class="terminal">
+            <p class="term-head">dbt seed</p>
+            <pre class="term-body"><span class="tt-cmd">dbt seed --select seed_full_moon_dates</span>
+<span class="tt-dim">14:08:12  Running with dbt=1.11.12</span>
+<span class="tt-dim">14:08:14  1 of 1 START seed file DEV.seed_full_moon_dates .................... [RUN]</span>
+<span class="tt-ok">14:08:16  1 of 1 OK loaded seed file DEV.seed_full_moon_dates ............... [INSERT 273 in 1.84s]</span>
+<span class="tt-ok">14:08:16  Completed successfully</span></pre>
+          </div>
+
+          <p>Seeds land in your development schema (<code>DEV</code> in the course) by default. On Snowflake the fully qualified name is something like <code>AIRBNB.DEV.SEED_FULL_MOON_DATES</code>. BigQuery puts them in your dataset; Postgres in your search path schema.</p>
+
+          <p>You can configure seeds in <code>dbt_project.yml</code> or a <code>seeds/schema.yml</code> file &mdash; column types, quoting, schema overrides. The course keeps defaults; the important part is that the CSV exists and <code>dbt seed</code> has run at least once before any model calls <code>ref('seed_full_moon_dates')</code>.</p>
+
+          <div class="diagram">
+            <p class="diagram-title">Seed load path from CSV to downstream model</p>
+            <div class="flow">
+              <div class="node is-seed"><b>seed_full_moon_dates.csv</b><small>git · seeds/</small></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-compute"><b>dbt seed</b><small>load · infer types</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-store"><b>DEV.seed_full_moon_dates</b><small>warehouse table</small></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-mart pulse"><b>mart_fullmoon_reviews</b><small>ref() join</small></div>
+            </div>
+          </div>
+
+          <div class="callout info"><strong>BigQuery and Databricks note:</strong> seed behaviour is the same conceptually &mdash; CSV to table in your target dataset &mdash; but type inference differs. Explicit <code>column_types</code> in a seed schema YAML avoids surprises when a column looks numeric but should stay text.</div>
+
+          <h3>Seed configuration in dbt_project.yml</h3>
+          <p>The course project declares where seeds live in <code>dbt_project.yml</code>:</p>
+
+<pre data-lang="yaml" data-title="dbt_project.yml (seed-paths)" data-explain="seed-paths tells dbt which folders contain CSV files. Default is seeds/ if omitted."><code>seed-paths: ["seeds"]</code></pre>
+
+          <p>You can also set project-wide seed defaults under a <code>seeds:</code> block &mdash; schema overrides, quoting, column types, tags. The course leaves seeds at defaults, but a typical production override looks like this:</p>
+
+<pre data-lang="yaml" data-title="dbt_project.yml (seed defaults example)" data-explain="Folder-level seed config applies to every CSV unless a seeds/schema.yml entry overrides it."><code>seeds:
+  airbnb:
+    +schema: reference
+    +quote_columns: false
+    seed_full_moon_dates:
+      +column_types:
+        full_moon_date: date</code></pre>
+
+          <p><code>+schema: reference</code> would load seeds into a dedicated reference schema instead of your dev target schema. <code>+quote_columns: false</code> matters on Postgres where quoting changes case sensitivity. Explicit <code>column_types</code> prevents dbt from inferring <code>full_moon_date</code> as a string when you need a native <code>DATE</code> for joins.</p>
+
+          <h3>Seeds in the DAG and CLI commands</h3>
+          <p>Seeds are nodes in the same manifest as models. List them with <code>dbt ls --resource-type seed</code> or include them in selectors: <code>dbt seed --select seed_full_moon_dates</code>, <code>dbt build --select +mart_fullmoon_reviews</code> (the <code>+</code> prefix pulls upstream seeds and models).</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Command</th><th>Runs seeds?</th><th>Runs models?</th><th>When to use</th></tr></thead>
+              <tbody>
+                <tr><td><code>dbt seed</code></td><td>Yes</td><td>No</td><td>CSV changed in git; first-time setup</td></tr>
+                <tr><td><code>dbt run</code></td><td>No</td><td>Yes</td><td>Models only; assumes seeds already loaded</td></tr>
+                <tr><td><code>dbt build</code></td><td>Yes (if selected)</td><td>Yes</td><td>End-to-end: seed &rarr; model &rarr; test in DAG order</td></tr>
+                <tr><td><code>dbt source freshness</code></td><td>No</td><td>No</td><td>Freshness queries on declared sources only</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>On every <code>dbt seed</code>, dbt typically truncates and reloads the seed table (adapter-dependent; Snowflake uses a full replace). That is acceptable for 273 rows and unacceptable for a million-row CSV &mdash; another reason seeds stay small.</p>
+
+          <div class="terminal">
+            <p class="term-head">dbt ls — seeds in the project</p>
+            <pre class="term-body"><span class="tt-cmd">dbt ls --resource-type seed</span>
+<span class="tt-dim">14:12:01  Running with dbt=1.11.12</span>
+<span class="tt-ok">airbnb.seeds.seed_full_moon_dates</span></pre>
+          </div>
+
+          <div class="callout warn"><strong>Seeds are not incremental.</strong> There is no <code>materialized='incremental'</code> for seeds. Every seed run reloads the whole file. If your reference data changes daily at scale, it belongs in a source table loaded by Fivetran or a batch job, not in git as a CSV.</div>
+
+          <h3>Explicit column types with seeds/schema.yml</h3>
+          <p>When dbt infers types incorrectly &mdash; treating a ZIP code as a number, or a date as varchar &mdash; add a schema YAML next to your CSV. The course does not need this for <code>seed_full_moon_dates</code> because a single date column infers cleanly on Snowflake, but the pattern is worth knowing before your first production seed breaks a join:</p>
+
+<pre data-lang="yaml" data-title="seeds/schema.yml (example)" data-explain="Column types lock down inference. The seed name matches the CSV filename without extension."><code>seeds:
+  - name: seed_full_moon_dates
+    config:
+      column_types:
+        full_moon_date: date</code></pre>
+
+          <p>Other useful seed config keys include <code>quote_columns</code> (whether to wrap column names in quotes &mdash; important on Postgres), <code>delimiter</code> for non-comma CSVs, and <code>+schema</code> to load into a dedicated reference schema instead of your dev target schema. All of these can also live under <code>seeds:</code> in <code>dbt_project.yml</code> at the project or seed-name level.</p>
+
+          <h3>Seeds versus sources at a glance</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Aspect</th><th>Seed</th><th>Source</th></tr></thead>
+              <tbody>
+                <tr><td>Where data lives before dbt</td><td>CSV in git under <code>seeds/</code></td><td>Table in warehouse, loaded by ELT</td></tr>
+                <tr><td>dbt command to load</td><td><code>dbt seed</code></td><td>None &mdash; already in warehouse</td></tr>
+                <tr><td>Reference in SQL</td><td><code>{{ ref('seed_full_moon_dates') }}</code></td><td><code>{{ source('airbnb', 'reviews') }}</code></td></tr>
+                <tr><td>Declared in</td><td>Implicit from filename; optional <code>seeds/schema.yml</code></td><td><code>models/sources.yml</code></td></tr>
+                <tr><td>Freshness checks</td><td>Not supported</td><td><code>dbt source freshness</code></td></tr>
+                <tr><td>Typical row count</td><td>Hundreds to low hundreds of thousands</td><td>Millions upward</td></tr>
+                <tr><td>Update cadence</td><td>When you merge a PR changing the CSV</td><td>When your loader job runs</td></tr>
+                <tr><td>Lineage node colour in docs</td><td>Seed (distinct from models)</td><td>Source (leftmost layer)</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="section" id="sources-yml">
+          <h2>Declaring sources in sources.yml</h2>
+          <p class="lead">Sources tell dbt about tables your project reads but does not build. They live in YAML &mdash; typically <code>models/sources.yml</code> &mdash; and give you a stable logical name, documentation hooks, freshness checks, and source-level tests without hard-coding database.schema.table strings in every model.</p>
+
+          <h3>Why not hard-code raw table names?</h3>
+          <p>Early in the course, staging models used fully qualified names like <code>AIRBNB.RAW.RAW_LISTINGS</code>. That works until you need a second environment, rename a table, or want freshness checks. Sources centralise the physical mapping in one file; models call <code>{{ source('airbnb', 'listings') }}</code> and dbt resolves the rest at compile time based on your target.</p>
+
+          <p>The course declares one source package named <code>airbnb</code> pointing at the <code>raw</code> schema with three tables:</p>
+
+<pre data-lang="yaml" data-title="models/sources.yml" data-explain="One source block: logical name airbnb, physical schema raw, three tables with identifier overrides where the file name differs from the logical name."><code>sources:
+  - name: airbnb
+    schema: raw
+    tables:
+      - name: listings
+        identifier: raw_listings
+
+      - name: hosts
+        identifier: raw_hosts
+
+      - name: reviews
+        identifier: raw_reviews
+        config:
+          loaded_at_field: date
+          freshness:
+            warn_after: {count: 1, period: hour}
+            error_after: {count: 24, period: hour}</code></pre>
+
+          <p>Breaking down the structure:</p>
+          <ul>
+            <li><strong><code>name: airbnb</code></strong> &mdash; the first argument to <code>source()</code>. A label for this group of raw tables, not necessarily the database name.</li>
+            <li><strong><code>schema: raw</code></strong> &mdash; the warehouse schema (Snowflake) or dataset prefix where the physical tables live. Combined with your profile's database, this resolves to <code>AIRBNB.RAW</code>.</li>
+            <li><strong><code>tables:</code></strong> &mdash; one entry per raw table this project reads. Each gets a logical <code>name</code> used in <code>source('airbnb', 'listings')</code>.</li>
+            <li><strong><code>identifier:</code></strong> &mdash; optional. When the physical table name differs from the logical name, <code>identifier</code> holds the real table name in the warehouse.</li>
+          </ul>
+
+          <p>Later sections add column-level tests to this file &mdash; <code>dbt_expectations</code> checks on <code>room_type</code> and <code>price</code> appear in the finished repo. Those tests run against the source, not a model, which is why <code>sources.yml</code> is the right home for them. See <a href="s11-tests.html">Section 11</a> for the full testing story.</p>
+
+          <div class="diagram">
+            <p class="diagram-title">Source declaration maps logical names to physical raw tables</p>
+            <div class="dag">
+              <div class="dag-col">
+                <p class="dag-label">sources.yml</p>
+                <div class="node is-source"><b>airbnb.listings</b><small>logical</small></div>
+                <div class="node is-source"><b>airbnb.hosts</b></div>
+                <div class="node is-source"><b>airbnb.reviews</b></div>
+              </div>
+              <div class="dag-col">
+                <p class="dag-label">AIRBNB.RAW</p>
+                <div class="node is-store"><b>raw_listings</b><small>identifier</small></div>
+                <div class="node is-store"><b>raw_hosts</b></div>
+                <div class="node is-store"><b>raw_reviews</b></div>
+              </div>
+              <div class="dag-col">
+                <p class="dag-label">Staging models</p>
+                <div class="node is-model"><b>src_listings</b></div>
+                <div class="node is-model"><b>src_hosts</b></div>
+                <div class="node is-model"><b>src_reviews</b></div>
+              </div>
+            </div>
+          </div>
+
+          <h3>Where sources.yml lives</h3>
+          <p>dbt discovers YAML anywhere under <code>model-paths</code>. The course uses <code>models/sources.yml</code> at the top level; some teams use <code>models/staging/_sources.yml</code> or split by domain (<code>_sources__airbnb.yml</code>). Filename does not matter to dbt &mdash; only that the file is under a configured path and parses as valid YAML.</p>
+
+          <h3>Optional source properties</h3>
+          <p>Beyond the course minimum, real projects add metadata that flows into generated docs:</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>YAML key</th><th>Purpose</th><th>Course project</th></tr></thead>
+              <tbody>
+                <tr><td><code>database</code></td><td>Override profile database for this source</td><td>Omitted &mdash; uses profile default (<code>AIRBNB</code>)</td></tr>
+                <tr><td><code>schema</code></td><td>Warehouse schema / dataset for all tables in the source</td><td><code>raw</code></td></tr>
+                <tr><td><code>description</code></td><td>Markdown docs on the source or table</td><td>Added in <a href="s14-documentation.html">Section 14</a></td></tr>
+                <tr><td><code>loader</code></td><td>Documents which tool loads the data (Fivetran, Airbyte)</td><td>Not set in course</td></tr>
+                <tr><td><code>meta</code></td><td>Arbitrary key-value metadata for orchestration</td><td>Not set in course</td></tr>
+                <tr><td><code>quoting</code></td><td>Force identifier quoting for case-sensitive tables</td><td>Not needed on Snowflake defaults</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>The finished repo's <code>sources.yml</code> adds column-level <code>data_tests</code> on listings &mdash; not part of Section 9, but worth knowing the file evolves:</p>
+
+<pre data-lang="yaml" data-title="models/sources.yml (finished repo excerpt)" data-explain="Later sections add dbt_expectations tests on raw columns. Section 9 only needs the three tables and reviews freshness." data-partial="true"><code>      - name: listings
+        identifier: raw_listings
+        columns:
+          - name: room_type
+            data_tests:
+              - dbt_expectations.expect_column_distinct_count_to_equal:
+                  arguments:
+                    value: 4
+          - name: price
+            data_tests:
+              - dbt_expectations.expect_column_values_to_match_regex:
+                  arguments:
+                    regex: "^\\\\$[0-9][0-9\\\\.]+$"</code></pre>
+
+          <p>In the repo as checked out for local dev, <code>error_after</code> on reviews may be commented out so static sample data does not block you. The course script shows both thresholds active:</p>
+
+<pre data-lang="yaml" data-title="models/sources.yml (course script version)" data-explain="Uncomment error_after when wiring freshness into a pipeline with live data." data-partial="true"><code>          freshness:
+            warn_after: {count: 1, period: hour}
+            error_after: {count: 24, period: hour}</code></pre>
+
+          <div class="callout info"><strong>Multiple YAML files merge.</strong> You can split sources across files &mdash; <code>_sources__airbnb.yml</code>, <code>_sources__stripe.yml</code> &mdash; and dbt merges them at parse time. Conflicting table names under the same source name are a parse error; duplicate source names with different schemas need careful naming.</div>
+
+          <h3>Before and after: hard-coded raw table</h3>
+          <p>In <a href="s07-models.html">Section 7</a>, staging models pointed directly at fully qualified raw tables. That pattern works in a single-environment tutorial but breaks the moment you need freshness, source tests, or a second target. The before/after for listings:</p>
+
+          <div class="grid-2">
+            <div class="mini-card">
+              <h4>Before (Section 7)</h4>
+<pre data-lang="sql" data-title="Hard-coded raw reference" data-explain="Compiles but is invisible to source freshness and source tests." data-partial="true"><code>FROM AIRBNB.RAW.RAW_LISTINGS</code></pre>
+            </div>
+            <div class="mini-card">
+              <h4>After (Section 9)</h4>
+<pre data-lang="sql" data-title="Declared source reference" data-explain="Central mapping in sources.yml; same SQL pattern across environments." data-partial="true"><code>FROM {{ source('airbnb', 'listings') }}</code></pre>
+            </div>
+          </div>
+
+          <p>After refactoring all three staging models, every raw read flows through one YAML file. Adding a fourth raw table later means one new entry in <code>sources.yml</code> and one new <code>src_</code> model &mdash; not hunting through dozens of files for hard-coded schema strings.</p>
+        </section>
+
+        <section class="section" id="source-vs-ref">
+          <h2>source() versus ref()</h2>
+          <p class="lead"><code>ref()</code> points at something dbt builds &mdash; a model, a seed, a snapshot. <code>source()</code> points at something dbt only documents and tests &mdash; a table your loader owns. Mixing them up breaks lineage semantics and freshness monitoring.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th></th><th><code>ref('model_name')</code></th><th><code>source('source_name', 'table_name')</code></th></tr></thead>
+              <tbody>
+                <tr><td>Points at</td><td>Models, seeds, snapshots, analyses</td><td>Raw tables declared in sources YAML</td></tr>
+                <tr><td>Built by dbt?</td><td>Yes &mdash; <code>dbt run</code>, <code>dbt seed</code>, or <code>dbt snapshot</code></td><td>No &mdash; built by your ELT tool or manual load</td></tr>
+                <tr><td>Lineage node type</td><td>Model / seed / snapshot</td><td>Source</td></tr>
+                <tr><td>Freshness checks</td><td>Not applicable</td><td><code>dbt source freshness</code></td></tr>
+                <tr><td>Environment resolution</td><td>Dev schema vs prod schema via target</td><td>Source <code>schema</code> + target database; can override per target</td></tr>
+                <tr><td>Typical layer</td><td>Staging onward</td><td>First CTE in staging models only</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Staging models switch to source()</h3>
+          <p>After this section, <code>src_listings.sql</code> reads the raw table through the declared source instead of a hard-coded path:</p>
+
+<pre data-lang="sql" data-title="models/src/src_listings.sql" data-explain="The staging pattern: one CTE wrapping source(), then rename columns in the outer SELECT."><code>-- import raw_listings
+WITH raw_listings AS (
+        SELECT * FROM {{ source('airbnb', 'listings') }}
+)
+SELECT 
+   id AS listing_id,
+   listing_url,
+   name AS listing_name,
+   room_type,
+   minimum_nights,
+   host_id,
+   price AS price_str,
+   created_at,
+   updated_at
+FROM raw_listings</code></pre>
+
+          <p>The hosts and reviews staging models follow the same pattern:</p>
+
+<pre data-lang="sql" data-title="models/src/src_hosts.sql" data-explain="source('airbnb', 'hosts') resolves to RAW.RAW_HOSTS via the identifier in sources.yml."><code>WITH raw_hosts AS (
+    SELECT
+        *
+    FROM
+       {{ source('airbnb', 'hosts') }}
+)
+SELECT
+    id AS host_id,
+    NAME AS host_name,
+    is_superhost,
+    created_at,
+    updated_at
+FROM
+    raw_hosts</code></pre>
+
+<pre data-lang="sql" data-title="models/src/src_reviews.sql" data-explain="Reviews staging reads source('airbnb', 'reviews') which maps to raw_reviews."><code>WITH raw_reviews AS (
+    SELECT
+        *
+    FROM
+        {{ source('airbnb', 'reviews') }}
+)
+SELECT
+    listing_id,
+    DATE AS review_date,
+    reviewer_name,
+    comments AS review_text,
+    sentiment AS review_sentiment
+FROM
+    raw_reviews</code></pre>
+
+          <p>Everything downstream still uses <code>ref()</code>. <code>dim_listings_cleansed</code> calls <code>ref('src_listings')</code>; <code>fct_reviews</code> calls <code>ref('src_reviews')</code>. The rule is simple: <code>source()</code> appears at the boundary where dbt's responsibility ends and the loader's begins; <code>ref()</code> everywhere inside the project DAG.</p>
+
+          <div class="callout danger"><strong>Never ref() a raw table.</strong> If you write <code>{{ ref('raw_listings') }}</code> for a table dbt does not build, compilation fails. If you hard-code <code>RAW.RAW_LISTINGS</code> instead, it compiles &mdash; and silently removes the table from source freshness, source tests, and the sources layer of the lineage graph.</div>
+
+          <h3>Compiled resolution</h3>
+          <p>At compile time on the course Snowflake target, <code>{{ source('airbnb', 'listings') }}</code> becomes something like <code>AIRBNB.RAW.RAW_LISTINGS</code>. Open <code>target/compiled/airbnb/models/src/src_listings.sql</code> after <code>dbt compile</code> to verify. The exact database depends on your profile; the logical names stay stable across environments.</p>
+
+          <div class="analogy"><strong>Everyday analogy &mdash;</strong> <code>source()</code> is the address book entry for a supplier warehouse you never own but receive shipments from. <code>ref()</code> is the internal recipe card for something your kitchen actually cooks. You do not list the supplier's shelf as one of your recipes.</div>
+
+          <h3>What ref() and source() compile to</h3>
+          <p>Both macros resolve at compile time to fully qualified relation names. The difference is what dbt knows about the node:</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Jinja call</th><th>Resolves to (course Snowflake dev)</th><th>Node in manifest</th></tr></thead>
+              <tbody>
+                <tr><td><code>{{ ref('seed_full_moon_dates') }}</code></td><td><code>AIRBNB.DEV.SEED_FULL_MOON_DATES</code></td><td>seed</td></tr>
+                <tr><td><code>{{ ref('fct_reviews') }}</code></td><td><code>AIRBNB.DEV.FCT_REVIEWS</code></td><td>model</td></tr>
+                <tr><td><code>{{ source('airbnb', 'listings') }}</code></td><td><code>AIRBNB.RAW.RAW_LISTINGS</code></td><td>source</td></tr>
+                <tr><td><code>{{ source('airbnb', 'reviews') }}</code></td><td><code>AIRBNB.RAW.RAW_REVIEWS</code></td><td>source</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>Notice sources resolve to the <code>RAW</code> schema, not your dev schema. Raw data is shared across environments in the course setup; only dbt-built objects land in <code>DEV</code>. Production teams often override source <code>schema</code> per target so dev reads a sandbox copy.</p>
+
+          <h3>Lineage: where sources and seeds appear</h3>
+          <p>After <code>dbt docs generate</code> and <code>dbt docs serve</code> (<a href="s14-documentation.html">Section 14</a>), the lineage graph shows sources as a separate layer on the left, seeds as their own node type, and models flowing right. A staging model with <code>source()</code> creates an edge from <code>airbnb.listings</code> to <code>src_listings</code>; hard-coded table names produce no source edge.</p>
+
+          <div class="diagram">
+            <p class="diagram-title">ref() chains models and seeds; source() attaches raw tables at the edge</p>
+            <div class="flow">
+              <div class="node is-source"><b>airbnb.reviews</b><small>source()</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-model"><b>src_reviews</b><small>ref() downstream</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-model"><b>fct_reviews</b></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-seed"><b>seed_full_moon_dates</b><small>ref()</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-mart pulse"><b>mart_fullmoon_reviews</b></div>
+            </div>
+          </div>
+
+          <div class="callout exam"><strong>Certification:</strong> you cannot <code>ref()</code> a source. You cannot run <code>dbt run</code> against a source. Sources are declared in YAML, not SQL files.</div>
+        </section>
+
+        <section class="section" id="identifier">
+          <h2>The identifier escape hatch</h2>
+          <p class="lead">Logical source table names should read well in models &mdash; short, domain-friendly, consistent. Physical raw tables often have ugly prefixes like <code>raw_</code> from the loader. The <code>identifier</code> property bridges the gap without renaming tables in the warehouse.</p>
+
+          <h3>When logical name equals physical name</h3>
+          <p>If you omit <code>identifier</code>, dbt assumes the physical table name matches the logical <code>name</code>. For a table declared as <code>name: orders</code> in schema <code>raw</code>, dbt looks for <code>raw.orders</code>.</p>
+
+          <h3>When they differ</h3>
+          <p>The Airbnb loader created <code>raw_listings</code>, <code>raw_hosts</code>, and <code>raw_reviews</code>. In models you want to write <code>source('airbnb', 'listings')</code> &mdash; cleaner than repeating <code>raw_listings</code> in every file. The YAML maps them:</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Logical name (in source())</th><th>identifier (physical table)</th><th>Full Snowflake path (course)</th></tr></thead>
+              <tbody>
+                <tr><td><code>listings</code></td><td><code>raw_listings</code></td><td><code>AIRBNB.RAW.RAW_LISTINGS</code></td></tr>
+                <tr><td><code>hosts</code></td><td><code>raw_hosts</code></td><td><code>AIRBNB.RAW.RAW_HOSTS</code></td></tr>
+                <tr><td><code>reviews</code></td><td><code>raw_reviews</code></td><td><code>AIRBNB.RAW.RAW_REVIEWS</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>You can also override <code>database</code> and <code>schema</code> per table if a source spans databases &mdash; uncommon in the course project but typical when one dbt project reads from both a landing zone and a curated raw layer in enterprise setups.</p>
+
+          <div class="callout tip"><strong>Naming convention:</strong> keep logical names stable across renames of physical tables. When the platform team renames <code>raw_listings</code> to <code>lz_airbnb_listings</code>, you update one line in <code>sources.yml</code>, not forty models.</div>
+
+          <h3>Identifier and snapshots</h3>
+          <p>Snapshots in <a href="s10-snapshots.html">Section 10</a> reference sources directly: <code>relation: source('airbnb', 'listings')</code>. The identifier mapping applies there too &mdash; dbt resolves to the physical table before building the snapshot SQL.</p>
+        </section>
+
+        <section class="section" id="source-freshness">
+          <h2>Source freshness</h2>
+          <p class="lead">Freshness checks answer one question: is the raw data recent enough to trust? dbt compares the maximum value of a timestamp column in the source table against the current time and raises a warning or error when data is stale.</p>
+
+          <h3>Configuration on the reviews source</h3>
+          <p>Only the reviews table carries freshness config in the course &mdash; it is the largest, append-only table with a clear event timestamp. The raw column is <code>date</code> (review submission date); dbt needs to know which column to inspect:</p>
+
+<pre data-lang="yaml" data-title="models/sources.yml (reviews freshness)" data-explain="loaded_at_field names the timestamp column; warn_after and error_after set staleness thresholds." data-partial="true"><code>      - name: reviews
+        identifier: raw_reviews
+        config:
+          loaded_at_field: date
+          freshness:
+            warn_after: {count: 1, period: hour}
+            error_after: {count: 24, period: hour}</code></pre>
+
+          <ul>
+            <li><strong><code>loaded_at_field</code></strong> &mdash; column holding when the row was loaded or when the event occurred. Here it is <code>date</code> from the raw reviews export. In production you often prefer a true load timestamp from your ELT tool (<code>_fivetran_synced</code>, <code>_airbyte_extracted_at</code>) if the event date can lag behind ingestion.</li>
+            <li><strong><code>warn_after</code></strong> &mdash; emit a warning (exit code still 0 by default in older behaviour; check your dbt version) when the max <code>loaded_at_field</code> is older than one hour.</li>
+            <li><strong><code>error_after</code></strong> &mdash; fail the freshness invocation when data is older than twenty-four hours. Pipelines wired to CI treat a non-zero exit code as a blocker.</li>
+          </ul>
+
+          <p>The finished repo may have <code>error_after</code> commented out during local development so stale sample data does not block builds. Uncomment it before wiring freshness into production orchestration.</p>
+
+          <h3>What dbt actually queries</h3>
+          <p>For each configured source, dbt runs a query equivalent to:</p>
+
+<pre data-lang="sql" data-title="Freshness check (conceptual)" data-explain="dbt finds MAX(loaded_at_field) and compares elapsed time to warn_after and error_after thresholds."><code>SELECT MAX(date) AS max_loaded_at
+FROM AIRBNB.RAW.RAW_REVIEWS</code></pre>
+
+          <p>It then compares <code>max_loaded_at</code> to the warehouse's current timestamp. If the gap exceeds <code>error_after</code>, the source is <code>error</code>; if it exceeds only <code>warn_after</code>, it is <code>warn</code>; otherwise <code>pass</code>.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Status</th><th>Meaning</th><th>Typical pipeline action</th></tr></thead>
+              <tbody>
+                <tr><td><code>pass</code></td><td>Max timestamp within both thresholds</td><td>Continue to <code>dbt build</code></td></tr>
+                <tr><td><code>warn</code></td><td>Older than <code>warn_after</code> but not <code>error_after</code></td><td>Alert on-call; may still run transforms</td></tr>
+                <tr><td><code>error</code></td><td>Older than <code>error_after</code></td><td>Stop downstream jobs; page the data platform team</td></tr>
+                <tr><td><code>runtime error</code></td><td>Query failed (missing column, no permissions)</td><td>Fix config or grants before trusting any freshness result</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout warn"><strong>loaded_at_field must exist and be a timestamp-like type.</strong> Pointing freshness at a varchar date column usually works on Snowflake if values cast cleanly, but a typo in the column name produces a runtime error, not a stale warning. Verify with a direct <code>SELECT MAX(date)</code> in a worksheet first.</div>
+
+          <h3>Freshness versus data quality tests</h3>
+          <p>Freshness is operational metadata &mdash; is the pipe flowing? Column tests in <code>sources.yml</code> (added later in the course) are data quality &mdash; are the values plausible? Run freshness before expensive model builds; run source tests as part of <code>dbt build</code> or CI.</p>
+
+          <p>Later in the course you will run source tests with selectors like <code>dbt test --select source:airbnb.listings</code> (<a href="s11-tests.html">Section 11</a>). That command scans the raw table for test failures; it does not check staleness. Freshness and tests complement each other but use different commands and answer different questions.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Check type</th><th>Command</th><th>Question answered</th></tr></thead>
+              <tbody>
+                <tr><td>Freshness</td><td><code>dbt source freshness</code></td><td>When was the newest row loaded?</td></tr>
+                <tr><td>Source data test</td><td><code>dbt test --select source:airbnb.listings</code></td><td>Do column values meet expectations?</td></tr>
+                <tr><td>Model test</td><td><code>dbt test --select src_listings</code></td><td>Did our transform preserve quality?</td></tr>
+                <tr><td>Build (all of the above for selected nodes)</td><td><code>dbt build --select +mart_fullmoon_reviews</code></td><td>Seed, run, and test in DAG order</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Period units for warn_after and error_after</h3>
+          <p>Both thresholds accept a <code>count</code> and a <code>period</code>. Valid periods are <code>minute</code>, <code>hour</code>, and <code>day</code>. The course uses one hour for warn and twenty-four hours for error on reviews &mdash; aggressive for a demo dataset, reasonable for a live feed that should update hourly. A nightly batch loader might instead use <code>warn_after: {count: 26, period: hour}</code> and <code>error_after: {count: 48, period: hour}</code> to tolerate a missed run without paging on-call every morning.</p>
+
+          <p>You can set freshness at the source level (applies to all tables that do not override) or per table under <code>config:</code>, as the course does for reviews only. Listings and hosts have no freshness block because the course treats them as slowly changing dimension sources where staleness is less critical than reviews volume.</p>
+        </section>
+
+        <section class="section" id="freshness-command">
+          <h2>The dbt source freshness command</h2>
+          <p class="lead"><code>dbt source freshness</code> evaluates every source table that has a <code>freshness:</code> block. It does not build models, run tests, or load seeds &mdash; only the freshness queries.</p>
+
+          <div class="terminal">
+            <p class="term-head">dbt source freshness</p>
+            <pre class="term-body"><span class="tt-cmd">dbt source freshness --select source:airbnb.reviews</span>
+<span class="tt-dim">15:22:01  Running with dbt=1.11.12</span>
+<span class="tt-dim">15:22:03  1 of 1 START freshness of airbnb.reviews ........................ [RUN]</span>
+<span class="tt-ok">15:22:04  1 of 1 PASS freshness of airbnb.reviews ......................... [PASS in 0.89s]</span>
+<span class="tt-dim">15:22:04  Done.</span></pre>
+          </div>
+
+          <p>When data is stale, output shifts to warnings or errors:</p>
+
+          <div class="terminal">
+            <p class="term-head">Stale source</p>
+            <pre class="term-body"><span class="tt-cmd">dbt source freshness</span>
+<span class="tt-dim">15:30:01  Running with dbt=1.11.12</span>
+<span class="tt-dim">15:30:03  1 of 1 START freshness of airbnb.reviews ........................ [RUN]</span>
+<span class="tt-warn">15:30:04  1 of 1 WARN freshness of airbnb.reviews ......................... [WARN in 0.91s]</span>
+<span class="tt-warn">15:30:04  Done with warnings</span></pre>
+          </div>
+
+          <h3>Selectors</h3>
+          <p>Narrow freshness the same way you narrow builds:</p>
+          <ul>
+            <li><code>dbt source freshness --select source:airbnb</code> &mdash; all tables under the airbnb source</li>
+            <li><code>dbt source freshness --select source:airbnb.reviews</code> &mdash; one table</li>
+            <li><code>dbt source freshness --select source:*</code> &mdash; every source with freshness config</li>
+          </ul>
+
+          <h3>Exit codes for orchestration</h3>
+          <p>Orchestrators (Airflow, Dagster, cron, GitHub Actions) rely on exit codes to decide whether to continue. After running freshness, inspect the shell exit code:</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Shell</th><th>Command to read last exit code</th></tr></thead>
+              <tbody>
+                <tr><td>Mac / Linux (bash, zsh)</td><td><code>echo $?</code></td></tr>
+                <tr><td>Windows Command Prompt</td><td><code>echo %ERRORLEVEL%</code> (run a failing command first to see a non-zero example)</td></tr>
+                <tr><td>Windows PowerShell</td><td><code>$LASTEXITCODE</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>The course demonstrates exit codes with a deliberate failure:</p>
+
+<pre data-lang="shell" data-title="Check exit code after a command (Mac/Linux)" data-explain="echo $? prints 0 for success, non-zero for failure — use after dbt source freshness in CI scripts."><code>dbt source freshness
+echo $?</code></pre>
+
+<pre data-lang="shell" data-title="Check exit code (Windows PowerShell)" data-explain="PowerShell stores the last native exit code in $LASTEXITCODE, not $?."><code>dbt source freshness
+$LASTEXITCODE</code></pre>
+
+          <p>In PowerShell, <code>$?</code> tells you whether the last command succeeded as a boolean &mdash; it does not replace <code>$LASTEXITCODE</code> for numeric exit codes your orchestrator expects.</p>
+
+          <p>The course script demonstrates exit codes with a deliberately failing command first so you see a non-zero value. On Windows Command Prompt:</p>
+
+<pre data-lang="shell" data-title="Check exit code (Windows cmd)" data-explain="dir against a missing path sets ERRORLEVEL; then echo it. Same pattern after dbt source freshness."><code>dir C:\nonexistent
+echo %ERRORLEVEL%</code></pre>
+
+          <p>After <code>dbt source freshness</code> returns ERROR for stale data, <code>echo %ERRORLEVEL%</code> in cmd or <code>$LASTEXITCODE</code> in PowerShell should be non-zero. Wire your CI step to fail when that happens:</p>
+
+<pre data-lang="shell" data-title="PowerShell CI gate (conceptual)" data-explain="Stop the pipeline before dbt build if raw reviews are too stale."><code>dbt source freshness --select source:airbnb.reviews
+if ($LASTEXITCODE -ne 0) {
+  Write-Error "Source freshness failed — aborting build"
+  exit $LASTEXITCODE
+}
+dbt build --select +mart_fullmoon_reviews</code></pre>
+
+          <h3>Freshness results artifact</h3>
+          <p>dbt writes freshness results to <code>target/sources.json</code> (path may vary slightly by version). Orchestrators can parse the max loaded timestamp and status per source for dashboards. When debugging, open that file after a run to see the exact timestamp dbt compared against your thresholds without re-querying the warehouse.</p>
+
+          <div class="callout exam"><strong>Certification:</strong> know that <code>dbt source freshness</code> is separate from <code>dbt test</code>, that freshness requires <code>loaded_at_field</code>, and that <code>warn_after</code> / <code>error_after</code> accept a <code>count</code> and <code>period</code> (minute, hour, day).</div>
+        </section>
+
+        <section class="section" id="mart-fullmoon">
+          <h2>mart_fullmoon_reviews: joining seed and facts</h2>
+          <p class="lead">The mart combines the incremental fact table with the full-moon seed to label each review as occurring on the night after a full moon or not. It is the first model in the course that joins a seed to a fact &mdash; a pattern you will reuse whenever reference data enriches events.</p>
+
+          <h3>The model as built in this section</h3>
+          <p>At this point in the course, the mart is a full table rebuild:</p>
+
+<pre data-lang="sql" data-title="models/mart/mart_fullmoon_reviews.sql (Section 9 version)" data-explain="Table materialization joining fct_reviews to the seed. The join uses review_date = full_moon_date + 1 day."><code>{{ config(
+  materialized = 'table',
+) }}
+
+WITH fct_reviews AS (
+    SELECT * FROM {{ ref('fct_reviews') }}
+),
+full_moon_dates AS (
+    SELECT * FROM {{ ref('seed_full_moon_dates') }}
+)
+
+SELECT
+  r.*,
+  CASE
+    WHEN fm.full_moon_date IS NULL THEN 'not full moon'
+    ELSE 'full moon'
+  END AS is_full_moon
+FROM
+  fct_reviews
+  r
+  LEFT JOIN full_moon_dates
+  fm
+  ON (TO_DATE(r.review_date) = DATEADD(DAY, 1, fm.full_moon_date))</code></pre>
+
+          <h3>The join logic</h3>
+          <p>The instructor's hypothesis: guests leave worse reviews the night after a full moon. The join matches a review to a seed row when the review date equals <em>the day after</em> the full moon:</p>
+          <ul>
+            <li><code>fm.full_moon_date</code> &mdash; the astronomical full moon (from the seed).</li>
+            <li><code>DATEADD(DAY, 1, fm.full_moon_date)</code> &mdash; the calendar day after.</li>
+            <li><code>TO_DATE(r.review_date)</code> &mdash; normalises the fact timestamp for comparison.</li>
+          </ul>
+          <p>A <code>LEFT JOIN</code> keeps every review. When no seed row matches, <code>fm.full_moon_date IS NULL</code> and the <code>CASE</code> returns <code>'not full moon'</code>.</p>
+
+          <h3>Sanity-checking the mart</h3>
+          <p>After the first successful build, run a grouped count to confirm both labels appear and the full-moon bucket is not empty:</p>
+
+<pre data-lang="sql" data-title="Verify is_full_moon distribution" data-explain="Expect mostly 'not full moon' and a minority 'full moon' — roughly one night in ~29 for a uniform calendar, plus join offset effects."><code>SELECT
+  is_full_moon,
+  COUNT(*) AS review_count
+FROM mart_fullmoon_reviews
+GROUP BY 1
+ORDER BY 1;</code></pre>
+
+          <p>Spot-check a known full moon: pick a date from the seed, add one day, and confirm reviews on that calendar day show <code>'full moon'</code>:</p>
+
+<pre data-lang="sql" data-title="Spot-check one lunar event" data-explain="2009-06-07 is in the seed; reviews on 2009-06-08 should match the join predicate."><code>SELECT *
+FROM mart_fullmoon_reviews
+WHERE TO_DATE(review_date) = '2009-06-08'
+LIMIT 10;</code></pre>
+
+          <p>The mart depends on both upstream nodes. If you run <code>dbt run --select mart_fullmoon_reviews</code> without seeding first, you get a relation-not-found error on the seed. If <code>fct_reviews</code> is empty, the mart builds successfully but returns zero rows &mdash; a reminder that <code>dbt run</code> does not load seeds automatically.</p>
+
+          <div class="diagram">
+            <p class="diagram-title">mart_fullmoon_reviews lineage from source through seed</p>
+            <div class="dag">
+              <div class="dag-col">
+                <p class="dag-label">Raw + seed</p>
+                <div class="node is-source"><b>raw_reviews</b></div>
+                <div class="node is-seed"><b>seed_full_moon_dates</b></div>
+              </div>
+              <div class="dag-col">
+                <p class="dag-label">Core models</p>
+                <div class="node is-model"><b>src_reviews</b></div>
+                <div class="node is-model"><b>fct_reviews</b></div>
+              </div>
+              <div class="dag-col">
+                <p class="dag-label">Mart</p>
+                <div class="node is-mart pulse"><b>mart_fullmoon_reviews</b><small>is_full_moon</small></div>
+              </div>
+            </div>
+          </div>
+
+          <h3>Build order</h3>
+          <p>Running the mart requires the seed and the fact to exist first:</p>
+
+          <div class="terminal">
+            <p class="term-head">dbt build</p>
+            <pre class="term-body"><span class="tt-cmd">dbt build --select +mart_fullmoon_reviews</span>
+<span class="tt-dim">16:01:02  Running with dbt=1.11.12</span>
+<span class="tt-dim">16:01:04  1 of 4 START seed file DEV.seed_full_moon_dates .................... [RUN]</span>
+<span class="tt-ok">16:01:05  1 of 4 OK loaded seed file DEV.seed_full_moon_dates ............... [INSERT 273 in 1.02s]</span>
+<span class="tt-dim">16:01:05  2 of 4 START sql incremental model DEV.fct_reviews ................ [RUN]</span>
+<span class="tt-ok">16:01:08  2 of 4 OK created sql incremental model DEV.fct_reviews ........... [SUCCESS 1204 in 2.41s]</span>
+<span class="tt-dim">16:01:08  3 of 4 START sql table model DEV.mart_fullmoon_reviews ............ [RUN]</span>
+<span class="tt-ok">16:01:10  3 of 4 OK created sql table model DEV.mart_fullmoon_reviews ....... [SUCCESS 1204 in 1.88s]</span>
+<span class="tt-ok">16:01:10  Completed successfully</span></pre>
+          </div>
+
+          <h3>Production evolution (forward link)</h3>
+          <p>By <a href="s19-production.html">Section 19 (Production)</a>, this mart becomes a <strong>microbatch incremental</strong> model in a dedicated <code>mart</code> schema &mdash; matching the fact's <code>event_time</code> so each batch rebuilds only one year of reviews instead of the full history. The join logic stays identical; only the <code>config()</code> block changes:</p>
+
+<pre data-lang="sql" data-title="models/mart/mart_fullmoon_reviews.sql (production branch)" data-explain="Microbatch incremental: same SELECT, but dbt processes year-sized batches on review_date. See Section 19 for full_refresh=false and threads requirements."><code>{{ config(
+  materialized = 'incremental',
+  incremental_strategy='microbatch',
+  event_time='review_date',
+  begin='2009-06-20',
+  batch_size='year',
+  full_refresh=false,
+  tags = ['fact'],
+  schema='mart'
+) }}
+
+WITH fct_reviews AS (
+    SELECT * FROM {{ ref('fct_reviews') }}
+),
+full_moon_dates AS (
+    SELECT * FROM {{ ref('seed_full_moon_dates') }}
+)
+
+SELECT
+  r.*,
+  CASE
+    WHEN fm.full_moon_date IS NULL THEN 'not full moon'
+    ELSE 'full moon'
+  END AS is_full_moon
+FROM
+  fct_reviews
+  r
+  LEFT JOIN full_moon_dates
+  fm
+  ON (TO_DATE(r.review_date) = DATEADD(DAY, 1, fm.full_moon_date))</code></pre>
+
+          <p>For now, treat the table materialization as the teaching version. The microbatch config is a production optimisation covered when the course discusses deployment, custom schemas, and CI.</p>
+
+          <div class="callout info"><strong>Unit tests reuse this mart.</strong> <a href="s12-advanced-testing.html">Section 12</a> adds a unit test with mocked <code>ref('fct_reviews')</code> and <code>ref('seed_full_moon_dates')</code> inputs to verify the join logic without scanning the full warehouse.</div>
+        </section>
+
+        <section class="section" id="deeper">
+          <h2>Deeper detail and edge cases</h2>
+          <p class="lead">Operational detail the videos skip: seed limits at scale, freshness false positives, multi-environment source overrides, and how teams wire freshness into orchestration.</p>
+
+          <h3>Version notes</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Behaviour</th><th>Before</th><th>Now</th><th>Version</th></tr></thead>
+              <tbody>
+                <tr><td>Source freshness config location</td><td>Top-level <code>freshness:</code> on table</td><td>Can live under <code>config:</code> (course uses <code>config:</code>)</td><td>1.x unified config</td></tr>
+                <tr><td>Source tests key</td><td><code>tests:</code> on columns</td><td><code>data_tests:</code> with <code>arguments:</code> nest</td><td>1.8+ / 1.11 course pin</td></tr>
+                <tr><td>Freshness in <code>dbt build</code></td><td>Separate command only</td><td><code>dbt build</code> can include freshness via project flags in some setups; course runs it separately</td><td>Check project <code>flags:</code></td></tr>
+                <tr><td>Seed column typing</td><td>Inferred on every load</td><td><code>column_types</code> in seed schema YAML for explicit control</td><td>1.x</td></tr>
+                <tr><td>Source freshness exit code on warn</td><td>Varies by version/settings</td><td>Confirm in <code>dbt source freshness --help</code> for your pin; treat warn as non-pass in prod CI</td><td>1.11</td></tr>
+                <tr><td><code>identifier</code> quoting</td><td>Case-sensitive warehouses need exact match</td><td>Same; Snowflake uppercases unquoted identifiers by default</td><td>N/A</td></tr>
+                <tr><td>Microbatch incremental</td><td>Not available</td><td><code>incremental_strategy='microbatch'</code> with <code>event_time</code></td><td>1.9+</td></tr>
+                <tr><td>Selector for sources</td><td><code>source:name.table</code></td><td>Same; <code>--select source:*</code> for all sources</td><td>1.x</td></tr>
+                <tr><td>Freshness on views</td><td>Supported if dbt can query underlying table</td><td>Prefer freshness on base tables loaders write to</td><td>1.x</td></tr>
+                <tr><td>Seeds in dbt Cloud</td><td>CLI only</td><td>Cloud jobs can run <code>dbt seed</code> as a step</td><td>Cloud</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>What it costs to run</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>What runs</th><th>Where the cost lands</th><th>How to spend less</th></tr></thead>
+              <tbody>
+                <tr><td><code>dbt seed</code> on 273-row CSV</td><td>Negligible load + full table replace</td><td>Run seed only when CSV changes; use <code>--select seed_name</code></td></tr>
+                <tr><td><code>dbt source freshness</code></td><td>One <code>SELECT MAX(...)</code> per configured source</td><td>Cheap; run before heavy builds, not after every model</td></tr>
+                <tr><td><code>mart_fullmoon_reviews</code> as table</td><td>Full scan of <code>fct_reviews</code> every run</td><td>Switch to microbatch incremental in prod (<a href="s19-production.html">Section 19</a>)</td></tr>
+                <tr><td>Source column tests (later)</td><td>Full scan of raw table per test</td><td>Scope tests; avoid regex on billion-row sources without sampling</td></tr>
+                <tr><td>Large seed mistaken for fact</td><td>Full CSV reload every <code>dbt seed</code></td><td>Move to source + loader once rows exceed ~500k or update daily</td></tr>
+                <tr><td>Freshness every five minutes</td><td>Repeated MAX queries; orchestration overhead</td><td>Match check interval to SLA (hourly/daily)</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout cost"><strong>The biggest waste here is promoting a seed to production volume.</strong> A CSV that grows to millions of rows and reloads on every pipeline run belongs in your ELT layer as a source table, not in git as a seed. Seeds are for reference data you are willing to replace wholesale.</div>
+
+          <h3>Traps that catch people</h3>
+          <ul>
+            <li><strong>Forgetting dbt seed before dbt run —</strong> models calling <code>ref('seed_full_moon_dates')</code> fail with a relation-not-found error. Add seed to CI before models, or use <code>dbt build</code> which runs seeds first.</li>
+            <li><strong>Hard-coding raw tables after adding sources.yml —</strong> some models still use <code>AIRBNB.RAW.RAW_LISTINGS</code> while others use <code>source()</code>. Freshness and source tests skip the hard-coded paths entirely.</li>
+            <li><strong>Wrong loaded_at_field —</strong> using the event date when loads batch weekly makes freshness look stale every weekend even though the pipe is healthy. Prefer a true ingestion timestamp when your loader provides one.</li>
+            <li><strong>Identifier typo —</strong> <code>identifier: raw_listing</code> (missing s) compiles but queries an empty or wrong table. Compare compiled SQL in <code>target/compiled</code> to a direct worksheet query.</li>
+            <li><strong>source() in marts —</strong> reading raw tables deep in the DAG bypasses staging cleansed logic and breaks the layering convention. Sources belong in <code>src_</code> models only.</li>
+            <li><strong>Seeds with secrets —</strong> putting API keys or employee lists in CSV seeds commits them to git forever. Seeds are plain text in version control.</li>
+            <li><strong>Case sensitivity on identifier —</strong> on Snowflake, unquoted identifiers fold to uppercase. A mixed-case physical table name may need quoting in YAML or the warehouse.</li>
+            <li><strong>Freshness on static sample data —</strong> course sample reviews never update; <code>error_after: 1 hour</code> always fails in prod unless you disable it locally. Comment out or lengthen thresholds for dev.</li>
+            <li><strong>Confusing ref and source in snapshots —</strong> snapshots must reference <code>source()</code> for raw mutable tables, not <code>ref('src_listings')</code>, if you want to snapshot the raw feed before staging transforms.</li>
+            <li><strong>Renaming a seed CSV without updating refs —</strong> changing <code>seed_full_moon_dates.csv</code> to <code>full_moon_dates.csv</code> changes the relation name to <code>full_moon_dates</code>. Every <code>ref('seed_full_moon_dates')</code> breaks until you update SQL or add a <code>alias:</code> in seed config.</li>
+            <li><strong>Assuming freshness runs during dbt run —</strong> a successful model run does not imply raw data is fresh. Freshness is opt-in via <code>dbt source freshness</code> or explicit orchestration steps.</li>
+          </ul>
+
+          <h3>Troubleshooting playbook</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Symptom</th><th>Most likely cause</th><th>What to check / fix</th></tr></thead>
+              <tbody>
+                <tr><td><code>Database Error: relation "SEED_FULL_MOON_DATES" does not exist</code></td><td>Seed never loaded</td><td>Run <code>dbt seed --select seed_full_moon_dates</code>; confirm table in dev schema</td></tr>
+                <tr><td><code>Compilation Error: Source 'airbnb' not found</code></td><td>Typo in source name or YAML not under model-paths</td><td>Verify <code>models/sources.yml</code> spelling; run <code>dbt parse</code></td></tr>
+                <tr><td>Freshness <code>runtime error</code> on reviews</td><td><code>loaded_at_field</code> column missing or wrong case</td><td><code>DESCRIBE TABLE raw.raw_reviews</code>; align YAML with actual column name <code>date</code></td></tr>
+                <tr><td>Freshness always WARN in dev</td><td>Static sample data with old max date</td><td>Comment <code>error_after</code>; lengthen thresholds; or refresh sample data</td></tr>
+                <tr><td><code>mart_fullmoon_reviews</code> zero full-moon rows</td><td>Join predicate off by one timezone or date type</td><td>Spot-check <code>TO_DATE(review_date)</code> vs seed dates in a worksheet</td></tr>
+                <tr><td>Source test passes but table empty</td><td>Wrong <code>identifier</code> pointing at empty clone</td><td>Compare row counts: source vs staging model</td></tr>
+                <tr><td>Compiled SQL shows wrong database</td><td>Profile target not what you expect</td><td><code>dbt debug</code>; check <code>target/database</code> in <code>logs/dbt.log</code></td></tr>
+                <tr><td>Seed column types wrong</td><td>Inference guessed NUMBER for an ID with leading zeros</td><td>Add <code>seeds/schema.yml</code> with explicit <code>column_types</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Production patterns</h3>
+          <p>Teams treat <code>sources.yml</code> as the contract with upstream data producers. Each source documents owner, SLA, and freshness thresholds. Orchestration runs <code>dbt source freshness</code> as a gate before <code>dbt build</code> &mdash; if reviews are stale, downstream marts do not run and BI keeps serving yesterday's build rather than silently partial data.</p>
+          <p>Seeds stay small: currency codes, fiscal calendars, marketing campaign mappings maintained by analysts in git. Anything larger moves to a managed table with a loader job and becomes a source. Multi-environment setups override <code>schema:</code> or <code>database:</code> per target in YAML so dev reads a sandbox raw schema while prod reads the real landing zone.</p>
+
+          <div class="grid-2">
+            <div class="mini-card">
+              <h4>Pattern: freshness gate in CI</h4>
+              <p>Nightly job: freshness &rarr; build &rarr; test. Freshness failure exits non-zero; Airflow/Dagster skips transform tasks. Alerts include max loaded timestamp and threshold breached.</p>
+            </div>
+            <div class="mini-card">
+              <h4>Anti-pattern: giant seeds</h4>
+              <p>Checking a 10 GB CSV into git and running <code>dbt seed</code> daily. Repo bloat, slow clones, full-table reloads. Use the loader instead.</p>
+            </div>
+          </div>
+
+<pre data-lang="yaml" data-title="models/sources.yml (per-target schema override)" data-explain="Override raw schema per dbt target so dev reads DEV_RAW without changing model SQL."><code>sources:
+  - name: airbnb
+    schema: "{% raw %}{{ target.name }}_raw{% endraw %}"
+    tables:
+      - name: reviews
+        identifier: raw_reviews</code></pre>
+
+          <h3>Certification pointers</h3>
+          <p>The exam tests seeds versus sources literally: seeds are CSV files dbt loads; sources are declared external tables. It asks when to use <code>source()</code> vs <code>ref()</code>, what <code>identifier</code> does, and which command checks freshness. Expect a scenario where stale raw data should block a pipeline &mdash; the answer involves <code>dbt source freshness</code> and <code>loaded_at_field</code>, not a generic test.</p>
+          <ul>
+            <li><a href="s07-models.html">Section 7</a> — staging models that consume these sources.</li>
+            <li><a href="s08-materializations.html">Section 8</a> — why <code>fct_reviews</code> is incremental while this mart starts as a table.</li>
+            <li><a href="s10-snapshots.html">Section 10</a> — snapshots referencing <code>source('airbnb', 'listings')</code>.</li>
+            <li><a href="s11-tests.html">Section 11</a> — source-level <code>data_tests</code> added to <code>sources.yml</code>.</li>
+            <li><a href="s19-production.html">Section 19</a> — microbatch incremental config for <code>mart_fullmoon_reviews</code>.</li>
+          </ul>
+          <div class="callout exam"><strong>Certification:</strong> memorise that seeds use <code>ref()</code>, sources use <code>source('package','table')</code>, freshness needs a timestamp column, and <code>dbt seed</code> / <code>dbt source freshness</code> are separate commands from <code>dbt run</code>.</div>
+        </section>
+
+        <section class="section" id="interview">
+          <h2>Interview questions</h2>
+          <p class="muted">Answer each one out loud before opening it.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+
+            <details class="qa">
+              <summary>When would you use a seed instead of a source?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p>Use a seed when the data is small, version-controlled CSV reference data that dbt should load directly &mdash; holiday calendars, country codes, manual mappings like <code>seed_full_moon_dates</code>. The team owns the file in git and reloads it with <code>dbt seed</code>.</p>
+                <p>Use a source when an external system or ELT tool already loads the table into the warehouse &mdash; Fivetran landing <code>raw_reviews</code>, an API batch job, a shared landing zone. dbt declares and tests it but never builds it.</p>
+                <p>If the dataset grows beyond a few hundred thousand rows or updates on a schedule independent of your dbt deploys, migrate from seed to source plus loader.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What is the difference between source() and ref()?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p><code>ref()</code> resolves to relations dbt materialises &mdash; models, seeds, snapshots. It encodes build order: dbt runs the referenced node first. It resolves schema per target so dev and prod stay isolated.</p>
+                <p><code>source()</code> resolves to tables declared in YAML that dbt does not build. It enables freshness checks, source tests, and a dedicated sources layer in lineage. Use it at the staging boundary only.</p>
+                <p>Hard-coding a physical table name avoids both functions and breaks environment isolation, freshness, and DAG completeness.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What does the identifier property do in sources.yml?<span class="qa-tag">Modelling</span></summary>
+              <div class="qa-body">
+                <p>It maps the logical table name used in <code>source('airbnb', 'listings')</code> to a different physical table name in the warehouse &mdash; here <code>raw_listings</code>. Models stay readable; renames of physical tables require a one-line YAML change.</p>
+                <p>Without <code>identifier</code>, dbt assumes the physical name equals the logical <code>name</code>. Use <code>identifier</code> whenever loaders impose prefixes like <code>raw_</code>, <code>lz_</code>, or <code>stg_</code> on actual table names.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How does source freshness work?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>dbt runs <code>SELECT MAX(loaded_at_field)</code> on the source table and compares the result to the current warehouse time. If the age exceeds <code>warn_after</code> or <code>error_after</code> (each a count + period), the source gets status warn or error.</p>
+                <p>It is operational monitoring &mdash; is data arriving? &mdash; not a row-level quality test. Configure on tables that receive regular loads and have a reliable timestamp column.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Your freshness check always warns in development. Why?<span class="qa-tag">Troubleshooting</span></summary>
+              <div class="qa-body">
+                <p>Sample datasets often have a fixed max date from when the dump was created. If <code>warn_after: 1 hour</code> and the newest review is months old, every freshness run warns or errors even though nothing is wrong with your code.</p>
+                <p>Fixes: lengthen thresholds for dev, comment out <code>error_after</code> locally (as the course repo does), use target-specific YAML overrides, or refresh sample data. Production pipelines against live feeds should keep strict thresholds.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Why declare sources in YAML instead of hard-coding table names?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>Centralised declaration gives you one place to change database/schema/table mappings per environment, attach documentation, run source-level tests, and configure freshness. Models stay environment-agnostic.</p>
+                <p>Hard-coded <code>DATABASE.SCHEMA.TABLE</code> strings compile but bypass the sources layer in lineage, skip freshness, and break when you clone prod data to a dev schema with a different name.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Can you run dbt test on a source?<span class="qa-tag">Testing</span></summary>
+              <div class="qa-body">
+                <p>Yes. Column tests under a source table in <code>sources.yml</code> run against the raw relation before staging transforms. The course adds <code>dbt_expectations</code> tests on <code>room_type</code> and <code>price</code> in a later section.</p>
+                <p>Source tests catch upstream problems at the boundary. Staging tests catch your transform logic. Both belong in a mature project; neither replaces freshness for staleness detection.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What happens if you forget to run dbt seed before building a model that refs a seed?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p>The model fails at runtime with a relation-not-found error because the seed table does not exist in the target schema. <code>dbt build</code> avoids this by running seeds first in DAG order; plain <code>dbt run</code> does not load seeds automatically.</p>
+                <p>CI pipelines should either use <code>dbt build</code> or explicitly run <code>dbt seed</code> before <code>dbt run</code> when seeds changed in the commit.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How would you check whether dbt source freshness failed in a PowerShell CI script?<span class="qa-tag">Production</span></summary>
+              <div class="qa-body">
+                <p>Run <code>dbt source freshness</code>, then inspect <code>$LASTEXITCODE</code>. Non-zero means failure or error-level staleness depending on configuration. Do not rely on <code>$?</code> alone for numeric exit codes.</p>
+                <p>On bash agents use <code>echo $?</code> or <code>set -e</code> so the script stops before downstream steps. Wire alerts to the freshness JSON artifact in <code>target/</code> for max loaded timestamps.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Why does mart_fullmoon_reviews join on review_date = full_moon_date + 1 day?<span class="qa-tag">SQL</span></summary>
+              <div class="qa-body">
+                <p>The business question is whether reviews submitted the night <em>after</em> a full moon differ in sentiment. The seed stores the astronomical full moon date; adding one day shifts to the calendar day guests would have experienced the aftermath.</p>
+                <p>A <code>LEFT JOIN</code> preserves all reviews; unmatched rows become <code>'not full moon'</code>. Getting the offset wrong by one day would mislabel the analysis &mdash; always validate edge dates against a known full moon in the seed.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Does dbt run load seeds automatically?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>No. <code>dbt run</code> executes models only. Seeds load with <code>dbt seed</code> or as part of <code>dbt build</code> when seeds are in the selected subgraph. If a model references <code>ref('seed_full_moon_dates')</code> and the seed table does not exist, the run fails at query time.</p>
+                <p>CI should either run <code>dbt build</code> end-to-end or run <code>dbt seed</code> as an explicit prerequisite step whenever seed CSVs change in the commit.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How do you select a single source table for freshness or tests?<span class="qa-tag">Certification</span></summary>
+              <div class="qa-body">
+                <p>Use the <code>source:source_name.table_name</code> selector syntax. Examples from the course project: <code>dbt source freshness --select source:airbnb.reviews</code>, <code>dbt test --select source:airbnb.listings</code>, <code>dbt source freshness --select source:airbnb</code> for all tables under the source that have freshness config.</p>
+                <p>This is parallel to model selectors (<code>dbt run --select fct_reviews</code>) but targets declared sources instead of built models. The wildcard <code>source:*</code> selects every source node in the project.</p>
+              </div>
+            </details>
+
+          </div>
+        </section>
+
+        <section class="section" id="practice">
+          <h2>Hands-on practice</h2>
+          <p class="muted">Run these from the <code>airbnb</code> folder with your virtualenv active.</p>
+          <ol class="practice-list">
+
+            <li class="practice">
+              <p class="practice-task">Download <code>seed_full_moon_dates.csv</code>, run <code>dbt seed</code>, and confirm the table exists with 273 rows in your dev schema.</p>
+              <span class="console-path">airbnb/seeds/seed_full_moon_dates.csv</span>
+              <p class="practice-expect"><code>dbt seed</code> reports INSERT 273; a worksheet query <code>SELECT COUNT(*) FROM &lt;dev_schema&gt;.seed_full_moon_dates</code> returns 273.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Download the CSV to <code>seeds/seed_full_moon_dates.csv</code>.</li>
+                    <li>Run <code>dbt seed --select seed_full_moon_dates</code>.</li>
+                    <li>Verify row count in Snowflake or with <code>dbt show --select seed_full_moon_dates --limit 5</code>.</li>
+                  </ol>
+<pre data-lang="shell" data-title="Load and verify seed"><code>dbt seed --select seed_full_moon_dates
+dbt show --select seed_full_moon_dates --limit 3</code></pre>
+                  <p class="muted">Undo: <code>DROP TABLE IF EXISTS &lt;dev_schema&gt;.seed_full_moon_dates</code> if you want a clean re-test of the seed command.</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">Create or update <code>models/sources.yml</code> with the three Airbnb raw tables and freshness on reviews. Refactor <code>src_listings.sql</code> to use <code>source('airbnb', 'listings')</code> instead of a hard-coded path.</p>
+              <span class="console-path">airbnb/models/sources.yml · models/src/src_listings.sql</span>
+              <p class="practice-expect"><code>dbt compile --select src_listings</code> succeeds; compiled SQL references <code>RAW.RAW_LISTINGS</code> (or your target's equivalent), not a dev-schema model.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Add the <code>sources.yml</code> block from this section.</li>
+                    <li>Replace the hard-coded FROM clause in <code>src_listings.sql</code> with <code>{{ source('airbnb', 'listings') }}</code>.</li>
+                    <li>Run <code>dbt compile --select src_listings</code> and inspect <code>target/compiled/</code>.</li>
+                  </ol>
+<pre data-lang="sql" data-title="models/src/src_listings.sql" data-explain="source() replaces the fully qualified raw table name."><code>WITH raw_listings AS (
+        SELECT * FROM {{ source('airbnb', 'listings') }}
+)
+SELECT 
+   id AS listing_id,
+   ...
+FROM raw_listings</code></pre>
+                  <p class="muted">Undo: revert <code>src_listings.sql</code> and remove <code>sources.yml</code> if you have not yet committed; otherwise git checkout the files.</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">Run <code>dbt source freshness --select source:airbnb.reviews</code> and read the exit code in your shell. Then build <code>mart_fullmoon_reviews</code> and count how many reviews fall on a full-moon-after night.</p>
+              <span class="console-path">airbnb/models/mart/mart_fullmoon_reviews.sql</span>
+              <p class="practice-expect">Freshness completes with PASS or WARN (sample data may warn); mart builds; <code>SELECT COUNT(*) FROM mart_fullmoon_reviews WHERE is_full_moon = 'full moon'</code> returns a positive number.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Add <code>mart_fullmoon_reviews.sql</code> from this section.</li>
+                    <li>Run freshness, then check exit code (<code>$LASTEXITCODE</code> in PowerShell, <code>echo $?</code> in bash).</li>
+                    <li>Run <code>dbt build --select +mart_fullmoon_reviews</code>.</li>
+                    <li>Query the mart for full-moon review counts.</li>
+                  </ol>
+<pre data-lang="shell" data-title="Freshness, build, analyse"><code>dbt source freshness --select source:airbnb.reviews
+$LASTEXITCODE   # PowerShell
+
+dbt build --select +mart_fullmoon_reviews</code></pre>
+<pre data-lang="sql" data-title="Analyse full-moon reviews"><code>SELECT is_full_moon, COUNT(*) AS review_count
+FROM mart_fullmoon_reviews
+GROUP BY 1;</code></pre>
+                  <p class="muted">Undo: <code>dbt run-operation drop_dev_schemas</code> is not available yet; drop <code>mart_fullmoon_reviews</code> manually or leave it for later sections.</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">Break freshness on purpose: set <code>error_after: {count: 1, period: minute}</code> on reviews, run freshness again, and confirm a non-zero exit code.</p>
+              <span class="console-path">airbnb/models/sources.yml</span>
+              <p class="practice-expect"><code>dbt source freshness</code> reports ERROR or exits non-zero; restoring sensible thresholds returns PASS.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Edit <code>error_after</code> to one minute in <code>sources.yml</code>.</li>
+                    <li>Run <code>dbt source freshness --select source:airbnb.reviews</code>.</li>
+                    <li>Check <code>$LASTEXITCODE</code> or <code>echo $?</code> is not 0.</li>
+                    <li>Restore <code>error_after: {count: 24, period: hour}</code> or comment it out for local dev.</li>
+                  </ol>
+                  <p class="muted">Undo: revert the freshness block to course defaults so later sections are not blocked.</p>
+                </div>
+              </details>
+            </li>
+
+          </ol>
+        </section>
+
+        <section class="section" id="recap">
+          <h2>Recap</h2>
+          <div class="recap">
+            <ul class="checklist">
+              <li>Seeds are CSV files in <code>seeds/</code> that dbt loads into tables via <code>dbt seed</code>. Reference them with <code>ref('seed_name')</code>.</li>
+              <li><code>seed_full_moon_dates.csv</code> holds lunar calendar dates used to enrich reviews in the full-moon mart.</li>
+              <li>Sources declare raw warehouse tables in <code>models/sources.yml</code> &mdash; dbt documents and tests them but does not build them.</li>
+              <li><code>source('airbnb', 'listings')</code> is for raw tables; <code>ref('src_listings')</code> is for dbt-built models and seeds.</li>
+              <li><code>identifier</code> maps a friendly logical name to the physical table name (<code>listings</code> &rarr; <code>raw_listings</code>).</li>
+              <li>Source freshness compares <code>MAX(loaded_at_field)</code> to <code>warn_after</code> and <code>error_after</code> thresholds.</li>
+              <li><code>dbt source freshness</code> runs those checks; use <code>$LASTEXITCODE</code> in PowerShell or <code>echo $?</code> on Mac/Linux for exit codes.</li>
+              <li>Staging models (<code>src_*</code>) should be the only models calling <code>source()</code>.</li>
+              <li><code>mart_fullmoon_reviews</code> LEFT JOINs <code>fct_reviews</code> to the seed on <code>review_date = full_moon_date + 1 day</code>.</li>
+              <li>The mart starts as a table in this section; production refactors it to microbatch incremental in <a href="s19-production.html">Section 19</a>.</li>
+              <li><code>dbt build</code> runs seeds before models; plain <code>dbt run</code> does not.</li>
+              <li>Do not put large or frequently updated datasets in seeds &mdash; use sources and a loader instead.</li>
+            </ul>
+            <p style="margin-top:1rem;">
+              <button type="button" data-complete="section-09">Mark complete</button>
+            </p>
+          </div>
+        </section>
+
+      </div>
+
+      <aside class="toc" aria-label="On this page">
+        <strong>On this page</strong>
+        <ol>
+          <li><a href="#lectures">Lectures</a></li>
+          <li><a href="#seeds">Seeds</a></li>
+          <li><a href="#sources-yml">sources.yml</a></li>
+          <li><a href="#source-vs-ref">source() vs ref()</a></li>
+          <li><a href="#identifier">identifier</a></li>
+          <li><a href="#source-freshness">Source freshness</a></li>
+          <li><a href="#freshness-command">dbt source freshness</a></li>
+          <li><a href="#mart-fullmoon">mart_fullmoon_reviews</a></li>
+          <li><a href="#deeper">Deeper detail</a></li>
+          <li><a href="#interview">Interview questions</a></li>
+          <li><a href="#practice">Hands-on practice</a></li>
+          <li><a href="#recap">Recap</a></li>
+        </ol>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<footer class="footer">The Complete dbt Bootcamp: Zero to Hero &middot; Section 9 &middot; Offline study edition</footer>
+</body>
+</html>

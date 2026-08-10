@@ -1,0 +1,1264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="dbt bootcamp Section 11: built-in generic tests, data_tests in schema.yml, singular tests, store_failures, test selection, compiled SQL, and interpreting dbt test output.">
+<title>Section 11 — Tests | The Complete dbt Bootcamp Notes</title>
+<link rel="stylesheet" href="assets/dbt.css">
+<script defer src="assets/search-index.js"></script>
+<script defer src="assets/code-highlight.js"></script>
+<script defer src="assets/dbt.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">Course section 11 of 22 · The Complete dbt Bootcamp: Zero to Hero</p>
+    <h1>Tests</h1>
+    <p class="subtitle">How dbt checks data quality without leaving your project: the four built-in generic tests declared in YAML, singular tests as plain SQL files, storing failures for triage, choosing what runs with <code>--select</code>, and reading the compiled SQL behind every test.</p>
+    <div class="hero-meta">
+      <span class="chip">9 lectures · ~40min</span>
+      <span class="chip">generic and singular tests</span>
+      <span class="chip">data_tests:</span>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <nav class="pager" aria-label="Section navigation">
+    <a href="s10-snapshots.html">← Snapshots</a>
+    <a href="index.html">Course contents</a>
+    <a href="s12-advanced-testing.html">Next: Advanced Testing →</a>
+  </nav>
+
+  <main id="main">
+    <div class="layout">
+      <div class="content">
+
+        <section class="section" id="lectures">
+          <h2>Lectures in this section</h2>
+          <ol class="lecture-list">
+            <li class="lecture">
+              <a class="lec-title" href="#why-test">Why test in dbt</a>
+              <span class="lec-time">~4:00</span>
+              <span class="lec-src">course-resources.md · Tests</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#generic-tests">The four built-in generic tests</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">course-resources.md · Generic Tests</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#data-tests-yaml">Declaring tests in schema.yml</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">models/schema.yml</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#data-tests-yaml">The data_tests: key and arguments:</a>
+              <span class="lec-time">~4:00</span>
+              <span class="lec-src">tools/SOURCES.md · Facts</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#singular-tests">Singular tests</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">tests/dim_listings_minimum_nights.sql</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#singular-tests">Exercise: consistent_created_at</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">tests/consistent_created_at.sql</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#store-failures">Storing test failures</a>
+              <span class="lec-time">~4:00</span>
+              <span class="lec-src">dbt_project.yml · data_tests:</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#selecting-tests">Restricting test execution</a>
+              <span class="lec-time">~4:00</span>
+              <span class="lec-src">course-resources.md · Restricting test execution</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#compiled-sql">Compiled SQL and dbt test output</a>
+              <span class="lec-time">~4:00</span>
+              <span class="lec-src">target/compiled/ · course-resources.md</span>
+            </li>
+          </ol>
+          <p class="muted">Sections 7&ndash;10 built models, materializations, sources and snapshots. This section adds the quality gate: assumptions about your data become executable checks that run on every pipeline execution.</p>
+        </section>
+
+        <section class="section" id="why-test">
+          <h2>Why test in dbt</h2>
+          <p class="lead">A dbt test is a <code>SELECT</code> that returns rows you do not want to exist. If the query returns zero rows, the test passes. If it returns any rows, dbt marks the test as failed and can block downstream work depending on severity and how you orchestrate the run.</p>
+
+          <p>That inversion matters. You are not writing assertions in Python or checking a boolean in application code. You express the violation condition in SQL &mdash; &ldquo;show me listing IDs that appear more than once&rdquo; &mdash; and dbt runs it against the warehouse relation your model materialised. The warehouse does the work; dbt tracks results, names the test, wires it into the DAG, and surfaces failures in the CLI and (optionally) in stored failure tables.</p>
+
+          <div class="diagram">
+            <p class="diagram-title">How dbt runs a test against a materialised model</p>
+            <div class="flow">
+              <div class="node is-model"><b>dim_listings_cleansed</b><small>table in DEV schema</small></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-test pulse"><b>not_null on listing_id</b><small>SELECT rows WHERE listing_id IS NULL</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-compute"><b>0 rows?</b><small>PASS</small></div>
+            </div>
+          </div>
+
+          <h3>Two families of tests in this section</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Type</th><th>Where it lives</th><th>When to use</th><th>Course examples</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Generic test</strong></td><td>Declared under <code>data_tests:</code> in <code>schema.yml</code> (or source YAML)</td><td>Reusable column checks: uniqueness, nulls, allowed values, foreign keys</td><td><code>unique</code>, <code>not_null</code>, <code>accepted_values</code>, <code>relationships</code></td></tr>
+                <tr><td><strong>Singular test</strong></td><td>SQL file in <code>tests/</code></td><td>One-off business rules spanning joins, aggregates, or logic generic tests cannot express</td><td><code>dim_listings_minimum_nights.sql</code>, <code>consistent_created_at.sql</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p><a href="s12-advanced-testing.html">Section 12</a> adds a third family &mdash; unit tests with mocked inputs, custom generic tests, contracts and constraints. This section stays with what ships in every dbt project out of the box plus singular SQL files.</p>
+
+          <h3>Tests in the analytics engineering workflow</h3>
+          <p>Testing is one of the practices that separates ad-hoc SQL from a maintainable pipeline. When a Fivetran sync duplicates rows, a staging CASE statement maps a new room type to NULL, or an incremental model drops late-arriving reviews, tests turn silent KPI drift into a failed job with a name you can grep. That failure is intentional: it is cheaper than a CFO asking why revenue dropped three weeks after the bug shipped.</p>
+
+          <p>dbt tests are not a substitute for:</p>
+          <ul>
+            <li><strong>Source freshness</strong> (<a href="s09-seeds-sources.html">Section 9</a>) &mdash; detects stale loads, not bad values inside a fresh load.</li>
+            <li><strong>Unit tests</strong> (<a href="s12-advanced-testing.html">Section 12</a>) &mdash; mock inputs in memory; no warehouse scan required.</li>
+            <li><strong>Database constraints</strong> &mdash; enforced at insert time by the warehouse; dbt tests run after the fact on schedule.</li>
+            <li><strong>Data observability platforms</strong> &mdash; anomaly detection on metrics over time; complementary to row-level tests.</li>
+          </ul>
+
+          <div class="analogy"><strong>Everyday analogy &mdash;</strong> generic tests are like checking every apple on the conveyor for bruises. Singular tests are the chef tasting one specific dish before it leaves the kitchen. Freshness is asking whether the delivery truck arrived today at all.</div>
+
+          <h3>When tests run in the DAG</h3>
+          <p>Test nodes depend on the models they reference. dbt will not run <code>not_null_dim_listings_cleansed_listing_id</code> until <code>dim_listings_cleansed</code> exists for the current target. Singular tests that join two models depend on both. In <code>dbt build</code>, dbt interleaves runs and tests; in a plain <code>dbt test</code>, you are responsible for that ordering.</p>
+
+          <div class="diagram">
+            <p class="diagram-title">Test execution order with dbt build on dim_listings_cleansed</p>
+            <div class="flow">
+              <div class="node is-mart"><b>dim_hosts_cleansed</b><small>run first</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-mart"><b>dim_listings_cleansed</b><small>run second</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-test pulse"><b>column data_tests</b><small>unique · not_null · relationships</small></div>
+            </div>
+          </div>
+
+          <div class="callout tip"><strong>Tests run against what exists in the warehouse.</strong> Run <code>dbt run</code> (or <code>dbt build</code>) before <code>dbt test</code> on a fresh environment. A test on <code>dim_listings_cleansed</code> queries the table dbt built, not the SQL file on disk. Ephemeral models have no relation to test directly &mdash; test their downstream tables instead.</div>
+
+          <h3>Where tests live in the Airbnb project</h3>
+          <div class="filetree">
+            <ul>
+              <li><span class="dir">airbnb/</span>
+                <ul>
+                  <li><span class="file">dbt_project.yml</span> <span class="new">← global <code>data_tests:</code> config (<code>store_failures</code>)</span></li>
+                  <li><span class="dir">models/</span>
+                    <ul>
+                      <li><span class="file">schema.yml</span> <span class="new">← generic tests on models and columns</span></li>
+                    </ul>
+                  </li>
+                  <li><span class="dir">tests/</span>
+                    <ul>
+                      <li><span class="file">dim_listings_minimum_nights.sql</span> <span class="new">← singular test</span></li>
+                      <li><span class="file">consistent_created_at.sql</span> <span class="new">← exercise solution</span></li>
+                    </ul>
+                  </li>
+                </ul>
+              </li>
+            </ul>
+          </div>
+        </section>
+
+        <section class="section" id="generic-tests">
+          <h2>The four built-in generic tests</h2>
+          <p class="lead">dbt ships four generic tests that cover the majority of column-level checks analytics engineers need. Each is a Jinja macro that expands into a failing-row query. You reference them by short name under a column&rsquo;s <code>data_tests:</code> list, or with an <code>arguments:</code> block when parameters are required.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Test</th><th>What it checks</th><th>Typical column</th><th>Needs arguments?</th></tr></thead>
+              <tbody>
+                <tr><td><code>unique</code></td><td>No duplicate values</td><td>Primary keys, natural keys</td><td>No</td></tr>
+                <tr><td><code>not_null</code></td><td>No NULL values</td><td>Keys, required attributes</td><td>No</td></tr>
+                <tr><td><code>accepted_values</code></td><td>Value is in an allowed list</td><td>Enums, flags, status codes</td><td>Yes &mdash; <code>values:</code></td></tr>
+                <tr><td><code>relationships</code></td><td>Every value exists in a parent column (referential integrity)</td><td>Foreign keys</td><td>Yes &mdash; <code>to:</code>, <code>field:</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>unique</h3>
+          <p>Assert that a column contains only distinct values. On <code>dim_listings_cleansed.listing_id</code>, this is your primary-key guarantee. Internally dbt groups by the column and returns groups with <code>COUNT(*) &gt; 1</code>.</p>
+
+<pre data-lang="sql" data-title="Compiled unique test (conceptual)" data-explain="dbt wraps the macro output; exact SQL lives under target/compiled/ after dbt compile or dbt test."><code>SELECT
+    listing_id
+FROM DEV.dim_listings_cleansed
+GROUP BY listing_id
+HAVING COUNT(*) &gt; 1</code></pre>
+
+          <p>If two rows share the same <code>listing_id</code>, the test fails and dbt prints how many failing rows it found (up to the warehouse limit configured for the adapter).</p>
+
+          <h3>not_null</h3>
+          <p>Returns rows where the column is NULL. Combine with <code>unique</code> on the same column for a minimal primary-key contract before you adopt formal model contracts in Section 12.</p>
+
+<pre data-lang="sql" data-title="Compiled not_null test (conceptual)" data-explain="Any returned row is a failure. Empty result set means pass."><code>SELECT
+    listing_id
+FROM DEV.dim_listings_cleansed
+WHERE listing_id IS NULL</code></pre>
+
+          <h3>accepted_values</h3>
+          <p>Restrict a column to a finite set. The course uses this on <code>room_type</code> with the four Airbnb room categories. Any unexpected string &mdash; a typo in staging, a new category from the API &mdash; surfaces as a failing row.</p>
+
+<pre data-lang="sql" data-title="Compiled accepted_values test (conceptual)" data-explain="values come from schema.yml arguments."><code>SELECT
+    room_type
+FROM DEV.dim_listings_cleansed
+WHERE room_type NOT IN (
+    'Entire home/apt',
+    'Private room',
+    'Shared room',
+    'Hotel room'
+)</code></pre>
+
+          <div class="callout warn"><strong>New categories are data, not test bugs.</strong> When Airbnb adds a fifth room type, the test fails correctly. Update the allowed list in YAML (or move to a seed-driven lookup test) after validating the new value with the business.</div>
+
+          <h3>relationships</h3>
+          <p>Foreign-key style integrity: every non-null value in the child column must appear in the parent column. The course links <code>dim_listings_cleansed.host_id</code> to <code>dim_hosts_cleansed.host_id</code> and later <code>fct_reviews.listing_id</code> to <code>dim_listings_cleansed.listing_id</code>.</p>
+
+          <p>The <code>to:</code> argument accepts <code>ref('model_name')</code> or <code>source('source_name', 'table_name')</code>. The parent model must exist in the warehouse when the test runs &mdash; another reason to run parents before children, or use <code>dbt test --select +dim_listings_cleansed</code> to include upstream builds if your orchestration bundles them.</p>
+
+<pre data-lang="sql" data-title="Compiled relationships test (conceptual)" data-explain="LEFT JOIN pattern: child rows with no matching parent key fail the test."><code>SELECT
+    child.host_id
+FROM DEV.dim_listings_cleansed AS child
+LEFT JOIN DEV.dim_hosts_cleansed AS parent
+    ON child.host_id = parent.host_id
+WHERE child.host_id IS NOT NULL
+  AND parent.host_id IS NULL</code></pre>
+
+          <h3>Generic tests compared at a glance</h3>
+          <div class="grid-2">
+            <div class="mini-card">
+              <h4>Column-only vs cross-table</h4>
+              <p><code>unique</code>, <code>not_null</code>, and <code>accepted_values</code> scan one column on one model. <code>relationships</code> joins two relations and is sensitive to build order and orphaned keys in either direction.</p>
+            </div>
+            <div class="mini-card">
+              <h4>NULL handling</h4>
+              <p><code>relationships</code> ignores NULL child keys by default (SQL NULL semantics). If NULL foreign keys are invalid, add a separate <code>not_null</code> on the same column.</p>
+            </div>
+          </div>
+
+          <div class="diagram">
+            <p class="diagram-title">relationships test between listings and hosts</p>
+            <div class="dag">
+              <div class="dag-col">
+                <p class="dag-label">Parent</p>
+                <div class="node is-mart"><b>dim_hosts_cleansed</b><small>host_id PK</small></div>
+              </div>
+              <div class="dag-col">
+                <p class="dag-label">Child</p>
+                <div class="node is-model pulse"><b>dim_listings_cleansed</b><small>host_id FK test</small></div>
+              </div>
+              <div class="dag-col">
+                <p class="dag-label">Failure rows</p>
+                <div class="node is-test"><b>orphan host_id</b><small>no matching parent</small></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="callout info"><strong>Warehouse differences.</strong> The compiled SQL is standard ANSI-ish SQL; Snowflake, BigQuery, Databricks and Postgres all execute the same pattern. Performance differs: <code>unique</code> on a billion-row column without a supporting statistic can be expensive on any platform. Add warehouse constraints or cluster keys in production; dbt tests do not replace physical indexing.</div>
+
+          <h3>Combining tests on one column</h3>
+          <p>The course stacks <code>unique</code> and <code>not_null</code> on <code>listing_id</code>. Together they approximate a primary-key constraint without enabling a formal model contract yet. Order in the YAML list does not change execution order &mdash; dbt runs tests in dependency order, not declaration order.</p>
+
+          <p>On <code>host_id</code>, the course uses <code>not_null</code> then <code>relationships</code>. That pairing is deliberate: every listing must point at a host, and that host must exist in <code>dim_hosts_cleansed</code>. If you only had <code>relationships</code>, NULL host IDs would slip through.</p>
+
+          <h3>What the instructor types live</h3>
+          <p>The Generic Tests lecture walks through adding tests column by column in <code>schema.yml</code>, running <code>dbt test</code> after each addition, and reading PASS lines in the terminal. Expect to see test node names grow longer as dbt encodes model, column, and test type into the identifier &mdash; that long name is what you pass to <code>--select</code> when re-running one failure.</p>
+
+          <div class="terminal">
+            <p class="term-head">After adding unique on listing_id</p>
+            <pre class="term-body"><span class="tt-cmd">dbt test --select dim_listings_cleansed</span>
+<span class="tt-dim">14:31:02  Running with dbt=1.11.12</span>
+<span class="tt-dim">14:31:04  1 of 2 START test not_null_dim_listings_cleansed_listing_id .......... [RUN]</span>
+<span class="tt-ok">14:31:05  1 of 2 PASS not_null_dim_listings_cleansed_listing_id ................. [PASS in 0.38s]</span>
+<span class="tt-dim">14:31:05  2 of 2 START test unique_dim_listings_cleansed_listing_id ............ [RUN]</span>
+<span class="tt-ok">14:31:06  2 of 2 PASS unique_dim_listings_cleansed_listing_id ................... [PASS in 0.52s]</span>
+<span class="tt-ok">14:31:06  Completed successfully</span></pre>
+          </div>
+        </section>
+
+        <section class="section" id="data-tests-yaml">
+          <h2>Declaring tests in schema.yml</h2>
+          <p class="lead">Generic tests attach to models and columns in YAML. The finished course project centralises most declarations in <code>models/schema.yml</code> alongside descriptions and (later) contracts. dbt discovers them at parse time and registers one test node per declaration.</p>
+
+          <div class="callout info"><strong>YAML key rename: <code>tests:</code> &rarr; <code>data_tests:</code>.</strong> Older projects and course screenshots may show <code>tests:</code> under a column. dbt 1.x expects <code>data_tests:</code> for data quality tests. Generic test parameters (<code>values:</code>, <code>to:</code>, <code>field:</code>) nest under <code>arguments:</code> rather than sitting at the same level as the test name. The course repo on the 1.11 pin already uses the current form.</div>
+
+          <h3>Old syntax vs current syntax</h3>
+          <p>If you migrate a legacy project or paste from an old blog post, translate both the key and the argument nesting:</p>
+
+          <div class="grid-2">
+            <div class="mini-card">
+              <h4>Legacy (pre-1.8 style)</h4>
+<pre data-lang="yaml" data-partial="true" data-title="Old column tests" data-explain="Still seen in Stack Overflow answers; do not copy into new projects."><code>columns:
+  - name: room_type
+    tests:
+      - accepted_values:
+          values: ['Entire home/apt', ...]</code></pre>
+            </div>
+            <div class="mini-card">
+              <h4>Current (1.11 course)</h4>
+<pre data-lang="yaml" data-partial="true" data-title="Current column tests" data-explain="Use this form in the Airbnb project."><code>columns:
+  - name: room_type
+    data_tests:
+      - accepted_values:
+          arguments:
+            values: ['Entire home/apt', ...]</code></pre>
+            </div>
+          </div>
+
+          <p>The same rename applies to <code>sources.yml</code> column tests and to seeds when you attach tests in seed schema YAML. Unit tests use a separate top-level <code>unit_tests:</code> key &mdash; not covered until Section 12.</p>
+
+          <p>Below is the block from the course script and repo for <code>dim_listings_cleansed</code> &mdash; the same structure the instructor types in the Generic Tests lecture:</p>
+
+<pre data-lang="yaml" data-title="models/schema.yml (dim_listings_cleansed excerpt)" data-explain="data_tests on columns; relationships and accepted_values use arguments:."><code>models:
+  - name: dim_listings_cleansed
+    description: Cleansed table which contains Airbnb listings.
+    columns:
+      - name: listing_id
+        description: Primary key for the listing
+        data_tests:
+          - unique
+          - not_null
+
+      - name: host_id
+        description: The hosts's id. References the host table.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_hosts_cleansed')
+                field: host_id
+
+      - name: room_type
+        description: Type of the apartment / room
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['Entire home/apt',
+                        'Private room',
+                        'Shared room',
+                        'Hotel room']</code></pre>
+
+          <h3>Model-level vs column-level tests</h3>
+          <p>Tests under <code>columns:</code> receive the column name automatically &mdash; the macro signature is <code>(model, column_name)</code> for built-ins. Tests under the model itself (not nested under a column) apply to the whole table. The finished repo adds a model-level custom generic test on <code>dim_listings_cleansed</code>:</p>
+
+<pre data-lang="yaml" data-title="models/schema.yml (model-level test — Section 12 preview)" data-explain="minimum_row_count is a custom generic test added later; shown here because it exists in the repo schema.yml."><code>  - name: dim_listings_cleansed
+    data_tests:
+      - minimum_row_count:
+          arguments:
+            min_row_count: 1000
+          config:
+            severity: error</code></pre>
+
+          <p>Model-level declarations still run against the materialised relation for that model. Custom generics are covered in <a href="s12-advanced-testing.html">Section 12</a>; the syntax pattern is identical to built-ins.</p>
+
+          <h3>Shorthand vs expanded form</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Style</th><th>YAML</th><th>When</th></tr></thead>
+              <tbody>
+                <tr><td>List item</td><td><code>- unique</code></td><td>Built-ins with no parameters</td></tr>
+                <tr><td>Map with arguments</td><td><code>- accepted_values:<br>&nbsp;&nbsp;arguments:<br>&nbsp;&nbsp;&nbsp;&nbsp;values: [...]</code></td><td>Built-ins that need configuration</td></tr>
+                <tr><td>Map with config</td><td><code>config:<br>&nbsp;&nbsp;severity: warn</code></td><td>Override failure behaviour per test (Section 12)</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Tests elsewhere in the same file</h3>
+          <p>By the end of the course, <code>schema.yml</code> also tests <code>fct_reviews</code>, <code>dim_listings_w_hosts</code>, and <code>dim_hosts_cleansed</code>. A <code>relationships</code> test on the fact table ensures every review points at a valid listing:</p>
+
+<pre data-lang="yaml" data-title="models/schema.yml (fct_reviews excerpt)" data-explain="Same relationships pattern on the fact FK."><code>  - name: fct_reviews
+    columns:
+      - name: listing_id
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_listings_cleansed')
+                field: listing_id
+
+      - name: reviewer_name
+        data_tests:
+          - not_null</code></pre>
+
+          <p>Keep tests close to the models they guard. Splitting YAML by folder (<code>models/dim/_dim__models.yml</code>) is a common production pattern; the course uses one file for simplicity.</p>
+
+          <h3>Full schema.yml context from the repo</h3>
+          <p>The finished project file is larger than the lecture excerpt. The block below matches the real <code>models/schema.yml</code> in the course repo for the models introduced in this section and their immediate neighbours:</p>
+
+<pre data-lang="yaml" data-title="models/schema.yml (repo excerpt)" data-explain="Real file from the Airbnb project; positive_values is a custom generic added in Section 12."><code>models:
+  - name: dim_listings_cleansed
+    description: Cleansed table which contains Airbnb listings.
+    data_tests:
+      - minimum_row_count:
+          arguments:
+            min_row_count: 1000
+          config:
+            severity: error
+    columns:
+      - name: listing_id
+        description: Primary key for the listing
+        data_tests:
+          - unique
+          - not_null
+
+      - name: host_id
+        description: The hosts's id. References the host table.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_hosts_cleansed')
+                field: host_id
+
+      - name: room_type
+        description: Type of the apartment / room
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['Entire home/apt',
+                        'Private room',
+                        'Shared room',
+                        'Hotel room']
+
+      - name: minimum_nights
+        description: '{{ doc("dim_listing_cleansed__minimum_nights") }}'
+        data_tests:
+          - positive_values
+
+  - name: fct_reviews
+    columns:
+      - name: listing_id
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_listings_cleansed')
+                field: listing_id
+
+      - name: reviewer_name
+        data_tests:
+          - not_null</code></pre>
+
+          <p>Notice <code>minimum_row_count</code> at model level and <code>positive_values</code> on <code>minimum_nights</code> &mdash; both are custom generic tests from Section 12. They illustrate that built-ins and customs share the same YAML shape once macros exist under <code>tests/generic/</code> or <code>macros/</code>.</p>
+
+          <div class="callout exam"><strong>Certification:</strong> know the four built-in generic test names, that YAML uses <code>data_tests:</code>, and that <code>relationships</code> requires <code>to</code> and <code>field</code> under <code>arguments:</code>. Expect a question that shows old <code>tests:</code> syntax and asks for the current equivalent.</div>
+        </section>
+
+        <section class="section" id="singular-tests">
+          <h2>Singular tests</h2>
+          <p class="lead">When a rule does not fit a generic macro &mdash; a join across models, a conditional aggregate, a window function &mdash; write a singular test: a <code>.sql</code> file in the <code>tests/</code> directory whose name becomes the test identifier. The file must be a query that returns failing rows only.</p>
+
+          <p>dbt compiles Jinja in the file (<code>ref()</code>, <code>source()</code>, macros) and executes the result. Any row returned is a failure. An empty result set is a pass. This is the same pass/fail contract as generic tests, but you own the SQL entirely.</p>
+
+          <h3>dim_listings_minimum_nights</h3>
+          <p>The staging model coerces <code>minimum_nights = 0</code> to <code>1</code> in <code>dim_listings_cleansed</code>. This singular test verifies that invariant: no row in the cleansed dimension should have <code>minimum_nights &lt; 1</code>.</p>
+
+<pre data-lang="sql" data-title="tests/dim_listings_minimum_nights.sql" data-explain="Returns up to 10 violating rows; LIMIT does not make a failing test pass if violations exist."><code>SELECT
+    *
+FROM
+    {{ ref('dim_listings_cleansed') }}
+WHERE minimum_nights &lt; 1
+LIMIT 10</code></pre>
+
+          <p>The <code>LIMIT 10</code> caps how many failing rows dbt fetches for the error message and logs. It does <em>not</em> cap how many violations exist &mdash; dbt still fails the test if any row matches. Use LIMIT to keep failure output readable on wide tables, not to sample away problems.</p>
+
+          <h3>Failing-row query pattern</h3>
+          <p>Think in terms of &ldquo;find the bad rows&rdquo;:</p>
+          <ul>
+            <li><strong>Generic <code>not_null</code></strong> &mdash; <code>WHERE column IS NULL</code></li>
+            <li><strong>Generic <code>unique</code></strong> &mdash; <code>GROUP BY … HAVING COUNT(*) &gt; 1</code></li>
+            <li><strong>Singular business rule</strong> &mdash; whatever SELECT exposes the violation; often a join or inequality</li>
+          </ul>
+
+          <p>To debug before adding a test, run the same SELECT in a worksheet against compiled refs. Replace <code>{{ ref('dim_listings_cleansed') }}</code> with your dev schema table name and confirm zero rows.</p>
+
+          <div class="terminal">
+            <p class="term-head">Worksheet sanity check</p>
+            <pre class="term-body"><span class="tt-cmd">SELECT COUNT(*) FROM DEV.dim_listings_cleansed WHERE minimum_nights &lt; 1</span>
+<span class="tt-ok">0</span></pre>
+          </div>
+
+          <h3>Exercise: consistent_created_at</h3>
+          <p>The course exercise asks for a singular test ensuring no review was submitted before its listing existed. Logically: for each review, <code>review_date</code> must be on or after the listing&rsquo;s <code>created_at</code>. Equivalently, flag rows where the listing was created <em>after</em> the review date.</p>
+
+<pre data-lang="sql" data-title="tests/consistent_created_at.sql" data-explain="JOIN listings to reviews; WHERE finds temporal inconsistency."><code>SELECT * FROM {{ ref('dim_listings_cleansed') }} l
+INNER JOIN {{ ref('fct_reviews') }} r
+USING (listing_id)
+WHERE l.created_at &gt; r.review_date</code></pre>
+
+          <p>Notes on this pattern:</p>
+          <ul>
+            <li><code>USING (listing_id)</code> requires the column name on both sides &mdash; true for these models.</li>
+            <li>Timestamps vs dates: if types differ, wrap with <code>TO_DATE()</code> or cast consistently so midnight boundaries do not create false failures.</li>
+            <li>An <code>INNER JOIN</code> only checks listings that have reviews. Orphan listings without reviews are out of scope for this rule.</li>
+          </ul>
+
+          <div class="diagram">
+            <p class="diagram-title">consistent_created_at flags impossible review timelines</p>
+            <div class="flow">
+              <div class="node is-mart"><b>dim_listings_cleansed</b><small>created_at</small></div>
+              <span class="arrow">×</span>
+              <div class="node is-mart"><b>fct_reviews</b><small>review_date</small></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-test pulse"><b>created_at &gt; review_date</b><small>failing rows</small></div>
+            </div>
+          </div>
+
+          <h3>Exercise walkthrough: consistent_created_at</h3>
+          <p>The course exercise (course-resources.md lines 690&ndash;702) asks you to enforce a temporal rule across models. Work through it in this order:</p>
+          <ol>
+            <li>State the rule in plain English: a review cannot predate its listing&rsquo;s creation.</li>
+            <li>Express the violation: listing <code>created_at</code> is after <code>review_date</code>.</li>
+            <li>Identify models: <code>dim_listings_cleansed</code> for <code>created_at</code>, <code>fct_reviews</code> for <code>review_date</code>, join on <code>listing_id</code>.</li>
+            <li>Write the SELECT returning violating rows only &mdash; not a boolean, not a count.</li>
+            <li>Save as <code>tests/consistent_created_at.sql</code> and run <code>dbt test -s consistent_created_at</code>.</li>
+          </ol>
+
+          <p>If the test fails unexpectedly, inspect sample rows: timezone offsets on <code>created_at</code> vs <code>review_date</code> often explain one or two edge cases in sample data.</p>
+
+          <h3>Debugging a singular test before commit</h3>
+          <p>Pattern the instructor uses implicitly:</p>
+          <ol>
+            <li>Write the query with literal schema.table names in a worksheet until it returns the rows you expect (zero for a pass).</li>
+            <li>Replace tables with <code>{{ ref() }}</code> calls.</li>
+            <li><code>dbt compile --select consistent_created_at</code> and diff against your worksheet query.</li>
+            <li>Run <code>dbt test</code> on the singular test alone.</li>
+          </ol>
+
+          <div class="callout danger"><strong>Singular tests can be expensive.</strong> A join between two large facts without filters scans both tables every test run. In production, narrow with date windows, incremental watermarks, or move heavy checks to monitored incremental assertions. The course tables are small; the pattern does not scale by default.</div>
+
+          <h3>Singular vs generic</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th></th><th>Generic</th><th>Singular</th></tr></thead>
+              <tbody>
+                <tr><td>Location</td><td><code>schema.yml</code></td><td><code>tests/*.sql</code></td></tr>
+                <tr><td>Reuse</td><td>Same macro, many columns</td><td>One file, one rule</td></tr>
+                <tr><td>Name</td><td><code>not_null_dim_listings_cleansed_listing_id</code> (auto)</td><td>File name: <code>dim_listings_minimum_nights</code></td></tr>
+                <tr><td>Best for</td><td>PK, FK, enums</td><td>Cross-model logic, aggregates</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="section" id="store-failures">
+          <h2>Storing test failures</h2>
+          <p class="lead">By default, failed tests only appear in the CLI and logs. With <code>store_failures: true</code>, dbt persists failing rows to a table in your warehouse so analysts can inspect, join, and trend them without re-running the test query.</p>
+
+          <p>The course enables this globally for all tests in <code>dbt_project.yml</code>:</p>
+
+<pre data-lang="yaml" data-title="dbt_project.yml (data_tests block)" data-explain="Applies to every test unless overridden in a test's config: block."><code>data_tests:
+  +store_failures: true
+  +schema: _test_failures</code></pre>
+
+          <h3>What gets created</h3>
+          <p>On failure, dbt creates (or appends to) a relation named from the test. Convention: schema from <code>+schema</code>, table name derived from the test node name. You will see tables like <code>DEV._TEST_FAILURES.not_null_dim_listings_cleansed_listing_id</code> in Snowflake. Exact naming includes a hash suffix on some adapters to avoid collisions.</p>
+
+          <ul>
+            <li>Columns typically mirror the failing SELECT plus metadata dbt adds (<code>_dbt_source_relation</code> in some versions).</li>
+            <li>Successful tests do not write to these tables.</li>
+            <li>Tables accumulate across runs unless you truncate or drop them &mdash; treat them as operational debris with a retention policy.</li>
+          </ul>
+
+          <div class="diagram">
+            <p class="diagram-title">store_failures writes violating rows to a side schema</p>
+            <div class="flow">
+              <div class="node is-test"><b>relationships test</b><small>fails</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-store pulse"><b>_test_failures schema</b><small>orphan rows persisted</small></div>
+            </div>
+          </div>
+
+          <h3>Per-test overrides</h3>
+          <p>Override globally in YAML on a specific test:</p>
+
+<pre data-lang="yaml" data-title="Disable store_failures for one test" data-explain="config: on a data_tests entry merges with project defaults."><code>data_tests:
+  - relationships:
+      arguments:
+        to: ref('dim_hosts_cleansed')
+        field: host_id
+      config:
+        store_failures: false</code></pre>
+
+          <p>Teams often store failures in dev and CI but disable storage for very wide rows or PII-heavy failures in prod, relying on alerting instead.</p>
+
+          <h3>Querying stored failures in Snowflake</h3>
+          <p>After a failing run with the course config, list and inspect tables:</p>
+
+<pre data-lang="sql" data-title="Inspect stored failures" data-explain="Replace DEV with your target schema; table name includes the test node name."><code>SHOW TABLES IN SCHEMA DEV._TEST_FAILURES;
+
+SELECT *
+FROM DEV._TEST_FAILURES.not_null_dim_listings_cleansed_listing_id
+LIMIT 100;</code></pre>
+
+          <p>Failure tables are ordinary relations. Join them back to dimensions on the key column to open Jira tickets with listing IDs, host names, or whatever the failing SELECT projected.</p>
+
+          <h3>Global config in dbt_project.yml</h3>
+          <p>The complete <code>data_tests:</code> block from the repo sits near the bottom of project config, separate from the <code>models:</code> tree:</p>
+
+<pre data-lang="yaml" data-title="dbt_project.yml (full project tail excerpt)" data-explain="data_tests: is sibling to models:, not nested under it."><code>models:
+  airbnb:
+    +materialized: view
+    dim:
+      +materialized: table
+    src:
+      +materialized: ephemeral
+    fct:
+      +tags: ['fact']
+data_tests:
+  +store_failures: true
+  +schema: _test_failures</code></pre>
+
+          <p>The leading <code>+</code> merges these settings into every test node unless a test overrides them in its own <code>config:</code> block. This is the same config-merge pattern as <code>+materialized: view</code> under <code>models:</code>.</p>
+
+          <div class="callout tip"><strong>Elementary and similar tools.</strong> The course mentions <a href="https://www.elementary-data.com/">Elementary Data</a> as a next step: it ingests dbt test results and artifact metadata for dashboards and alerts. <code>store_failures</code> is the native warehouse-native version of &ldquo;keep the bad rows for me.&rdquo;</div>
+
+          <div class="callout cost"><strong>Storage and compute.</strong> Every stored failure runs the failing SELECT <em>and</em> an INSERT/CREATE. On large tables with thousands of failing keys, you pay twice. Fix upstream, then drop old failure tables.</div>
+        </section>
+
+        <section class="section" id="selecting-tests">
+          <h2>Restricting test execution</h2>
+          <p class="lead">Full <code>dbt test</code> on a mature project can scan every model and column you have ever declared. Selectors limit scope during development, CI, and incident response &mdash; the same <code>--select</code> (or <code>-s</code>) syntax as <code>dbt run</code>, with test-specific graph operators.</p>
+
+          <h3>Run one singular test by name</h3>
+          <p>From the course script &mdash; run only the minimum nights check:</p>
+
+          <div class="terminal">
+            <p class="term-head">Single singular test</p>
+            <pre class="term-body"><span class="tt-cmd">dbt test -s dim_listings_minimum_nights</span>
+<span class="tt-dim">15:04:01  Running with dbt=1.11.12</span>
+<span class="tt-dim">15:04:03  1 of 1 START test dim_listings_minimum_nights ........................ [RUN]</span>
+<span class="tt-ok">15:04:04  1 of 1 PASS dim_listings_minimum_nights ............................. [PASS in 0.89s]</span>
+<span class="tt-ok">15:04:04  Completed successfully</span></pre>
+          </div>
+
+          <h3>Run all tests on a model</h3>
+          <p>Pass the model name to run every generic and singular test that depends on that model (directly or as parent):</p>
+
+<pre data-lang="shell" data-title="Tests for one model"><code>dbt test --select dim_listings_cleansed</code></pre>
+
+          <p>This includes column tests declared in YAML and singular tests that <code>ref()</code> the model, because they are part of the model&rsquo;s test subgraph.</p>
+
+          <h3>Graph operators</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Selector</th><th>Meaning</th><th>Example</th></tr></thead>
+              <tbody>
+                <tr><td><code>model_name</code></td><td>Tests on or referencing that model</td><td><code>dbt test -s fct_reviews</code></td></tr>
+                <tr><td><code>+model</code></td><td>Model, tests, and upstream dependencies</td><td><code>dbt test -s +dim_listings_cleansed</code></td></tr>
+                <tr><td><code>model+</code></td><td>Model, tests, and downstream</td><td><code>dbt test -s dim_hosts_cleansed+</code></td></tr>
+                <tr><td><code>tag:name</code></td><td>Nodes with that tag</td><td><code>dbt test -s tag:fact</code> (facts tagged in <code>dbt_project.yml</code>)</td></tr>
+                <tr><td><code>source:pkg.table</code></td><td>Source tests</td><td><code>dbt test -s source:airbnb.listings</code></td></tr>
+                <tr><td><code>test_type:singular</code></td><td>Only singular tests</td><td><code>dbt test -s test_type:singular</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Tags on tests</h3>
+          <p>Assign tags in a test&rsquo;s <code>config:</code> block to group checks for nightly vs hourly runs:</p>
+
+<pre data-lang="yaml" data-title="Tag a column test" data-explain="Run only critical tests in PR CI with dbt test -s tag:critical."><code>data_tests:
+  - not_null:
+      config:
+        tags: ['critical', 'nightly']</code></pre>
+
+          <p>Singular tests accept a config block at the top of the SQL file via <code>{{ config(tags=['critical']) }}</code>. <a href="s17-selectors-commands.html">Section 17</a> expands selectors with <code>selectors.yml</code> for reusable CI graphs.</p>
+
+          <div class="callout info"><strong>Selector syntax at dbt 1.12.</strong> Named selectors move to <code>-s selector:name</code> instead of <code>--selector name</code>. The course pin is 1.11; both forms appear in the wild. Check your version in <code>dbt --version</code>.</div>
+
+          <h3>dbt build vs dbt test</h3>
+          <p><code>dbt build</code> runs models, seeds, snapshots, and tests in DAG order &mdash; tests execute after their dependencies build. Plain <code>dbt test</code> assumes relations already exist. In CI, either run <code>dbt build --select state:modified+</code> or explicitly <code>dbt run</code> then <code>dbt test</code> on the same selection.</p>
+
+          <h3>Listing tests with dbt ls</h3>
+          <p>When selectors feel opaque, list before you run:</p>
+
+<pre data-lang="shell" data-title="Discover test node names"><code>dbt ls --resource-type test
+dbt ls --select dim_listings_cleansed,resource_type:test
+dbt ls --select test_type:singular</code></pre>
+
+          <p>The output is the exact string to pass to <code>--select</code>. Long generic test names are normal &mdash; copy them from <code>dbt ls</code> rather than typing by hand.</p>
+
+          <h3>Tags inherited from models</h3>
+          <p>Facts in the course carry <code>+tags: ['fact']</code> under <code>models/airbnb/fct:</code> in <code>dbt_project.yml</code>. Tests do not automatically inherit model tags unless configured; explicitly tag critical tests when you want <code>dbt test -s tag:critical</code> without maintaining parallel selectors. Section 17 expands tag strategy for CI.</p>
+        </section>
+
+        <section class="section" id="compiled-sql">
+          <h2>Compiled SQL of a test</h2>
+          <p class="lead">Every test is SQL. After compile, the fully expanded query lives under <code>target/compiled/&lt;project&gt;/</code> mirroring the path of YAML macros or <code>tests/</code> files. Reading compiled SQL is the fastest way to debug a surprising pass or fail.</p>
+
+          <h3>Where to look</h3>
+          <ul>
+            <li><strong>Singular tests</strong> &mdash; <code>target/compiled/airbnb/tests/dim_listings_minimum_nights.sql</code></li>
+            <li><strong>Generic tests</strong> &mdash; under <code>target/compiled/airbnb/models/schema.yml/</code> with long auto-generated file names per test node</li>
+            <li><strong>Logs</strong> &mdash; <code>logs/dbt.log</code> contains the exact query on failure at DEBUG level; the instructor prefers compiled files over <code>--debug</code> for readability</li>
+          </ul>
+
+          <p>Workflow:</p>
+          <ol>
+            <li><code>dbt compile --select dim_listings_cleansed</code> (or compile a specific test with <code>dbt test --select test_name --no-run</code> where supported, or run test once)</li>
+            <li>Open the compiled file in your editor</li>
+            <li>Copy the SQL into a worksheet; run it directly</li>
+            <li>Compare row counts to what dbt reported</li>
+          </ol>
+
+          <h3>Compiled singular test example</h3>
+          <p>After compile, Jinja resolves to your target schema:</p>
+
+<pre data-lang="sql" data-title="target/compiled/airbnb/tests/dim_listings_minimum_nights.sql" data-explain="Ref becomes DEV.dim_listings_cleansed (or your target schema)."><code>SELECT
+    *
+FROM
+    DEV.dim_listings_cleansed
+WHERE minimum_nights &lt; 1
+LIMIT 10</code></pre>
+
+          <h3>Compiled generic test example</h3>
+          <p>A <code>unique</code> test on <code>listing_id</code> compiles to something equivalent to:</p>
+
+<pre data-lang="sql" data-title="target/compiled/.../unique_dim_listings_cleansed_listing_id.sql" data-explain="File name is auto-generated; search target/compiled for unique and listing_id."><code>SELECT
+    listing_id AS unique_field,
+    COUNT(*) AS n_records
+FROM DEV.dim_listings_cleansed
+WHERE listing_id IS NOT NULL
+GROUP BY listing_id
+HAVING COUNT(*) &gt; 1</code></pre>
+
+          <h3>How to read the result</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Compiled query returns</th><th>Test result</th><th>Your action</th></tr></thead>
+              <tbody>
+                <tr><td>0 rows</td><td>PASS</td><td>None unless you expected failures &mdash; see troubleshooting</td></tr>
+                <tr><td>1+ rows</td><td>FAIL (or WARN)</td><td>Each row is an example violation; fix source or model logic</td></tr>
+                <tr><td>Error (syntax, missing relation)</td><td>ERROR</td><td>Model not built, typo in ref, or warehouse permission issue</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout tip"><strong>Prefer compiled SQL over --debug.</strong> Section 16 notes the instructor abandoned live <code>--debug</code> in favour of opening <code>target/compiled/</code>. The file is stable, searchable, and shareable in a PR comment.</div>
+
+          <h3>Worked example: debugging relationships failure</h3>
+          <p>Suppose <code>relationships_fct_reviews_listing_id__listing_id__ref_dim_listings_cleansed_</code> fails with <code>FAIL 3</code>:</p>
+          <ol>
+            <li>Open <code>target/compiled/airbnb/models/schema.yml/</code> and search for <code>relationships</code> and <code>fct_reviews</code>.</li>
+            <li>Copy the compiled LEFT JOIN query into a Snowflake worksheet.</li>
+            <li>Run it &mdash; you should see three orphan <code>listing_id</code> values.</li>
+            <li>Trace each ID: missing from <code>dim_listings_cleansed</code> because incremental filter excluded it, or stale fact row after listing delete?</li>
+            <li>Fix the model or source; <code>dbt run --select fct_reviews dim_listings_cleansed</code>; re-test.</li>
+          </ol>
+
+          <p>This workflow is faster than reading a stack trace because you see the actual keys that violated the rule.</p>
+
+          <h3>Compiled accepted_values and not_null</h3>
+          <p>For completeness, the other two built-ins on <code>dim_listings_cleansed</code> compile roughly as:</p>
+
+<pre data-lang="sql" data-title="Compiled not_null (listing_id)" data-explain="Search target/compiled for the exact file after dbt test."><code>SELECT *
+FROM DEV.dim_listings_cleansed
+WHERE listing_id IS NULL</code></pre>
+
+<pre data-lang="sql" data-title="Compiled accepted_values (room_type)" data-explain="IN list comes from schema.yml arguments.values."><code>SELECT *
+FROM DEV.dim_listings_cleansed
+WHERE room_type NOT IN (
+    'Entire home/apt', 'Private room', 'Shared room', 'Hotel room'
+    )</code></pre>
+        </section>
+
+        <section class="section" id="dbt-test-output">
+          <h2>The dbt test command and output</h2>
+          <p class="lead"><code>dbt test</code> executes all selected test nodes, prints one line per test, and exits non-zero if any test failed with error severity. Learn to read the summary line &mdash; it tells you pass count, fail count, warn count, and timing.</p>
+
+          <h3>Full project test run</h3>
+          <div class="terminal">
+            <p class="term-head">dbt test (excerpt)</p>
+            <pre class="term-body"><span class="tt-cmd">dbt test</span>
+<span class="tt-dim">15:10:01  Running with dbt=1.11.12</span>
+<span class="tt-dim">15:10:05  1 of 12 START test accepted_values_dim_listings_cleansed_room_type__... [RUN]</span>
+<span class="tt-ok">15:10:06  1 of 12 PASS accepted_values_dim_listings_cleansed_room_type__... [PASS in 0.72s]</span>
+<span class="tt-dim">15:10:06  2 of 12 START test not_null_dim_listings_cleansed_listing_id ....... [RUN]</span>
+<span class="tt-ok">15:10:07  2 of 12 PASS not_null_dim_listings_cleansed_listing_id .............. [PASS in 0.41s]</span>
+<span class="tt-dim">15:10:08  3 of 12 START test dim_listings_minimum_nights ...................... [RUN]</span>
+<span class="tt-ok">15:10:09  3 of 12 PASS dim_listings_minimum_nights ............................ [PASS in 0.55s]</span>
+<span class="tt-dim">15:10:12  8 of 12 START test relationships_fct_reviews_listing_id__listing_id__ref_dim_listings_cleansed_ [RUN]</span>
+<span class="tt-err">15:10:14  8 of 12 FAIL 3 relationships_fct_reviews_listing_id__... .......... [FAIL 3 in 1.21s]</span>
+<span class="tt-warn">15:10:18  11 of 12 WARN 1 expect_column_max_to_be_between_dim_listings_w_hosts_price [WARN 1 in 0.98s]</span>
+<span class="tt-err">15:10:20  Completed with 1 error and 1 warning</span></pre>
+          </div>
+
+          <h3>Reading the status tokens</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Token</th><th>Meaning</th><th>Exit code impact</th></tr></thead>
+              <tbody>
+                <tr><td><code>PASS</code></td><td>Zero failing rows</td><td>None</td></tr>
+                <tr><td><code>FAIL</code> + number</td><td>Failing rows found (error severity)</td><td>Non-zero exit</td></tr>
+                <tr><td><code>WARN</code> + number</td><td>Failing rows but severity warn</td><td>Zero by default in many setups; treat as pass in CI at your peril</td></tr>
+                <tr><td><code>ERROR</code></td><td>Test query could not run</td><td>Non-zero exit</td></tr>
+                <tr><td><code>SKIP</code></td><td>Dependency failed or selector excluded</td><td>Depends on configuration</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>The number after <code>FAIL</code> or <code>WARN</code> is the count of failing rows dbt retrieved (subject to adapter limits). It is not an arbitrary code. Three orphan <code>listing_id</code> values in a relationships test yields <code>FAIL 3</code>.</p>
+
+          <h3>After a failure</h3>
+          <ol>
+            <li>Read the test name &mdash; it encodes model, column, and test type for generic tests.</li>
+            <li>Open compiled SQL in <code>target/compiled/</code> and run it in a worksheet.</li>
+            <li>If <code>store_failures</code> is on, query the table in <code>_test_failures</code>.</li>
+            <li>Fix the model, source data, or test definition; re-run <code>dbt test --select &lt;failed_test&gt;</code>.</li>
+          </ol>
+
+          <div class="terminal">
+            <p class="term-head">Re-run one failed test</p>
+            <pre class="term-body"><span class="tt-cmd">dbt test --select relationships_fct_reviews_listing_id__listing_id__ref_dim_listings_cleansed_</span>
+<span class="tt-dim">15:12:01  1 of 1 START test relationships_fct_reviews_listing_id__... .......... [RUN]</span>
+<span class="tt-ok">15:12:03  1 of 1 PASS relationships_fct_reviews_listing_id__... ............... [PASS in 1.05s]</span></pre>
+          </div>
+
+          <p>PowerShell CI scripts should check <code>$LASTEXITCODE</code> after <code>dbt test</code>, same as <code>dbt run</code>. A green log line with warnings may still hide data issues if your policy treats WARN as success.</p>
+
+          <h3>Interpreting a complete successful run</h3>
+          <div class="terminal">
+            <p class="term-head">dbt test — all course tests pass</p>
+            <pre class="term-body"><span class="tt-cmd">dbt test</span>
+<span class="tt-dim">16:20:01  Running with dbt=1.11.12</span>
+<span class="tt-dim">16:20:02  Found 42 models, 2 snapshots, 1 seed, 18 data tests, 2 singular tests</span>
+<span class="tt-dim">16:20:05  Concurrency: 4 threads (target='dev')</span>
+<span class="tt-ok">16:20:18  Completed successfully</span>
+<span class="tt-ok">16:20:18  Done. PASS=20 WARN=0 ERROR=0 SKIP=0 TOTAL=20</span></pre>
+          </div>
+
+          <p>The summary line is what scripts parse: <code>PASS=20</code> means twenty tests returned zero rows; <code>ERROR=0</code> means no test crashed; <code>SKIP=0</code> means nothing was skipped due to upstream failure. If WARN is non-zero, read those lines even when the job is green.</p>
+
+          <h3>dbt test vs dbt run — side by side</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Command</th><th>Runs</th><th>Creates/changes warehouse tables?</th><th>Typical use</th></tr></thead>
+              <tbody>
+                <tr><td><code>dbt run</code></td><td>Models (and snapshots if selected)</td><td>Yes &mdash; builds relations</td><td>Transform data</td></tr>
+                <tr><td><code>dbt test</code></td><td>Data tests only</td><td>Only if <code>store_failures</code> writes failure tables</td><td>Validate after build</td></tr>
+                <tr><td><code>dbt build</code></td><td>Models, seeds, snapshots, tests in order</td><td>Yes for models; tests may write failure tables</td><td>CI end-to-end</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Test naming conventions</h3>
+          <p>dbt auto-generates generic test names by concatenating test type, model, column, and argument hash. Examples from this project:</p>
+          <ul>
+            <li><code>unique_dim_listings_cleansed_listing_id</code></li>
+            <li><code>not_null_dim_listings_cleansed_host_id</code></li>
+            <li><code>accepted_values_dim_listings_cleansed_room_type__Entire_home_apt__Private_room__Shared_room__Hotel_room</code></li>
+            <li><code>relationships_dim_listings_cleansed_host_id__host_id__ref_dim_hosts_cleansed_</code></li>
+          </ul>
+          <p>Singular tests use the file name without extension: <code>dim_listings_minimum_nights</code>, <code>consistent_created_at</code>. Rename the file and dbt renames the test node on the next parse.</p>
+
+          <p>Long names are awkward in terminal but self-documenting in logs and Elementary dashboards. Use <code>dbt ls --select test_type:singular</code> when you forget the exact string.</p>
+
+          <h3>What happens on the first test run</h3>
+          <p>After adding tests to a model that already exists in the warehouse, the first <code>dbt test</code> only executes the new queries &mdash; it does not rebuild the model. If you changed model logic and tests together, run <code>dbt build --select dim_listings_cleansed+</code> so the table reflects the latest SQL before tests scan it. Stale model data with fresh tests is a common source of &ldquo;test passes but should fail&rdquo; confusion during development.</p>
+
+          <p>On BigQuery and Databricks, failure row counts and <code>store_failures</code> table names follow the same semantics; only the qualified relation syntax (<code>project.dataset.table</code> vs three-part names) differs in compiled output. Always read compiled SQL for your adapter rather than assuming Snowflake quoting.</p>
+
+          <p>Forward link: <a href="s12-advanced-testing.html">Section 12</a> adds <code>positive_values</code>, <code>minimum_row_count</code>, unit tests, and enforced contracts on <code>dim_hosts_cleansed</code> &mdash; all building on the <code>data_tests:</code> patterns established here.</p>
+
+          <div class="callout exam"><strong>Certification:</strong> distinguish <code>dbt test</code> from <code>dbt source freshness</code> and unit tests (<code>test_type:unit</code> in Section 12). Know that tests return rows on failure and that severity controls exit behaviour.</div>
+        </section>
+
+        <section class="section" id="deeper">
+          <h2>Deeper detail and edge cases</h2>
+          <p class="lead">Production testing detail the lectures skip: version churn in YAML syntax, warehouse cost of full-table scans, silent false passes, and how teams tier tests in CI.</p>
+
+          <h3>Version notes</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Behaviour</th><th>Before</th><th>Now</th><th>Version</th></tr></thead>
+              <tbody>
+                <tr><td>YAML key for column tests</td><td><code>tests:</code></td><td><code>data_tests:</code></td><td>1.8+ (1.11 course pin)</td></tr>
+                <tr><td>Generic test parameters</td><td>Top-level under test name</td><td>Nested under <code>arguments:</code></td><td>1.8+</td></tr>
+                <tr><td>Unit tests</td><td>Not available</td><td><code>unit_tests:</code> in YAML</td><td>1.8+</td></tr>
+                <tr><td><code>store_failures</code></td><td>Per-test config only</td><td>Project-level <code>data_tests:</code> defaults</td><td>1.x</td></tr>
+                <tr><td>Test selection</td><td><code>--select</code></td><td>Same; <code>test_type:</code> and <code>resource_type:</code> filters expanded</td><td>1.x</td></tr>
+                <tr><td>Named selectors</td><td><code>--selector name</code></td><td><code>-s selector:name</code></td><td>1.12</td></tr>
+                <tr><td>Generic test <code>severity</code></td><td>Top-level</td><td>Under <code>config:</code></td><td>1.x unified config</td></tr>
+                <tr><td>Built-in test macros</td><td>Ship in dbt-core</td><td>Still in-core; packages add more</td><td>1.11</td></tr>
+                <tr><td><code>dbt test --no-run</code></td><td>Limited</td><td>Compile tests without executing (adapter support varies)</td><td>Check 1.11 docs</td></tr>
+                <tr><td>Constraints vs tests</td><td>Tests only</td><td>Model contracts can enforce <code>not_null</code> at build time</td><td>1.5+ (<a href="s12-advanced-testing.html">Section 12</a>)</td></tr>
+                <tr><td>Expectations package namespace</td><td><code>calogica/dbt_expectations</code></td><td>Course uses <code>metaplane/dbt_expectations</code> 0.10.10</td><td>Package pin</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>What it costs to run</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>What runs</th><th>Where the cost lands</th><th>How to spend less</th></tr></thead>
+              <tbody>
+                <tr><td><code>unique</code> on large column</td><td>Full table GROUP BY</td><td>Warehouse constraints, approximate checks in dev, test only modified models in CI</td></tr>
+                <tr><td><code>relationships</code></td><td>Join child + parent full scans</td><td>Ensure clustering on join keys; run after incremental facts finish</td></tr>
+                <tr><td>Singular join test</td><td>Custom scan of all joined rows</td><td>Add date filters; downgrade to warn in dev</td></tr>
+                <tr><td><code>store_failures</code></td><td>Failed SELECT + write to storage</td><td>Disable for wide rows; truncate failure tables regularly</td></tr>
+                <tr><td>Full <code>dbt test</code> nightly</td><td>Sum of every test query</td><td>Tier tags: PR runs <code>tag:critical</code> only</td></tr>
+                <tr><td>Source column tests</td><td>Raw table scans</td><td>Scope to columns that matter; avoid duplicate coverage with staging</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout cost"><strong>The biggest surprise is test compute.</strong> Teams optimise <code>dbt run</code> then run forty full-table tests on every schedule. A <code>unique</code> on a billion-row fact costs real money daily. Treat tests like queries in your cost review.</div>
+
+          <h3>Traps that catch people</h3>
+          <ul>
+            <li><strong>Testing before building —</strong> running <code>dbt test</code> on a clean clone without <code>dbt run</code> first yields relation-not-found errors, not meaningful failures.</li>
+            <li><strong>Old <code>tests:</code> key —</strong> copy-paste from a 2020 blog post silently fails parse or deprecation warnings; use <code>data_tests:</code> and <code>arguments:</code>.</li>
+            <li><strong>LIMIT on singular tests —</strong> believing LIMIT 10 means &ldquo;only fail if more than 10 bad rows&rdquo;; any match fails the test.</li>
+            <li><strong>relationships without not_null —</strong> NULL child keys pass relationships but may still be invalid; add <code>not_null</code> when NULL means missing data.</li>
+            <li><strong>accepted_values stale list —</strong> new legitimate enum values fail until YAML updates; communicate with upstream before disabling tests.</li>
+            <li><strong>Testing ephemeral models directly —</strong> no relation exists; test downstream materialised models instead.</li>
+            <li><strong>Warn treated as green CI —</strong> pipelines exit 0 on WARN while dashboards show wrong data; align severity with SLAs.</li>
+            <li><strong>Duplicate test coverage —</strong> same column checked in staging and mart doubles warehouse cost without adding signal.</li>
+            <li><strong>store_failures PII —</strong> failure tables contain actual bad rows, which may include names, emails, or prices; restrict schema access.</li>
+            <li><strong>Compiled ref wrong schema —</strong> running compiled SQL in a worksheet against PROD while dbt targeted DEV; always check <code>dbt debug</code> target.</li>
+            <li><strong>Join logic inverted —</strong> <code>consistent_created_at</code> with <code>&lt;</code> instead of <code>&gt;</code> passes while allowing impossible timelines.</li>
+            <li><strong>Empty table false pass —</strong> <code>unique</code> and <code>accepted_values</code> pass on zero rows; pair with row-count or freshness gates for critical marts.</li>
+            <li><strong>Test name too long for shell —</strong> generic test node names exceed terminal width; use <code>dbt ls --select</code> and quote the name in PowerShell.</li>
+          </ul>
+
+          <h3>Troubleshooting playbook</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Symptom</th><th>Most likely cause</th><th>What to check / fix</th></tr></thead>
+              <tbody>
+                <tr><td>Test PASS but you know data is wrong</td><td>Test filters exclude bad rows (wrong WHERE, INNER JOIN dropped rows, testing wrong model)</td><td>Run compiled SQL manually; broaden join; verify you test the mart consumers use</td></tr>
+                <tr><td><code>unique</code> times out on huge table</td><td>Full GROUP BY without partition filter</td><td>Add warehouse clustering; sample in dev; use incremental audit pattern; consider constraint in database</td></tr>
+                <tr><td><code>FAIL 0</code> or confusing count</td><td>Adapter row cap or test errored mid-run</td><td>Read <code>logs/dbt.log</code>; run compiled query in worksheet with COUNT(*)</td></tr>
+                <tr><td>relationships fails after host model version change</td><td><code>ref('dim_hosts_cleansed')</code> resolves to latest version; v1/v2 row mismatch</td><td>Align refs with <code>ref('dim_hosts_cleansed', v=2)</code>; rebuild parents</td></tr>
+                <tr><td>Singular test ERROR: object does not exist</td><td>Upstream model not built in target schema</td><td><code>dbt run --select +test_name</code> or <code>dbt build</code></td></tr>
+                <tr><td>All tests SKIP</td><td>Prior model failure in <code>dbt build</code> or empty selection</td><td>Run <code>dbt ls --select test_type:data</code>; fix failing models first</td></tr>
+                <tr><td>store_failures table empty but test FAIL</td><td>Permission on <code>_test_failures</code> schema or store disabled per test</td><td>Check <code>dbt_project.yml</code> and test <code>config:</code>; verify CREATE TABLE grant</td></tr>
+                <tr><td>accepted_values passes with typos</td><td>Case sensitivity or whitespace in strings</td><td><code>SELECT DISTINCT room_type, LENGTH(room_type) FROM …</code></td></tr>
+                <tr><td>Test passes on empty table</td><td>Zero rows trivially satisfy many tests</td><td>Add <code>minimum_row_count</code> or source freshness gate</td></tr>
+                <tr><td>Compiled SQL shows unexpected database</td><td>Wrong target in profile</td><td><code>dbt debug</code>; confirm <code>target/schema</code></td></tr>
+                <tr><td><code>dbt test</code> runs zero tests</td><td>Overly narrow <code>--select</code> or no tests declared</td><td><code>dbt ls --resource-type test</code>; widen selector to <code>package:*</code></td></tr>
+                <tr><td>Duplicate failures every run</td><td>Upstream not fixed; store_failures appends</td><td>Fix root cause; truncate failure table or drop and recreate</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Production patterns</h3>
+          <p>Mature teams tier tests: <strong>critical</strong> (PK, FK, revenue columns) run on every PR against a slim CI warehouse; <strong>monitoring</strong> (distribution, regex, custom singular) run nightly; <strong>experimental</strong> tests start as <code>severity: warn</code> until trusted. Tags encode the tier; selectors in CI reference tags, not hand-maintained model lists.</p>
+          <p>Failure storage goes to a locked-down schema with seven-day retention. Analysts join failure tables to dimension keys for triage tickets. Some teams export <code>run_results.json</code> from <code>target/</code> to observability stacks instead of relying on CLI alone.</p>
+
+          <div class="grid-2">
+            <div class="mini-card">
+              <h4>Pattern: PR slim tests</h4>
+              <p><code>dbt build --select state:modified+ --exclude tag:nightly</code> after seeding defer to prod artifacts. Catches regressions on changed models without scanning the whole DAG.</p>
+            </div>
+            <div class="mini-card">
+              <h4>Anti-pattern: test everything on raw</h4>
+              <p>Duplicating mart logic tests on raw sources and cleansed layers. Fix once in staging; test the contract at the mart boundary.</p>
+            </div>
+          </div>
+
+<pre data-lang="yaml" data-title="dbt_project.yml (tiered test defaults)" data-explain="Reusable pattern: tag critical tests in schema.yml and select them in CI."><code>data_tests:
+  +store_failures: true
+  +schema: audit_test_failures
+  +severity: warn   # default lenient; override to error on critical columns
+
+# CI: dbt test -s tag:critical,config.severity:error</code></pre>
+
+          <h3>Certification pointers</h3>
+          <p>The exam tests generic test names, the failing-row semantics, YAML structure with <code>data_tests:</code> and <code>arguments:</code>, and the difference between singular tests and unit tests. It asks when to use <code>relationships</code> vs a singular join test, and what <code>store_failures</code> does. Severity and warn vs error exit behaviour appear in scenario questions.</p>
+          <ul>
+            <li><a href="s09-seeds-sources.html">Section 9</a> — source tests and <code>dbt test --select source:…</code>.</li>
+            <li><a href="s12-advanced-testing.html">Section 12</a> — unit tests, custom generics, contracts, severity.</li>
+            <li><a href="s16-debugging-logging.html">Section 16</a> — debugging tests with compiled SQL and dbt_expectations.</li>
+            <li><a href="s17-selectors-commands.html">Section 17</a> — selectors.yml and tag-based CI graphs.</li>
+            <li><a href="s22-certification.html">Section 22</a> — practice exam scenarios on testing.</li>
+          </ul>
+          <div class="callout exam"><strong>Certification:</strong> memorise the four built-in generics, the <code>data_tests:</code> key, and that tests fail when the query returns rows. Know <code>dbt test</code> vs <code>dbt build</code> ordering.</div>
+        </section>
+
+        <section class="section" id="interview">
+          <h2>Interview questions</h2>
+          <p class="muted">Answer each one out loud before opening it.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+
+            <details class="qa">
+              <summary>What are the four built-in generic tests in dbt?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p><code>unique</code>, <code>not_null</code>, <code>accepted_values</code>, and <code>relationships</code>. They cover primary-key uniqueness, required fields, enum validation, and foreign-key integrity to another model or source.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How does dbt decide whether a test passes or fails?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>Every test compiles to a SELECT. Zero rows returned means PASS. Any row returned means FAIL (or WARN if severity is warn). ERROR means the query could not execute &mdash; missing relation, syntax error, permission issue.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What is the difference between a generic test and a singular test?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p>Generic tests are declared in YAML, backed by reusable macros, and parameterised per column. Singular tests are one-off SQL files in <code>tests/</code> for business rules that do not fit a macro &mdash; joins, complex inequalities, aggregates. Both use the same failing-row semantics.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Why did tests: become data_tests: in schema.yml?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p>dbt split data tests from other test-like resources (unit tests, etc.) and unified config. Older material shows <code>tests:</code>; current projects use <code>data_tests:</code> with parameters under <code>arguments:</code>. Parsing old syntax may warn or fail depending on version.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Explain how a relationships test works internally.<span class="qa-tag">SQL</span></summary>
+              <div class="qa-body">
+                <p>dbt LEFT JOINs the child model to the parent on child.column = parent.field. Rows where the child value is NOT NULL but the parent key IS NULL are returned as failures &mdash; orphan foreign keys. NULL child keys are excluded from failure by default.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Your unique test passes but stakeholders report duplicate IDs in the dashboard. What do you check?<span class="qa-tag">Troubleshooting</span></summary>
+              <div class="qa-body">
+                <p>Confirm the dashboard queries the same model and schema the test targets (not a cached extract or different environment). Run the compiled unique test SQL manually. Check whether duplicates exist only in a subset filtered out by the test. Verify the test runs in production CI, not only locally. Look for incremental logic that re-inserted duplicates without merge.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What does store_failures do and when would you disable it?<span class="qa-tag">Production</span></summary>
+              <div class="qa-body">
+                <p>On failure, dbt writes violating rows to a warehouse table (often in a dedicated schema like <code>_test_failures</code>). Disable for PII-heavy failures, extremely wide rows, or high-volume failures that would be expensive to persist. Keep enabled in dev for debugging.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How do you run only the tests related to fct_reviews?<span class="qa-tag">Certification</span></summary>
+              <div class="qa-body">
+                <p><code>dbt test --select fct_reviews</code> runs tests on that model and tests that reference it. Use <code>+fct_reviews</code> to include upstream dependencies, or <code>fct_reviews+</code> for downstream. Tag selectors like <code>tag:fact</code> work if tests inherit fact model tags via config.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Why can testing ephemeral staging models be awkward?<span class="qa-tag">Modelling</span></summary>
+              <div class="qa-body">
+                <p>Ephemeral models have no warehouse relation. Generic column tests expect a materialised table or view. You test staging logic indirectly through downstream materialised models, or temporarily switch staging to view during development.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>A singular test with LIMIT 10 fails. Does that mean exactly 10 bad rows?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p>No. LIMIT caps rows returned for display and logging. The test fails if any violating row exists. The failure count in CLI may show up to the limit or total depending on adapter. Use a COUNT query in a worksheet for the true total.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Where do you find the SQL dbt actually ran for a failing test?<span class="qa-tag">Troubleshooting</span></summary>
+              <div class="qa-body">
+                <p><code>target/compiled/&lt;project&gt;/</code> mirrors test paths or YAML-generated names. <code>logs/dbt.log</code> has the query at debug level. With <code>store_failures</code>, query the failure table. The instructor recommends compiled files over live <code>--debug</code>.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What is the difference between dbt test and dbt build for tests?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p><code>dbt test</code> only runs test nodes and assumes dependencies already exist. <code>dbt build</code> runs seeds, models, snapshots, and tests in DAG order, building prerequisites first. CI often uses build for consistency; local debugging often uses run then test on a subset.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>When would you write consistent_created_at as a singular test instead of a relationships test?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p><code>relationships</code> only checks key existence across tables. Temporal consistency requires comparing two date columns across a join &mdash; a custom WHERE clause. That is singular-test territory unless you build a custom generic macro for reuse.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How do WARN severity tests affect CI exit codes?<span class="qa-tag">Production</span></summary>
+              <div class="qa-body">
+                <p>By default many setups exit 0 if only warnings occurred, while ERROR severity failures exit non-zero. Teams explicitly fail CI on warn for critical tests or use <code>config.severity:error</code> selectors. Document the policy; do not assume warn is visible in green pipelines.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Why might a unique test timeout while the table query feels fast?<span class="qa-tag">Performance</span></summary>
+              <div class="qa-body">
+                <p><code>unique</code> runs a full GROUP BY over the column. A selective dashboard query uses indexes or filters the test does not. On Snowflake, lack of clustering on the tested column hurts; on BigQuery, full column scan billing applies. Mitigate with physical PK constraints, smaller dev samples, or testing only incremental subsets in CI via defer and state.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What is the failing-row query for not_null and how is it different from a singular test?<span class="qa-tag">Testing</span></summary>
+              <div class="qa-body">
+                <p><code>not_null</code> expands to <code>SELECT * FROM model WHERE column IS NULL</code>. A singular test is the same contract but you write arbitrary SQL. Generic tests are reusable macros; singular tests are one file per rule. Both fail when rows are returned.</p>
+              </div>
+            </details>
+
+          </div>
+        </section>
+
+        <section class="section" id="practice">
+          <h2>Hands-on practice</h2>
+          <p class="muted">Run these from the <code>airbnb</code> folder with your virtualenv active.</p>
+          <ol class="practice-list">
+
+            <li class="practice">
+              <p class="practice-task">Add the generic tests from the course to <code>models/schema.yml</code> for <code>dim_listings_cleansed</code> (unique and not_null on <code>listing_id</code>, relationships on <code>host_id</code>, accepted_values on <code>room_type</code>). Run <code>dbt test --select dim_listings_cleansed</code>.</p>
+              <span class="console-path">airbnb/models/schema.yml</span>
+              <p class="practice-expect">All column tests PASS; log shows auto-generated test names like <code>unique_dim_listings_cleansed_listing_id</code>.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Copy the YAML block from the <a href="#data-tests-yaml">schema.yml section</a> above.</li>
+                    <li><code>dbt run --select dim_hosts_cleansed dim_listings_cleansed</code> (hosts must exist for relationships).</li>
+                    <li><code>dbt test --select dim_listings_cleansed</code></li>
+                  </ol>
+<pre data-lang="shell" data-title="Build then test"><code>dbt run --select dim_hosts_cleansed dim_listings_cleansed
+dbt test --select dim_listings_cleansed</code></pre>
+                  <p class="muted">Undo: remove the <code>data_tests:</code> blocks you added if starting fresh for Section 12.</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">Create <code>tests/dim_listings_minimum_nights.sql</code>, run it alone with <code>dbt test -s dim_listings_minimum_nights</code>, then compile and open the compiled file.</p>
+              <span class="console-path">airbnb/tests/dim_listings_minimum_nights.sql</span>
+              <p class="practice-expect">Test PASS; compiled file under <code>target/compiled/airbnb/tests/</code> shows your dev schema instead of <code>{{ ref() }}</code>.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Create the SQL file from the <a href="#singular-tests">singular tests section</a>.</li>
+                    <li><code>dbt test -s dim_listings_minimum_nights</code></li>
+                    <li><code>dbt compile --select dim_listings_minimum_nights</code></li>
+                    <li>Open <code>target/compiled/airbnb/tests/dim_listings_minimum_nights.sql</code>.</li>
+                  </ol>
+                  <p class="muted">Undo: delete the test file if you want a clean <code>tests/</code> folder before Section 12.</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">Complete the exercise: write <code>tests/consistent_created_at.sql</code>, run it, and if it passes run the same SQL in a worksheet with COUNT(*) to confirm zero inconsistent rows.</p>
+              <span class="console-path">airbnb/tests/consistent_created_at.sql</span>
+              <p class="practice-expect">Test PASS; worksheet COUNT returns 0.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Add the join test from the exercise section.</li>
+                    <li><code>dbt run --select dim_listings_cleansed fct_reviews</code></li>
+                    <li><code>dbt test -s consistent_created_at</code></li>
+                    <li>Run compiled SQL with <code>SELECT COUNT(*) FROM ( … )</code> in Snowflake.</li>
+                  </ol>
+<pre data-lang="sql" data-title="tests/consistent_created_at.sql" data-explain="Exercise solution from course-resources.md."><code>SELECT * FROM {{ ref('dim_listings_cleansed') }} l
+INNER JOIN {{ ref('fct_reviews') }} r
+USING (listing_id)
+WHERE l.created_at &gt; r.review_date</code></pre>
+                  <p class="muted">Undo: delete the test file.</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">Enable <code>store_failures</code> in <code>dbt_project.yml</code>, introduce a deliberate failure (temporarily add <code>'Bad room'</code> to accepted_values or insert a bad row), run the test, and query the failure table in <code>_test_failures</code>.</p>
+              <span class="console-path">airbnb/dbt_project.yml · Snowflake worksheet</span>
+              <p class="practice-expect">Test FAIL; a new table appears under <code>DEV._TEST_FAILURES</code> (or your target schema) containing the bad row.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Add the <code>data_tests:</code> block from this section to <code>dbt_project.yml</code>.</li>
+                    <li>Temporarily widen <code>accepted_values</code> is wrong &mdash; instead narrow it to force failure, or insert a listing with invalid <code>room_type</code> in a dev-only copy.</li>
+                    <li><code>dbt test --select accepted_values_dim_listings_cleansed_room_type__*</code> (use tab completion from <code>dbt ls --select</code>).</li>
+                    <li><code>SHOW TABLES IN SCHEMA DEV._TEST_FAILURES;</code> and SELECT from the new table.</li>
+                    <li>Revert the bad data and YAML; re-run test to PASS.</li>
+                  </ol>
+                  <p class="muted">Undo: revert YAML/data changes; drop failure tables with <code>DROP TABLE IF EXISTS …</code> or <code>dbt run-operation</code> cleanup macro if your team has one.</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">Break a relationships test on purpose: run tests before <code>dim_hosts_cleansed</code> exists in a fresh schema, observe the ERROR, then fix with <code>dbt build --select +dim_listings_cleansed</code>.</p>
+              <span class="console-path">airbnb/ · terminal</span>
+              <p class="practice-expect">First run ERROR (relation does not exist); after build, relationships PASS.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>In a fresh dev schema (or after dropping host table), run <code>dbt test --select dim_listings_cleansed</code> without run.</li>
+                    <li>Note ERROR on relationships if listings exists but hosts does not.</li>
+                    <li><code>dbt build --select +dim_listings_cleansed</code></li>
+                    <li>Re-run tests &mdash; all PASS.</li>
+                  </ol>
+                  <p class="muted">Undo: nothing permanent if you used build to recover.</p>
+                </div>
+              </details>
+            </li>
+
+          </ol>
+        </section>
+
+        <section class="section" id="recap">
+          <h2>Recap</h2>
+          <div class="recap">
+            <ul class="checklist">
+              <li>A dbt test passes when its SELECT returns <strong>zero rows</strong>; any row is a failure.</li>
+              <li>Built-in generic tests: <code>unique</code>, <code>not_null</code>, <code>accepted_values</code>, <code>relationships</code>.</li>
+              <li>Declare generics under <code>data_tests:</code> in YAML; parameters nest under <code>arguments:</code> (not the old <code>tests:</code> key).</li>
+              <li>Singular tests live in <code>tests/*.sql</code> and express one-off rules with full SQL.</li>
+              <li><code>dim_listings_minimum_nights</code> guards the cleansed minimum_nights invariant; LIMIT only caps displayed failures.</li>
+              <li><code>consistent_created_at</code> joins listings and reviews to catch impossible timelines.</li>
+              <li><code>store_failures: true</code> in <code>dbt_project.yml</code> persists failing rows to <code>+schema: _test_failures</code>.</li>
+              <li>Restrict runs with <code>dbt test -s model_name</code>, graph operators, tags, and <code>test_type:</code> selectors.</li>
+              <li>Debug from <code>target/compiled/</code> &mdash; compiled SQL is the ground truth for what ran.</li>
+              <li>CLI: <code>PASS</code> / <code>FAIL n</code> / <code>WARN n</code> / <code>ERROR</code>; FAIL with error severity exits non-zero.</li>
+              <li>Run models before tests on fresh environments; use <code>dbt build</code> for ordered run+test.</li>
+              <li>Custom generics, unit tests, contracts and severity depth are in <a href="s12-advanced-testing.html">Section 12</a>.</li>
+            </ul>
+            <p style="margin-top:1rem;">
+              <button type="button" data-complete="section-11">Mark complete</button>
+            </p>
+          </div>
+        </section>
+
+      </div>
+
+      <aside class="toc" aria-label="On this page">
+        <strong>On this page</strong>
+        <ol>
+          <li><a href="#lectures">Lectures</a></li>
+          <li><a href="#why-test">Why test</a></li>
+          <li><a href="#generic-tests">Generic tests</a></li>
+          <li><a href="#data-tests-yaml">schema.yml</a></li>
+          <li><a href="#singular-tests">Singular tests</a></li>
+          <li><a href="#store-failures">store_failures</a></li>
+          <li><a href="#selecting-tests">Selecting tests</a></li>
+          <li><a href="#compiled-sql">Compiled SQL</a></li>
+          <li><a href="#dbt-test-output">dbt test output</a></li>
+          <li><a href="#deeper">Deeper detail</a></li>
+          <li><a href="#interview">Interview questions</a></li>
+          <li><a href="#practice">Hands-on practice</a></li>
+          <li><a href="#recap">Recap</a></li>
+        </ol>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<footer class="footer">The Complete dbt Bootcamp: Zero to Hero · Section 11 · Offline study edition</footer>
+</body>
+</html>

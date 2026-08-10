@@ -1,0 +1,1116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="dbt bootcamp Section 20: the dbt Power User and official VS Code extensions, the Fusion engine, SQLFluff, refactoring legacy SQL, and building models with an AI assistant.">
+<title>Section 20 — Power User, Fusion and AI | The Complete dbt Bootcamp Notes</title>
+<link rel="stylesheet" href="assets/dbt.css">
+<script defer src="assets/search-index.js"></script>
+<script defer src="assets/code-highlight.js"></script>
+<script defer src="assets/dbt.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">Course section 20 of 22 · The Complete dbt Bootcamp: Zero to Hero</p>
+    <h1>Power User, Fusion and AI</h1>
+    <p class="subtitle">The closing stretch of the build track: VS Code extensions that make dbt feel like a real IDE, the Rust-based Fusion engine that compiles without warehouse round-trips, SQLFluff for style enforcement, a deliberate legacy-to-intermediate refactor on the Airbnb project, and the prompting workflow Steven uses to scaffold models with an AI assistant.</p>
+    <div class="hero-meta">
+      <span class="chip">5 lectures · ~25min</span>
+      <span class="chip">VS Code tooling</span>
+      <span class="chip">Fusion engine and AI</span>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <nav class="pager" aria-label="Section navigation">
+    <a href="s19-production.html">← dbt in Production</a>
+    <a href="index.html">Course contents</a>
+    <a href="s21-best-practices.html">Next: Best Practices →</a>
+  </nav>
+
+  <main id="main">
+    <div class="layout">
+      <div class="content">
+
+        <section class="section" id="lectures">
+          <h2>Lectures in this section</h2>
+          <ol class="lecture-list">
+            <li class="lecture">
+              <a class="lec-title" href="#power-user-extension">The dbt Power User VS Code extension</a>
+              <span class="lec-time">~6:00</span>
+              <span class="lec-src">branch poweruser · .devcontainer/devcontainer.json</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#official-extension">The official dbt VS Code extension</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">branch official-extension · devcontainer.json</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#fusion-engine">The Fusion engine</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">branch official-extension · install-dbt-fusion.sh</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#sqlfluff">SQLFluff and the dbt templater</a>
+              <span class="lec-time">~4:00</span>
+              <span class="lec-src">branch poweruser · airbnb/.sqlfluff</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#legacy-refactoring">Legacy code, refactoring, and building with AI</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">course-resources.md · models/legacy/ · models/intermediate/</span>
+            </li>
+          </ol>
+          <p class="muted">Most of this section lives on Git branches, not <code>main</code>. Check out <code>poweruser</code> for SQLFluff, legacy models, and the Power User extension; check out <code>official-extension</code> for dbt Labs&rsquo; extension and Fusion. The instructor copies intermediate files into the project before the legacy lecture &mdash; your notes quote the finished files from the branch.</p>
+          <p class="muted">Sections 1&ndash;19 built the Airbnb DAG on <code>main</code>; this section adds tooling and refactoring patterns you use on real jobs after the core curriculum. Nothing here changes production CI defaults until you deliberately adopt Fusion or SQLFluff in your own pipeline.</p>
+        </section>
+
+        <section class="section" id="power-user-extension">
+          <h2>The dbt Power User extension</h2>
+          <p class="lead"><a href="https://marketplace.visualstudio.com/items?itemName=innoverio.vscode-dbt-power-user">dbt Power User</a> (publisher Innoverio) is a community extension that predates dbt Labs&rsquo; official VS Code product. On the course&rsquo;s <code>poweruser</code> branch it is pre-installed in the devcontainer so every student gets the same IDE experience without hunting the marketplace.</p>
+
+          <p>The extension ID is <code>innoverio.vscode-dbt-power-user</code>. The branch&rsquo;s devcontainer pins it explicitly and sets file associations so YAML and SQL open with Jinja-aware grammars:</p>
+
+<pre data-lang="json" data-title=".devcontainer/devcontainer.json (poweruser branch)" data-explain="Pre-installs Power User and maps *.sql to jinja-sql so VS Code understands ref() and config blocks."><code>{
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "innoverio.vscode-dbt-power-user"
+      ],
+      "settings": {
+        "terminal.integrated.cwd": "${containerWorkspaceFolder}/airbnb",
+        "files.associations": {
+          "*.yaml": "jinja-yaml",
+          "*.yml": "jinja-yaml",
+          "*.sql": "jinja-sql",
+          "*.md": "jinja-md"
+        }
+      }
+    }
+  }
+}</code></pre>
+
+          <p>Opening the workspace at <code>airbnb/</code> as the integrated terminal cwd means every <code>dbt</code> command you run from the VS Code terminal already sits in the project root &mdash; the same convention Section 6 established for local setup.</p>
+
+          <h3>Lineage preview</h3>
+          <p>Power User reads your project&rsquo;s manifest (after <code>dbt parse</code> or <code>dbt run</code>) and renders an interactive lineage graph inside the editor. Click a model in the sidebar or from a <code>ref()</code> call and you see upstream sources and downstream dependents without opening dbt Docs in a browser.</p>
+
+          <p>For the Airbnb project, selecting <code>mart_listing_performance</code> on the <code>poweruser</code> branch shows the chain: <code>dim_listings_w_hosts</code> and <code>int_host_performance</code> feeding the mart. That is the same DAG Section 14 documents, but embedded in the editor where you are editing SQL.</p>
+
+          <div class="diagram">
+            <p class="diagram-title">Lineage Power User shows for mart_listing_performance</p>
+            <div class="dag">
+              <div class="dag-col">
+                <p class="dag-label">Staging / dim</p>
+                <div class="node is-model"><b>dim_hosts_cleansed</b></div>
+                <div class="node is-model"><b>dim_listings_cleansed</b></div>
+                <div class="node is-model"><b>dim_listings_w_hosts</b></div>
+              </div>
+              <div class="dag-col">
+                <p class="dag-label">Intermediate</p>
+                <div class="node is-model pulse"><b>int_host_performance</b></div>
+              </div>
+              <div class="dag-col">
+                <p class="dag-label">Mart</p>
+                <div class="node is-mart"><b>mart_listing_performance</b></div>
+              </div>
+            </div>
+          </div>
+
+          <h3>Model preview and compiled SQL</h3>
+          <p>From a <code>.sql</code> model file, Power User can compile the active model and show the rendered SQL in a side panel &mdash; the same output you would read manually from <code>target/compiled/airbnb/models/...</code> after <code>dbt compile</code>. Use this to verify Jinja resolved correctly before paying for a warehouse run.</p>
+
+          <p>The preview uses whichever dbt executable your Python environment provides. If compilation fails, the panel shows the parse error with a line reference back to the source file. That is faster than switching to a terminal for a compile-only loop, though Section 16&rsquo;s artifact-first debugging still applies when you need the full compiled test SQL.</p>
+
+          <h3>SQL formatting</h3>
+          <p>Power User includes a formatter tuned for dbt SQL (Jinja blocks plus warehouse dialect). Right-click in a model or use the format command to re-indent CTEs, align keywords, and wrap long lines. It does not replace a team style guide enforced in CI &mdash; it keeps local files readable before you commit.</p>
+
+          <p>Formatting is opinionated. Teams often combine editor formatting with SQLFluff (covered below) so &ldquo;format on save&rdquo; in the IDE and &ldquo;lint in CI&rdquo; share the same rules where possible.</p>
+
+          <h3>Cost estimation</h3>
+          <p>On supported adapters, Power User can estimate the warehouse cost of running the selected model based on metadata and historical run stats where available. Treat this as a directional hint, not an invoice: actual cost depends on warehouse size, clustering, and concurrent load.</p>
+
+          <div class="callout cost"><strong>Cost estimation is advisory.</strong> A model preview or compile is free; a model run bills the warehouse. Use estimation to decide whether to add <code>--sample</code> or run in dev first, especially for full-table materializations from Section 8.</div>
+
+          <h3>What Power User expects from your project</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Requirement</th><th>Why</th><th>If missing</th></tr></thead>
+              <tbody>
+                <tr><td><code>dbt_project.yml</code> at project root</td><td>Extension discovers project name and paths</td><td>Features stay disabled; set project root manually</td></tr>
+                <tr><td>Python venv with dbt installed</td><td>Compile and run delegate to CLI</td><td>Point <code>python.defaultInterpreterPath</code> at venv (Section 6)</td></tr>
+                <tr><td>Valid <code>profiles.yml</code></td><td>Adapter connection for preview/run</td><td>Compile may work; run and cost features fail</td></tr>
+                <tr><td><code>target/manifest.json</code> (after parse/run)</td><td>Lineage graph</td><td>Run <code>dbt parse</code> once to generate</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout tip"><strong>Run dbt parse after large refactors.</strong> Lineage and navigation stay stale until the manifest updates. A parse is cheap compared to a full run and refreshes the graph for every downstream file you touched.</div>
+
+          <h3>Power User commands worth knowing</h3>
+          <p>Most actions live in the command palette (<code>Ctrl+Shift+P</code> / <code>Cmd+Shift+P</code>). Search for &ldquo;dbt&rdquo; to find compile, run, test, and lineage views for the active file. The extension respects your current file&rsquo;s model name when building a <code>--select</code> clause, which matches the mental model from Section 17 without typing the model name twice.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Palette action</th><th>CLI equivalent</th><th>When to use</th></tr></thead>
+              <tbody>
+                <tr><td>Compile current model</td><td><code>dbt compile --select &lt;model&gt;</code></td><td>Verify Jinja before spend</td></tr>
+                <tr><td>Run current model</td><td><code>dbt run --select &lt;model&gt;</code></td><td>Materialize after compile passes</td></tr>
+                <tr><td>Run tests on current model</td><td><code>dbt test --select &lt;model&gt;</code></td><td>After run builds the relation</td></tr>
+                <tr><td>Show lineage</td><td><code>dbt docs generate</code> + browser</td><td>Quick upstream/downstream check in IDE</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>On BigQuery or Databricks, cost estimation may be unavailable or less accurate than on Snowflake — the course targets Snowflake throughout. If estimation is missing, fall back to <code>dbt compile</code> plus warehouse query history in the cloud console.</p>
+        </section>
+
+        <section class="section" id="official-extension">
+          <h2>The official dbt VS Code extension</h2>
+          <p class="lead">dbt Labs ships its own extension (<code>dbtLabsInc.dbt</code>) on the <code>official-extension</code> branch. It is built around the Fusion engine and a language server that understands dbt projects structurally &mdash; not just as text with Jinja sprinkled in.</p>
+
+          <p>The official devcontainer swaps the extension list and adds an <code>onCreateCommand</code> that installs Fusion before Python dependencies:</p>
+
+<pre data-lang="json" data-title=".devcontainer/devcontainer.json (official-extension branch)" data-explain="Installs Fusion via shell script on container create, then Power User is replaced by dbt Labs' extension."><code>{
+  "onCreateCommand": ".devcontainer/install-dbt-fusion.sh",
+  "postCreateCommand": "uv pip install -r pyproject.toml",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbtLabsInc.dbt"
+      ],
+      "settings": {
+        "terminal.integrated.cwd": "${containerWorkspaceFolder}/airbnb"
+      }
+    }
+  }
+}</code></pre>
+
+          <h3>Power User versus official extension</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Dimension</th><th>dbt Power User (Innoverio)</th><th>Official dbt extension (dbt Labs)</th></tr></thead>
+              <tbody>
+                <tr><td>Engine</td><td>Delegates to installed dbt Core (Python)</td><td>Designed for Fusion language server; can use Core or Fusion binary</td></tr>
+                <tr><td>Lineage</td><td>Manifest-based graph in sidebar</td><td>Column-level lineage where Fusion parser supports it</td></tr>
+                <tr><td>Compile speed</td><td>Same as CLI <code>dbt compile</code></td><td>Near-instant recompile on save with Fusion (project-size dependent)</td></tr>
+                <tr><td>Static SQL analysis</td><td>Limited to compiled output</td><td>Errors for bad column refs before warehouse run (Fusion)</td></tr>
+                <tr><td>SQL formatting</td><td>Built-in formatter</td><td>Formatting aligned with dbt Labs tooling roadmap</td></tr>
+                <tr><td>Cost estimation</td><td>Supported on some adapters</td><td>Not the primary focus; check current release notes</td></tr>
+                <tr><td>Maturity</td><td>Long-standing community extension</td><td>Newer; tied to Fusion beta/GA cadence</td></tr>
+                <tr><td>Course branch</td><td><code>poweruser</code></td><td><code>official-extension</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>Neither extension replaces the CLI in production CI. Both improve the inner loop while authoring. Teams commonly let engineers pick one locally while CI still runs plain <code>dbt build</code> from the same <code>pyproject.toml</code> pin (dbt Core 1.11.x on <code>main</code>).</p>
+
+          <div class="callout info"><strong>You can install both extensions locally.</strong> VS Code may warn about overlapping functionality. For the course, use one branch&rsquo;s devcontainer at a time so settings stay consistent. Cursor follows the same extension model as VS Code for dbt workflows.</div>
+
+          <h3>Language server behaviour</h3>
+          <p>The official extension registers a language server that indexes <code>models/</code>, <code>macros/</code>, <code>sources.yml</code>, and schema YAML. Hover on <code>{{ ref('dim_listings_cleansed') }}</code> and you see column lists from the schema file where documented. Go-to-definition on a macro name opens the macro file.</p>
+
+          <p>That behaviour depends on Fusion&rsquo;s SQL comprehension layer when Fusion is the backend. With Core-only installs, some features degrade to manifest-based lookups similar to Power User. The course&rsquo;s <code>official-extension</code> branch exists specifically to pair the extension with Fusion.</p>
+
+          <h3>Switching branches in the course repo</h3>
+          <p>The instructor maintains parallel branches so students can compare tooling without merging unfinished experiments into <code>main</code>:</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Branch</th><th>Extension</th><th>Extra project files</th></tr></thead>
+              <tbody>
+                <tr><td><code>main</code></td><td>Neither pinned (your choice)</td><td>Canonical course project through Section 19 topics</td></tr>
+                <tr><td><code>poweruser</code></td><td>innoverio.vscode-dbt-power-user</td><td><code>.sqlfluff</code>, <code>models/legacy/</code>, <code>models/intermediate/</code>, <code>mart_listing_performance</code></td></tr>
+                <tr><td><code>official-extension</code></td><td>dbtLabsInc.dbt + Fusion installer</td><td>Fusion devcontainer hook; no legacy/intermediate lesson files</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>For the legacy refactor lecture, Steven asks you to copy intermediate files from the <code>poweruser</code> branch into your working tree if you are still on <code>main</code>. The course-resources script links directly to <code>airbnb/models/intermediate</code> on GitHub. After copying, run <code>dbt parse</code> so both extensions pick up the new nodes.</p>
+
+          <div class="callout info"><strong>Cursor uses the same extension IDs.</strong> Install Power User or the official dbt extension in Cursor&rsquo;s extensions panel. Point the Python interpreter at the same uv venv from Section 6; the AI chat can read open model files as context for the Building with AI lecture.</div>
+        </section>
+
+        <section class="section" id="fusion-engine">
+          <h2>The Fusion engine</h2>
+          <p class="lead">Fusion is dbt Labs&rsquo; Rust-based execution and compilation engine. It replaces the Python parser/runtime for many workflows while keeping the same project layout: <code>dbt_project.yml</code>, <code>models/</code>, <code>ref()</code>, tests in YAML. Authoring does not change; what changes is how fast compilation happens and how much the tool understands about SQL before touching the warehouse.</p>
+
+          <h3>What Fusion changes</h3>
+          <ul>
+            <li><strong>Compile speed</strong> &mdash; dbt Labs reports up to ~30&times; faster project parsing and roughly 2&times; faster full-project compilation versus dbt Core on large projects. Single-file recompile in the IDE can feel instant because Fusion is a native binary, not a Python interpreter loading Jinja for every file.</li>
+            <li><strong>Static analysis</strong> &mdash; Fusion parses SQL into an AST, resolves columns across <code>ref()</code> dependencies, and can flag invalid identifiers locally. Core often needs a warehouse round-trip or a full compile plus manual inspection to catch the same mistake.</li>
+            <li><strong>SQL comprehension without warehouse round-trips</strong> &mdash; lineage, type checking, and IDE diagnostics can run on your laptop. The warehouse still executes materializations; Fusion does not eliminate run cost from Section 8 materializations.</li>
+            <li><strong>No Python runtime for the engine itself</strong> &mdash; the Fusion binary installs separately. Your project may still use Python for <code>dbt-core</code> adapters or Python models from Section 17 until you fully migrate.</li>
+          </ul>
+
+          <div class="diagram">
+            <p class="diagram-title">Core versus Fusion in the developer loop</p>
+            <div class="flow">
+              <div class="node is-compute"><b>Edit model.sql</b><small>local</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-model"><b>Fusion compile</b><small>AST · no warehouse</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-compute pulse"><b>IDE errors / lineage</b><small>seconds</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-store"><b>dbt run</b><small>warehouse bills here</small></div>
+            </div>
+          </div>
+
+          <h3>Installing Fusion in the course devcontainer</h3>
+          <p>The <code>official-extension</code> branch ships a one-line installer invoked on container create:</p>
+
+<pre data-lang="shell" data-title=".devcontainer/install-dbt-fusion.sh" data-explain="Downloads and installs the Fusion CLI from dbt Labs' public CDN; --update refreshes an existing install."><code>#!/bin/bash
+set -e
+export SHELL=/bin/bash
+curl -fsSL https://public.cdn.getdbt.com/fs/install/install.sh | sh -s -- --update</code></pre>
+
+          <p>After rebuild, verify with <code>dbt --version</code> (or the Fusion-specific binary name your install prints &mdash; dbt Labs has consolidated branding over time). The course repo&rsquo;s CI runs a <code>dbtf build</code> job on Fusion alongside Core tests in <code>.github/workflows/python-app.yml</code>, but that workflow is courseware infrastructure, not student homework.</p>
+
+          <div class="terminal">
+            <p class="term-head">Verify Fusion install (illustrative)</p>
+            <pre class="term-body"><span class="tt-cmd">dbt parse</span>
+<span class="tt-dim">Fusion engine 2.x · adapter: snowflake</span>
+<span class="tt-ok">Parsed 24 models, 8 tests, 2 snapshots</span>
+<span class="tt-ok">Completed successfully</span></pre>
+          </div>
+
+          <h3>Limitations and maturity caveats</h3>
+          <p>Fusion is newer than a decade of dbt Core behaviour. Treat it as evolving software, not a drop-in guarantee for every package and Jinja pattern.</p>
+
+          <ul>
+            <li><strong>Adapter coverage</strong> &mdash; Snowflake was the first-class beta target; BigQuery, Redshift, Databricks, and others arrived on a rolling basis. Not every adapter feature Core exposes is implemented in Fusion on day one.</li>
+            <li><strong>Stricter validation</strong> &mdash; patterns Core warned about may become hard errors under Fusion&rsquo;s parser. Deprecated YAML or macro overrides fail earlier, which is good for greenfield projects and painful for legacy repos until you fix them.</li>
+            <li><strong>Package compatibility</strong> &mdash; macros that rely on undocumented Core internals (or heavy runtime warehouse queries during parse) may break. The course&rsquo;s metaplane <code>dbt_expectations</code> and <code>dbt_utils</code> pins should be tested explicitly on Fusion before you switch CI.</li>
+            <li><strong>Jinja compile-time queries</strong> &mdash; models that call <code>run_query()</code> or introspect <code>information_schema</code> during compilation can be slower on Fusion than Core in edge cases reported on public issue trackers. Parsing speed does not help if compilation must hit the warehouse dozens of times.</li>
+            <li><strong>Core-only features in CI scripts</strong> &mdash; the course&rsquo;s <code>test_commands.sh</code> skips inline Jinja comment tests when <code>ENGINE=fusion</code> because Fusion handles inline compile differently. Read adapter release notes before assuming parity.</li>
+          </ul>
+
+          <div class="callout info"><strong>Check current adapter support before migrating production.</strong> dbt Labs publishes Fusion compatibility and GA milestones on their developer blog and docs. Snowflake-first teams benefit earliest; multi-adapter estates should pilot on a branch and run the same <code>dbt build</code> you use in <a href="s19-production.html">Section 19</a> Slim CI before cutting over.</div>
+
+          <div class="callout warn"><strong>Fusion speeds up compile, not warehouse execution.</strong> A ten-minute incremental model still runs ten minutes in Snowflake. The win is trying five SQL variants in the IDE without five paid runs &mdash; aligned with Section 16&rsquo;s compile-first debugging loop.</div>
+
+          <h3>Core versus Fusion command surface</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Task</th><th>dbt Core 1.11 (course main)</th><th>Fusion (official-extension branch)</th></tr></thead>
+              <tbody>
+                <tr><td>Author models</td><td>Same SQL/Jinja</td><td>Same SQL/Jinja</td></tr>
+                <tr><td><code>dbt parse</code></td><td>Python parser</td><td>Rust parser; stricter errors</td></tr>
+                <tr><td>IDE feedback on save</td><td>Requires extension + manifest</td><td>Language server backed by Fusion</td></tr>
+                <tr><td><code>dbt run-operation</code></td><td>Supported</td><td>Verify macro compatibility per release</td></tr>
+                <tr><td>Python models (Section 17)</td><td>Supported</td><td>Check Fusion release notes; may lag Core</td></tr>
+                <tr><td>Production CI default</td><td>What <code>main</code> pins today</td><td>Pilot separately; do not assume identical behaviour</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Testing Fusion compatibility on the Airbnb project</h3>
+          <p>Before trusting Fusion in daily work, run the same commands the course CI uses for Fusion smoke tests — parse, build, and the shared macro inline tests from <code>.github/scripts/test_commands.sh</code> (infrastructure script, not graded homework). Expect the Jinja-comment inline compile test to run on Core only.</p>
+
+          <div class="terminal">
+            <p class="term-head">Fusion smoke test sequence</p>
+            <pre class="term-body"><span class="tt-cmd">dbt parse</span>
+<span class="tt-ok">Completed successfully</span>
+<span class="tt-cmd">dbt compile --select int_host_performance</span>
+<span class="tt-ok">Completed successfully</span>
+<span class="tt-cmd">dbt show --inline "{{ select_positive_values('dim_listings_cleansed', 'price') }}"</span>
+<span class="tt-dim">Previewing inline node...</span>
+<span class="tt-ok">Completed successfully</span></pre>
+          </div>
+
+          <p>If parse fails on Fusion with a YAML or macro error Core ignored, fix the project before blaming the adapter. Fusion&rsquo;s stricter parser is doing its job. Package macros from <code>dbt_utils</code> and <code>dbt_expectations</code> should compile on supported releases — if not, check package pins in <code>packages.yml</code> against Fusion release notes.</p>
+
+          <div class="analogy"><strong>Everyday analogy —</strong> Fusion is like switching from an interpreted scripting language to a compiled language for the build step: you get faster feedback and more errors at compile time, but some dynamic tricks that relied on loose typing stop working until you rewrite them.</div>
+        </section>
+
+        <section class="section" id="sqlfluff">
+          <h2>SQLFluff and the dbt templater</h2>
+          <p class="lead"><a href="https://docs.sqlfluff.com/">SQLFluff</a> is a SQL linter and formatter. With the <code>dbt</code> templater it renders Jinja the same way dbt would, then linting rules apply to the resulting SQL. The <code>poweruser</code> branch adds a minimal project config:</p>
+
+<pre data-lang="text" data-title="airbnb/.sqlfluff" data-explain="Sets Snowflake dialect for lint rules; extend with templater and rule sections for CI."><code>[sqlfluff]
+  dialect = snowflake</code></pre>
+
+          <h3>Why lint dbt SQL separately from dbt test</h3>
+          <p>dbt tests assert data correctness; SQLFluff asserts shape and readability: keyword placement, indent width, trailing commas, ambiguous aliases. A model can pass every <code>unique</code> and <code>not_null</code> test from Section 11 while remaining unreadable or inconsistent with team style.</p>
+
+          <p>SQLFluff runs outside the warehouse. It invokes dbt&rsquo;s compilation context (when configured) so rules see resolved <code>ref()</code> names, not raw Jinja placeholders.</p>
+
+          <h3>Typical expanded configuration</h3>
+          <p>The course file is intentionally minimal. Production teams usually add templater and rule sections like this:</p>
+
+<pre data-lang="text" data-title="airbnb/.sqlfluff — typical team extension" data-explain="dbt templater tells SQLFluff how to render models; exclude paths dbt does not lint."><code>[sqlfluff]
+  dialect = snowflake
+  templater = dbt
+  exclude_rules = L034
+
+[sqlfluff:templater:dbt]
+  project_dir = .
+  profiles_dir = ~/.dbt
+
+[sqlfluff:indentation]
+  indent_unit = space
+  tab_space_size = 2
+
+[sqlfluff:rules:capitalisation.keywords]
+  capitalisation_policy = lower</code></pre>
+
+          <h3>Running SQLFluff on the Airbnb project</h3>
+
+          <div class="terminal">
+            <p class="term-head">Lint one model</p>
+            <pre class="term-body"><span class="tt-cmd">sqlfluff lint models/intermediate/int_host_performance.sql</span>
+<span class="tt-ok">All Finished!</span>
+<span class="tt-dim">0 violations found</span></pre>
+          </div>
+
+          <div class="terminal">
+            <p class="term-head">Fix auto-fixable violations</p>
+            <pre class="term-body"><span class="tt-cmd">sqlfluff fix models/mart/mart_listing_performance.sql</span>
+<span class="tt-dim">Fixing L003 indentation...</span>
+<span class="tt-ok">Fixed 4 violations</span></pre>
+          </div>
+
+          <p>Install SQLFluff in the same virtualenv as dbt: <code>uv pip install sqlfluff sqlfluff-templater-dbt</code>. Version-pin it in CI alongside dbt Core so local and pipeline results match.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Tool</th><th>What it checks</th><th>When to run</th></tr></thead>
+              <tbody>
+                <tr><td><code>dbt parse</code></td><td>Project graph and YAML validity</td><td>Every save / CI</td></tr>
+                <tr><td><code>dbt test</code></td><td>Data quality</td><td>After build (Sections 11&ndash;12)</td></tr>
+                <tr><td>SQLFluff</td><td>SQL style and some logic smells</td><td>Pre-commit or CI lint job</td></tr>
+                <tr><td>Fusion / official extension</td><td>Structural SQL and refs</td><td>On save in IDE</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout tip"><strong>Lint the models you refactor in this section.</strong> Legacy SQL often uses inconsistent casing (<code>with</code> versus <code>WITH</code>) and wide lines. Running SQLFluff after extracting <code>int_host_performance</code> catches formatting drift before review.</div>
+
+          <p>On BigQuery, set <code>dialect = bigquery</code>. On Postgres, <code>dialect = postgres</code>. Snowflake-specific functions in the course models (<code>DATEDIFF</code>, <code>:: NUMBER</code>) require the Snowflake dialect or rules will false-positive.</p>
+
+          <h3>SQLFluff rules teams commonly tune</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Rule</th><th>What it enforces</th><th>Typical action</th></tr></thead>
+              <tbody>
+                <tr><td>L003</td><td>Indentation consistency</td><td>Auto-fix with <code>sqlfluff fix</code></td></tr>
+                <tr><td>L010</td><td>Keyword capitalisation</td><td>Set policy to lower to match dbt style</td></tr>
+                <tr><td>L034</td><td>SELECT * in outer query</td><td>Often excluded for staging models</td></tr>
+                <tr><td>LT05</td><td>Line length</td><td>Wrap or exclude for wide CASE expressions</td></tr>
+                <tr><td>RF04</td><td>Keywords as identifiers</td><td>Warn on columns named <code>date</code>, <code>user</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>Add SQLFluff to pre-commit hooks only after the team agrees on rule exclusions — otherwise every legacy file blocks commits until mass-fixed. The legacy lecture is a good moment to lint new intermediate code while leaving <code>models/legacy/</code> excluded via <code>sqlfluff exclude_paths</code> until refactor completes.</p>
+        </section>
+
+        <section class="section" id="legacy-refactoring">
+          <h2>Working with legacy code</h2>
+          <p class="lead">Real dbt projects inherit SQL that bypasses the DAG: direct <code>source()</code> reads, duplicated cleansing logic, and monolithic marts. The course simulates that with a <code>models/legacy/</code> folder on the <code>poweruser</code> branch, then refactors toward the layered layout Sections 7&ndash;9 established.</p>
+
+          <div class="filetree">
+            <ul>
+              <li><span class="dir">airbnb/models/</span>
+                <ul>
+                  <li><span class="dir">legacy/</span> <span class="note">quarantined old SQL — not ref&rsquo;d by production path</span>
+                    <ul>
+                      <li><span class="file">legacy_int_host_performance.sql</span></li>
+                      <li><span class="file">legacy_mart_listing_performance.sql</span></li>
+                    </ul>
+                  </li>
+                  <li><span class="dir">intermediate/</span> <span class="new">← refactored host metrics</span>
+                    <ul>
+                      <li><span class="file">int_host_performance.sql</span></li>
+                    </ul>
+                  </li>
+                  <li><span class="dir">mart/</span>
+                    <ul>
+                      <li><span class="file">mart_listing_performance.sql</span> <span class="new">← reads int + dim</span></li>
+                    </ul>
+                  </li>
+                </ul>
+              </li>
+            </ul>
+          </div>
+
+          <h3>Before: legacy host performance</h3>
+          <p><code>legacy_int_host_performance.sql</code> reads raw sources directly, re-implements price parsing that already lives in <code>dim_listings_cleansed</code>, and ends with an explicit TODO list for the refactor:</p>
+
+<pre data-lang="sql" data-title="models/legacy/legacy_int_host_performance.sql" data-explain="Legacy pattern: source() calls, duplicated cleansing, no shared dim layer — marked with TODO comments for the refactor exercise." data-partial="true"><code>WITH raw_host_data AS (
+    SELECT
+        id AS host_id,
+        NAME AS host_name,
+        created_at AS host_since,
+        is_superhost AS host_is_superhost
+    FROM {{ source('airbnb', 'hosts') }}
+    WHERE id IS NOT NULL
+),
+
+raw_listing_data AS (
+    SELECT
+        id AS listing_id,
+        CASE
+            WHEN price IS NULL THEN 0
+            ELSE CAST(
+                REPLACE(REPLACE(price, '$', ''), ',', '') AS DECIMAL(10,2)
+            )
+        END AS price_clean,
+        minimum_nights,
+        host_id
+    FROM {{ source('airbnb', 'listings') }}
+    WHERE id IS NOT NULL
+),
+-- ... host_listing_aggregates, host_performance CTEs ...
+SELECT * FROM host_performance
+
+-- TODO: Refactor to use {{ ref('dim_hosts_cleansed') }} and {{ ref('dim_listings_cleansed') }}
+-- TODO: Move to models/intermediate/int_host_performance.sql</code></pre>
+
+          <p>Problems with the legacy pattern:</p>
+          <ul>
+            <li><strong>Duplicated cleansing</strong> &mdash; price parsing diverges from <code>dim_listings_cleansed</code> if either side changes.</li>
+            <li><strong>Source coupling</strong> &mdash; mart logic depends on raw column names (<code>NAME</code>, string prices) instead of conformed dimensions.</li>
+            <li><strong>No reuse</strong> &mdash; host aggregates trapped in one file; <code>mart_listing_performance</code> cannot share them without copy-paste.</li>
+            <li><strong>Harder testing</strong> &mdash; you cannot test host metrics in isolation from staging sources without spinning up raw tables.</li>
+          </ul>
+
+          <h3>After: int_host_performance</h3>
+          <p>The refactored intermediate model reads cleansed dimensions, materializes as a table, and documents metrics in a block comment:</p>
+
+<pre data-lang="sql" data-title="models/intermediate/int_host_performance.sql" data-explain="Refactored: ref() to dim models, one grain per host_id, portfolio and tenure classifications for downstream marts." data-partial="true"><code>{{
+  config(
+    materialized = 'table'
+  )
+}}
+WITH dim_hosts AS (
+  SELECT host_id, host_name, is_superhost, created_at
+  FROM {{ ref('dim_hosts_cleansed') }}
+),
+dim_listings AS (
+  SELECT listing_id, room_type, price, minimum_nights, host_id
+  FROM {{ ref('dim_listings_cleansed') }}
+),
+host_listing_metrics AS (
+  SELECT
+    h.host_id,
+    h.host_name,
+    COUNT(DISTINCT dl.listing_id) AS total_listings,
+    ROUND(AVG(dl.price), 2) AS avg_listing_price,
+    COALESCE(SUM(CASE WHEN dl.room_type = 'Entire home/apt' THEN 1 ELSE 0 END), 0) AS entire_home_count
+    -- ... private_room_count, shared_room_count, hotel_room_count ...
+  FROM dim_hosts h
+  LEFT JOIN dim_listings dl ON h.host_id = dl.host_id
+  GROUP BY h.host_id, h.host_name, h.is_superhost, h.created_at
+)
+SELECT
+  h.host_id,
+  h.host_name,
+  h.total_listings,
+  h.avg_listing_price,
+  CASE
+    WHEN h.total_listings = 0 THEN 'inactive'
+    WHEN h.total_listings = 1 THEN 'single_listing'
+    WHEN h.total_listings BETWEEN 2 AND 5 THEN 'small_portfolio'
+    WHEN h.total_listings BETWEEN 6 AND 15 THEN 'medium_portfolio'
+    WHEN h.total_listings &gt;= 16 THEN 'large_portfolio'
+  END AS portfolio_size,
+  CASE
+    WHEN h.is_superhost = 't' THEN 'superhost'
+    ELSE 'standard'
+  END AS host_status,
+  d.dominant_room_type
+FROM host_listing_metrics h
+LEFT JOIN dominant_room_type_calc d ON h.host_id = d.host_id</code></pre>
+
+          <h3>Mart after refactor</h3>
+          <p><code>mart_listing_performance.sql</code> shrinks: listing grain comes from <code>dim_listings_w_hosts</code>; host portfolio context comes from <code>int_host_performance</code>.</p>
+
+<pre data-lang="sql" data-title="models/mart/mart_listing_performance.sql" data-explain="Mart joins listing dimension to intermediate host metrics — no raw sources, no duplicated aggregates."><code>WITH listing_base AS (
+    SELECT
+        listing_id,
+        listing_name,
+        room_type,
+        price,
+        minimum_nights,
+        host_id,
+        host_name,
+        host_is_superhost
+    FROM {{ ref('dim_listings_w_hosts') }}
+),
+host_metrics AS (
+    SELECT
+        host_id,
+        total_listings,
+        avg_listing_price,
+        portfolio_size,
+        host_status,
+        host_tenure
+    FROM {{ ref('int_host_performance') }}
+),
+final AS (
+    SELECT
+        l.listing_id,
+        l.listing_name,
+        l.room_type,
+        l.price,
+        l.minimum_nights,
+        l.host_id,
+        l.host_name,
+        h.total_listings,
+        h.avg_listing_price AS host_portfolio_avg_price,
+        h.portfolio_size,
+        h.host_status,
+        CASE
+            WHEN h.total_listings = 1 THEN 'only_listing'
+            WHEN l.price &gt;= h.avg_listing_price THEN 'above_portfolio_avg'
+            ELSE 'below_portfolio_avg'
+        END AS price_position_vs_portfolio,
+        CASE
+            WHEN l.price &lt; 50 THEN 'budget'
+            WHEN l.price &gt;= 50 AND l.price &lt; 150 THEN 'mid_range'
+            WHEN l.price &gt;= 150 AND l.price &lt; 300 THEN 'premium'
+            ELSE 'luxury'
+        END AS price_segment
+    FROM listing_base l
+    LEFT JOIN host_metrics h ON l.host_id = h.host_id
+)
+SELECT * FROM final</code></pre>
+
+          <p>Compare to <code>legacy_mart_listing_performance.sql</code>, which inlined host aggregates and raw joins in one 150-line file. The refactored mart is easier to test at listing grain because host logic is frozen in <code>int_host_performance</code>.</p>
+
+          <div class="diagram">
+            <p class="diagram-title">Refactor moves host logic from mart to intermediate</p>
+            <div class="flow">
+              <div class="node is-source"><b>legacy mart</b><small>sources + aggregates inline</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-model"><b>int_host_performance</b><small>host grain</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-mart pulse"><b>mart_listing_performance</b><small>listing grain join</small></div>
+            </div>
+          </div>
+
+          <h3>Legacy folder convention</h3>
+          <p>Keep superseded models in <code>models/legacy/</code> (or disable them with <code>enabled: false</code> in config) until you verify row-count parity against replacements. Do not delete legacy SQL until tests prove equivalence &mdash; stakeholders may compare old dashboard numbers during migration.</p>
+
+          <p>Optionally exclude legacy from production selectors:</p>
+
+<pre data-lang="yaml" data-title="selectors.yml — exclude legacy from prod runs" data-explain="Path selector ensures legacy quarantine never runs in scheduled jobs."><code>selectors:
+  - name: production_models
+    definition:
+      union:
+        - method: path
+          value: models
+        - exclude:
+            - method: path
+              value: models/legacy</code></pre>
+
+          <div class="callout danger"><strong>Do not ref legacy models from new code.</strong> If a new mart still <code>ref()</code>s a legacy file, you inherit all its source coupling. Point refs at dimensions and intermediate models only.</div>
+
+          <h3>Side-by-side: legacy mart versus refactored mart</h3>
+          <p><code>legacy_mart_listing_performance.sql</code> rebuilds host aggregates inside the mart CTE chain. The refactored version delegates host metrics to <code>int_host_performance</code> and keeps only listing-grain derivations (<code>price_segment</code>, <code>price_position_vs_portfolio</code>).</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Concern</th><th>Legacy mart</th><th>Refactored mart</th></tr></thead>
+              <tbody>
+                <tr><td>Raw source reads</td><td><code>source('airbnb', 'listings')</code> and hosts</td><td>None — only <code>ref()</code></td></tr>
+                <tr><td>Price parsing</td><td>Inline REPLACE/CAST on string price</td><td>Uses numeric <code>price</code> from dim</td></tr>
+                <tr><td>Host aggregates</td><td><code>host_aggregates</code> CTE inside mart</td><td><code>ref('int_host_performance')</code></td></tr>
+                <tr><td>Lines of SQL</td><td>~150</td><td>~50</td></tr>
+                <tr><td>Reusable host metrics</td><td>No — trapped in mart</td><td>Yes — other marts can ref intermediate</td></tr>
+                <tr><td>Test surface</td><td>Monolith — hard to test host logic alone</td><td>Test intermediate and mart separately</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>The instructor&rsquo;s course-resources note says to copy intermediate files from the <code>poweruser</code> branch so your tree matches the video. If you already checked out that branch, the files are present; on <code>main</code>, copy <code>int_host_performance.sql</code> and the legacy folder before comparing before/after.</p>
+        </section>
+
+        <section class="section" id="ai-model-building">
+          <h2>Building models with AI</h2>
+          <p class="lead">The final lecture uses an AI assistant inside VS Code (Copilot, Cursor, or similar) to scaffold <code>int_host_performance</code> from a natural-language prompt. The workflow is deliberate: give the model enough context to emit valid dbt, then apply the same review and testing discipline as hand-written SQL.</p>
+
+          <h3>Prompt Steven uses in the course</h3>
+          <p>From <code>course-resources.md</code>, the instructor pastes:</p>
+
+<pre data-lang="text" data-title="course-resources.md — Building Models with AI prompt" data-explain="Natural-language spec with upstream models, metrics, classifications, and target path — copy into your AI chat with schema.yml attached."><code>Create an intermediate model called int_host_performance that calculates host-level performance metrics.
+
+Use the following upstream models:
+dim_hosts_cleansed for host data
+dim_listings_cleaned for listing data
+
+Calculate these metrics per host:
+- total_listings: count of listings
+- avg_listing_price: average price across listings
+- min_listing_price: minimum price
+- max_listing_price: maximum price
+- room type distribution (entire_home_count, private_room_count, shared_room_count, hotel_room_count)
+- avg_minimum_nights: average minimum night
+
+Add these classifications:
+- portfolio_size: based on listing count (inactive = 0, single_listing = 1, small_portfolio = 2-5, medium_portfolio = 6-15, large_portfolio = 16+)
+- host_status: 'superhost' if is_superhost = 't', else 'standard'
+- host_tenure: based on created_at (new_host &lt;1 year, experienced_host 1-3 years, veteran_host 3+ years)
+- dominant_room_type: the room type with most listing
+
+save to models/intermediate/int_host_performance.sql</code></pre>
+
+          <div class="callout warn"><strong>The prompt typo is intentional teaching.</strong> It says <code>dim_listings_cleaned</code>; the real model is <code>dim_listings_cleansed</code>. A good workflow catches that in review when <code>dbt compile</code> fails or when you verify every <code>ref()</code> name against the project.</div>
+
+          <h3>Prompting patterns that work for dbt</h3>
+          <ol>
+            <li><strong>Attach schema context</strong> &mdash; paste relevant blocks from <code>models/schema.yml</code> or open the upstream model files in the editor context so column names match the project.</li>
+            <li><strong>Specify grain and path</strong> &mdash; &ldquo;one row per host_id&rdquo; and <code>models/intermediate/int_host_performance.sql</code> prevent the model landing in the wrong folder or at wrong grain.</li>
+            <li><strong>Require ref(), forbid raw tables</strong> &mdash; explicitly say &ldquo;use ref() only, no source()&rdquo; for transform layers.</li>
+            <li><strong>Name classifications with enums</strong> &mdash; listing portfolio buckets as in the prompt reduces vague <code>CASE</code> logic.</li>
+            <li><strong>Ask for config explicitly</strong> &mdash; &ldquo;materialized table&rdquo; or &ldquo;view&rdquo; matches Section 8 decisions.</li>
+            <li><strong>Iterate in small diffs</strong> &mdash; generate skeleton CTEs first, then add dominant_room_type logic in a second prompt after the first compile passes.</li>
+          </ol>
+
+          <h3>Review checklist before merge</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Check</th><th>Why AI gets it wrong</th></tr></thead>
+              <tbody>
+                <tr><td><code>ref()</code> names exist</td><td>Hallucinated model names or typos (<code>cleaned</code> vs <code>cleansed</code>)</td></tr>
+                <tr><td>Grain matches GROUP BY</td><td>Duplicate host rows or collapsed metrics</td></tr>
+                <tr><td>Superhost logic matches raw encoding</td><td>Boolean versus <code>'t'</code>/<code>'f'</code> strings on Snowflake</td></tr>
+                <tr><td>Price column is numeric</td><td>AI may re-parse strings already cleansed upstream</td></tr>
+                <tr><td>Jinja blocks balance</td><td>Partial <code>{% if %}</code> snippets</td></tr>
+                <tr><td>Tests added in schema.yml</td><td>AI rarely adds <code>unique</code> on <code>host_id</code> unless asked</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Honest caveat: AI is not a substitute for tests</h3>
+          <p>Generated SQL can compile and still be wrong: off-by-one tenure boundaries, <code>LEFT JOIN</code> turned into <code>INNER JOIN</code>, or classifications that do not match business definitions. The course expects you to add the same tests and contracts you learned in <a href="s11-tests.html">Section 11</a> and <a href="s12-advanced-testing.html">Section 12</a>.</p>
+
+          <ul>
+            <li><code>unique</code> and <code>not_null</code> on <code>host_id</code> in <code>int_host_performance</code></li>
+            <li>Accepted-values tests on <code>portfolio_size</code>, <code>host_status</code>, <code>host_tenure</code></li>
+            <li>Singular tests on <code>mart_listing_performance</code> like the branch&rsquo;s <code>test_mart_listing_performance.sql</code> patterns</li>
+            <li>Contract YAML if the mart feeds a governed exposure from Section 15</li>
+          </ul>
+
+          <pre data-lang="sql" data-title="models/mart/test_mart_listing_performance.sql" data-explain="Singular tests the branch ships — AI will not create these unless you prompt for them; copy the pattern for price_segment logic." data-partial="true"><code>SELECT *
+FROM {{ ref('mart_listing_performance') }}
+WHERE (price &lt; 50 AND price_segment != 'budget')
+    OR (price &gt;= 50 AND price &lt; 150 AND price_segment != 'mid_range')
+    OR (price &gt;= 150 AND price &lt; 300 AND price_segment != 'premium')
+    OR (price &gt;= 300 AND price_segment != 'luxury')</code></pre>
+
+          <div class="callout exam"><strong>Certification angle:</strong> the exam tests that you validate models with tests and documentation, not that you used AI. Treat AI output as a first draft from a junior contributor — review, test, document, then merge through the same PR process as Section 19 CI.</div>
+
+          <h3>Cursor / Copilot workflow in practice</h3>
+          <p>Open <code>models/schema.yml</code>, <code>dim_hosts_cleansed.sql</code>, and <code>dim_listings_cleansed.sql</code> in the editor. Start an inline chat with the course prompt. Accept the skeleton, run <code>dbt compile --select int_host_performance</code>, fix errors, then <code>dbt run --select int_host_performance</code>. Run SQLFluff if enabled. Add YAML tests. Only then build <code>mart_listing_performance+</code>.</p>
+
+          <div class="terminal">
+            <p class="term-head">Build order after AI scaffold</p>
+            <pre class="term-body"><span class="tt-cmd">dbt build --select +int_host_performance</span>
+<span class="tt-dim">1 of 4 START sql table model DEV.int_host_performance ........ [RUN]</span>
+<span class="tt-ok">1 of 4 OK created sql table model DEV.int_host_performance .... [SUCCESS]</span>
+<span class="tt-dim">2 of 4 START test unique_int_host_performance_host_id .......... [RUN]</span>
+<span class="tt-ok">2 of 4 PASS unique_int_host_performance_host_id ............... [PASS in 0.8s]</span>
+<span class="tt-ok">Completed successfully</span></pre>
+          </div>
+
+          <h3>What to paste into the AI context window</h3>
+          <p>Minimum viable context for the course prompt:</p>
+          <ul>
+            <li>Column list for <code>dim_hosts_cleansed</code> and <code>dim_listings_cleansed</code> from <code>models/schema.yml</code></li>
+            <li>The exact <code>ref()</code> spelling from existing dim model file names</li>
+            <li>Materialization convention: table for intermediate aggregates that multiple marts reuse (Section 8)</li>
+            <li>Snowflake-specific functions the project already uses: <code>DATEDIFF(YEAR, ...)</code>, superhost as <code>'t'</code> string</li>
+          </ul>
+
+          <p>Optional but helpful: paste the TODO block from <code>legacy_int_host_performance.sql</code> so the model understands what not to do (no <code>source()</code>, no price string parsing). Ask the assistant to explain each CTE in one sentence before you accept the file — if the explanation mentions &ldquo;raw listings&rdquo;, send it back.</p>
+
+          <h3>After the model exists: wire the mart and tests</h3>
+          <p>The AI lecture builds intermediate first; the mart already exists on the <code>poweruser</code> branch as the consumer. Trace the dependency:</p>
+
+          <div class="diagram">
+            <p class="diagram-title">Build order for the poweruser performance models</p>
+            <div class="flow">
+              <div class="node is-model"><b>dim_hosts_cleansed</b></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-model"><b>dim_listings_cleansed</b></div>
+              <span class="arrow">→</span>
+              <div class="node is-model pulse"><b>int_host_performance</b></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-model"><b>dim_listings_w_hosts</b></div>
+              <span class="arrow">→</span>
+              <div class="node is-mart"><b>mart_listing_performance</b></div>
+            </div>
+          </div>
+
+          <p>Run <code>dbt build --select +mart_listing_performance</code> to build all upstream nodes and tests in order. Add singular tests from <code>test_mart_listing_performance.sql</code> to the <code>tests/</code> folder or convert key assertions to generic tests in YAML — the branch ships SQL singulars as examples of classification logic worth locking down.</p>
+        </section>
+
+        <section class="section" id="deeper">
+          <h2>Deeper detail and edge cases</h2>
+          <p class="lead">Extension choice, Fusion migration risk, and AI-generated SQL in production — the operational details the short closing lectures cannot cover.</p>
+
+          <h3>Version notes</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Behaviour</th><th>Before</th><th>Now</th><th>Version</th></tr></thead>
+              <tbody>
+                <tr><td>Primary IDE extension (course)</td><td>Power User only</td><td>Official dbt extension on separate branch</td><td>2025+ course branches</td></tr>
+                <tr><td>Execution engine</td><td>dbt Core Python only</td><td>Fusion Rust engine optional</td><td>Fusion beta 2025; dbt 2.x trajectory</td></tr>
+                <tr><td>SQLFluff in repo</td><td>Not on main</td><td><code>.sqlfluff</code> dialect snowflake on poweruser</td><td>Branch-only</td></tr>
+                <tr><td>Intermediate layer</td><td>Not on main</td><td><code>models/intermediate/int_host_performance</code></td><td>poweruser branch</td></tr>
+                <tr><td>Test YAML key</td><td><code>tests:</code></td><td><code>data_tests:</code></td><td>1.8+ (Sections 11&ndash;12)</td></tr>
+                <tr><td>dbt Labs lint tooling</td><td>SQLFluff only</td><td>dbt lint (SQLFluff-compatible) on Fusion roadmap</td><td>2025+ announcements</td></tr>
+                <tr><td>Fusion install</td><td>Manual download</td><td><code>install.sh</code> CDN script in devcontainer</td><td>official-extension branch</td></tr>
+                <tr><td>Inline compile tests in CI</td><td>All run on Core</td><td>Jinja comment test skipped on Fusion</td><td><code>test_commands.sh</code></td></tr>
+                <tr><td>Python models</td><td>Core feature</td><td>Verify Fusion support per release</td><td>Section 17 models</td></tr>
+                <tr><td>Power User cost estimate</td><td>Adapter-specific</td><td>Still third-party; not in official extension core value</td><td>Extension release notes</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>What it costs to run</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>What runs</th><th>Where the cost lands</th><th>How to spend less</th></tr></thead>
+              <tbody>
+                <tr><td><code>dbt parse</code> / Fusion compile</td><td>Local CPU; CI runner time</td><td>Fusion reduces runner minutes on large projects</td></tr>
+                <tr><td>Extension &ldquo;Run model&rdquo;</td><td>Warehouse — same as CLI</td><td>Use compile/preview first; sample runs from Section 16</td></tr>
+                <tr><td><code>int_host_performance</code> table build</td><td>Full scan of dim tables</td><td>Materialize once; marts ref it instead of re-aggregating</td></tr>
+                <tr><td>Legacy models if left enabled</td><td>Duplicate scans of raw sources</td><td>Exclude <code>models/legacy</code> from selectors</td></tr>
+                <tr><td>SQLFluff in CI</td><td>Runner CPU; dbt templater invokes compile</td><td>Lint changed files only on PR</td></tr>
+                <tr><td>AI-assisted iteration</td><td>LLM API + your warehouse if you run every draft</td><td>Compile before run; batch test at end</td></tr>
+                <tr><td>Fusion information_schema introspection</td><td>Warehouse metadata queries at compile</td><td>Watch compile-time query count on huge projects</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout cost"><strong>Biggest waste: running every AI draft with dbt run.</strong> Treat compile as the gate. A bad <code>ref()</code> costs nothing at compile time; it costs a full table scan if you run immediately.</div>
+
+          <h3>Traps that catch people</h3>
+          <ul>
+            <li><strong>Stale manifest in IDE —</strong> lineage shows old graph after renames until <code>dbt parse</code>. You chase ghosts in Power User while CLI works.</li>
+            <li><strong>Two extensions fighting —</strong> duplicate formatters and conflicting language servers slow saves or produce contradictory squiggles.</li>
+            <li><strong>Fusion on unsupported adapter —</strong> install succeeds but run fails mid-migration. Check adapter matrix before switching CI.</li>
+            <li><strong>SQLFluff without dbt templater —</strong> rules flag <code>{{ ref() }}</code> as syntax errors. Set <code>templater = dbt</code>.</li>
+            <li><strong>Legacy folder still in DAG —</strong> forgotten <code>ref()</code> to legacy model resurrects duplicate pipelines and doubles warehouse cost.</li>
+            <li><strong>AI typo in ref name —</strong> <code>dim_listings_cleaned</code> compiles nowhere. Always grep the project for exact model names.</li>
+            <li><strong>Skipping tests on generated SQL —</strong> AI loves plausible <code>CASE</code> boundaries that fail edge rows. Add singular tests for classification logic.</li>
+            <li><strong>Re-parsing prices in intermediate —</strong> AI may copy legacy cleansing into new models. Read upstream dims first.</li>
+            <li><strong>Confusing compile speed with pipeline speed —</strong> Fusion saves IDE time, not nightly run duration.</li>
+            <li><strong>Committing .sqlfluff that differs from CI —</strong> local fix passes, PR fails. Pin sqlfluff version in pyproject or requirements.</li>
+            <li><strong>dim_listings_w_hosts version drift —</strong> by course end the join model may use <code>ref('dim_hosts_cleansed', v=2)</code> from Section 19; AI scaffolds against v1 names if schema context is stale.</li>
+          </ul>
+
+          <h3>Troubleshooting playbook</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Symptom</th><th>Most likely cause</th><th>What to check / fix</th></tr></thead>
+              <tbody>
+                <tr><td>Extension: &ldquo;No dbt project found&rdquo;</td><td>Workspace root above <code>airbnb/</code></td><td>Open <code>airbnb</code> folder or set project path in extension settings</td></tr>
+                <tr><td>Lineage empty</td><td>No manifest</td><td><code>dbt parse</code>; confirm <code>target/manifest.json</code> exists</td></tr>
+                <tr><td>Fusion install script fails in devcontainer</td><td>Network or curl blocked</td><td>Run <code>install-dbt-fusion.sh</code> manually; check CDN access</td></tr>
+                <tr><td><code>dbt compile</code> OK on Core, fails on Fusion</td><td>Stricter parser</td><td>Read Fusion error; fix deprecated YAML or macro pattern</td></tr>
+                <tr><td>SQLFluff: templater error</td><td><code>profiles_dir</code> wrong</td><td>Point <code>[sqlfluff:templater:dbt]</code> at your profiles</td></tr>
+                <tr><td><code>int_host_performance</code> row count mismatch vs legacy</td><td>Join type or dim filter difference</td><td>Compare compiled SQL; run COUNT(*) on both</td></tr>
+                <tr><td>Mart price_segment test fails</td><td>Boundary off-by-one (<code>150</code> vs <code>149</code>)</td><td>Align CASE with <code>test_mart_listing_performance.sql</code></td></tr>
+                <tr><td>AI model uses <code>source()</code></td><td>Prompt did not forbid it</td><td>Re-prompt; replace with <code>ref()</code> to dims</td></tr>
+                <tr><td>Power User run hangs</td><td>Credentials or warehouse suspend</td><td><code>dbt debug</code> in terminal first</td></tr>
+                <tr><td>Both host and listing grain in one model</td><td>AI mixed grains</td><td>Split intermediate (host) from mart (listing)</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Production patterns</h3>
+          <p>Mature teams standardize on one IDE extension document in the repo README, pin Fusion or Core explicitly in CI (not both silently), and add a <code>lint</code> job for SQLFluff on changed <code>.sql</code> files. Legacy quarantine uses <code>enabled: false</code> plus a sunset date; selectors exclude <code>legacy/</code> from production jobs.</p>
+          <p>AI usage policies require human review, mandatory tests for new models, and no direct merge of uncompiled AI output. Some teams ban AI on macros that touch permissions or PII columns.</p>
+
+          <div class="grid-2">
+            <div class="mini-card">
+              <h4>Pattern: intermediate extraction</h4>
+              <p>When two marts need the same host aggregates, build <code>int_*</code> once. The course refactor is the template for any legacy monolith.</p>
+            </div>
+            <div class="mini-card">
+              <h4>Anti-pattern: AI + no schema.yml</h4>
+              <p>Generated columns without YAML tests never enter prod CI. Section 11 tests are part of the definition of done.</p>
+            </div>
+          </div>
+
+<pre data-lang="yaml" data-title="models/schema.yml — tests for int_host_performance" data-explain="Minimum tests after AI scaffold; add to schema.yml before merge."><code>  - name: int_host_performance
+    columns:
+      - name: host_id
+        data_tests:
+          - unique
+          - not_null
+      - name: portfolio_size
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['inactive', 'single_listing', 'small_portfolio', 'medium_portfolio', 'large_portfolio']</code></pre>
+
+          <h3>Certification pointers</h3>
+          <p>The certification exam focuses on dbt Core concepts: materializations, tests, macros, packages, and deployment — not a specific VS Code extension. Know that compile happens before run, that <code>ref()</code> enforces DAG dependencies, and that tests belong in YAML. Extension and Fusion details may appear only as general &ldquo;developer productivity&rdquo; context.</p>
+          <ul>
+            <li><a href="s11-tests.html">Section 11</a> — data tests AI-generated models still need.</li>
+            <li><a href="s12-advanced-testing.html">Section 12</a> — contracts and singular tests for classification logic.</li>
+            <li><a href="s16-debugging-logging.html">Section 16</a> — compile-first loop before paying for runs.</li>
+            <li><a href="s19-production.html">Section 19</a> — CI gates that catch bad merges regardless of authoring tool.</li>
+            <li><a href="s21-best-practices.html">Section 21</a> — folder conventions for intermediate vs mart layers.</li>
+          </ul>
+          <div class="callout exam"><strong>Certification:</strong> know the difference between staging, intermediate, and mart layers; that <code>source()</code> is for raw ingestion boundaries and <code>ref()</code> for the DAG; and that linting and IDE tools do not replace <code>dbt test</code>.</div>
+
+          <p>Extension and Fusion specifics evolve quarterly — for exam day, prioritise Core mechanics from Sections 7&ndash;19. Treat this section as productivity tooling that sits on top of the same compile-run-test loop you already know.</p>
+        </section>
+
+        <section class="section" id="interview">
+          <h2>Interview questions</h2>
+          <p class="muted">Answer each one out loud before opening it.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+
+            <details class="qa">
+              <summary>What does the dbt Power User extension give you that the CLI alone does not?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>In-editor lineage from the manifest, compiled SQL preview without leaving the file, formatting tuned for dbt SQL, and on some adapters cost estimation before run. The CLI still does the real compile and run; the extension surfaces results faster.</p>
+                <p>You still need a valid project, profiles, and a parsed manifest for graph features. It does not replace tests or documentation.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How does the official dbt extension differ from Power User?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p>Power User is a community extension built around dbt Core. The official extension is from dbt Labs and pairs with the Fusion language server for faster compile and deeper static analysis when Fusion is installed.</p>
+                <p>Power User emphasizes lineage UI and cost hints; the official extension emphasizes SQL comprehension, column-level lineage, and alignment with dbt Labs&rsquo; roadmap. Teams may standardize on one locally while CI stays on Core or Fusion consistently.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What is the Fusion engine and what problem does it solve?<span class="qa-tag">Performance</span></summary>
+              <div class="qa-body">
+                <p>Fusion is a Rust-based dbt engine that reimplements parsing and compilation with native SQL understanding. It speeds project parse and compile dramatically and enables IDE feedback without warehouse round-trips for many error classes.</p>
+                <p>It does not replace warehouse execution for materializations. Adapter support and package compatibility evolve; treat migration as a pilot, not a flip of a switch.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Why use SQLFluff if dbt already has tests?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>Tests validate data; SQLFluff validates SQL style and some structural conventions. Consistent formatting makes diffs reviewable and reduces bike-shedding in PRs.</p>
+                <p>With the dbt templater, SQLFluff renders Jinja before linting, so rules apply to real SQL. It catches different failure modes than <code>unique</code> or <code>not_null</code>.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How would you refactor a legacy dbt model that reads sources directly?<span class="qa-tag">Modelling</span></summary>
+              <div class="qa-body">
+                <p>Identify duplicated logic already in dimensions (price parsing, renaming). Extract shared aggregates to an intermediate model at the correct grain (<code>int_host_performance</code> at host level). Point marts at <code>ref()</code> to dims and intermediate layers only.</p>
+                <p>Keep legacy files quarantined until row-count and metric parity tests pass. Exclude legacy from production selectors. Delete only after consumers migrate.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What grain should int_host_performance be at and why?<span class="qa-tag">Modelling</span></summary>
+              <div class="qa-body">
+                <p>One row per <code>host_id</code>. Metrics are host-level aggregates (listing counts, portfolio classifications, tenure). Listing-level attributes belong in <code>mart_listing_performance</code>, which joins host metrics to listing grain.</p>
+                <p>Mixing grains in one model causes fan-out or double-counting when downstream models join incorrectly.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How do you safely use AI to generate a dbt model?<span class="qa-tag">Production</span></summary>
+              <div class="qa-body">
+                <p>Provide schema.yml and upstream model files as context. Specify grain, materialization, target path, and require <code>ref()</code>. Review every name, compile before run, add YAML tests and singular tests for business logic, and merge through normal PR/CI.</p>
+                <p>AI output is untrusted until tests pass — same standard as junior-authored SQL. Cross-reference Sections 11&ndash;12 for contracts on exposed marts.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>When would Fusion compile be slower than you expect?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p>When models trigger many compile-time warehouse queries — heavy <code>run_query()</code>, large <code>information_schema</code> introspection, or iterative Jinja that hits the warehouse repeatedly. Fusion&rsquo;s parse speed does not remove those round-trips.</p>
+                <p>Profile compile with debug logs; compare Core versus Fusion on the same project before mandating Fusion in CI.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What is the legacy/ folder pattern for?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>It quarantines superseded SQL during migration. Files remain for comparison and audit but should not be referenced by new models or production selectors.</p>
+                <p>Pair with <code>enabled: false</code> or selector exclusions once replacements are verified. Document sunset dates so legacy code does not linger for years.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Does Fusion eliminate warehouse cost for dbt development?<span class="qa-tag">Cost</span></summary>
+              <div class="qa-body">
+                <p>No. Fusion reduces local compile and static analysis cost. Any <code>dbt run</code>, <code>dbt build</code>, or test still queries the warehouse and bills compute/storage as before.</p>
+                <p>The savings come from catching errors before run and iterating in the IDE — fewer failed full-table builds during development.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How does mart_listing_performance use int_host_performance?<span class="qa-tag">SQL</span></summary>
+              <div class="qa-body">
+                <p>Listing attributes come from <code>dim_listings_w_hosts</code> at listing grain. Host portfolio metrics come from <code>int_host_performance</code> joined on <code>host_id</code>. Derived columns like <code>price_position_vs_portfolio</code> compare listing price to the host&rsquo;s average from the intermediate model.</p>
+                <p>This avoids recomputing host aggregates inside the mart and matches the DRY principle from Section 1.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What should you check after sqlfluff fix changes a model?<span class="qa-tag">Troubleshooting</span></summary>
+              <div class="qa-body">
+                <p>Run <code>dbt compile</code> to ensure the templater still renders. Re-run affected tests — aggressive formatting can occasionally break Jinja block boundaries if misconfigured.</p>
+                <p>Diff the file in git; confirm only style changed, not logic. In CI, pin SQLFluff version so fix behaviour is stable.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Why materialize int_host_performance as a table?<span class="qa-tag">Performance</span></summary>
+              <div class="qa-body">
+                <p>Multiple downstream consumers (<code>mart_listing_performance</code> and any future host-facing mart) read the same aggregates. A table avoids recomputing host-level GROUP BY on every mart run.</p>
+                <p>A view would re-scan dims each time; ephemeral would inline into every child and duplicate work. Table is the course choice for reusable intermediate aggregates at a stable grain.</p>
+              </div>
+            </details>
+
+          </div>
+        </section>
+
+        <section class="section" id="practice">
+          <h2>Hands-on practice</h2>
+          <p class="muted">Run these from the <code>airbnb</code> folder with your virtualenv active. Check out the <code>poweruser</code> branch for legacy and intermediate files unless noted.</p>
+          <ol class="practice-list">
+
+            <li class="practice">
+              <p class="practice-task">Install and configure SQLFluff with the dbt templater. Lint <code>int_host_performance.sql</code>, then fix any auto-fixable violations.</p>
+              <span class="console-path">airbnb/.sqlfluff · models/intermediate/int_host_performance.sql</span>
+              <p class="practice-expect"><code>sqlfluff lint</code> reports zero violations (or only rules you deliberately excluded); file still compiles with <code>dbt compile --select int_host_performance</code>.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li><code>uv pip install sqlfluff sqlfluff-templater-dbt</code></li>
+                    <li>Extend <code>.sqlfluff</code> with <code>templater = dbt</code> and <code>profiles_dir</code> pointing at your profiles.</li>
+                    <li><code>sqlfluff lint models/intermediate/int_host_performance.sql</code></li>
+                    <li><code>sqlfluff fix models/intermediate/int_host_performance.sql</code></li>
+                    <li><code>dbt compile --select int_host_performance</code></li>
+                  </ol>
+                  <p class="muted">Undo: revert the file with git if fix changed logic you did not want.</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">Build the refactored pipeline: run <code>int_host_performance</code>, then <code>mart_listing_performance</code>, and verify row counts against the legacy mart logic.</p>
+              <span class="console-path">airbnb/models/intermediate/ · airbnb/models/mart/mart_listing_performance.sql</span>
+              <p class="practice-expect">Both models succeed; listing count in mart matches <code>SELECT COUNT(*) FROM dim_listings_w_hosts</code> (minus any intentional filters).</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li><code>dbt run --select int_host_performance</code></li>
+                    <li><code>dbt run --select mart_listing_performance</code></li>
+                    <li>In Snowflake: compare <code>COUNT(*)</code> on new mart vs legacy if you built legacy in a scratch schema.</li>
+                    <li>Spot-check <code>price_segment</code> boundaries for listings at 49, 50, 149, 150, 299, 300.</li>
+                  </ol>
+<pre data-lang="shell" data-title="Build subgraph"><code>dbt build --select int_host_performance+mart_listing_performance</code></pre>
+                  <p class="muted">Undo: <code>dbt run --select mart_listing_performance --full-refresh</code> after edits; drop intermediate table if you need to rematerialize from scratch.</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">Use the course AI prompt to regenerate or extend <code>int_host_performance</code> in a scratch file. Fix the <code>dim_listings_cleaned</code> typo, compile, and add at least three YAML tests before merging.</p>
+              <span class="console-path">models/intermediate/int_host_performance.sql · models/schema.yml</span>
+              <p class="practice-expect"><code>dbt build --select int_host_performance</code> passes <code>unique</code>, <code>not_null</code> on <code>host_id</code>, and an <code>accepted_values</code> test on <code>portfolio_size</code>.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Paste prompt from this section into Copilot/Cursor with <code>schema.yml</code> open.</li>
+                    <li>Save to a temp file or overwrite; fix <code>ref('dim_listings_cleansed')</code>.</li>
+                    <li><code>dbt compile --select int_host_performance</code></li>
+                    <li>Add YAML tests from the #deeper block example.</li>
+                    <li><code>dbt build --select int_host_performance</code></li>
+                  </ol>
+                  <p class="muted">Undo: <code>git checkout -- models/intermediate/int_host_performance.sql models/schema.yml</code> to restore branch originals.</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">On the <code>official-extension</code> branch, rebuild the devcontainer or run <code>install-dbt-fusion.sh</code>, then parse the project with Fusion and compare compile time to Core.</p>
+              <span class="console-path">.devcontainer/install-dbt-fusion.sh · airbnb/</span>
+              <p class="practice-expect"><code>dbt parse</code> succeeds; you can open the official extension and see project index without errors (adapter support permitting).</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li><code>git checkout official-extension</code></li>
+                    <li>Run <code>.devcontainer/install-dbt-fusion.sh</code> or rebuild container.</li>
+                    <li>Time <code>dbt parse</code> with Fusion versus Core on same machine.</li>
+                    <li>Note any parse errors Fusion reports that Core ignored — fix or document.</li>
+                  </ol>
+                  <p class="muted">Undo: switch back to <code>main</code> or <code>poweruser</code> branch for remaining course work.</p>
+                </div>
+              </details>
+            </li>
+
+          </ol>
+        </section>
+
+        <section class="section" id="recap">
+          <h2>Recap</h2>
+          <div class="recap">
+            <ul class="checklist">
+              <li>dbt Power User (<code>innoverio.vscode-dbt-power-user</code>) adds lineage preview, model preview, formatting, and cost hints on top of dbt Core.</li>
+              <li>The official dbt extension (<code>dbtLabsInc.dbt</code>) pairs with Fusion for faster compile and static SQL analysis.</li>
+              <li>Fusion is a Rust engine: faster parse/compile, SQL comprehension without warehouse round-trips for many checks — but run/test still hit the warehouse.</li>
+              <li>Install Fusion in the course via <code>.devcontainer/install-dbt-fusion.sh</code> on the <code>official-extension</code> branch.</li>
+              <li>Check current adapter support before production migration; Fusion is newer and stricter than Core.</li>
+              <li>SQLFluff with <code>dialect = snowflake</code> and <code>templater = dbt</code> enforces SQL style; tests from Sections 11&ndash;12 enforce correctness.</li>
+              <li>Legacy models live in <code>models/legacy/</code> quarantined until refactored; new code uses <code>ref()</code> to dims and intermediate layers.</li>
+              <li><code>int_host_performance</code> is host grain; <code>mart_listing_performance</code> joins it to listing grain from <code>dim_listings_w_hosts</code>.</li>
+              <li>AI prompts should include schema context, exact <code>ref()</code> names, grain, and path — then compile, test, and review like any other PR.</li>
+              <li>AI-generated SQL still needs YAML tests, singular tests, and contracts — never merge on compile alone.</li>
+              <li>Compare <code>poweruser</code> and <code>official-extension</code> devcontainers side by side to see how extension choice changes the container bootstrap.</li>
+            </ul>
+            <p style="margin-top:1rem;">
+              <button type="button" data-complete="section-20">Mark complete</button>
+            </p>
+          </div>
+        </section>
+
+      </div>
+
+      <aside class="toc" aria-label="On this page">
+        <strong>On this page</strong>
+        <ol>
+          <li><a href="#lectures">Lectures</a></li>
+          <li><a href="#power-user-extension">Power User extension</a></li>
+          <li><a href="#official-extension">Official extension</a></li>
+          <li><a href="#fusion-engine">Fusion engine</a></li>
+          <li><a href="#sqlfluff">SQLFluff</a></li>
+          <li><a href="#legacy-refactoring">Legacy refactoring</a></li>
+          <li><a href="#ai-model-building">Building with AI</a></li>
+          <li><a href="#deeper">Deeper detail</a></li>
+          <li><a href="#interview">Interview questions</a></li>
+          <li><a href="#practice">Hands-on practice</a></li>
+          <li><a href="#recap">Recap</a></li>
+        </ol>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<footer class="footer">The Complete dbt Bootcamp: Zero to Hero · Section 20 · Offline study edition</footer>
+</body>
+</html>

@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="DEA-C01 Section 12: EC2 instance families and purchasing options, AWS Batch job workflow, and AWS SAM serverless deployment with CloudFormation transforms.">
+<title>Section 12 — Compute Services | AWS Data Engineer DEA-C01 Notes</title>
+<link rel="stylesheet" href="assets/aws.css">
+<script defer src="assets/search-index.js"></script>
+<script defer src="assets/code-highlight.js"></script>
+<script defer src="assets/aws.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">Course section 12 of 21 · AWS Certified Data Engineer Associate</p>
+    <h1>Compute Services</h1>
+    <p class="subtitle">Elastic compute on EC2 — instance families, purchasing models and placement — plus AWS Batch for containerised heavy jobs and AWS SAM for packaging Lambda pipelines as CloudFormation deployments.</p>
+    <div class="hero-meta">
+      <span class="chip">17 slides · ~25min</span>
+      <span class="chip">Exam domains: Data Operations · Data Ingestion</span>
+      <span class="chip">Deck slides 409–425</span>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <nav class="pager" aria-label="Section navigation">
+    <a href="s11-other-databases.html">← Other Database Services</a>
+    <a href="index.html">Course contents</a>
+    <a href="s13-analytics.html">Next: Analytics →</a>
+  </nav>
+
+  <main id="main">
+    <div class="layout">
+      <div class="content">
+
+        <section class="section" id="lectures">
+          <h2>Lectures in this section</h2>
+          <p class="muted">Compute choices underpin EMR clusters, Glue alternatives, Batch ETL, and Lambda packaging. See also <a href="s04-glue.html">Section 4 (Glue)</a> and <a href="s05-lambda.html">Section 5 (Lambda)</a>.</p>
+          <ol class="lecture-list">
+            <li class="lecture">
+              <a class="lec-title" href="#ec2">Amazon EC2 — virtual servers in the cloud</a>
+              <span class="lec-time">~6:00</span>
+              <span class="lec-src">Slides 411–412</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#instance-types">EC2 instance types and naming</a>
+              <span class="lec-time">~8:00</span>
+              <span class="lec-src">Slides 414–417</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#batch">AWS Batch — Docker batch jobs at scale</a>
+              <span class="lec-time">~8:00</span>
+              <span class="lec-src">Slides 419–421</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#sam">AWS SAM — serverless application model</a>
+              <span class="lec-time">~6:00</span>
+              <span class="lec-src">Slides 423–425</span>
+            </li>
+          </ol>
+        </section>
+
+        <section class="section" id="ec2">
+          <h2>Amazon EC2</h2>
+          <p class="lead"><strong>Amazon Elastic Compute Cloud (EC2)</strong> provides resizable virtual servers (instances) in the cloud. For data engineering, EC2 is the foundation under EMR, self-managed Spark, Kafka, custom ETL workers, and Batch compute environments.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-411.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-411.png" alt="Slide introducing EC2: secure resizable compute, virtual instances, on-demand capacity, varied CPU memory storage and networking combinations." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 411</span>EC2 is IaaS — you choose AMI, instance type, storage and networking. The exam expects you to pick the right family for a workload, not to memorise every instance size.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-412.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-412.png" alt="Slide on EC2 benefits: full configuration control, high availability, Auto Scaling, integration with AWS services." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 412</span>EC2 integrates with Auto Scaling, ELB, EBS, S3 and VPC. Data pipelines use it when you need OS-level control, custom libraries, or long-running processes beyond Lambda's 15-minute limit.</figcaption>
+          </figure>
+
+          <h3>Why data engineers use EC2</h3>
+          <ul>
+            <li><strong>EMR and self-managed Spark</strong> — cluster nodes are EC2 instances; family choice drives shuffle performance.</li>
+            <li><strong>Batch and container jobs</strong> — Batch launches EC2 or Fargate for Docker workloads.</li>
+            <li><strong>Custom ingestion agents</strong> — long-running pollers, FTP bridges, legacy protocol adapters.</li>
+            <li><strong>Instance store for temp data</strong> — local NVMe for high-throughput scratch space during sort-heavy jobs.</li>
+          </ul>
+
+          <h3>Purchasing options</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Option</th><th>Cost</th><th>Commitment</th><th>Data workload fit</th></tr></thead>
+              <tbody>
+                <tr><td><strong>On-Demand</strong></td><td>Highest per hour</td><td>None</td><td>Dev/test, unpredictable jobs, primary EMR master nodes</td></tr>
+                <tr><td><strong>Reserved Instances / Savings Plans</strong></td><td>Up to ~72% off On-Demand</td><td>1 or 3 years</td><td>Steady-state Redshift-adjacent workers, always-on ingestion</td></tr>
+                <tr><td><strong>Spot Instances</strong></td><td>Up to ~90% off On-Demand</td><td>Interruptible with 2-min notice</td><td>EMR <em>task</em> nodes, Batch compute environments, fault-tolerant Spark</td></tr>
+                <tr><td><strong>Dedicated Hosts</strong></td><td>Premium</td><td>Physical server dedicated to you</td><td>License compliance (SQL Server, Oracle BYOL)</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout warn"><strong>Spot interruption caveat.</strong> Spot instances can be reclaimed with a two-minute warning. Use Spot for stateless Batch jobs and EMR task nodes — never for the master node, never when a job cannot checkpoint. Batch and EMR retry interrupted tasks automatically when configured.</div>
+
+          <h3>EBS-optimised instances and instance store</h3>
+          <p><strong>EBS-optimised</strong> instances dedicate network bandwidth to EBS volumes — important when shuffle spills to disk or HDFS runs on EBS. <strong>Instance store</strong> (ephemeral NVMe on <code>i</code>, <code>d</code>, and some <code>r</code> families) offers higher IOPS but data is lost on stop/terminate. Use instance store for temporary Spark shuffle; persist results to S3.</p>
+
+          <h3>Placement groups</h3>
+          <ul>
+            <li><strong>Cluster</strong> — instances in the same AZ, low latency (HPC, tightly coupled Spark).</li>
+            <li><strong>Spread</strong> — instances on distinct hardware (critical singleton nodes).</li>
+            <li><strong>Partition</strong> — groups within AZs (large Kafka, HDFS-style topologies).</li>
+          </ul>
+        </section>
+
+        <section class="section" id="instance-types">
+          <h2>EC2 instance types</h2>
+          <p class="lead">Instance types combine CPU, memory, storage and networking. AWS names them with a family letter, generation number, optional attributes, and size.</p>
+
+          <h3>Naming convention</h3>
+          <p>Example: <code>r6gd.4xlarge</code> — <strong>r</strong> = memory optimised, <strong>6</strong> = sixth generation, <strong>g</strong> = Graviton (ARM), <strong>d</strong> = local NVMe instance store, <strong>4xlarge</strong> = size within the family.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-414.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-414.png" alt="Slide on General Purpose and Compute Optimized EC2 instance types with balanced resources and high-performance processors." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 414</span><strong>General Purpose (<code>m</code>, <code>t</code>)</strong> balance CPU, memory and network — Glue development bastions, small ingestion workers. <strong>Compute Optimized (<code>c</code>)</strong> — high CPU for compression, encoding, video transcoding and CPU-bound transforms.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-415.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-415.png" alt="Slide on Memory Optimized and Accelerated Computing instance types for in-memory datasets and hardware accelerators." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 415</span><strong>Memory Optimized (<code>r</code>, <code>x</code>, <code>z</code>)</strong> — large in-memory Spark, SAP HANA-style workloads, Redis on EC2. <strong>Accelerated Computing (<code>p</code>, <code>g</code>, <code>inf</code>, <code>trn</code>)</strong> — GPUs and custom chips for ML training and inference.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-416.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-416.png" alt="Slide on Storage Optimized instances for high sequential read and write to large local datasets." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 416</span><strong>Storage Optimized (<code>i</code>, <code>d</code>, <code>h</code>)</strong> — local NVMe for high sequential I/O. EMR task nodes processing terabyte shuffles, HDFS on instance store, log aggregation buffers.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-417.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-417.png" alt="Slide on HPC Optimized instances for high-performance computing workloads at scale with best price performance." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 417</span><strong>HPC Optimized (<code>hpc</code>)</strong> — tightly coupled scientific simulation. Less common in DEA-C01 unless a question mentions HPC or MPI workloads at scale.</figcaption>
+          </figure>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Family</th><th>Letter</th><th>Data engineering workload</th></tr></thead>
+              <tbody>
+                <tr><td>General Purpose</td><td><code>m</code>, <code>t</code></td><td>Bastion hosts, orchestration agents, moderate ETL</td></tr>
+                <tr><td>Compute Optimized</td><td><code>c</code></td><td>Compression, encoding, CPU-heavy UDFs</td></tr>
+                <tr><td>Memory Optimized</td><td><code>r</code>, <code>x</code></td><td>Spark executors, in-memory aggregations, large joins</td></tr>
+                <tr><td>Storage Optimized</td><td><code>i</code>, <code>d</code></td><td>Local NVMe shuffle, HDFS data nodes, high IOPS staging</td></tr>
+                <tr><td>Accelerated</td><td><code>g</code>, <code>p</code></td><td>ML feature extraction, GPU-accelerated transforms</td></tr>
+                <tr><td>HPC Optimized</td><td><code>hpc</code></td><td>Scientific simulation, genomics — rarely the DEA default</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout exam"><strong>Exam shortcut.</strong> "Large dataset in memory" → <code>r</code> or <code>x</code>. "Local NVMe for temporary high-throughput storage" → <code>i</code> or <code>d</code>. "Video transcoding or compression" → <code>c</code>. "Lowest cost for fault-tolerant parallel workers" → Spot task nodes.</div>
+
+          <h3>What data engineers actually pick</h3>
+          <p>Deck slides list families; production clusters map workloads to instance letters. The pattern repeats across EMR, self-managed Spark on EC2, and Batch compute environments.</p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Workload signal</th><th>Family</th><th>Example sizes</th><th>Why</th></tr></thead>
+              <tbody>
+                <tr><td>Balanced Spark executors, moderate shuffle</td><td><code>m6i</code>, <code>m7g</code></td><td><code>m6i.4xlarge</code></td><td>Even CPU/memory ratio — default for general ETL workers when neither dimension dominates</td></tr>
+                <tr><td>Large joins, in-memory aggregations, wide caches</td><td><code>r6i</code>, <code>r7g</code>, <code>x2idn</code></td><td><code>r6i.8xlarge</code></td><td>High memory per vCPU — working set must fit RAM or Spark spills to disk</td></tr>
+                <tr><td>Compression, encoding, Parquet rewrite, CPU-bound UDFs</td><td><code>c6i</code>, <code>c7g</code></td><td><code>c6i.2xlarge</code></td><td>Maximum vCPU per dollar for serial CPU work without large memory needs</td></tr>
+                <tr><td>Shuffle spill, local scratch, HDFS data nodes</td><td><code>i3</code>, <code>i4i</code>, <code>d3</code></td><td><code>i3.4xlarge</code></td><td>NVMe instance store — terabytes of local IOPS; data lost on stop/terminate</td></tr>
+                <tr><td>ML feature extraction, GPU transforms</td><td><code>g5</code>, <code>p4d</code></td><td><code>g5.xlarge</code></td><td>Only when the job uses CUDA — general ETL rarely needs GPU; exam mentions ML inference explicitly</td></tr>
+                <tr><td>Cost-sensitive sustained workers</td><td><code>m7g</code>, <code>r7g</code> (Graviton)</td><td><code>r7g.2xlarge</code></td><td>Up to ~20% better price/performance — requires ARM-compatible binaries (rebuild Docker images, verify Spark native libs)</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout warn"><strong>Graviton rebuild caveat.</strong> Graviton (<code>g</code> suffix) runs ARM64. x86-only JARs, proprietary ODBC drivers, or legacy C extensions fail at runtime. Validate in dev before committing a three-year Savings Plan on Graviton.</div>
+        </section>
+
+        <section class="section" id="batch">
+          <h2>AWS Batch</h2>
+          <p class="lead"><strong>AWS Batch</strong> runs containerised batch jobs at any scale. You define jobs as Docker images; Batch handles provisioning, queuing and scaling the underlying compute — EC2, Spot or Fargate — without you managing a cluster scheduler.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-419.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-419.png" alt="Slide comparing Batch versus Lambda and Glue: Batch for Docker compute-intensive jobs, Lambda for event-driven tasks, Glue for ETL." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 419</span>Batch fills the gap between Lambda (15-minute limit, no Docker) and Glue (managed Spark ETL). Use Batch when you bring your own container and need hours of CPU or custom binaries.</figcaption>
+          </figure>
+
+          <h3>Batch versus Lambda versus Glue versus EMR</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Service</th><th>Runtime limit</th><th>Packaging</th><th>Cost model</th><th>When it wins</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Lambda</strong></td><td>15 minutes max</td><td>Zip/container up to 10 GB</td><td>Per invocation + GB-second</td><td>Event-driven, lightweight, sub-minute tasks</td></tr>
+                <tr><td><strong>Glue</strong></td><td>No hard limit (job timeout configurable)</td><td>PySpark/Scala scripts, Glue libs</td><td>DPU-hour</td><td>Managed Spark ETL, Data Catalog integration</td></tr>
+                <tr><td><strong>Batch</strong></td><td>No limit (job definition timeout)</td><td>Any Docker image</td><td>EC2/Fargate/Spot underlying cost</td><td>Custom container, genomics, rendering, HPC-style batch</td></tr>
+                <tr><td><strong>EMR</strong></td><td>Cluster lifetime</td><td>Spark/Hive/Hadoop ecosystem</td><td>EC2 (+ EMR premium) per hour</td><td>Large Spark/Hive clusters, interactive notebooks</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-420.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-420.png" alt="Slide on AWS Batch features: Docker jobs, auto scaling, scheduling, Step Functions integration, EC2 Spot and Fargate compute, pricing on underlying resources." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 420</span>Batch itself has no charge beyond the compute it launches. Spot-backed compute environments cut cost for interruptible pipelines. Step Functions can submit and monitor Batch jobs in a workflow.</figcaption>
+          </figure>
+
+          <h3>How Batch works</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-421.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-421.png" alt="Slide showing AWS Batch workflow: Define Jobs, Submit to Job Queues, Job Scheduling, Running." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 421</span>Four stages: job definitions (Docker image, vCPU, memory, env vars) → submit to a queue → scheduler matches queue to a compute environment → container runs on EC2/Fargate.</figcaption>
+          </figure>
+
+          <div class="diagram">
+            <p class="diagram-title">AWS Batch — submit → queue → compute environment → running job</p>
+            <div class="flow">
+              <div class="node is-source"><b>Submit job</b><small>CLI · SDK · Step Functions</small></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-store"><b>Job queue</b><small>priority · fair-share</small></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-compute pulse"><b>Scheduler</b><small>matches CE capacity</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-compute"><b>Compute environment</b><small>EC2 · Spot · Fargate</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-serve"><b>Running container</b><small>Docker image · logs → CloudWatch</small></div>
+            </div>
+          </div>
+
+          <h3>Batch on Fargate versus EC2</h3>
+          <ul>
+            <li><strong>Fargate</strong> — no instance management; pay per vCPU/memory per second. Good for variable job sizes and when you do not want to manage AMIs.</li>
+            <li><strong>EC2 / Spot</strong> — cheaper at sustained scale; you choose instance types and can use GPU instances. Spot compute environments scale to zero when the queue is empty.</li>
+          </ul>
+
+          <h3>Array jobs, dependencies and multi-node parallel jobs</h3>
+          <ul>
+            <li><strong>Array jobs</strong> — run the same job definition thousands of times with a unique index (<code>AWS_BATCH_JOB_ARRAY_INDEX</code>) — parametric sweeps over S3 prefixes.</li>
+            <li><strong>Job dependencies</strong> — job B starts only after job A succeeds (<code>dependsOn</code>) — simple DAG without Step Functions.</li>
+            <li><strong>Multi-node parallel jobs</strong> — MPI-style workloads across multiple containers in one job (HPC, large parallel simulations).</li>
+          </ul>
+
+          <h3>Retry strategies and evaluateOnExit</h3>
+          <p>Job definitions specify <code>retryStrategy</code> with an <code>attempts</code> count and optional <code>evaluateOnExit</code> rules. Match the exit code or reason and either <code>retry</code> or <code>exit</code> — so Spot interruption (<code>StatusReason</code> containing "Spot") retries, but a bad input file exit code 2 fails fast without wasting cluster hours.</p>
+<pre data-lang="json" data-title="Batch job definition — retry Spot, fail on bad input" data-explain="evaluateOnExit prevents infinite retries on non-transient failures while still recovering from Spot reclaim."><code>{
+  "retryStrategy": {
+    "attempts": 5,
+    "evaluateOnExit": [
+      {
+        "onStatusReason": "Host EC2*",
+        "action": "retry"
+      },
+      {
+        "onReason": "OutOfMemoryError*",
+        "action": "exit"
+      },
+      {
+        "onExitCode": "2",
+        "action": "exit"
+      }
+    ]
+  }
+}</code></pre>
+
+          <h3>Fair-share scheduling and compute environment limits</h3>
+          <p>Multiple job queues can share one compute environment. <strong>Fair-share scheduling</strong> allocates capacity proportionally across queues based on configured weights — a long-running low-priority ETL queue cannot starve an urgent SLA queue entirely. Set <code>maxvCpus</code> on the compute environment as a soft ceiling: Batch scales out Spot/On-Demand instances until total vCPUs hit the cap, then jobs queue. This prevents runaway cost when a bug submits ten thousand array jobs.</p>
+          <ul>
+            <li><strong>SPOT_CAPACITY_OPTIMIZED</strong> — allocation strategy picks Spot pools with the most available capacity, reducing interruption rate versus lowest-price Spot.</li>
+            <li><strong>Order of capacity</strong> — On-Demand base plus Spot for overflow is common; pure Spot for fault-tolerant genomics or rendering.</li>
+          </ul>
+
+          <h3>Batch on EKS</h3>
+          <p><strong>AWS Batch on Amazon EKS</strong> schedules Batch jobs onto an existing Kubernetes cluster instead of EC2 compute environments you manage separately. Use it when the organisation already runs EKS for microservices and wants batch workloads on the same node groups with unified IAM and observability. Batch still handles job queues and definitions; EKS provides the underlying pod placement. See <a href="s17-containers.html#eks">Section 17 (EKS)</a> for cluster setup.</p>
+        </section>
+
+        <section class="section" id="sam">
+          <h2>AWS SAM</h2>
+          <p class="lead"><strong>AWS Serverless Application Model (SAM)</strong> is an open-source framework that extends CloudFormation with shorthand for Lambda, API Gateway, DynamoDB and other serverless resources. SAM is a <strong>CloudFormation transform</strong> — <code>sam deploy</code> expands the concise template into full CloudFormation and creates a changeset.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-423.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-423.png" alt="Slide on AWS SAM: serverless development framework for Lambda API Gateway DynamoDB, YAML templates, deployment ease and local testing." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 423</span>SAM templates are YAML with short syntax (<code>AWS::Serverless::Function</code>). The transform macro converts them to vanilla CloudFormation resources at deploy time.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-424.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-424.png" alt="Slide on SAM CLI: local testing environment mimicking AWS, IDE extensions, sam build package deploy commands." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 424</span>SAM CLI wraps build, local invoke (<code>sam local invoke</code>), and deploy. Use it to test Lambda handlers against sample S3 events before pushing to AWS.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-425.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-425.png" alt="Slide showing SAM deployment flow: write template, sam build, sam package, sam deploy." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 425</span>Typical flow: author <code>template.yaml</code> → <code>sam build</code> (compile, vendor deps) → <code>sam deploy</code> (package to S3 if needed, create/update CloudFormation stack).</figcaption>
+          </figure>
+
+          <pre data-lang="yaml" data-title="template.yaml — Lambda triggered by S3 object create (SAM transform)" data-explain="SAM Transform expands AWS::Serverless::Function into Lambda + IAM role + S3 event permission. Globals set runtime defaults for all functions in the stack."><code>AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Ingest raw CSV uploads into staging prefix
+
+Globals:
+  Function:
+    Timeout: 120
+    Runtime: python3.12
+    MemorySize: 512
+
+Resources:
+  IngestFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: app.handler
+      CodeUri: src/
+      Environment:
+        Variables:
+          STAGING_BUCKET: !Ref RawBucket
+      Policies:
+        - S3ReadPolicy:
+            BucketName: !Ref RawBucket
+        - S3WritePolicy:
+            BucketName: !Ref RawBucket
+      Events:
+        NewCsvUpload:
+          Type: S3
+          Properties:
+            Bucket: !Ref RawBucket
+            Events: s3:ObjectCreated:*
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: prefix
+                    Value: raw/
+                  - Name: suffix
+                    Value: .csv
+
+  RawBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: dea-lab-ab-4821
+
+Outputs:
+  IngestFunctionArn:
+    Value: !GetAtt IngestFunction.Arn</code></pre>
+
+<pre data-lang="shell" data-title="Deploy the SAM stack" data-explain="sam build compiles the function; sam deploy --guided creates a samconfig.toml for repeat deploys. Under the hood this is CloudFormation."><code>cd sam-ingest/
+sam build
+sam deploy --guided
+# Stack name: dea-ingest
+# Region: us-east-1
+# Confirm changes before deploy: Y
+
+aws s3 cp data/customers.csv s3://dea-lab-ab-4821/raw/customers/customers.csv
+# Lambda fires on ObjectCreated — check CloudWatch Logs for the function</code></pre>
+
+          <div class="callout tip"><strong>SAM vs raw CloudFormation.</strong> Anything SAM can deploy, CloudFormation can too — SAM is syntactic sugar plus CLI conveniences. Exam questions about "Infrastructure as Code" for Lambda often accept either SAM or CloudFormation; Step Functions + CDK are alternatives covered elsewhere.</div>
+        </section>
+
+        <section class="section" id="deeper">
+          <h2>Deeper detail and exam edge cases</h2>
+          <p class="lead">Purchasing economics, instance limits that constrain container density, and Batch operational knobs the deck slides only name in passing.</p>
+
+          <h3>Limits and quotas that decide answers</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Limit</th><th>Value</th><th>Adjustable?</th><th>Why it matters</th></tr></thead>
+              <tbody>
+                <tr><td>Spot interruption notice</td><td>2 minutes (<code>instance-action</code> metadata)</td><td>Hard</td><td>Jobs must checkpoint or finish within the window — master nodes and stateful HDFS cannot use Spot</td></tr>
+                <tr><td>Linux EC2 minimum billable</td><td>60 seconds per instance launch</td><td>Hard</td><td>Sub-minute Batch jobs still pay for one minute of instance time</td></tr>
+                <tr><td>Lambda maximum duration</td><td>15 minutes</td><td>Hard</td><td>Anything longer needs Batch, ECS, or EMR — common exam redirect</td></tr>
+                <tr><td>Batch array job size</td><td>Up to 10,000 child jobs (default quota)</td><td>Soft</td><td>Large parametric sweeps need array jobs, not one Step Functions Map with 10,000 Lambdas</td></tr>
+                <tr><td>Batch multi-node parallel</td><td>Up to 128 nodes per job (default)</td><td>Soft</td><td>MPI workloads need multi-node job definition with <code>nodeRangeProperties</code></td></tr>
+                <tr><td>ENI / IP limits per instance type</td><td>Varies by type (e.g. <code>t3.micro</code> low, <code>m5.4xlarge</code> higher)</td><td>Hard</td><td>ECS/Batch on EC2 — each task needs an ENI; dense packing hits network interface quota before CPU</td></tr>
+                <tr><td>EBS-optimised baseline throughput</td><td>Varies by instance size (e.g. 0.25–12.5 Gbps)</td><td>Hard (type/size)</td><td>Shuffle-heavy Spark on EBS without EBS-optimised instances contends with network traffic</td></tr>
+                <tr><td>Instance store persistence</td><td>Ephemeral — lost on stop/terminate</td><td>Hard</td><td>NVMe shuffle data must be recomputed or copied to S3 before instance recycle</td></tr>
+                <tr><td>Placement group cluster</td><td>Single AZ only</td><td>Hard</td><td>Low-latency HPC/Spark within AZ; cannot span AZs in one cluster group</td></tr>
+                <tr><td>SAM local invoke</td><td>Docker on developer machine; no real AWS services</td><td>Hard</td><td>Cannot test VPC, actual DynamoDB, or IAM role chaining locally without mocks</td></tr>
+                <tr><td>CloudFormation stack rollback</td><td>Automatic on failed create; update rollback on failed change</td><td>Hard</td><td>SAM deploy inherits this — a bad template leaves stack in <code>ROLLBACK_COMPLETE</code> (must delete before retry)</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>What you actually pay for</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Billed dimension</th><th>Unit</th><th>How to spend less</th></tr></thead>
+              <tbody>
+                <tr><td>EC2 On-Demand</td><td>Per-second (60 s minimum Linux)</td><td>Spot for fault-tolerant workers; right-size instance family</td></tr>
+                <tr><td>Spot Instances</td><td>Per-second, price varies by pool</td><td><code>SPOT_CAPACITY_OPTIMIZED</code>; checkpoint to S3; mixed On-Demand base</td></tr>
+                <tr><td>Reserved Instances / Savings Plans</td><td>Upfront or hourly commitment 1–3 years</td><td>Cover steady baseline; break-even typically 6–12 months vs On-Demand at &gt;70% utilisation</td></tr>
+                <tr><td>EBS volumes</td><td>GB-month + provisioned IOPS/throughput</td><td>gp3 baseline for shuffle; delete volumes on terminate; instance store for temp data</td></tr>
+                <tr><td>Batch service fee</td><td>No charge — pay underlying compute only</td><td>Batch is cheaper than Glue for long non-Spark container jobs (no DPU premium)</td></tr>
+                <tr><td>Fargate (Batch on Fargate)</td><td>vCPU-second + GB-second</td><td>Scale to zero when queue empty; EC2 Spot cheaper at sustained high utilisation</td></tr>
+                <tr><td>Data transfer</td><td>Cross-AZ, cross-Region, internet egress</td><td>Keep Batch compute in same AZ as S3 bucket where possible; VPC endpoints for S3</td></tr>
+                <tr><td>NAT Gateway</td><td>Per-hour + per-GB processed</td><td>VPC endpoints for S3/ECR so Batch nodes pull images without NAT</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout cost"><strong>Biggest money leak.</strong> On-Demand EMR or Batch workers running 24/7 without Savings Plans or Spot — a <code>r6i.4xlarge</code> left on over a weekend costs more than the entire pipeline output is worth. Use Spot task nodes with On-Demand masters only.</div>
+          <div class="callout danger"><strong>Surprise bill.</strong> Instance store shuffle filled, job wrote final output to local disk only, Spot reclaimed the node — data gone, job restarted from scratch, double compute charge. Always persist results to S3 incrementally.</div>
+
+          <h3>Traps that catch people</h3>
+          <ul>
+            <li><strong>Spot on master node —</strong> EMR or Batch coordinator on Spot loses cluster state on reclaim. Masters and critical singletons stay On-Demand; workers use Spot.</li>
+            <li><strong>No checkpoint within 2 minutes —</strong> Spot sends two-minute warning via instance metadata. Jobs processing hours of work without periodic S3 checkpoints restart from zero.</li>
+            <li><strong>Instance store assumed durable —</strong> Stop (not terminate) an instance with instance store volumes — data survives stop/start on same host, but hardware failure or stop on different hardware loses data. Treat as ephemeral.</li>
+            <li><strong>EBS without EBS-optimised —</strong> General-purpose instances share network with EBS; shuffle-heavy Spark saturates both. Enable EBS-optimised or use <code>i</code>/<code>d</code> NVMe families.</li>
+            <li><strong>maxvCpus ignored —</strong> Compute environment <code>maxvCpus</code> is a soft ceiling Batch respects, but misconfiguring it to account maximum causes runaway Spot scaling during array job floods.</li>
+            <li><strong>Batch vs Glue for Spark —</strong> Batch runs your Docker image; Glue runs managed Spark with DPU billing. A six-hour PySpark ETL belongs on Glue or EMR, not Batch — unless the requirement is a custom non-Spark binary.</li>
+            <li><strong>Batch vs Glue for long non-Spark —</strong> A 48-hour genomics pipeline in a custom container on Batch costs EC2/Spot only. Glue charges DPU-hours even when the job is not Spark-optimised.</li>
+            <li><strong>sam local limitations —</strong> Local invoke runs Lambda in Docker on your laptop — no real VPC peering, no actual RDS Proxy, no KMS decrypt against production keys. Integration tests need deployed stacks.</li>
+            <li><strong>SAM drift —</strong> Manual console changes to Lambda memory or IAM do not update the SAM template. Next <code>sam deploy</code> may revert them or fail — treat CloudFormation stack as source of truth.</li>
+            <li><strong>Graviton without ARM build —</strong> Deploying x86 Docker images to <code>m7g</code> Batch nodes fails at pull or runtime. Multi-arch builds (<code>docker buildx</code>) required.</li>
+          </ul>
+
+          <h3>Troubleshooting playbook</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Symptom</th><th>Most likely cause</th><th>What to check / fix</th></tr></thead>
+              <tbody>
+                <tr><td>Batch jobs stuck in RUNNABLE</td><td>Compute environment at <code>maxvCpus</code> or insufficient Spot capacity</td><td>Batch console → CE → desired vCPUs vs max; try <code>SPOT_CAPACITY_OPTIMIZED</code>; raise max or add On-Demand CE</td></tr>
+                <tr><td>Spot job retries endlessly</td><td>Missing <code>evaluateOnExit</code> for permanent failures</td><td>Job definition retry rules — exit on bad data exit codes; retry only on Spot/host errors</td></tr>
+                <tr><td>Spark shuffle disk full on EBS</td><td>Undersized gp3 or wrong instance family</td><td>Increase EBS size/IOPS; move to <code>i3</code>/<code>i4i</code> instance store; reduce partition count</td></tr>
+                <tr><td>Cannot pack more containers on EC2</td><td>ENI limit per instance type</td><td>AWS docs ENI limits for type; use larger instance or awsvpc mode with fewer tasks per host</td></tr>
+                <tr><td><code>sam deploy</code> fails rollback</td><td>Template error or resource limit</td><td>CloudFormation Events tab; fix template; delete stack in <code>ROLLBACK_COMPLETE</code> before redeploy</td></tr>
+                <tr><td>EMR task nodes die mid-job</td><td>Spot reclaim without speculation</td><td>Enable Spark speculative execution; dynamic allocation; Spot-only on task instance group</td></tr>
+                <tr><td>High cross-AZ transfer on Batch</td><td>Compute and S3 in different AZs</td><td>Align subnet AZ with bucket access pattern; S3 gateway endpoint in VPC</td></tr>
+                <tr><td>Lambda timeout on large file</td><td>15-minute hard limit</td><td>Move to Batch job definition with same container image in ECR</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Production patterns</h3>
+          <p>A typical batch analytics pipeline uses Step Functions to orchestrate: validate input (Lambda) → submit Batch array job (one container per S3 prefix) → merge results (Glue or Redshift COPY). Compute environment: managed EC2 with Spot primary, On-Demand base capacity for queue headroom, <code>maxvCpus</code> set to budget cap. Instance type <code>m6i</code> for balanced workers or <code>r6i</code> when Spark executor memory is the bottleneck.</p>
+          <div class="diagram">
+            <p class="diagram-title">Batch Spot pipeline with checkpointing</p>
+            <div class="flow">
+              <div class="node is-source"><b>S3 input shards</b><small>prefix per array index</small></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-compute pulse"><b>Batch array job</b><small>Spot CE · retry on reclaim</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-store"><b>S3 checkpoint</b><small>partial results every N min</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-serve"><b>Curated prefix</b><small>Glue catalog · Athena</small></div>
+            </div>
+          </div>
+<pre data-lang="shell" data-title="Submit Batch array job over S3 prefixes" data-explain="Array index maps to input shard — Spot interruption retries from checkpoint, not from shard zero."><code>aws batch submit-job \
+  --job-name dea-transform-array \
+  --job-queue dea-etl-queue \
+  --job-definition dea-transform:3 \
+  --array-properties size=64 \
+  --parameters inputPrefix=s3://dea-lab-ab-4821/raw/shards/</code></pre>
+          <p><strong>Anti-pattern:</strong> Running a persistent EMR cluster On-Demand for one nightly 90-minute job — pay 23.5 idle hours daily. Prefer transient EMR with auto-termination, Batch with scale-to-zero, or Glue scheduled jobs.</p>
+
+          <h3>Where this fits with the rest of the exam</h3>
+          <p>Compute choices underpin nearly every pipeline section. EC2 is the substrate for <a href="s13-analytics.html#emr">EMR</a> (Spark clusters), <a href="s04-glue.html">Glue</a> (managed Spark on shared infrastructure), and <a href="s17-containers.html">containers</a> (ECS/EKS). Lambda limits in <a href="s05-lambda.html#limits">Section 5</a> explain when Batch takes over.</p>
+          <ul>
+            <li><a href="s04-glue.html">Section 4 (Glue)</a> — managed Spark ETL with DPU billing when you do not need a custom container.</li>
+            <li><a href="s05-lambda.html">Section 5 (Lambda)</a> — event-driven, sub-15-minute, no cluster management — SAM deploys Lambda stacks.</li>
+            <li><a href="s13-analytics.html#emr">Section 13 (EMR)</a> — long-running Spark/Hive when you need the full Hadoop ecosystem interactively.</li>
+            <li><a href="s17-containers.html#eks">Section 17 (EKS)</a> — Batch on EKS when Kubernetes is already the platform standard.</li>
+          </ul>
+          <div class="callout exam"><strong>How the exam frames the choice.</strong> "Custom Docker, runs 6 hours, no Spark" → Batch. "Managed Spark ETL with Data Catalog" → Glue. "Event-driven, under 15 minutes" → Lambda. "Interactive Spark notebook cluster" → EMR. "Infrastructure as Code for Lambda + API Gateway" → SAM or CloudFormation. Spot is almost always correct for fault-tolerant worker nodes when the question mentions cost optimisation.</div>
+        </section>
+
+        <section class="section" id="interview">
+          <h2>Interview questions</h2>
+          <p class="muted">Answer each one out loud before opening it.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+            <details class="qa">
+              <summary>When would you use Spot instances for a data pipeline, and what safeguards are required?<span class="qa-tag">Cost</span></summary>
+              <div class="qa-body">
+                <p>Spot fits fault-tolerant, stateless work: EMR task nodes (not master/core with HDFS), AWS Batch jobs that checkpoint to S3, and parallel transforms where another node can retry a lost partition.</p>
+                <p>Safeguards: never put irreplaceable state only on Spot; use Spot capacity-optimized allocation; configure Batch/EMR to retry interrupted tasks; persist output to S3 incrementally.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Explain the difference between EBS volumes and instance store for a Spark shuffle-heavy job.<span class="qa-tag">Performance</span></summary>
+              <div class="qa-body">
+                <p><strong>EBS</strong> is network-attached, persistent across stop/start, and suits durable intermediate results. EBS-optimised instances prevent network contention with the NIC.</p>
+                <p><strong>Instance store</strong> is local NVMe — lower latency and higher IOPS for temporary shuffle spill, but ephemeral. If the instance is lost, local data is gone. Best pattern: shuffle on instance store, write final output to S3.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How do you choose between AWS Batch and AWS Glue for an ETL job?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p><strong>Glue</strong> when the job is Spark/Python ETL integrated with the Data Catalog, crawlers and job bookmarks — least code for standard S3→S3 transforms.</p>
+                <p><strong>Batch</strong> when you need a custom Docker image (specific Linux libs, non-JVM binary, proprietary tool), MPI/multi-node beyond Glue's model, or runtime control Glue does not offer. Batch is general compute; Glue is specialised ETL.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What are the core components of AWS Batch and how does scheduling work?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p><strong>Job definition</strong> — Docker image, resource requirements, env vars, retry policy. <strong>Job queue</strong> — holds submitted jobs with priority. <strong>Compute environment</strong> — EC2, Spot or Fargate capacity Batch scales. The scheduler places queued jobs onto available compute when vCPU/memory match.</p>
+                <p>Multiple queues can feed one compute environment; high-priority queues preempt lower ones when capacity is scarce.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What instance family would you pick for an in-memory Spark aggregation over 500 GB of data?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p><strong>Memory Optimized</strong> — <code>r6i</code> or <code>r7g</code> (Graviton). The working set must fit in executor memory to avoid spilling to disk. Size executors so aggregate memory across the cluster holds the hot dataset; use <code>x</code> instances only if you need extreme memory per node.</p>
+                <p>If data must live locally for I/O, add <code>d</code> or <code>i</code> variants for NVMe spill — but memory is the primary constraint for "in-memory aggregation".</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What is SAM's relationship to CloudFormation?<span class="qa-tag">Architecture</span></summary>
+              <div class="qa-body">
+                <p>SAM is a CloudFormation <strong>transform</strong> (<code>AWS::Serverless-2016-10-31</code>). Short resource types like <code>AWS::Serverless::Function</code> expand into Lambda functions, IAM roles, event source mappings and permissions. <code>sam deploy</code> uploads artifacts and executes a CloudFormation stack create/update.</p>
+                <p>You can mix SAM and native CloudFormation resources in one template — add an <code>AWS::S3::Bucket</code> beside a Serverless Function in the same file.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Lambda cannot run your 45-minute containerised transformation. What do you recommend?<span class="qa-tag">Exam</span></summary>
+              <div class="qa-body">
+                <p><strong>AWS Batch</strong> with a job definition pointing at your Docker image in ECR — no 15-minute limit, scales to zero on Fargate or Spot EC2. Alternatives: Glue if it can be rewritten as Spark; EMR if you need a persistent Spark cluster; ECS/Fargate long-running task if it is always-on rather than batch.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What is the purpose of a Batch array job versus a Step Functions Map state?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p><strong>Batch array jobs</strong> launch thousands of identical containers differentiated by array index — best for homogeneous parallel work (one image, many input shards) with native Batch scheduling and Spot scaling.</p>
+                <p><strong>Step Functions Map</strong> orchestrates heterogeneous steps with visual workflow, error handling and human approval — better when each branch has different logic or you need to coordinate Batch with Lambda, Glue and SNS in one DAG.</p>
+              </div>
+            </details>
+          </div>
+        </section>
+
+        <section class="section" id="practice">
+          <h2>Hands-on practice</h2>
+          <p class="muted">Free tier where possible. Delete everything at the end of each task.</p>
+          <ol class="practice-list">
+            <li class="practice">
+              <p class="practice-task">Launch a <code>t3.micro</code> EC2 instance (free tier), attach a 10 GB gp3 EBS volume, and copy <code>data/customers.csv</code> from your lab bucket to the instance and back with the AWS CLI.</p>
+              <span class="console-path">EC2 → Launch instance → Amazon Linux 2023</span>
+              <p class="practice-expect"><code>aws s3 cp</code> from the instance succeeds using an instance profile with S3 read access.</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">Console + CLI</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Launch <code>t3.micro</code> in <code>us-east-1</code> with default VPC.</li>
+                    <li>Create IAM role <code>EC2-S3ReadLab</code> with <code>AmazonS3ReadOnlyAccess</code>; attach as instance profile.</li>
+                    <li>SSH in, install AWS CLI v2, run:</li>
+                  </ol>
+<pre data-lang="shell"><code>aws s3 cp s3://dea-lab-ab-4821/raw/customers/customers.csv /tmp/
+aws s3 cp /tmp/customers.csv s3://dea-lab-ab-4821/staging/customers/from-ec2.csv</code></pre>
+                  <p class="muted">Cleanup: terminate instance; delete staging copy if not needed.</p>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Create a minimal AWS Batch setup on Fargate: compute environment, job queue, job definition (public Amazon Linux container), submit one job and confirm it reaches SUCCEEDED.</p>
+              <span class="console-path">AWS Batch → Create compute environment → Fargate</span>
+              <p class="practice-expect">Job status SUCCEEDED; CloudWatch Logs show container output.</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">Console</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li><strong>Batch → Compute environments → Create</strong> → Fargate, enabled.</li>
+                    <li><strong>Job queues → Create</strong> → link to the compute environment, priority 1.</li>
+                    <li><strong>Job definitions → Create</strong> → container image <code>public.ecr.aws/amazonlinux/amazonlinux:latest</code>, command <code>echo,hello-batch</code>, vCPU 0.25, memory 512 MB.</li>
+                    <li><strong>Jobs → Submit</strong> → select queue and definition.</li>
+                  </ol>
+                  <p class="muted">Cleanup: disable/delete compute environment and delete job definition. Fargate charges per second while the job runs.</p>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task"> Initialise a SAM project with one Lambda function, run <code>sam build</code> and <code>sam local invoke</code> with a synthetic S3 event before deploying.</p>
+              <span class="console-path">Terminal — SAM CLI</span>
+              <p class="practice-expect">Local invoke returns HTTP 200 and logs the simulated S3 bucket/key from the test event.</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">CLI</span></summary>
+                <div class="qa-body">
+<pre data-lang="shell"><code>sam init --runtime python3.12 --name dea-sam-lab --app-template hello-world
+cd dea-sam-lab
+sam build
+sam local invoke HelloWorldFunction --event events/event.json
+
+# Optional deploy (creates real resources):
+# sam deploy --guided</code></pre>
+                  <p class="muted">Cleanup after deploy: <code>aws cloudformation delete-stack --stack-name dea-sam-lab</code>.</p>
+                </div>
+              </details>
+            </li>
+          </ol>
+        </section>
+
+        <section class="section" id="recap">
+          <h2>Recap</h2>
+          <div class="recap">
+            <ul class="checklist">
+              <li>EC2 = resizable VMs; data workloads use it via EMR, Batch and custom agents.</li>
+              <li>Instance names: family + generation + attributes + size — <code>r</code>/<code>x</code> memory, <code>i</code>/<code>d</code> NVMe, <code>c</code> CPU, <code>g</code>/<code>p</code> GPU.</li>
+              <li>Spot for EMR task nodes and Batch — interruptible with 2-min warning; not for master or stateful HDFS.</li>
+              <li>Instance store = fast ephemeral; EBS = persistent network storage; EBS-optimised dedicates bandwidth.</li>
+              <li>Batch: job definition → queue → scheduler → compute environment (EC2/Spot/Fargate) → Docker container.</li>
+              <li>Lambda (&lt;15 min, event) · Glue (managed Spark ETL) · Batch (any Docker, long-running) · EMR (Spark cluster).</li>
+              <li>Array jobs for parametric parallelism; job dependencies for simple DAGs; multi-node for MPI.</li>
+              <li>SAM = CloudFormation transform; flow is template → sam build → sam deploy.</li>
+            </ul>
+            <p style="margin-top:1rem;">
+              <button type="button" data-complete="section-12">Mark complete</button>
+            </p>
+          </div>
+        </section>
+
+      </div>
+
+      <aside class="toc" aria-label="On this page">
+        <strong>On this page</strong>
+        <ol>
+          <li><a href="#lectures">Lectures</a></li>
+          <li><a href="#ec2">EC2</a></li>
+          <li><a href="#instance-types">Instance types</a></li>
+          <li><a href="#batch">AWS Batch</a></li>
+          <li><a href="#sam">AWS SAM</a></li>
+          <li><a href="#deeper">Deeper detail</a></li>
+          <li><a href="#interview">Interview questions</a></li>
+          <li><a href="#practice">Hands-on practice</a></li>
+          <li><a href="#recap">Recap</a></li>
+        </ol>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<footer class="footer">AWS Certified Data Engineer Associate (DEA-C01) · Section 12 · Offline study edition</footer>
+</body>
+</html>

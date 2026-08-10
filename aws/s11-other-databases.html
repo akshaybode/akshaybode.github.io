@@ -1,0 +1,896 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="DEA-C01 Section 11: RDS and Aurora, DocumentDB, Neptune, Keyspaces, MemoryDB for Redis, Timestream, and a purpose-built database selection guide for the exam.">
+<title>Section 11 — Other Database Services | AWS Data Engineer DEA-C01 Notes</title>
+<link rel="stylesheet" href="assets/aws.css">
+<script defer src="assets/search-index.js"></script>
+<script defer src="assets/code-highlight.js"></script>
+<script defer src="assets/aws.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">Course section 11 of 21 · AWS Certified Data Engineer Associate</p>
+    <h1>Other Database Services</h1>
+    <p class="subtitle">Relational engines on RDS and Aurora, purpose-built NoSQL and graph stores, Cassandra-compatible Keyspaces, durable in-memory MemoryDB, and time-series Timestream — plus the decision table that turns exam scenario wording into the right service.</p>
+    <div class="hero-meta">
+      <span class="chip">35 slides · ~40min</span>
+      <span class="chip">Exam domain: Data Store Management (26%)</span>
+      <span class="chip">Deck slides 374–408</span>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <nav class="pager" aria-label="Section navigation">
+    <a href="s10-redshift.html">← Redshift Datawarehouse</a>
+    <a href="index.html">Course contents</a>
+    <a href="s12-compute.html">Next: Compute Services →</a>
+  </nav>
+
+  <main id="main">
+    <div class="layout">
+      <div class="content">
+
+        <section class="section" id="lectures">
+          <h2>Lectures in this section</h2>
+          <p class="muted">These services sit beside <a href="s09-dynamodb.html">DynamoDB</a> and <a href="s10-redshift.html">Redshift</a> in Domain 2. The exam rarely asks deep internals — it asks which database fits a scenario.</p>
+          <ol class="lecture-list">
+            <li class="lecture">
+              <a class="lec-title" href="#rds">Amazon RDS — engines, security, ACID and operations</a>
+              <span class="lec-time">~12:00</span>
+              <span class="lec-src">Slides 375–383</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#aurora">Amazon Aurora — performance, Serverless and pricing</a>
+              <span class="lec-time">~6:00</span>
+              <span class="lec-src">Slides 385–388</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#documentdb">Amazon DocumentDB — MongoDB-compatible documents</a>
+              <span class="lec-time">~4:00</span>
+              <span class="lec-src">Slides 390–392</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#neptune">Amazon Neptune — graph database</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">Slides 394–396</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#keyspaces">Amazon Keyspaces — Cassandra-compatible</a>
+              <span class="lec-time">~3:00</span>
+              <span class="lec-src">Slides 398–399</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#memorydb">Amazon MemoryDB for Redis</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">Slides 401–403</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#timestream">Amazon Timestream — time-series analytics</a>
+              <span class="lec-time">~6:00</span>
+              <span class="lec-src">Slides 405–408</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#database-selection">Purpose-built database selection</a>
+              <span class="lec-time">~5:00</span>
+            </li>
+          </ol>
+        </section>
+
+        <section class="section" id="rds">
+          <h2>Amazon RDS</h2>
+          <p class="lead"><strong>Amazon Relational Database Service (RDS)</strong> is a fully managed relational database. You choose an engine; AWS handles provisioning, patching, backups and Multi-AZ failover. For data engineering it is the operational store behind pipelines — metadata catalogs, staging schemas, and transactional sources for DMS and Glue CDC jobs.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-375.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-375.png" alt="Course slide introducing Amazon RDS as a managed relational database service." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 375</span>Section opener for RDS. The exam treats RDS as the default when the question says SQL, ACID transactions, or a specific open-source engine you already run on premises.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-376.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-376.png" alt="Slide listing RDS characteristics: managed, scalable, encrypted, and supported engines MySQL, PostgreSQL, MariaDB, Oracle, SQL Server, and Aurora." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 376</span>RDS supports six engines. Aurora is also available through RDS APIs but is a separate storage architecture — do not treat it as "just another engine" on exam questions about read scaling or storage auto-growth.</figcaption>
+          </figure>
+
+          <h3>Supported engines</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Engine</th><th>Typical exam scenario</th><th>Notable limit</th></tr></thead>
+              <tbody>
+                <tr><td>MySQL / MariaDB</td><td>Open-source OLTP, web apps, read replicas for reporting</td><td>MySQL table size limit 16 TiB — partition large tables</td></tr>
+                <tr><td>PostgreSQL</td><td>JSON columns, geospatial, complex SQL, Glue zero-ETL targets</td><td>Tune autovacuum; use <code>COPY</code> for bulk loads</td></tr>
+                <tr><td>Oracle / SQL Server</td><td>Lift-and-shift from on-premises commercial DB</td><td>Licensing costs; SQL Server failover needs enough provisioned IOPS</td></tr>
+                <tr><td>Aurora</td><td>MySQL/PostgreSQL compatible with higher throughput and storage auto-scale</td><td>See <a href="#aurora">Aurora section</a> — different failover and replica model</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Security — KMS, backups and patching</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-377.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-377.png" alt="Slide on RDS security: KMS envelope encryption, automated backups and snapshots, patch management, and AWS Backup integration." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 377</span>Encryption at rest uses KMS with envelope encryption — RDS generates a data key, encrypts it with your CMK, then encrypts storage. In transit uses TLS. Automated backups run during a daily window; manual snapshots persist until deleted.</figcaption>
+          </figure>
+
+          <h3>ACID compliance and locking</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-378.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-378.png" alt="Slide defining ACID properties: Atomicity, Consistency, Isolation, Durability for RDS data reliability." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 378</span>All RDS engines provide ACID transactions. Pipelines that need exactly-once semantics across systems still need idempotent writes at the application layer — RDS guarantees consistency inside one database, not across S3 and Redshift.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-379.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-379.png" alt="Slide on RDS locking: exclusive locks block reads and writes, shared locks allow concurrent reads, locks apply at table and row level." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 379</span>Row- and table-level locks coordinate concurrent transactions. Exclusive locks block other writers and readers; shared locks allow concurrent reads.</figcaption>
+          </figure>
+
+          <div class="callout info"><strong>Deck correction — lock syntax.</strong> Slide 379 swaps the PostgreSQL syntax labels: <code>FOR SHARE</code> acquires a shared (read) lock; <code>FOR UPDATE</code> acquires an exclusive (write) lock. The descriptions are correct; only the syntax lines are reversed on the slide.</div>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-380.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-380.png" alt="Slide showing PostgreSQL lock commands and deadlock explanation when transactions wait on each other's locks." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 380</span>Deadlocks occur when two transactions hold locks the other needs — PostgreSQL detects them and aborts one transaction. Design ETL jobs to lock rows in a consistent order and keep transactions short.</figcaption>
+          </figure>
+
+          <pre data-lang="sql" data-title="RDS/Aurora PostgreSQL — read with deadlock-safe ordering" data-explain="Lock rows in primary-key order so concurrent jobs never acquire locks in opposite sequences. Keep the transaction short."><code>-- ETL job updating pipeline watermark rows: always lock in ascending id order
+BEGIN;
+
+SELECT status, last_run_at
+FROM etl_watermarks
+WHERE pipeline_id IN (101, 205, 310)
+ORDER BY pipeline_id          -- consistent lock order prevents deadlocks
+FOR UPDATE;
+
+UPDATE etl_watermarks
+SET last_run_at = NOW(), status = 'running'
+WHERE pipeline_id = 205;
+
+COMMIT;
+
+-- Shared read lock (multiple readers OK):
+-- SELECT * FROM etl_watermarks WHERE pipeline_id = 205 FOR SHARE;
+
+-- Table-level exclusive lock (blocks all access — use sparingly):
+-- LOCK TABLE etl_watermarks IN ACCESS EXCLUSIVE MODE;</code></pre>
+
+          <h3>Multi-AZ versus read replicas</h3>
+          <p>The exam loves this distinction. <strong>Multi-AZ</strong> is for high availability; <strong>read replicas</strong> are for read scaling and disaster recovery.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Feature</th><th>Multi-AZ (standby)</th><th>Read replica</th></tr></thead>
+              <tbody>
+                <tr><td>Purpose</td><td>Automatic failover on primary failure</td><td>Scale read traffic; optional DR in another Region</td></tr>
+                <tr><td>Replication</td><td>Synchronous to standby in another AZ</td><td>Asynchronous — replica can lag seconds</td></tr>
+                <tr><td>Endpoint</td><td>Single DNS endpoint fails over to standby</td><td>Separate read endpoint per replica</td></tr>
+                <tr><td>Readable?</td><td>Standby is <em>not</em> readable (except Aurora — see below)</td><td>Yes — route SELECT queries to replica endpoint</td></tr>
+                <tr><td>Cross-Region</td><td>Same Region only</td><td>Yes — create replica in another Region</td></tr>
+                <tr><td>Promotable</td><td>Standby becomes primary on failover (automatic)</td><td>Manual promotion to standalone primary</td></tr>
+                <tr><td>Exam trap</td><td>"Reduce read load" → wrong answer</td><td>"Offload reporting queries" → correct</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>RDS Proxy</h3>
+          <p><strong>Amazon RDS Proxy</strong> sits between applications and RDS/Aurora and pools database connections. Lambda functions that open a new connection per invocation exhaust the database's <code>max_connections</code> limit quickly; RDS Proxy multiplexes thousands of client connections onto a smaller pool of DB connections. It also improves failover recovery — existing proxy connections survive an Aurora/RDS failover without the application reconnecting to a new host IP.</p>
+
+          <h3>Operational guidelines and tuning</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-381.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-381.png" alt="Slide listing RDS operational guidelines: CloudWatch monitoring, scaling storage, backups during low IOPS, provision I/O capacity, TTL under 30 seconds, and failover testing." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 381</span>Monitor CPU, memory, replica lag and free storage in CloudWatch. Scale storage before you hit the limit — RDS can auto-grow but provisioned IOPS must be sized for peak write load.</figcaption>
+          </figure>
+
+          <div class="callout info"><strong>Deck correction — "TTL under 30 seconds".</strong> RDS has no TTL setting. The slide likely conflates DynamoDB TTL with RDS, or refers to DNS TTL for faster failover detection. For RDS, set a low <strong>client connection timeout</strong> and use RDS Proxy so applications reconnect quickly after failover.</div>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-382.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-382.png" alt="Slide on RDS engine best practices: allocate enough RAM for working set, monitor ReadIOPS, use Enhanced Monitoring and Performance Insights." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 382</span>The working-set rule: if your hot data fits in RAM, reads come from the buffer cache and ReadIOPS stay low and flat. When ReadIOPS climb steadily, you are disk-bound — scale up instance memory or add read replicas.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-383.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-383.png" alt="Slide on engine-specific RDS best practices for MySQL partitioning, Oracle FlashGrid, PostgreSQL autovacuum, and SQL Server failover IOPS." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 383</span>Engine-specific tuning matters in migration scenarios. PostgreSQL autovacuum prevents table bloat that slows analytical queries against operational replicas.</figcaption>
+          </figure>
+        </section>
+
+        <section class="section" id="aurora">
+          <h2>Amazon Aurora</h2>
+          <p class="lead"><strong>Amazon Aurora</strong> is AWS's cloud-native relational engine, compatible with MySQL and PostgreSQL. It separates compute from a distributed storage volume that replicates six copies across three Availability Zones and auto-grows in 10 GB increments up to 128 TiB.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-385.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-385.png" alt="Slide on Aurora purpose and features: MySQL and PostgreSQL compatible, up to 5x MySQL and 3x PostgreSQL performance, scales 10 GB to 128 TB, up to 15 read replicas, IAM auth and encryption." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 385</span>Aurora storage is shared — adding a read replica does not copy data; the new instance attaches to the same volume. Replicas can serve reads with low lag and can be promoted to primary.</figcaption>
+          </figure>
+
+          <h3>Aurora storage and replicas</h3>
+          <ul>
+            <li><strong>6 copies, 3 AZs</strong> — quorum writes; survives loss of an entire AZ without data loss.</li>
+            <li><strong>Up to 15 read replicas</strong> — all share the same storage layer; typical replica lag under 100 ms.</li>
+            <li><strong>Aurora Global Database</strong> — one primary Region, up to five secondary Regions with sub-second cross-Region replication for disaster recovery.</li>
+            <li><strong>Aurora zero-ETL integrations</strong> — near-real-time replication from Aurora MySQL/PostgreSQL into <a href="s10-redshift.html">Redshift</a> without building a custom CDC pipeline.</li>
+            <li><strong>Babelfish for Aurora PostgreSQL</strong> — translates T-SQL from SQL Server so applications can migrate with minimal code changes.</li>
+          </ul>
+
+          <h3>Aurora Serverless v2</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-386.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-386.png" alt="Slide on Aurora Serverless: automatic scaling, on-demand usage, no instance management, billed in Aurora Capacity Units." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 386</span>Aurora Serverless v2 scales ACUs (Aurora Capacity Units) up and down in fractions of a second. Minimum 0.5 ACU; scales to handle spikes without pre-provisioning. Ideal for dev/test, variable workloads, and new projects with unknown traffic.</figcaption>
+          </figure>
+
+          <pre data-lang="python" data-title="boto3 — RDS Data API against Aurora Serverless" data-explain="The Data API runs SQL over HTTPS without a persistent TCP connection — ideal for Lambda and intermittent jobs. Requires an Aurora cluster with the HTTP endpoint enabled."><code>import boto3
+
+client = boto3.client("rds-data", region_name="us-east-1")
+
+response = client.execute_statement(
+    resourceArn="arn:aws:rds:us-east-1:123456789012:cluster:dea-aurora-sls",
+    secretArn="arn:aws:secretsmanager:us-east-1:123456789012:secret:dea/db-creds",
+    database="pipeline_meta",
+    sql="""
+        SELECT pipeline_id, status, last_run_at
+        FROM etl_watermarks
+        WHERE status = :s
+        ORDER BY pipeline_id
+    """,
+    parameters=[{"name": "s", "value": {"stringValue": "failed"}}],
+)
+
+for record in response["records"]:
+    print(record)</code></pre>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-387.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-387.png" alt="Slide listing Aurora use cases: caching, leaderboards, and session store." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 387</span>The deck lists caching, leaderboards and session store — those are in-memory Redis patterns. Aurora's real use cases are OLTP at scale: SaaS backends, financial ledgers, and PostgreSQL/MySQL apps that outgrow standard RDS performance.</figcaption>
+          </figure>
+
+          <div class="callout info"><strong>Deck correction — Aurora use cases.</strong> Caching, leaderboards and session stores belong to <a href="#memorydb">MemoryDB</a> or ElastiCache, not Aurora. Aurora wins when you need MySQL/PostgreSQL compatibility with higher throughput, storage auto-scale, or zero-ETL to Redshift.</div>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-388.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-388.png" alt="Slide on Aurora pricing: node hours, data transfer, backup storage beyond free tier, and Reserved Instance discounts." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 388</span>Aurora bills compute per instance-hour plus storage per GB-month and I/O (Aurora I/O-Optimized removes per-I/O charges for I/O-heavy workloads). Backup storage beyond the free allocation (equal to DB size) is charged separately.</figcaption>
+          </figure>
+        </section>
+
+        <section class="section" id="documentdb">
+          <h2>Amazon DocumentDB</h2>
+          <p class="lead"><strong>Amazon DocumentDB (with MongoDB compatibility)</strong> is a fully managed document database for JSON-like workloads. It speaks the MongoDB API — existing drivers and tools work with minimal changes — but runs on a separate, purpose-built storage engine optimised for AWS.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-390.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-390.png" alt="Slide on DocumentDB: MongoDB-compatible managed NoSQL, serverless scaling, multi-AZ replication, IAM auth and encryption." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 390</span>Choose DocumentDB when the question mentions MongoDB, BSON documents, or flexible nested schemas with secondary indexes — not when it mentions DynamoDB-style partition keys.</figcaption>
+          </figure>
+
+          <div class="slide-row">
+            <figure class="slide-fig">
+              <a href="assets/slides/slide-391.png" target="_blank" rel="noopener">
+                <img src="assets/slides/slide-391.png" alt="Slide on DocumentDB pricing: instance hours, storage and I/O, backup storage." loading="lazy">
+              </a>
+              <figcaption><span class="slide-no">Slide 391</span>DocumentDB charges by instance class hours plus storage and I/O. Cluster storage grows automatically; you scale compute by changing instance size or adding replicas.</figcaption>
+            </figure>
+            <figure class="slide-fig">
+              <a href="assets/slides/slide-392.png" target="_blank" rel="noopener">
+                <img src="assets/slides/slide-392.png" alt="Duplicate DocumentDB pricing slide with instance hours, storage I/O and backup costs." loading="lazy">
+              </a>
+              <figcaption><span class="slide-no">Slide 392</span>Duplicate of slide 391 in the deck — pricing model is instance + storage + I/O + backup beyond retention, not on-demand request pricing like DynamoDB.</figcaption>
+            </figure>
+          </div>
+
+          <div class="callout exam"><strong>DocumentDB vs DynamoDB.</strong> "MongoDB API" or "document/JSON with MongoDB API" → DocumentDB. "Single-digit millisecond key-value at any scale with partition key" → DynamoDB. DocumentDB supports rich document queries and indexes; DynamoDB requires access patterns designed upfront.</div>
+        </section>
+
+        <section class="section" id="neptune">
+          <h2>Amazon Neptune</h2>
+          <p class="lead"><strong>Amazon Neptune</strong> is a fully managed graph database for highly connected data — fraud rings, social networks, knowledge graphs, and recommendation engines where relationships matter more than rows.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-394.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-394.png" alt="Slide on Neptune overview: graph database for knowledge graphs, fraud detection, recommendations, property graph and RDF data models." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 394</span>Two graph models: <strong>property graph</strong> (vertices and edges with properties — Gremlin, openCypher) and <strong>RDF</strong> (subject-predicate-object triples — SPARQL).</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-395.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-395.png" alt="Slide on Neptune features: fully managed, 3-AZ HA, KMS encryption, scales to 64 TB, up to 15 read replicas, millisecond graph queries." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 395</span>Neptune scales storage to 64 TiB and supports up to 15 read replicas. Graph traversals that would need many SQL joins run in milliseconds because edges are first-class citizens.</figcaption>
+          </figure>
+
+          <h3>Query languages and Neptune Analytics</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Language</th><th>Model</th><th>When to use</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Gremlin</strong></td><td>Property graph (Apache TinkerPop)</td><td>Imperative traversals — "find friends-of-friends within 3 hops"</td></tr>
+                <tr><td><strong>openCypher</strong></td><td>Property graph</td><td>Declarative pattern matching — familiar to Neo4j users</td></tr>
+                <tr><td><strong>SPARQL</strong></td><td>RDF triples</td><td>Knowledge graphs, ontologies, semantic web data</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p><strong>Amazon Neptune Analytics</strong> is a separate analytics engine for large-scale graph analytics (PageRank, community detection) over data in S3 or Neptune — use it when the question asks for graph <em>analytics</em> at batch scale, not millisecond OLTP traversals.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-396.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-396.png" alt="Slide on Neptune integration with Lambda S3 SageMaker, query optimization, Gremlin and SPARQL support, and instance-based pricing." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 396</span>Neptune integrates with Lambda (stream processing), S3 (bulk load via <code>neptune-loader</code>), and SageMaker (ML on graph embeddings). Pricing is per instance hour plus storage — not serverless per query.</figcaption>
+          </figure>
+        </section>
+
+        <section class="section" id="keyspaces">
+          <h2>Amazon Keyspaces (for Apache Cassandra)</h2>
+          <p class="lead"><strong>Amazon Keyspaces</strong> is a serverless, Cassandra-compatible wide-column database. Applications using the Cassandra Query Language (CQL) and existing Cassandra drivers connect with minimal code changes.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-398.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-398.png" alt="Slide on Keyspaces: Cassandra-compatible managed NoSQL, serverless scaling, multi-AZ durability, IAM auth and encryption." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 398</span>Keyspaces handles the Cassandra operational burden — no gossip protocol tuning, no node replacement. Data is replicated across multiple AZs automatically.</figcaption>
+          </figure>
+
+          <h3>CQL and capacity modes</h3>
+          <p>Tables are defined with CQL (<code>CREATE TABLE</code>, partition key, clustering columns). Two capacity modes mirror DynamoDB's model:</p>
+          <ul>
+            <li><strong>On-demand</strong> — pay per read/write request; good for unpredictable or spiky traffic.</li>
+            <li><strong>Provisioned</strong> — set RCU/WCU (called read/write capacity units in Keyspaces); cheaper at steady high throughput.</li>
+          </ul>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-399.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-399.png" alt="Slide on Keyspaces pricing: on-demand throughput and storage versus provisioned capacity for predictable workloads." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 399</span>"Cassandra workload" or "CQL" in an exam question points here. Also consider Keyspaces when migrating an on-premises Cassandra cluster to AWS without re-architecting.</figcaption>
+          </figure>
+        </section>
+
+        <section class="section" id="memorydb">
+          <h2>Amazon MemoryDB for Redis</h2>
+          <p class="lead"><strong>Amazon MemoryDB for Redis</strong> is a durable, in-memory database compatible with Redis. Unlike ElastiCache, MemoryDB writes every transaction to a multi-AZ transaction log before acknowledging — so it is a primary database, not just a cache.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-401.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-401.png" alt="Slide on MemoryDB: Redis-compatible in-memory database with multi-AZ durability, snapshotting, IAM auth and encryption." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 401</span>MemoryDB stores data in memory for microsecond read latency while persisting writes through a distributed transaction log across AZs. Snapshots to S3 provide point-in-time recovery.</figcaption>
+          </figure>
+
+          <h3>MemoryDB versus ElastiCache for Redis</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Aspect</th><th>MemoryDB for Redis</th><th>ElastiCache for Redis</th></tr></thead>
+              <tbody>
+                <tr><td>Primary use</td><td>Durable primary database</td><td>Cache in front of RDS/S3/DynamoDB</td></tr>
+                <tr><td>Durability</td><td>Multi-AZ transaction log — data survives node failure</td><td>Optional snapshots; cache can be rebuilt from source</td></tr>
+                <tr><td>Latency</td><td>Microsecond reads</td><td>Microsecond reads</td></tr>
+                <tr><td>Exam phrase</td><td>"Microsecond latency <em>and durable</em>"</td><td>"Cache" or "reduce database load"</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-402.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-402.png" alt="Slide on MemoryDB use cases: high-performance caching, gaming leaderboards, and web session store." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 402</span>Leaderboards, session stores and real-time counters are classic Redis patterns. MemoryDB adds durability so you can treat Redis data structures as the system of record.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-403.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-403.png" alt="Slide on MemoryDB pricing: node hours, data transfer, backup storage, and Reserved Instance options." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 403</span>MemoryDB pricing is node-based (like Aurora provisioned), not per-request. Size nodes for working-set memory — data must fit in RAM.</figcaption>
+          </figure>
+        </section>
+
+        <section class="section" id="timestream">
+          <h2>Amazon Timestream</h2>
+          <p class="lead"><strong>Amazon Timestream</strong> is a serverless time-series database optimised for IoT telemetry, application metrics, DevOps monitoring and financial tick data. It automatically tiers data between a memory store (fast recent queries) and a magnetic store (cost-optimised historical data).</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-405.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-405.png" alt="Slide on Timestream: serverless time-series database for IoT, logs, DevOps and financial data with time-series optimised functions." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 405</span>Timestream includes built-in time-series functions — interpolation, smoothing, approximate percentile — so you do not need to rewrite SQL for gap-filling and downsampling.</figcaption>
+          </figure>
+
+          <h3>Memory store and magnetic store</h3>
+          <ul>
+            <li><strong>Memory store</strong> — holds recent data (default retention: 24 hours to 8760 hours). Optimised for high-ingest and low-latency queries on hot data.</li>
+            <li><strong>Magnetic store</strong> — automatically moves older records based on retention policy. Cheaper storage for historical analysis.</li>
+            <li><strong>Retention policies</strong> — configure separately for each tier. Deletes are automatic when records age out.</li>
+          </ul>
+
+          <p><strong>Amazon Timestream for InfluxDB</strong> is a managed InfluxDB-compatible service for teams already on InfluxDB OSS — separate from native Timestream but serves the same time-series exam scenarios when "InfluxDB" appears explicitly.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-406.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-406.png" alt="Architecture diagram showing Timestream ingestion from Lambda, MSK, Flink, Kinesis and IoT Core, with output to Grafana, QuickSight and SageMaker." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 406</span>Timestream accepts writes from Lambda, Kinesis, MSK, Managed Flink and IoT Core. Downstream consumers include Managed Grafana, QuickSight and SageMaker for dashboards and anomaly detection.</figcaption>
+          </figure>
+
+          <div class="diagram">
+            <p class="diagram-title">IoT telemetry → Timestream → visualization (animated flow)</p>
+            <div class="flow">
+              <div class="node is-source"><b>IoT devices</b><small>sensors · PLCs · gateways</small></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-store"><b>Kinesis Data Streams</b><small>transport events</small></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-compute pulse"><b>Managed Flink</b><small>transform · aggregate</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-store"><b>Timestream</b><small>memory + magnetic tiers</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-serve"><b>Grafana / QuickSight</b><small>dashboards · alerts</small></div>
+            </div>
+          </div>
+
+          <div class="slide-row">
+            <figure class="slide-fig">
+              <a href="assets/slides/slide-407.png" target="_blank" rel="noopener">
+                <img src="assets/slides/slide-407.png" alt="IoT pipeline diagram: devices to Kinesis to Managed Flink to Timestream to Managed Grafana for real-time metrics visualization." loading="lazy">
+              </a>
+              <figcaption><span class="slide-no">Slide 407</span>Reference IoT pipeline from the deck: devices publish to Kinesis, Flink transforms and inserts into Timestream, Grafana visualises metrics and logs in near real time.</figcaption>
+            </figure>
+            <figure class="slide-fig">
+              <a href="assets/slides/slide-408.png" target="_blank" rel="noopener">
+                <img src="assets/slides/slide-408.png" alt="Alternative IoT pipeline using Kinesis Data Firehose instead of Flink to load Timestream with Grafana visualization." loading="lazy">
+              </a>
+              <figcaption><span class="slide-no">Slide 408</span>Variant without Flink: Firehose can deliver batched records directly to Timestream when you need near-real-time (not sub-second) ingestion with less operational overhead.</figcaption>
+            </figure>
+          </div>
+
+          <pre data-lang="python" data-title="Timestream — write records and query with boto3" data-explain="Timestream uses a separate write client. Dimensions are indexed metadata; measures are the numeric values. Queries use a SQL-like dialect with time-series functions."><code>import boto3
+from datetime import datetime
+
+write = boto3.client("timestream-write", region_name="us-east-1")
+query = boto3.client("timestream-query", region_name="us-east-1")
+
+DB = "dea_metrics"
+TABLE = "sensor_readings"
+NOW = str(int(datetime.utcnow().timestamp() * 1000))  # epoch ms
+
+write.write_records(
+    DatabaseName=DB,
+    TableName=TABLE,
+    Records=[{
+        "Dimensions": [
+            {"Name": "device_id", "Value": "plc-042"},
+            {"Name": "region", "Value": "us-east-1"},
+        ],
+        "MeasureName": "temperature",
+        "MeasureValue": "38.7",
+        "MeasureValueType": "DOUBLE",
+        "Time": NOW,
+        "TimeUnit": "MILLISECONDS",
+    }],
+)
+
+result = query.query(
+    QueryString=f"""
+        SELECT device_id,
+               AVG(measure_value::double) AS avg_temp
+        FROM {DB}.{TABLE}
+        WHERE time &gt; ago(1h)
+          AND measure_name = 'temperature'
+        GROUP BY device_id
+        ORDER BY avg_temp DESC
+    """
+)
+for row in result["Rows"]:
+    print(row["Data"])</code></pre>
+        </section>
+
+        <section class="section" id="database-selection">
+          <h2>Purpose-built database selection</h2>
+          <p class="lead">Domain 2 service-selection questions describe a data model and access pattern. Match the phrase to the service before comparing cost or operational overhead.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Service</th>
+                  <th>Data model</th>
+                  <th>Access pattern</th>
+                  <th>Exam phrase that points here</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>RDS / Aurora</strong></td>
+                  <td>Relational tables, SQL, joins</td>
+                  <td>ACID OLTP, complex queries, known schema</td>
+                  <td>"SQL", "ACID transactions", "PostgreSQL/MySQL", "join across tables"</td>
+                </tr>
+                <tr>
+                  <td><strong>DynamoDB</strong></td>
+                  <td>Key-value / document, partition + sort key</td>
+                  <td>Single-digit ms key lookups at any scale</td>
+                  <td>"partition key", "millisecond latency at scale", "serverless NoSQL"</td>
+                </tr>
+                <tr>
+                  <td><strong>DocumentDB</strong></td>
+                  <td>JSON/BSON documents</td>
+                  <td>Flexible schema, document queries, secondary indexes</td>
+                  <td>"document/JSON with MongoDB API", "MongoDB compatible"</td>
+                </tr>
+                <tr>
+                  <td><strong>Neptune</strong></td>
+                  <td>Property graph or RDF triples</td>
+                  <td>Multi-hop relationship traversals</td>
+                  <td>"graph relationships", "knowledge graph", "Gremlin", "fraud ring detection"</td>
+                </tr>
+                <tr>
+                  <td><strong>Keyspaces</strong></td>
+                  <td>Wide-column (Cassandra)</td>
+                  <td>High write throughput, tunable consistency, CQL</td>
+                  <td>"Cassandra workload", "CQL", "wide-column"</td>
+                </tr>
+                <tr>
+                  <td><strong>MemoryDB</strong></td>
+                  <td>Redis data structures in memory</td>
+                  <td>Microsecond latency with durability</td>
+                  <td>"microsecond latency and durable", "Redis as primary database"</td>
+                </tr>
+                <tr>
+                  <td><strong>ElastiCache</strong></td>
+                  <td>Redis/Memcached in memory</td>
+                  <td>Cache in front of a database; session store (non-durable OK)</td>
+                  <td>"cache", "reduce database read load", "sub-millisecond cache"</td>
+                </tr>
+                <tr>
+                  <td><strong>Timestream</strong></td>
+                  <td>Time-series (timestamp + measures)</td>
+                  <td>Append-only metrics, IoT telemetry, downsampling</td>
+                  <td>"time series", "IoT sensor data", "metrics over time"</td>
+                </tr>
+                <tr>
+                  <td><strong>Redshift</strong></td>
+                  <td>Columnar relational (MPP)</td>
+                  <td>Analytics SQL over billions of rows, aggregations</td>
+                  <td>"data warehouse", "analytics", "star schema", "BI reporting"</td>
+                </tr>
+                <tr>
+                  <td><strong>OpenSearch</strong></td>
+                  <td>JSON documents with inverted index</td>
+                  <td>Full-text search, log analytics, faceted search</td>
+                  <td>"full-text search", "log analytics", "Elasticsearch"</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout exam"><strong>Two-step exam method.</strong> First match the data model phrase to a service in this table. Then apply the qualifier — <em>least operational overhead</em> may push RDS toward Aurora Serverless, or Timestream over self-managed InfluxDB on EC2. More tie-breakers in <a href="s21-exam-prep.html#decisions">Section 21</a>.</div>
+        </section>
+
+        <section class="section" id="deeper">
+          <h2>Deeper detail and exam edge cases</h2>
+          <p class="lead">Quotas, billing meters, and availability-model traps across RDS, Aurora, and the purpose-built engines — the details the selection table above does not spell out.</p>
+
+          <h3>Limits and quotas that decide answers</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Limit</th><th>Value</th><th>Adjustable?</th><th>Why it matters</th></tr></thead>
+              <tbody>
+                <tr><td>RDS read replicas</td><td>5 per instance (default)</td><td>Soft</td><td>Read scaling stops at five unless you move to Aurora (15 replicas) or shard</td></tr>
+                <tr><td>Aurora read replicas</td><td>15 per cluster</td><td>Hard</td><td>All share storage — adding replica is fast but endpoint management grows</td></tr>
+                <tr><td>RDS storage autoscaling cooldown</td><td>6 hours between modifications</td><td>Hard</td><td>Cannot shrink quickly after a spike — size max limit generously upfront</td></tr>
+                <tr><td>Aurora storage growth</td><td>10 GB increments to 128 TiB</td><td>Hard (auto)</td><td>No pre-provisioning — pay per GB-month as volume grows</td></tr>
+                <tr><td>Aurora Serverless v2 minimum</td><td>0.5 ACU</td><td>Hard</td><td>Idle cluster still bills at floor ACU — not zero cost when quiet</td></tr>
+                <tr><td>Backup retention (RDS/Aurora)</td><td>0–35 days automated</td><td>Hard (max 35)</td><td>Manual snapshots persist until deleted — independent of retention window</td></tr>
+                <tr><td>IAM database auth token</td><td>15-minute validity</td><td>Hard</td><td>Long-running ETL connections must refresh token or use Secrets Manager rotation</td></tr>
+                <tr><td>Aurora backtrack</td><td>MySQL-compatible Aurora only</td><td>Hard</td><td>PostgreSQL Aurora has no backtrack — use PITR restore instead</td></tr>
+                <tr><td>Keyspaces row size</td><td>1 MB maximum</td><td>Hard</td><td>Wide rows above DynamoDB-like limits fail — offload blobs to S3</td></tr>
+                <tr><td>DocumentDB cluster storage</td><td>Auto-grows in 10 GB increments (up to 128 TiB)</td><td>Hard (auto)</td><td>Instance count scales compute; storage bills separately from instance hours</td></tr>
+                <tr><td>Neptune bulk load</td><td><code>neptune-loader</code> from S3</td><td>Hard (pattern)</td><td>Large graph ingests use IAM-authenticated loader, not INSERT loops</td></tr>
+                <tr><td>Timestream magnetic store</td><td>Configurable retention (days to years)</td><td>Hard (setting)</td><td>Late-arriving records land in magnetic tier and cost more to query than memory tier</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>What you actually pay for</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Billed dimension</th><th>Unit</th><th>How to spend less</th></tr></thead>
+              <tbody>
+                <tr><td>RDS/Aurora compute</td><td>Instance-hour or ACU-second</td><td>Right-size; Aurora Serverless v2 for variable load; Reserved Instances for steady OLTP</td></tr>
+                <tr><td>RDS storage</td><td>GB-month (gp3/io2)</td><td>Enable autoscaling max cap; archive cold data to S3; delete unused snapshots</td></tr>
+                <tr><td>Aurora Standard I/O</td><td>Per million I/O requests</td><td>Switch to I/O-Optimized when I/O exceeds ~25% of total Aurora spend</td></tr>
+                <tr><td>Aurora Global Database</td><td>Cross-Region replication data transfer + secondary Region instances</td><td>Use only when RTO/RPO requires sub-second cross-Region reads</td></tr>
+                <tr><td>Backup storage beyond free tier</td><td>GB-month (free = DB size for automated backups)</td><td>Shorten retention; delete obsolete manual snapshots</td></tr>
+                <tr><td>RDS Proxy</td><td>Proxy capacity units (vCPU-based)</td><td>Only where connection pooling needed (Lambda, serverless apps) — not for long-batch ETL</td></tr>
+                <tr><td>DocumentDB / Neptune</td><td>Instance-hour + storage + I/O</td><td>Scale replicas for reads; pause dev clusters where supported</td></tr>
+                <tr><td>Keyspaces on-demand</td><td>Per read/write request unit</td><td>Provisioned mode at steady high throughput — mirrors DynamoDB economics</td></tr>
+                <tr><td>Timestream</td><td>Memory store GB-hour + magnetic store GB-month + queries scanned</td><td>Shorten memory retention; reject or route very late data separately</td></tr>
+                <tr><td>Oracle/SQL Server licensing</td><td>Licence-included (LI) vs BYOL</td><td>BYOL when enterprise agreement covers licences; LI for short migrations</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout cost"><strong>Biggest money leak.</strong> Aurora Standard with I/O-heavy OLTP (many small transactions) — I/O charges dominate. At roughly 25% of spend on I/O, Aurora I/O-Optimized flat storage pricing wins.</div>
+          <div class="callout danger"><strong>Surprise bill.</strong> Timestream late-arriving telemetry written days after event time lands in the magnetic store but queries that scan wide time ranges still bill for data scanned — IoT pipelines with clock drift inflate magnetic storage and query cost.</div>
+
+          <h3>Traps that catch people</h3>
+          <ul>
+            <li><strong>Multi-AZ for read scaling —</strong> Standard RDS Multi-AZ standby is not readable. Read replicas handle SELECT offload. Multi-AZ DB <em>cluster</em> (two readable standbys) is a different product — exam wording matters.</li>
+            <li><strong>Multi-AZ DB cluster vs instance —</strong> Multi-AZ DB cluster gives two readable standbys in addition to the writer; classic Multi-AZ instance has one non-readable standby. Only the cluster option serves read traffic from standbys.</li>
+            <li><strong>Storage autoscaling lag —</strong> RDS waits up to 6 hours between storage increases. A sudden bulk load can fill disk before autoscaling triggers — set max storage above expected peak.</li>
+            <li><strong>Aurora clone scope —</strong> Aurora cloning is copy-on-write — fast and cheap for dev/test snapshots of production. Clones still consume storage for changed pages; not a free duplicate.</li>
+            <li><strong>Backtrack on PostgreSQL —</strong> Aurora backtrack rewinds MySQL-compatible clusters without restore. PostgreSQL Aurora questions pointing to "rewind 1 hour" need PITR restore to new cluster, not backtrack.</li>
+            <li><strong>IAM DB auth in batch jobs —</strong> 15-minute token expiry breaks jobs running longer unless the driver refreshes. Use Secrets Manager with RDS Proxy for long ETL, or static credentials in Secrets Manager with rotation.</li>
+            <li><strong>DocumentDB MongoDB version —</strong> DocumentDB supports a subset of MongoDB API versions (4.0/5.0 compatibility). Aggregation pipelines or drivers targeting newer MongoDB features may fail after lift-and-shift.</li>
+            <li><strong>MemoryDB vs ElastiCache —</strong> ElastiCache data can be rebuilt from RDS; MemoryDB is the durable primary. "Cache" in the question → ElastiCache; "durable microsecond" → MemoryDB.</li>
+            <li><strong>Keyspaces 1 MB row —</strong> Cassandra-wide rows with large collections hit Keyspaces harder limit than DynamoDB's 400 KB item — design partition width accordingly.</li>
+            <li><strong>Timestream tier confusion —</strong> Recent data in memory store queries faster and cheaper per query. Historical analytics on magnetic store scans more GB — tune retention so dashboards query the memory tier.</li>
+          </ul>
+
+          <h3>Troubleshooting playbook</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Symptom</th><th>Most likely cause</th><th>What to check / fix</th></tr></thead>
+              <tbody>
+                <tr><td>RDS <code>StorageFull</code> alarm</td><td>Autoscaling max reached or 6-hour cooldown</td><td>CloudWatch <code>FreeStorageSpace</code>; manually increase max allocated storage; archive old data</td></tr>
+                <tr><td>Read replica lag growing</td><td>Heavy write load on primary; large DDL on primary</td><td>CloudWatch <code>ReplicaLag</code>; move heavy reporting to fresher replica; scale primary</td></tr>
+                <tr><td>Lambda cannot connect to RDS</td><td>Connection exhaustion (<code>max_connections</code>)</td><td>Add RDS Proxy; reduce Lambda concurrency or use Data API for Aurora Serverless</td></tr>
+                <tr><td>Aurora failover slower than expected</td><td>DNS TTL; connection pool holding stale host</td><td>Use cluster endpoint (writer/reader); RDS Proxy; lower client DNS cache</td></tr>
+                <tr><td>Neptune bulk load fails</td><td>Wrong IAM role on loader; S3 prefix permissions</td><td><code>neptune-loader</code> logs in CloudWatch; IAM role trust for Neptune cluster</td></tr>
+                <tr><td>DocumentDB migration driver errors</td><td>Unsupported MongoDB API feature</td><td>Check DocumentDB compatibility matrix; test aggregation pipeline in staging</td></tr>
+                <tr><td>Timestream reject high-volume writes</td><td>Magnetic store retention exceeded for record timestamp</td><td>Adjust memory/magnetic retention; validate device clock skew</td></tr>
+                <tr><td>RDS Custom patch failure</td><td>Custom automation outside standard RDS maintenance</td><td>SSM documents on Custom instance; verify IAM for automation framework</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Production patterns</h3>
+          <div class="grid-2">
+            <div class="mini-card">
+              <h4>OLTP source → warehouse</h4>
+              <p>RDS/Aurora PostgreSQL as pipeline metadata and operational store. Aurora zero-ETL to Redshift for analytics replica without DMS. Read replicas serve reporting SELECTs that tolerate lag; Multi-AZ (or Multi-AZ DB cluster) covers writer failover. RDS Proxy in front of Lambda watermark updaters.</p>
+            </div>
+            <div class="mini-card">
+              <h4>Purpose-built at the edge</h4>
+              <p>Timestream for device telemetry (Kinesis → Flink → Timestream). MemoryDB for real-time feature store with durability. Neptune for fraud graph traversals loaded via S3 bulk loader. Anti-pattern: forcing relational RDS for time-series IoT — partition management and retention become operational burden.</p>
+            </div>
+          </div>
+<pre data-lang="shell" data-title="Neptune bulk load from S3" data-explain="Loader runs as an IAM-authenticated job — preferred over millions of Gremlin INSERT statements."><code>curl -X POST \
+  -H 'Content-Type: application/json' \
+  https://&lt;cluster-endpoint&gt;:8182/loader \
+  -d '{
+    "source": "s3://dea-lab-ab-4821/raw/graph/nodes/",
+    "format": "csv",
+    "iamRoleArn": "arn:aws:iam::123456789012:role/NeptuneLoadFromS3",
+    "region": "us-east-1",
+    "failOnError": "FALSE"
+  }'</code></pre>
+
+          <h3>Where this fits with the rest of the exam</h3>
+          <p>This section completes Domain 2 alongside <a href="s09-dynamodb.html">DynamoDB</a> (key-value at scale) and <a href="s10-redshift.html">Redshift</a> (analytical SQL). Operational databases feed ingestion in <a href="s02-data-ingestion.html">Section 2</a> (DMS, JDBC sources) and zero-ETL paths in Section 10.</p>
+          <ul>
+            <li><a href="s10-redshift.html#integrations">Redshift zero-ETL from Aurora</a> — least-effort path when the question pairs OLTP Aurora with a warehouse.</li>
+            <li><a href="s09-dynamodb.html">Section 9 (DynamoDB)</a> — when the scenario is partition-key access, not SQL or documents.</li>
+            <li><a href="s18-migration.html">Section 18 (Migration)</a> — DMS homogeneous/heterogeneous moves into RDS or Aurora.</li>
+            <li><a href="s06-streaming.html">Section 6 (Streaming)</a> — Timestream and MemoryDB ingest paths from Kinesis and IoT Core.</li>
+          </ul>
+          <div class="callout exam"><strong>How the exam frames the choice.</strong> Match data model first (relational, document, graph, wide-column, time-series, in-memory), then apply the qualifier. "SQL + ACID + specific engine" → RDS. "MySQL/PostgreSQL + storage auto-scale + 15 replicas" → Aurora. "MongoDB API" → DocumentDB. "CQL / Cassandra" → Keyspaces. "Gremlin / graph traversal" → Neptune. "Time series / IoT metrics" → Timestream. Multi-AZ answers availability; read replicas answer read scaling — never swap them.</div>
+        </section>
+
+        <section class="section" id="interview">
+          <h2>Interview questions</h2>
+          <p class="muted">Answer each one out loud before opening it.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+            <details class="qa">
+              <summary>When would you choose RDS Multi-AZ over a read replica, and can you use both together?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p><strong>Multi-AZ</strong> is for high availability — synchronous standby in another AZ, automatic failover, same endpoint. It does not offload read traffic (the standby is not readable in standard RDS).</p>
+                <p><strong>Read replicas</strong> are for read scaling and optional cross-Region DR — asynchronous, separate endpoint, can lag. Use both together in production: Multi-AZ for failover, read replicas for reporting queries.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Why would Lambda functions use RDS Proxy instead of connecting directly to Aurora?<span class="qa-tag">Architecture</span></summary>
+              <div class="qa-body">
+                <p>Each Lambda invocation can open a new TCP connection to the database. At concurrency, you hit <code>max_connections</code> and the database rejects new connections. RDS Proxy pools thousands of application connections onto a smaller set of DB connections and handles credential rotation via Secrets Manager.</p>
+                <p>After an Aurora failover, the proxy endpoint stays the same — Lambda does not need to resolve a new IP. Combined with the RDS Data API (HTTP, no persistent connection), this is the standard serverless + relational pattern.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What makes Aurora storage different from RDS storage?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>RDS stores data on EBS volumes attached to each instance — storage scales with instance size or allocated storage. Aurora uses a shared, distributed storage volume: six copies across three AZs, auto-growing in 10 GB steps to 128 TiB, with quorum writes.</p>
+                <p>Read replicas attach to the same volume (no full data copy), which is why Aurora supports up to 15 low-lag replicas and fast replica provisioning compared to RDS.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>DocumentDB, DynamoDB, or RDS PostgreSQL for a MongoDB migration?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>If the application uses MongoDB drivers, BSON documents, and MongoDB query operators → <strong>DocumentDB</strong>. Minimal application change.</p>
+                <p>If you are redesigning for key-based access at massive scale with no joins → <strong>DynamoDB</strong>. If you want relational integrity and SQL → <strong>RDS PostgreSQL</strong> with JSONB columns, but that is not a MongoDB API migration.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How do you choose between Neptune, Redshift and OpenSearch for analyzing connected data?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p><strong>Neptune</strong> when traversals are the query — "find all accounts within three hops of a flagged node" in milliseconds on a live graph.</p>
+                <p><strong>Redshift</strong> when relationships are modelled as fact/dimension tables and the workload is batch analytics SQL over billions of rows.</p>
+                <p><strong>OpenSearch</strong> when the need is full-text or log search, not relationship traversal. Fraud "rings" with graph patterns → Neptune; keyword search over support tickets → OpenSearch.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>MemoryDB versus ElastiCache — both are Redis-compatible. When is each the right primary choice?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p><strong>ElastiCache</strong> when Redis is a cache — data can be rebuilt from RDS/S3/DynamoDB on eviction. Optimised for lowest latency reads with optional snapshots.</p>
+                <p><strong>MemoryDB</strong> when Redis is the system of record — leaderboards, session state, or inventory counters that must survive node failure without rebuilding from another store. Multi-AZ transaction log provides durability with microsecond reads.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Explain Timestream's two-tier storage and why it matters for cost.<span class="qa-tag">Performance</span></summary>
+              <div class="qa-body">
+                <p>The <strong>memory store</strong> holds recent data for fast ingests and interactive queries — you pay for higher-performance storage but query latency is low. The <strong>magnetic store</strong> holds older data moved automatically by retention policy — cheaper per GB, still queryable but optimised for scans over history.</p>
+                <p>Configure retention per tier so hot IoT data (last 24 hours) stays in memory for dashboards while years of compliance history sit in magnetic storage at lower cost.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>An exam question mentions "Cassandra", "CQL", and "multi-Region writes". What service do you pick?<span class="qa-tag">Exam</span></summary>
+              <div class="qa-body">
+                <p><strong>Amazon Keyspaces</strong> — fully managed, Cassandra-compatible, CQL API, multi-AZ durability by default. On-demand capacity for spiky traffic; provisioned for steady write-heavy workloads.</p>
+                <p>Do not pick DynamoDB unless the question shifts to partition-key design without Cassandra compatibility, or DocumentDB unless it mentions MongoDB instead.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What is Aurora zero-ETL and when would a data engineer care?<span class="qa-tag">Architecture</span></summary>
+              <div class="qa-body">
+                <p>Aurora zero-ETL replication streams changes from Aurora PostgreSQL or MySQL into Redshift without building a custom CDC pipeline (no DMS task, no Glue job). Redshift gets near-real-time copies of operational tables for analytics.</p>
+                <p>Choose it when the question wants operational + analytical stores with minimal pipeline code — see also <a href="s10-redshift.html">Redshift</a> integration patterns.</p>
+              </div>
+            </details>
+          </div>
+        </section>
+
+        <section class="section" id="practice">
+          <h2>Hands-on practice</h2>
+          <p class="muted">Free tier where possible. Delete everything at the end of each task.</p>
+          <ol class="practice-list">
+            <li class="practice">
+              <p class="practice-task">Launch a <code>db.t3.micro</code> RDS PostgreSQL instance (free tier), enable automated backups, connect and run the deadlock-safe watermark query from this section.</p>
+              <span class="console-path">RDS → Create database → PostgreSQL → Free tier template</span>
+              <p class="practice-expect">You can connect with psql or the Query Editor and see the <code>etl_watermarks</code> table after creating it.</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">Console + SQL</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li><strong>RDS → Create database</strong> → Standard → PostgreSQL 15 → Template: Free tier → DB identifier <code>dea-pg-lab</code>.</li>
+                    <li>Set master username/password. Single-AZ is fine for the lab. Create.</li>
+                    <li>Security group: allow inbound 5432 from your IP.</li>
+                    <li>Connect and create a sample table, then run the FOR UPDATE query from the RDS section.</li>
+                  </ol>
+<pre data-lang="shell"><code>psql -h dea-pg-lab.xxxxx.us-east-1.rds.amazonaws.com -U postgres -d postgres
+
+CREATE TABLE etl_watermarks (
+  pipeline_id INT PRIMARY KEY,
+  status TEXT,
+  last_run_at TIMESTAMPTZ
+);
+INSERT INTO etl_watermarks VALUES (101,'ok',NOW()), (205,'failed',NOW());</code></pre>
+                  <p class="muted">Cleanup: RDS → dea-pg-lab → Delete → uncheck final snapshot.</p>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Create a Timestream database and table, write ten sample sensor records with the CLI, and run a <code>SELECT … WHERE time &gt; ago(1h)</code> query.</p>
+              <span class="console-path">Amazon Timestream → Create database</span>
+              <p class="practice-expect">Query returns your device dimensions and average measure values.</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">CLI</span></summary>
+                <div class="qa-body">
+<pre data-lang="shell"><code>aws timestream-write create-database --database-name dea_metrics --region us-east-1
+
+aws timestream-write create-table \
+  --database-name dea_metrics \
+  --table-name sensor_readings \
+  --retention-properties "MemoryStoreRetentionPeriodInHours=24,MagneticStoreRetentionPeriodInDays=7" \
+  --region us-east-1
+
+# Use the Python write example from this page, or timestream-write write-records via CLI
+
+aws timestream-query query \
+  --query-string "SELECT COUNT(*) FROM dea_metrics.sensor_readings WHERE time > ago(1h)" \
+  --region us-east-1</code></pre>
+                  <p class="muted">Cleanup: delete table then database. Timestream bills per GB ingested and scanned — keep the lab small.</p>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Using the purpose-built database table in this section, classify five scenarios: gaming leaderboard (durable), social graph recommendations, MongoDB lift-and-shift, IoT temperature metrics, and monthly sales reporting.</p>
+              <p class="practice-expect">Answers: MemoryDB, Neptune, DocumentDB, Timestream, Redshift — written down with the phrase that justified each.</p>
+              <details class="qa">
+                <summary>Show answers<span class="qa-tag">Exam</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Leaderboard with durable counters → MemoryDB (microsecond + durable Redis).</li>
+                    <li>People-you-may-know via relationship hops → Neptune (graph relationships).</li>
+                    <li>Existing MongoDB app → DocumentDB (MongoDB API).</li>
+                    <li>Sensor readings over time → Timestream (time series / IoT).</li>
+                    <li>Monthly aggregates over star schema → Redshift (data warehouse / analytics).</li>
+                  </ol>
+                </div>
+              </details>
+            </li>
+          </ol>
+        </section>
+
+        <section class="section" id="recap">
+          <h2>Recap</h2>
+          <div class="recap">
+            <ul class="checklist">
+              <li>RDS: managed SQL engines, KMS encryption, ACID, Multi-AZ (HA sync standby) vs read replicas (async read scale / cross-Region DR).</li>
+              <li>RDS Proxy pools connections for Lambda; Data API runs SQL over HTTPS for Aurora Serverless.</li>
+              <li>Aurora: 6-copy storage, 128 TiB auto-grow, 15 read replicas, Global Database, Serverless v2 ACUs, zero-ETL to Redshift.</li>
+              <li>DocumentDB = MongoDB API; Keyspaces = Cassandra/CQL; Neptune = Gremlin, openCypher, SPARQL graph traversals.</li>
+              <li>MemoryDB = durable Redis primary; ElastiCache = cache layer — "microsecond latency and durable" → MemoryDB.</li>
+              <li>Timestream: memory store (hot) + magnetic store (historical); IoT → Kinesis → Flink → Timestream → Grafana.</li>
+              <li>Match exam phrases first (graph, time series, Cassandra, MongoDB API), then apply least-overhead and cost qualifiers.</li>
+              <li>Working-set-in-RAM rule: flat ReadIOPS means buffer cache is healthy; climbing ReadIOPS means scale memory or add replicas.</li>
+            </ul>
+            <p style="margin-top:1rem;">
+              <button type="button" data-complete="section-11">Mark complete</button>
+            </p>
+          </div>
+        </section>
+
+      </div>
+
+      <aside class="toc" aria-label="On this page">
+        <strong>On this page</strong>
+        <ol>
+          <li><a href="#lectures">Lectures</a></li>
+          <li><a href="#rds">RDS</a></li>
+          <li><a href="#aurora">Aurora</a></li>
+          <li><a href="#documentdb">DocumentDB</a></li>
+          <li><a href="#neptune">Neptune</a></li>
+          <li><a href="#keyspaces">Keyspaces</a></li>
+          <li><a href="#memorydb">MemoryDB</a></li>
+          <li><a href="#timestream">Timestream</a></li>
+          <li><a href="#database-selection">Database selection</a></li>
+          <li><a href="#deeper">Deeper detail</a></li>
+          <li><a href="#interview">Interview questions</a></li>
+          <li><a href="#practice">Hands-on practice</a></li>
+          <li><a href="#recap">Recap</a></li>
+        </ol>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<footer class="footer">AWS Certified Data Engineer Associate (DEA-C01) · Section 11 · Offline study edition</footer>
+</body>
+</html>

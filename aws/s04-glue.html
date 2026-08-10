@@ -1,0 +1,902 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="DEA-C01 Section 4: AWS Glue costs and DPU pricing, AWS Budgets, stateful ETL with job bookmarks, Glue transformations and workflows, job types, partitioning, and Glue DataBrew.">
+<title>Section 4 — AWS Glue Deep Dive | AWS Data Engineer DEA-C01 Notes</title>
+<link rel="stylesheet" href="assets/aws.css">
+<script defer src="assets/search-index.js"></script>
+<script defer src="assets/code-highlight.js"></script>
+<script defer src="assets/aws.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">Course section 4 of 21 · AWS Certified Data Engineer Associate</p>
+    <h1>AWS Glue Deep Dive</h1>
+    <p class="subtitle">What Glue costs per DPU-hour, how job bookmarks make Spark jobs incremental, the four job types and when to pick each, Hive-style partitioning on S3, and DataBrew for no-code preparation — plus the budgets and stateful-versus-stateless concepts the exam ties to ingestion pipelines.</p>
+    <div class="hero-meta">
+      <span class="chip">32 slides · ~45min</span>
+      <span class="chip">Exam domain: Data Ingestion and Transformation (34%)</span>
+      <span class="chip">Deck slides 36–67</span>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <nav class="pager" aria-label="Section navigation">
+    <a href="s03-athena.html">← Querying with Athena</a>
+    <a href="index.html">Course contents</a>
+    <a href="s05-lambda.html">Next: Serverless Compute with Lambda →</a>
+  </nav>
+
+  <main id="main">
+    <div class="layout">
+      <div class="content">
+
+        <section class="section" id="lectures">
+          <h2>Lectures in this section</h2>
+          <p class="muted">Each lecture links to the notes that cover it. Labs reuse bucket <code>dea-lab-&lt;initials&gt;-&lt;random&gt;</code> and <code>data/customers.csv</code>.</p>
+          <ol class="lecture-list">
+            <li class="lecture">
+              <a class="lec-title" href="#glue-costs">Glue costs: DPU-hour pricing, crawlers, Data Catalog, DataBrew and Data Quality</a>
+              <span class="lec-time">~8:00</span>
+              <span class="lec-src">Slides 37–41</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#budgets">AWS Budgets: cost guardrails and forecast alerts</a>
+              <span class="lec-time">~4:00</span>
+              <span class="lec-src">Slide 42–43</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#stateful-stateless">Stateful vs stateless ingestion and Glue job bookmarks</a>
+              <span class="lec-time">~6:00</span>
+              <span class="lec-src">Slides 44–47</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#transformations">Glue ETL transformations, DynamicFrames and pushdown predicates</a>
+              <span class="lec-time">~7:00</span>
+              <span class="lec-src">Slides 48–50</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#workflows">Glue Workflows, triggers and orchestration choices</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">Slides 51–52</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#job-types">Glue job types, worker types, versions and execution modes</a>
+              <span class="lec-time">~10:00</span>
+              <span class="lec-src">Slides 53–56</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#partitioning">Partitioning S3 data for Glue and Athena</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">Slides 57–58</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#databrew">Glue DataBrew: projects, recipes and transformations</a>
+              <span class="lec-time">~8:00</span>
+              <span class="lec-src">Slides 59–67</span>
+            </li>
+          </ol>
+        </section>
+
+        <section class="section" id="glue-costs">
+          <h2>Glue costs and DPU pricing</h2>
+          <p class="lead">AWS Glue bills in <strong>DPU-hours</strong> (Data Processing Units). One DPU is 4 vCPU and 16 GB RAM. Almost every Glue compute feature — ETL jobs, crawlers, interactive sessions, DataBrew jobs — converts its runtime and capacity into DPU-hours at a regional rate (commonly <strong>$0.44 per DPU-hour</strong> in <code>us-east-1</code>; always check the pricing page for your region).</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-038.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-038.png" alt="Course slide on Glue crawler and Data Catalog pricing: crawlers billed by DPU with a 10-minute minimum, one DPU equals 4 vCPU and 16 GB RAM, and Data Catalog storage is free for the first million objects then one dollar per 100,000 objects per month." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 38</span>Crawler and Data Catalog pricing. Crawlers run on DPUs and inherit the same 10-minute minimum as older Glue ETL jobs. The Data Catalog itself is cheap until you exceed one million tables, partitions or schemas — at that point each additional 100,000 objects costs about a dollar a month.</figcaption>
+          </figure>
+
+          <h3>Crawlers</h3>
+          <ul>
+            <li>Billed by the second based on the number of DPUs the crawler uses.</li>
+            <li><strong>10-minute minimum</strong> per crawl run — a 30-second crawl still bills for 10 minutes.</li>
+            <li>Crawlers infer schema and register tables/partitions in the Glue Data Catalog; they do not transform data.</li>
+          </ul>
+
+          <h3>Data Catalog storage and requests</h3>
+          <ul>
+            <li>First <strong>1 million objects</strong> (tables, partitions, databases, connections) stored free per month.</li>
+            <li>Above that: <strong>$1.00 per 100,000 objects</strong> per month.</li>
+            <li>API requests to the catalog (GetTable, GetPartitions, etc.) have their own per-request pricing at high volume; normal pipeline usage stays negligible.</li>
+          </ul>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-039.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-039.png" alt="Course slide on Glue ETL job DPU pricing: billed by seconds with 10-minute minimum or 1-minute minimum on Glue 2.0 plus, Spark default 10 DPUs minimum 2, Spark Streaming default 2 DPUs, Ray default 6 M-DPUs, Python Shell default 0.0625 DPU, and 0.44 dollars per DPU-hour." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 39</span>ETL job DPU defaults and the 1-minute vs 10-minute minimum billing split. Glue 2.0 and later charge only for actual runtime after a 1-minute floor; older job types and crawlers still use a 10-minute floor — a common exam cost trap.</figcaption>
+          </figure>
+
+          <h3>ETL jobs</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Job type</th><th>Min DPUs</th><th>Default DPUs</th><th>Typical use</th></tr></thead>
+              <tbody>
+                <tr><td>Apache Spark ETL</td><td>2</td><td>10</td><td>Large-scale batch transforms</td></tr>
+                <tr><td>Spark Streaming ETL</td><td>2</td><td>2</td><td>Micro-batch streaming from Kinesis or Kafka</td></tr>
+                <tr><td>Ray</td><td>2 M-DPUs</td><td>6 M-DPUs</td><td>ML/AI parallel workloads (memory-optimised M-DPUs)</td></tr>
+                <tr><td>Python Shell</td><td>0.0625 (1/16 DPU)</td><td>0.0625</td><td>Lightweight scripts, no Spark cluster</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout cost"><strong>Minimum billing windows.</strong> Glue versions <strong>2.0 and later</strong> (Spark jobs, streaming, Ray, Python Shell on supported versions) bill with a <strong>1-minute minimum</strong>. Crawlers and Glue 1.0-style jobs still use a <strong>10-minute minimum</strong>. A one-minute Spark job on Glue 4.0 bills for one minute; a one-minute crawler bills for ten.</div>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-040.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-040.png" alt="Course slide on Glue interactive sessions and notebooks: billed while active based on DPUs with configurable idle timeout, 1-minute minimum, minimum 2 DPUs default 5." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 40</span>Interactive sessions (Glue Studio notebooks) bill for the entire time the session is active, not just while code runs. Set an idle timeout or shut the session down when you finish — an open notebook overnight is real money.</figcaption>
+          </figure>
+
+          <h3>DataBrew and Data Quality</h3>
+          <ul>
+            <li><strong>DataBrew interactive sessions:</strong> billed per session-minute while a project is open (similar idle-timeout discipline as Glue notebooks).</li>
+            <li><strong>DataBrew jobs:</strong> billed in DPU-minutes when a recipe job runs over a dataset.</li>
+            <li><strong>Glue Data Quality:</strong> ruleset evaluation runs as part of a Glue job or crawler and inherits that job's DPU billing; storing quality results in the catalog is included in catalog object counts.</li>
+          </ul>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-041.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-041.png" alt="Course slide with Glue cost worked examples: a 15-minute Spark job on 6 DPUs costs 0.66 dollars, and a 24-minute interactive session on 5 DPUs costs 0.88 dollars at 0.44 per DPU-hour." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 41</span>Worked cost examples. Formula: <code>DPUs × hours × $0.44</code>. A 15-minute job on 6 DPUs = 6 × 0.25 × 0.44 = $0.66. Right-sizing DPUs and worker count is the main lever after partition pruning.</figcaption>
+          </figure>
+
+          <div class="callout exam"><strong>Exam cost maths.</strong> Questions give runtime, DPU count and rate — multiply DPUs by fractional hours. Remember the 1-minute floor on Glue 2.0+ jobs: a 45-second job bills as one minute, not zero.</div>
+        </section>
+
+        <section class="section" id="budgets">
+          <h2>AWS Budgets</h2>
+          <p class="lead">Glue DPU-hours add up fast on a study account. <strong>AWS Budgets</strong> lets you set spending thresholds and get email or SNS alerts before the bill surprises you. Section 1 walked through creating a 5 USD budget; here is what the service actually offers.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-043.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-043.png" alt="Course slide on AWS Budgets: alarms on exceed, actual and forecasted tracking, budget types including cost usage saving plans and reservation plans, budgets free with two action-enabled budgets free then ten cents per day." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 43</span>AWS Budgets overview. Budgets themselves are free; only <em>budget actions</em> (automated responses like applying an IAM policy when a threshold is crossed) cost money after the first two.</figcaption>
+          </figure>
+
+          <h3>Budget types</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Type</th><th>What it tracks</th><th>Example alert</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Cost budget</strong></td><td>Actual or forecasted spend in dollars</td><td>Email when forecast exceeds $20 this month</td></tr>
+                <tr><td><strong>Usage budget</strong></td><td>Service usage quantity (hours, GB, requests)</td><td>Alert when Glue DPU-hours exceed 100</td></tr>
+                <tr><td><strong>Savings Plans budget</strong></td><td>Utilisation of a Savings Plan commitment</td><td>Alert when utilisation drops below 80%</td></tr>
+                <tr><td><strong>Reservation budget</strong></td><td>Reserved Instance or capacity utilisation</td><td>Alert when RI coverage falls</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Actual vs forecast alerts</h3>
+          <p><strong>Actual</strong> alerts fire when spend or usage has already crossed the threshold — good for hard stops. <strong>Forecasted</strong> alerts use AWS's projection of end-of-month spend based on current run rate — they give you days of warning on a climbing Glue bill. Use both: forecast at 80% for early warning, actual at 100% for confirmation.</p>
+
+          <h3>Budget actions</h3>
+          <p>Budget actions automate a response when a threshold is breached: attach an IAM policy that denies <code>glue:StartJobRun</code>, stop EC2 instances, or notify an SNS topic that triggers a runbook. The first <strong>two action-enabled budgets are free</strong>; additional ones cost <strong>$0.10 per day</strong> each.</p>
+
+          <h3>Cost Explorer and anomaly detection</h3>
+          <p><strong>AWS Cost Explorer</strong> visualises spend by service, tag and time — use it to see whether Glue, Athena or Redshift drove last month's spike. <strong>Cost Anomaly Detection</strong> (part of Cost Explorer) learns your baseline and alerts on unusual daily spend without you setting a fixed threshold — useful when you forget an interactive Glue session.</p>
+
+          <div class="callout tip"><strong>Study account guardrail.</strong> A cost budget at $5 with a forecast alert at 80% plus a usage budget on Glue DPU-hours catches both "I'm about to overspend" and "something is running Glue continuously". Pair with billing alerts in CloudWatch (Section 1).</div>
+        </section>
+
+        <section class="section" id="stateful-stateless">
+          <h2>Stateful vs stateless ingestion</h2>
+          <p class="lead">A <strong>stateless</strong> processor treats every event independently — no memory of what came before. A <strong>stateful</strong> processor remembers prior events so it can skip already-handled data, maintain windows, or deduplicate. The distinction matters directly for Glue job bookmarks and for exam questions about incremental loads.</p>
+
+          <div class="slide-row">
+            <figure class="slide-fig">
+              <a href="assets/slides/slide-045.png" target="_blank" rel="noopener">
+                <img src="assets/slides/slide-045.png" alt="Course slide defining stateful systems as remembering past interactions and stateless systems as processing each request independently." loading="lazy">
+              </a>
+              <figcaption><span class="slide-no">Slide 45</span>Core definitions. Stateful = context carries forward. Stateless = each invocation stands alone.</figcaption>
+            </figure>
+            <figure class="slide-fig">
+              <a href="assets/slides/slide-046.png" target="_blank" rel="noopener">
+                <img src="assets/slides/slide-046.png" alt="Course slide applying stateful and stateless concepts to data ingestion: stateful maintains context per event, stateless processes each ingestion event independently." loading="lazy">
+              </a>
+              <figcaption><span class="slide-no">Slide 46</span>Applied to ingestion. A nightly full reload is stateless; an incremental job that tracks the last processed file is stateful.</figcaption>
+            </figure>
+          </div>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-047.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-047.png" alt="Course slide listing AWS ingestion services by statefulness: Kinesis supports both stateful Data Streams and stateless Firehose, Data Pipeline orchestrates both, and Glue offers stateful or stateless ETL with job bookmarks." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 47</span>Where state lives on AWS. Kinesis Data Streams is stateful (retention, shard iterators). Firehose is stateless (no replay). Glue can be either — job bookmarks make it stateful.</figcaption>
+          </figure>
+
+          <h3>Glue job bookmarks</h3>
+          <p>Job bookmarks persist state between runs so a Glue job processes <strong>only new data</strong> since the last successful run. Glue tracks which files or partitions have been read from S3 (and similar sources) and skips them on the next invocation. That makes the job <strong>incremental</strong> and, combined with deterministic writes, <strong>idempotent</strong>.</p>
+          <ul>
+            <li>Enable with <code>--job-bookmark-option job-bookmark-enable</code> on the job, or <code>job.init()</code> / bookmark keys in the script.</li>
+            <li>State is stored in a bookmark table in the Glue Data Catalog keyed by job name and source.</li>
+            <li><strong>Reset a bookmark</strong> when you need a full reprocess: console → Job → Action → Reset job bookmark, or delete the bookmark entry via the Glue API. Without resetting, changed source files that were already bookmarked are skipped.</li>
+            <li>Bookmarks work with S3, JDBC, DynamoDB and other supported sources — not with every connector.</li>
+          </ul>
+
+          <div class="callout exam"><strong>Why Spark cares.</strong> Spark itself is stateless between job runs — each <code>JobRun</code> starts fresh unless you add bookmarks, checkpoint directories (streaming), or external state. Exam questions about "process only new files daily" → Glue job with bookmarks enabled, not a bare Spark script without tracking.</div>
+        </section>
+
+        <section class="section" id="transformations">
+          <h2>Glue ETL transformations</h2>
+          <p class="lead">AWS Glue is a managed ETL service: <strong>extract</strong> from JDBC databases, S3, Kinesis, DynamoDB and Redshift; <strong>transform</strong> with built-in operations or custom PySpark/Scala; <strong>load</strong> back to the same family of targets. Format conversion (CSV ↔ Parquet ↔ JSON ↔ XML) is a first-class transform.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-049.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-049.png" alt="Course slide showing Glue ETL extract from RDS Aurora DynamoDB Redshift S3 Kinesis, transform with filtering joining aggregation FindMatches ML and Detect PII, and load to the same targets." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 49</span>The Glue ETL triangle. Built-in transforms include filter, join, aggregate, FindMatches (ML dedup entity resolution) and Detect PII. Slides 49–50 are the same diagram — the emphasis is source/target flexibility plus transform library.</figcaption>
+          </figure>
+
+          <h3>Built-in transform catalogue</h3>
+          <ul>
+            <li><strong>Filter</strong> — drop rows matching a condition.</li>
+            <li><strong>Join</strong> — combine two DynamicFrames on keys.</li>
+            <li><strong>Aggregate / Group</strong> — summarise by key columns.</li>
+            <li><strong>Map / ApplyMapping</strong> — rename and cast columns to a target schema.</li>
+            <li><strong>FindMatches</strong> — ML transform to identify duplicate entities without exact keys.</li>
+            <li><strong>Detect PII</strong> — flag or mask sensitive columns.</li>
+            <li><strong>Relationalize</strong> — flatten nested structs into relational tables.</li>
+          </ul>
+
+          <h3>DynamicFrame vs Spark DataFrame</h3>
+          <p>Glue's native type is the <strong>DynamicFrame</strong> — a schema-flexible dataset that handles semi-structured data and evolving schemas better than a strict Spark <code>DataFrame</code>. Convert freely: <code>dyf.toDF()</code> and <code>DynamicFrame.fromDF(df, glueContext, "name")</code>.</p>
+          <p><strong>ResolveChoice</strong> resolves columns where the same field has conflicting types across records (e.g. sometimes string, sometimes int). It picks a resolution strategy: <code>make_cols</code>, <code>cast</code>, <code>make_struct</code>, or <code>project</code>. Without it, downstream writes can fail on heterogeneous JSON.</p>
+
+          <h3>Pushdown predicates and partition pruning</h3>
+          <p>When reading from the catalog, pass a <strong>pushdown predicate</strong> so the scan skips irrelevant partitions before Spark sees the data:</p>
+
+<pre data-lang="python" data-title="Glue — partition pruning on catalog read" data-explain="pushDownPredicate limits the S3 prefixes Glue reads; partitionKeys in the catalog must match the S3 path layout (year=2024/month=01)."><code>import sys
+from awsglue.transforms import *
+from awsglue.utils import getResolvedOptions
+from pyspark.context import SparkContext
+from awsglue.context import GlueContext
+from awsglue.job import Job
+
+args = getResolvedOptions(sys.argv, ["JOB_NAME"])
+sc = SparkContext()
+glueContext = GlueContext(sc)
+job = Job(glueContext)
+job.init(args["JOB_NAME"], args)
+
+# Read only January 2024 partitions — Glue skips other S3 prefixes
+dyf = glueContext.create_dynamic_frame.from_catalog(
+    database="dea_lab",
+    table_name="customers_raw",
+    push_down_predicate="year='2024' AND month='01'",
+    transformation_ctx="customers_raw"
+)
+
+# Drop duplicate row (row 11 duplicates row 6 in customers.csv)
+deduped = DynamicFrame.fromDF(
+    dyf.toDF().dropDuplicates(["ID", "Name", "Email"]),
+    glueContext, "deduped"
+)
+
+# Write partitioned Parquet to curated/
+glueContext.write_dynamic_frame.from_options(
+    frame=deduped,
+    connection_type="s3",
+    connection_options={
+        "path": "s3://dea-lab-ab-4821/curated/customers/",
+        "partitionKeys": ["State"]
+    },
+    format="parquet",
+    transformation_ctx="write_curated"
+)
+
+job.commit()</code></pre>
+
+          <h3>Glue Studio visual editor</h3>
+          <p>Glue Studio provides a drag-and-drop canvas for the same transforms — each node compiles to PySpark. Use it for prototyping; export the script for production CI/CD. Visual ETL, Notebook and Script editor are the three authoring modes (see slide 54 in job types).</p>
+
+          <h3>Glue Data Quality (DQDL)</h3>
+          <p><strong>Data Quality Definition Language (DQDL)</strong> expresses rulesets such as <code>Completeness "email" &gt; 0.95</code>, <code>UniqueValueCount "id" = 1</code>, or <code>RowCount &gt; 0</code>. Attach a ruleset to a Glue job or crawler; failed rules can block the job or land results in CloudWatch and the catalog. This is the programmatic counterpart to DataBrew's visual profiling.</p>
+        </section>
+
+        <section class="section" id="workflows">
+          <h2>Glue Workflows and orchestration</h2>
+          <p class="lead"><strong>Glue Workflows</strong> orchestrate multi-step pipelines — chains of crawlers, jobs and triggers — with a visual graph and run history. They are ideal when every step is Glue-native; for cross-service pipelines, compare with EventBridge and Step Functions.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-052.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-052.png" alt="Course slide on Glue Workflows: orchestrate jobs and crawlers, visual interface, blueprints, and trigger types including schedule on-demand EventBridge and Lambda." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 52</span>Glue Workflows and trigger types. The screenshot shows a trigger → ETL job → conditional trigger → crawler chain. Blueprints generate common patterns (e.g. S3 → catalog → ETL) from a wizard.</figcaption>
+          </figure>
+
+          <h3>Trigger types</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Trigger</th><th>Starts when</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Schedule</strong></td><td>Cron expression — nightly batch</td></tr>
+                <tr><td><strong>On-demand</strong></td><td>Manual start from console or API</td></tr>
+                <tr><td><strong>EventBridge event</strong></td><td>Matching event on the default or custom bus (S3 object created, job state change)</td></tr>
+                <tr><td><strong>Conditional</strong></td><td>After another job/crawler succeeds or fails (ANY / ALL logic)</td></tr>
+                <tr><td><strong>Lambda</strong></td><td>Custom Lambda invokes <code>StartWorkflowRun</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Glue triggers vs EventBridge vs Step Functions</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Orchestrator</th><th>Best for</th><th>Limitation</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Glue Workflows</strong></td><td>Glue jobs + crawlers only; visual monitoring in Glue console</td><td>Does not natively call Lambda, SNS or external APIs as steps</td></tr>
+                <tr><td><strong>Amazon EventBridge</strong></td><td>Event routing: S3 upload → start Glue job; decoupled pub/sub</td><td>No built-in retry/state machine — pair with targets that handle failures</td></tr>
+                <tr><td><strong>AWS Step Functions</strong></td><td>Multi-service workflows with retries, catch, parallel branches, human approval</td><td>More setup; bills per state transition</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>Full integration patterns — SQS, SNS, API Gateway — are in <a href="s15-app-integration.html">Section 15</a>. Rule of thumb: Glue-only DAG → Workflows; single event → one action → EventBridge; complex branching across services → Step Functions.</p>
+
+          <div class="diagram">
+            <p class="diagram-title">Typical Glue Workflow run</p>
+            <div class="flow">
+              <div class="node is-source"><b>Schedule trigger</b><small>cron 02:00 UTC</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-compute"><b>Crawler</b><small>register new S3 partitions</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-compute pulse"><b>Spark ETL job</b><small>bookmark-enabled incremental</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-store"><b>Curated S3</b><small>partitioned Parquet</small></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="section" id="job-types">
+          <h2>Glue job types, workers and versions</h2>
+          <p class="lead">Pick the job type from workload shape: heavy Spark batch, micro-batch streaming, lightweight Python, or Ray for parallel Python ML. Then pick <strong>worker type</strong>, <strong>Glue version</strong> and <strong>standard vs flex</strong> execution.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-054.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-054.png" alt="Course slide showing Glue Studio create job options: Visual ETL notebook and script editor, with job configuration for Spark Glue 4.0 Python 3 G.1X worker type, and engine choices Python shell Ray and Spark." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 54</span>Glue Studio authoring modes and job configuration. Glue 4.0 maps to Spark 3.3 and Python 3. Engine dropdown switches between Spark, Python shell and Ray.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-055.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-055.png" alt="Course slide comparing four Glue job types: Spark ETL for large-scale processing 2-100 DPU, Spark Streaming for real-time 2-100 DPU, Python Shell for lightweight tasks 0.0625-1 DPU, and Ray for parallel processing." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 55</span>Four job types at a glance. Python Shell is the cheapest option for small file conversions; Spark ETL is the default for anything that needs a cluster.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-056.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-056.png" alt="Course slide on Glue execution types: Standard starts immediately with consistent timing, Flex is cheaper with possible startup delay for less time-sensitive jobs." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 56</span>Standard vs Flex execution. Flex trades startup latency for lower DPU-hour rates — fine for nightly batches, wrong for SLA-bound pipelines.</figcaption>
+          </figure>
+
+          <h3>Worker types (Spark jobs)</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Worker</th><th>vCPU / memory</th><th>Notes</th></tr></thead>
+              <tbody>
+                <tr><td><strong>G.1X</strong></td><td>4 vCPU, 16 GB</td><td>Default; equals 1 DPU</td></tr>
+                <tr><td><strong>G.2X</strong></td><td>8 vCPU, 32 GB</td><td>2 DPUs; more memory per executor</td></tr>
+                <tr><td><strong>G.4X</strong></td><td>16 vCPU, 64 GB</td><td>4 DPUs; large shuffles/joins</td></tr>
+                <tr><td><strong>G.8X</strong></td><td>32 vCPU, 128 GB</td><td>8 DPUs; very large in-memory ops</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>Worker count × worker DPU size = total DPUs. A job with 5 × G.2X workers uses 10 DPUs.</p>
+
+          <div class="callout info"><strong>Python Shell minimum.</strong> Python Shell jobs can run on <strong>0.0625 DPU</strong> (1/16 DPU) for the smallest tasks. Despite the deck wording, Python Shell does <em>not</em> use G.1X workers — it uses fractional DPU allocation. Spark jobs have a <strong>2-DPU minimum</strong> (typically 2 × G.1X workers).</div>
+
+          <h3>Glue version → Spark version mapping</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Glue version</th><th>Spark</th><th>Python</th></tr></thead>
+              <tbody>
+                <tr><td>Glue 4.0</td><td>3.3</td><td>3.10</td></tr>
+                <tr><td>Glue 3.0</td><td>3.1</td><td>3.7</td></tr>
+                <tr><td>Glue 2.0</td><td>2.4</td><td>3.7</td></tr>
+                <tr><td>Glue 1.0</td><td>2.4</td><td>2.7</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>New jobs should target Glue 4.0 for the 1-minute billing minimum and current Spark features.</p>
+
+          <h3>Spark Streaming ETL</h3>
+          <p>Reads from Kinesis Data Streams, Kafka (MSK) or other streaming sources in micro-batches. Default <strong>window size is 100 seconds</strong> (<code>windowSize</code> parameter). Uses Spark Structured Streaming under the hood with Glue-managed infrastructure. Enable checkpointing on S3 for failure recovery.</p>
+
+          <h3>Python Shell job snippet</h3>
+<pre data-lang="python" data-title="Glue Python Shell — CSV row count to CloudWatch" data-explain="Python Shell jobs use plain Python 3 with boto3/pandas; no SparkContext. Max timeout 24 hours on 1 DPU."><code>import sys
+import boto3
+import pandas as pd
+from awsglue.utils import getResolvedOptions
+
+args = getResolvedOptions(sys.argv, ["input_path"])
+df = pd.read_csv(args["input_path"])
+row_count = len(df)
+print(f"Rows read: {row_count}")
+
+# Optional: emit custom metric
+cw = boto3.client("cloudwatch")
+cw.put_metric_data(
+    Namespace="DEA/Lab",
+    MetricData=[{"MetricName": "CsvRowCount", "Value": row_count, "Unit": "Count"}]
+)</code></pre>
+
+          <h3>Start a job from the CLI</h3>
+<pre data-lang="shell" data-title="AWS CLI — start Glue job run" data-explain="Returns a JobRunId immediately; poll with get-job-run or watch CloudWatch logs. Pass bookmark option and worker overrides as --arguments."><code>aws glue start-job-run \
+  --job-name dea-customers-etl \
+  --arguments '{
+    "--job-bookmark-option": "job-bookmark-enable",
+    "--push_down_predicate": "State=NY"
+  }'
+
+# Response: { "JobRunId": "jr_abc123..." }</code></pre>
+
+          <h3>Glue connections and VPC access</h3>
+          <p>A <strong>Glue connection</strong> stores JDBC URL, credentials (often from Secrets Manager) and network info for private databases. To reach RDS in a private subnet, create the connection with a VPC, subnet and security group; Glue creates elastic network interfaces in that subnet. The job's IAM role needs <code>ec2:CreateNetworkInterface</code> permissions. Without a connection, only public endpoints and S3-native sources work out of the box.</p>
+
+          <h3>Glue Schema Registry</h3>
+          <p>Central registry for Avro, JSON Schema and Protobuf schemas with versioning and compatibility checks (backward/forward/full). Producers register schemas; consumers (Glue streaming jobs, MSK, Kinesis) validate payloads at ingest. Prevents "silent" schema drift from breaking downstream Parquet tables.</p>
+        </section>
+
+        <section class="section" id="partitioning">
+          <h2>Partitioning data on S3</h2>
+          <p class="lead">Partitioning splits data into directory prefixes so queries and ETL jobs read only the subset they need. On AWS the standard is <strong>Hive-style</strong> keys: <code>year=2024/month=01/day=15/</code>.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-058.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-058.png" alt="Course slide on Glue partitioning with device-data-bucket example showing year month day Hive-style prefixes and benefits of query performance reduced I/O independent partition processing and cost efficiency." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 58</span>The <code>device-data-bucket</code> worked example. Prefix layout <code>/data/year=2023/month=01/day=01/</code> lets Athena and Glue skip entire year or month subtrees when the query filters on those columns.</figcaption>
+          </figure>
+
+          <h3>Why partition</h3>
+          <ul>
+            <li><strong>Query performance</strong> — Athena and Redshift Spectrum scan fewer files.</li>
+            <li><strong>Reduced I/O</strong> — Glue and Spark list and read only matching prefixes.</li>
+            <li><strong>Independent processing</strong> — backfill one month without touching others.</li>
+            <li><strong>Cost</strong> — less data scanned means lower Athena and shorter Glue runs.</li>
+          </ul>
+
+          <h3>Define partitions in the job and the catalog</h3>
+          <p>Pass <code>partitionKeys</code> in <code>write_dynamic_frame</code> (see transformation code above) <em>and</em> ensure the crawler or <code>ALTER TABLE ADD PARTITION</code> registers them in the Data Catalog. Mismatch between S3 paths and catalog partition columns breaks pruning.</p>
+
+          <div class="callout warn"><strong>Too many small partitions.</strong> Aim for partitions roughly 128 MB–1 GB each. Millions of tiny files (the "small file problem") hurt Spark and Athena — compact with a Glue job or S3 Object Lambda batch.</div>
+        </section>
+
+        <section class="section" id="databrew">
+          <h2>Glue DataBrew</h2>
+          <p class="lead"><strong>AWS Glue DataBrew</strong> is a visual data-preparation service for analysts and engineers who prefer clicks over PySpark. It reads from S3, JDBC and the Data Catalog; writes cleaned data back to S3 or Redshift; and exposes 250+ built-in transformations.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-060.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-060.png" alt="Course slide introducing DataBrew as visual data preparation with pre-built transformations reading from S3 data lake through DataBrew to Redshift." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 60</span>DataBrew sits between the lake and the warehouse. No code required for standard cleaning; recipes are reusable and schedulable.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-061.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-061.png" alt="Course slide showing DataBrew console with data quality statistics and column profiling visualisations." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 61</span>DataBrew console with profiling. Column statistics show valid, invalid and missing percentages plus value distributions — the visual counterpart to Glue Data Quality rulesets.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-062.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-062.png" alt="Course slide defining DataBrew concepts: Project for configuring transforms, Step as applied transformation, Recipe as reusable step set, Job as recipe execution, Schedule for automation, and Data Profiling for quality analysis." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 62</span>DataBrew vocabulary. Flow: create a <strong>Project</strong> on a dataset → build <strong>Steps</strong> → save as a <strong>Recipe</strong> → run a <strong>Job</strong> on a schedule.</figcaption>
+          </figure>
+
+          <h3>Object model</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Object</th><th>Role</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Dataset</strong></td><td>Pointer to S3, JDBC or catalog table input</td></tr>
+                <tr><td><strong>Project</strong></td><td>Interactive workspace where you configure transforms</td></tr>
+                <tr><td><strong>Step</strong></td><td>One applied transformation (sort, dedupe, split column)</td></tr>
+                <tr><td><strong>Recipe</strong></td><td>Saved, reusable ordered list of steps</td></tr>
+                <tr><td><strong>Job</strong></td><td>Batch execution of a recipe over a dataset → S3/Redshift output</td></tr>
+                <tr><td><strong>Schedule</strong></td><td>Cron automation for jobs</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Transformation categories from the deck</h3>
+          <div class="grid-2">
+            <div class="mini-card">
+              <h4>Filter and column ops</h4>
+              <ul>
+                <li><strong>Filter</strong> — keep rows matching conditions</li>
+                <li><strong>Split</strong> — split a column on a delimiter</li>
+                <li><strong>Sort</strong> — ascending/descending order</li>
+                <li><strong>Date/Time conversions</strong> — parse and reformat timestamps</li>
+                <li><strong>Count distinct</strong> — unique value counts per column</li>
+              </ul>
+            </div>
+            <div class="mini-card">
+              <h4>Shape and combine</h4>
+              <ul>
+                <li><strong>Nest / Unnest</strong> — NEST_TO_MAP, NEST_TO_ARRAY, NEST_TO_STRUCT, UNNEST_ARRAY</li>
+                <li><strong>Pivot / Unpivot</strong> — rows to columns and back</li>
+                <li><strong>Transpose</strong> — swap rows and columns</li>
+                <li><strong>Group</strong> — aggregate by keys</li>
+                <li><strong>Join / Union</strong> — combine datasets</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="slide-row">
+            <figure class="slide-fig">
+              <a href="assets/slides/slide-063.png" target="_blank" rel="noopener">
+                <img src="assets/slides/slide-063.png" alt="Course slide showing DataBrew NEST_TO_MAP NEST_TO_ARRAY and NEST_TO_STRUCT transformations converting Name Age City columns into map array or struct formats." loading="lazy">
+              </a>
+              <figcaption><span class="slide-no">Slide 63</span>Nest transforms combine columns into a map, array or typed struct — useful before loading semi-structured data into JSON-friendly stores.</figcaption>
+            </figure>
+            <figure class="slide-fig">
+              <a href="assets/slides/slide-064.png" target="_blank" rel="noopener">
+                <img src="assets/slides/slide-064.png" alt="Course slide showing DataBrew UNNEST_ARRAY expanding an array back into separate Name Age City columns." loading="lazy">
+              </a>
+              <figcaption><span class="slide-no">Slide 64</span>UNNEST_ARRAY reverses nesting — expands one array column into multiple scalar columns.</figcaption>
+            </figure>
+          </div>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-065.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-065.png" alt="Course slide showing DataBrew PIVOT rotating Quarter sales into Q1 Q2 columns and UNPIVOT converting columns into attribute-value rows." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 65</span>PIVOT turns row values into columns (Q1, Q2); UNPIVOT melts columns into attribute/value pairs — the same reshape operations as SQL PIVOT/UNPIVOT.</figcaption>
+          </figure>
+
+          <div class="slide-row">
+            <figure class="slide-fig">
+              <a href="assets/slides/slide-066.png" target="_blank" rel="noopener">
+                <img src="assets/slides/slide-066.png" alt="Course slide showing DataBrew TRANSPOSE swapping column headers with row values for Name Age City." loading="lazy">
+              </a>
+              <figcaption><span class="slide-no">Slide 66</span>TRANSPOSE flips rows and columns — different from pivot; every column becomes a row attribute.</figcaption>
+            </figure>
+            <figure class="slide-fig">
+              <a href="assets/slides/slide-067.png" target="_blank" rel="noopener">
+                <img src="assets/slides/slide-067.png" alt="Course slide listing DataBrew transformations Join Split Filter Sort Date Time conversions and Count Distinct." loading="lazy">
+              </a>
+              <figcaption><span class="slide-no">Slide 67</span>Remaining transform families: join, split, filter, sort, datetime parsing and count distinct — the everyday cleaning toolkit.</figcaption>
+            </figure>
+          </div>
+
+          <div class="callout exam"><strong>Glue vs DataBrew on the exam.</strong> Complex multi-source ETL, bookmarks, streaming → Glue Spark job. Business-user cleaning, profiling, 250+ one-click transforms → DataBrew. "Least coding" almost always points to DataBrew or Glue Studio Visual ETL.</div>
+        </section>
+
+        <section class="section" id="deeper">
+          <h2>Deeper detail and exam edge cases</h2>
+          <p class="lead">Glue billing floors, worker sizing, bookmark failure modes, and operational gotchas that turn a cheap batch job into a recurring DPU-hour leak.</p>
+
+          <h3>Limits and quotas that decide answers</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Limit</th><th>Value</th><th>Adjustable?</th><th>Why it matters</th></tr></thead>
+              <tbody>
+                <tr><td>DPU-hour rate (us-east-1)</td><td>~0.44 USD per DPU-hour</td><td>Flex execution lowers rate; Standard starts immediately</td><td>Exam cost maths: DPUs × hours × rate, subject to minimum duration.</td></tr>
+                <tr><td>Glue 2.0+ job minimum bill</td><td>1 minute per run</td><td>No (hard)</td><td>45-second Spark job still bills one minute — not zero.</td></tr>
+                <tr><td>Glue 0.9 / 1.0 / crawler minimum bill</td><td>10 minutes per run</td><td>No (hard)</td><td>One-minute crawler run bills ten minutes — major exam trap vs Glue 4.0 Spark jobs.</td></tr>
+                <tr><td>Spark ETL minimum capacity</td><td>2 DPUs (typically 2 × G.1X workers)</td><td>No (hard) at job level</td><td>Cannot run a one-DPU Spark cluster — Python Shell is the small-job escape hatch.</td></tr>
+                <tr><td>Python Shell minimum</td><td>0.0625 DPU (1/16 DPU)</td><td>No (hard)</td><td>Cheapest Glue compute for tiny scripts — not the same worker types as Spark.</td></tr>
+                <tr><td>G.1X worker</td><td>4 vCPU, 16 GB RAM (= 1 DPU)</td><td>Choose worker type/count</td><td>Default for general ETL; scale out workers before jumping to G.8X unless memory-bound.</td></tr>
+                <tr><td>G.2X / G.4X / G.8X</td><td>2 / 4 / 8 DPUs each; 32 / 64 / 128 GB RAM</td><td>Choose per shuffle/join size</td><td>Larger workers reduce shuffle over network; do not use G.8X for 100 MB files.</td></tr>
+                <tr><td>Spark Streaming ETL minimum</td><td>2 DPUs always on while running</td><td>No (hard)</td><td>Micro-batch streaming is never sub-2-DPU — cost is continuous, not per batch file.</td></tr>
+                <tr><td>Concurrent job runs (default)</td><td>Soft quota — varies by account (often tens per Region)</td><td>Yes — Service Quotas request</td><td>Workflow fan-out hitting limit queues runs — design sequential stages or request increase.</td></tr>
+                <tr><td>Data Catalog free tier</td><td>1 million objects/month</td><td>Reduce partition objects</td><td>Bookmark state and partitions count toward storage.</td></tr>
+                <tr><td>Catalog above free tier</td><td>~1 USD per 100,000 objects/month</td><td>Partition projection in Athena reduces catalog churn</td><td>High partition cardinality affects both Athena and catalog bills.</td></tr>
+                <tr><td>Flex execution trade-off</td><td>Lower DPU rate; delayed start possible</td><td>Choose per job</td><td>Nightly batch OK; SLA-bound pipeline → Standard.</td></tr>
+                <tr><td>Spark UI / continuous logging</td><td>Extra S3 storage + small compute overhead</td><td>Disable in production after tuning</td><td>Debug feature left on writes logs to S3 indefinitely if lifecycle missing.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>What you actually pay for</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Billed dimension</th><th>Unit</th><th>How to spend less</th></tr></thead>
+              <tbody>
+                <tr><td>Spark / streaming / Ray jobs</td><td>DPU-hour (1-min or 10-min floor)</td><td>Right-size workers; pushdown predicates; Flex for non-urgent; Glue 4.0 not 1.0.</td></tr>
+                <tr><td>Crawler</td><td>DPU-hour, 10-min minimum</td><td>Crawl once; incremental folders only; replace with job-written partitions.</td></tr>
+                <tr><td>Interactive sessions / notebooks</td><td>DPU-hour while session open</td><td>Idle timeout; stop session when done — overnight notebook ≈ 5 DPUs × hours × 0.44.</td></tr>
+                <tr><td>DataBrew interactive project</td><td>Per session-minute (node-based)</td><td>Close projects; publish recipe and run batch job instead of leaving UI open.</td></tr>
+                <tr><td>DataBrew recipe job</td><td>DPU-minutes per job run</td><td>Schedule jobs; avoid re-running full dataset when recipe change is small.</td></tr>
+                <tr><td>Data Catalog API requests</td><td>Per request above free allowance at high volume</td><td>Normal pipelines stay negligible; millions of GetPartitions calls need partition indexes.</td></tr>
+                <tr><td>Data Quality (DQDL) evaluation</td><td>Inherits hosting job/crawler DPU-hours</td><td>Run rules on partitioned slices; fail-fast rules before heavy transforms.</td></tr>
+                <tr><td>Job bookmark storage</td><td>Counts as catalog objects</td><td>Negligible at lab scale; included in million-object free tier.</td></tr>
+                <tr><td>ENI / NAT for VPC JDBC</td><td>Data processing + NAT hourly if no S3 gateway endpoint</td><td>S3 VPC gateway endpoint on Glue subnet; avoid NAT for S3-only jobs.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout cost"><strong>Biggest Glue waste.</strong> Default 10-DPU Spark job on a megabyte file, plus leaving an interactive session or DataBrew project open over a weekend. Right-size to 2 × G.1X for small labs; stop sessions explicitly.</div>
+          <div class="callout danger"><strong>Crawler on a schedule.</strong> A daily crawler on a production bucket bills at least 10 minutes of DPU time every day even when zero new files arrived. Event-driven partition registration or bookmarks plus ADD PARTITION eliminates most crawls.</div>
+
+          <h3>Traps that catch people</h3>
+          <ul>
+            <li><strong>10-minute minimum on crawlers —</strong> Students run crawlers repeatedly while debugging schema. Each run bills 10 minutes minimum — use the console table preview or one crawl plus manual DDL fixes.</li>
+            <li><strong>Glue Studio overwrites script —</strong> Editing the visual graph regenerates the script and can wipe hand-written PySpark. Export to Git; treat Studio as prototype, script editor as source of truth for production.</li>
+            <li><strong>Job bookmark skips corrected files —</strong> Bookmarks track processed paths. If a source file is replaced in place with fixed data, the bookmark skips it. Reset bookmark or write to new keys.</li>
+            <li><strong>Bookmark disabled mid-pipeline —</strong> Re-enable after a full load without reset causes duplicate processing of all files — or skip if state inconsistent. Document bookmark resets in runbooks.</li>
+            <li><strong>Schema drift breaks Parquet write —</strong> New JSON field types conflict across files. ResolveChoice or explicit schema enforcement before write; Schema Registry for streaming sources.</li>
+            <li><strong>Flex for SLA jobs —</strong> Flex saves money but queue delay violates "complete by 6 AM" requirements. Exam scenarios with deadlines → Standard execution.</li>
+            <li><strong>Streaming ETL left running —</strong> Minimum 2 DPUs continuous. Forgetting to stop a lab streaming job bills like a small cluster 24/7.</li>
+            <li><strong>Auto-scaling without cap —</strong> <code>--enable-auto-scaling</code> helps skewed workloads but can spin to max workers on bad joins. Set worker limits and fix data skew first.</li>
+            <li><strong>DataBrew vs Spark duplicate —</strong> Running both on the same dataset doubles DPU spend. Pick DataBrew for profiling/cleaning, Spark for complex joins — chain them, do not parallel duplicate.</li>
+            <li><strong>DQDL blocking without sampling —</strong> Full-table quality on billions of rows every run adds DPU time. Scope rules to new partitions or sample for monitoring rules.</li>
+          </ul>
+
+          <h3>Troubleshooting playbook</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Symptom</th><th>Most likely cause</th><th>What to check / fix</th></tr></thead>
+              <tbody>
+                <tr><td>Job succeeds but no new rows in output</td><td>Bookmark skipped all sources as already processed</td><td>Glue console → Job → Bookmarks; reset if full reload needed; verify new files use new keys.</td></tr>
+                <tr><td>Duplicate rows after job retry</td><td>Bookmark disabled or append-only write mode</td><td>Enable bookmark; use overwrite partition; MERGE pattern in Spark for idempotent loads.</td></tr>
+                <tr><td><code>AnalysisException</code> schema mismatch</td><td>Schema drift in source JSON/CSV</td><td>Sample failing files; ResolveChoice; enforce schema in DynamicFrame; Schema Registry for Kafka.</td></tr>
+                <tr><td>Job timeout with low CPU</td><td>Single large shuffle; straggler partition; too few workers</td><td>Spark UI (enable temporarily); increase workers or G.2X; fix skew with salting/repartition.</td></tr>
+                <tr><td>JDBC connection timeout</td><td>Missing VPC connection or security group</td><td>Connection ENI in correct subnet; RDS SG allows Glue SG inbound; Secrets Manager creds valid.</td></tr>
+                <tr><td>Crawler adds duplicate tables</td><td>Multiple crawlers same path different databases</td><td>Consolidate crawlers; use single database naming convention.</td></tr>
+                <tr><td>Flex job started hours late</td><td>Expected Flex queue behaviour</td><td>CloudWatch job run <code>StartedOn</code> vs scheduled time; switch to Standard for SLA.</td></tr>
+                <tr><td>Data Quality rules always fail</td><td>Threshold too tight or wrong column after ApplyMapping</td><td>DQDL results in CloudWatch; validate column names post-transform.</td></tr>
+                <tr><td>Script changes lost after Studio save</td><td>Visual save regenerated code</td><td>Version script in Git; disable auto-regenerate or edit in script tab only.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Production patterns</h3>
+          <p>Production Glue pipelines run <strong>Glue 4.0 Spark jobs</strong> on schedules or EventBridge triggers, with bookmarks enabled for incremental S3 ingest, pushdown predicates for the processing window, and Parquet writes partitioned by date. Crawlers run on initial onboarding only — ongoing partitions are registered by the job via the API or sync operations. DataBrew handles analyst-driven cleaning recipes published as jobs; Spark owns joins, deduplication at scale, and VPC JDBC extracts. Data Quality rulesets gate curated loads before Athena exposes tables to consumers.</p>
+          <div class="diagram">
+            <p class="diagram-title">Incremental Glue batch (production default)</p>
+            <div class="flow">
+              <div class="node is-source"><b>EventBridge</b><small>S3 ObjectCreated</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-compute pulse"><b>Spark ETL</b><small>bookmark · predicate</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-store"><b>curated Parquet</b><small>ADD PARTITION</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-serve"><b>DQDL check</b><small>fail → SNS</small></div>
+            </div>
+          </div>
+          <p>Anti-pattern: 10-DPU default job reading the entire multi-TB table nightly without predicate because "it worked in dev on 11 rows". Production uses date pushdown, worker auto-scaling with a cap, and Flex when the SLA allows queue delay.</p>
+<pre data-lang="shell" data-title="Glue — start job with bookmark and auto-scaling" data-explain="Pass job parameters that production pipelines standardise: bookmark on, auto-scaling on, Flex only when SLA permits."><code>aws glue start-job-run \
+  --job-name dea-customers-etl \
+  --arguments '{
+    "--job-bookmark-option": "job-bookmark-enable",
+    "--enable-auto-scaling": "true",
+    "--enable-continuous-cloudwatch-log": "false",
+    "--enable-spark-ui": "false"
+  }'</code></pre>
+
+          <h3>Where this fits with the rest of the exam</h3>
+          <p>Glue is the default batch transform answer and the glue between ingestion, catalog, and query layers — exam Domain 1 weighting makes this section high leverage.</p>
+          <ul>
+            <li><a href="s02-data-ingestion.html">Section 2 (Data Ingestion)</a> — S3 landing layout and catalog concepts this section operationalises.</li>
+            <li><a href="s03-athena.html">Section 3 (Athena)</a> — consumers of curated Glue output; CTAS limits push heavy transforms back to Glue.</li>
+            <li><a href="s05-lambda.html">Section 5 (Lambda)</a> — event-driven lightweight transforms vs Glue for Spark-scale work.</li>
+            <li><a href="s06-streaming.html">Section 6 (Streaming)</a> — Spark Streaming ETL from Kinesis/MSK; bookmarks differ from streaming checkpoints.</li>
+            <li><a href="s12-compute.html">Section 12 (EMR)</a> — when custom Spark, long clusters, or exotic libraries beat serverless Glue.</li>
+            <li><a href="s15-app-integration.html">Section 15 (Step Functions)</a> — multi-service orchestration when Glue Workflows are too narrow.</li>
+          </ul>
+          <div class="callout exam"><strong>Glue vs EMR vs Lambda vs DataBrew.</strong> Least operational overhead on routine S3→S3 Spark → Glue. Complex multi-hour Spark with custom JARs → EMR. Single-file trigger transform under minutes → Lambda. Visual profiling and recipe cleaning without code → DataBrew. "Process only new files daily" → Glue with job bookmarks, not a stateless re-read of the bucket.</div>
+        </section>
+
+        <section class="section" id="interview">
+          <h2>Interview questions</h2>
+          <p class="muted">Answer each one out loud before opening it.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+            <details class="qa">
+              <summary>How is AWS Glue priced, and what is the difference between the 1-minute and 10-minute minimum billing?<span class="qa-tag">Cost</span></summary>
+              <div class="qa-body">
+                <p>Glue bills in <strong>DPU-hours</strong> at a regional rate (about $0.44/DPU-hour in us-east-1). One DPU is 4 vCPU and 16 GB RAM. Crawlers and Glue 1.0-style workloads have a <strong>10-minute minimum</strong> per run. Glue 2.0+ ETL jobs, streaming, Ray, Python Shell and interactive sessions use a <strong>1-minute minimum</strong>. Cost = DPUs allocated × runtime in hours × rate, subject to the floor.</p>
+                <p>The Data Catalog stores the first million objects free; above that it is about a dollar per 100,000 objects per month. DataBrew sessions and jobs add their own DPU-minute charges.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What are Glue job bookmarks and when would you reset them?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>Job bookmarks persist state between runs so Glue skips files or partitions already processed — making batch ingestion <strong>incremental</strong>. Enable with <code>--job-bookmark-option job-bookmark-enable</code>. State lives in the Data Catalog keyed by job and source.</p>
+                <p>Reset when you need a <strong>full reload</strong>: schema change requiring reprocessing all history, a bug corrupted curated output, or source files were replaced in place. Reset via console (Reset job bookmark) or API; until reset, previously seen paths are skipped.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>When do you choose Python Shell over a Spark ETL job?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p><strong>Python Shell</strong> suits lightweight work: single-file CSV conversion, calling boto3 APIs, small pandas transforms, under ~16 GB data on 1 DPU. It starts faster and costs a fraction of a Spark cluster (0.0625 DPU minimum).</p>
+                <p><strong>Spark ETL</strong> is for distributed joins, large shuffles, complex transforms, DynamicFrames, and anything needing more than one machine. If the question mentions "large-scale", "join multiple sources" or "partitioned Parquet at TB scale", Spark wins.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Explain standard vs flex execution for Glue jobs.<span class="qa-tag">Cost</span></summary>
+              <div class="qa-body">
+                <p><strong>Standard</strong> starts immediately and delivers predictable runtime — use for SLA-bound or time-sensitive pipelines. <strong>Flex</strong> queues the job and may delay startup in exchange for a lower DPU-hour price — fine for nightly batches where a few minutes of queue time does not matter.</p>
+                <p>Flex is an exam cost optimisation answer when the scenario explicitly says processing can wait or is not time-critical.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What is a pushdown predicate and why does it save money?<span class="qa-tag">Performance</span></summary>
+              <div class="qa-body">
+                <p>A pushdown predicate is a filter expression passed to <code>create_dynamic_frame.from_catalog</code> (or the JDBC equivalent) so Glue resolves it against catalog partition metadata <em>before</em> reading S3. Only matching prefixes are listed and scanned.</p>
+                <p>Without it, Spark reads every file under the table root. With it, Athena-style partition pruning happens at ingest time — fewer bytes read, shorter job, lower DPU bill and less downstream work.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>DynamicFrame vs DataFrame — when do you use ResolveChoice?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p><strong>DynamicFrame</strong> is Glue's schema-flexible abstraction — it handles sparse and evolving schemas (JSON logs, catalog tables with mixed types). <strong>DataFrame</strong> is Spark's strict typed API — faster for known schemas and rich SQL.</p>
+                <p><strong>ResolveChoice</strong> is needed when the same column has conflicting types across records (string vs int). It merges or casts variants into a consistent schema before mapping or writing to Parquet, which requires uniform types per column.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How would you orchestrate a crawler followed by an ETL job on a schedule?<span class="qa-tag">Architecture</span></summary>
+              <div class="qa-body">
+                <p>Inside Glue-only scope: create a <strong>Glue Workflow</strong> with a schedule trigger → crawler step → conditional trigger on crawler success → Spark job. Monitor in the Workflows graph.</p>
+                <p>Alternatives: <strong>EventBridge</strong> rule on a cron schedule targeting <code>StartJobRun</code> (two separate rules if crawler and job are independent), or <strong>Step Functions</strong> if later steps include Lambda, SNS or branching logic. For pure Glue, Workflows are least operational overhead.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What is the device-data-bucket partitioning example teaching?<span class="qa-tag">Exam</span></summary>
+              <div class="qa-body">
+                <p>It demonstrates <strong>Hive-style S3 prefixes</strong>: <code>year=YYYY/month=MM/day=DD/</code>. Queries filtering on year and month skip unrelated prefixes — less I/O for Glue and Athena, independent backfills per day, lower scan cost.</p>
+                <p>Partitions must be declared in the Data Catalog (crawler or manual) and match the path keys used in <code>partitionKeys</code> on write. High-cardinality columns (user ID) make bad partition keys; date columns are the classic choice.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Glue DataBrew vs a Glue Spark job — how do you decide?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p><strong>DataBrew</strong> for visual profiling, 250+ one-click transforms, analyst-friendly recipes, and scheduled cleaning jobs without maintaining PySpark. <strong>Spark ETL</strong> for complex multi-source joins, custom code, job bookmarks, streaming, VPC JDBC at scale, and fine-grained performance tuning.</p>
+                <p>DataBrew output still lands on S3 for Athena; many teams DataBrew-clean then Glue-model, or use Data Quality rulesets in Spark jobs for governance.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>A Glue job reading RDS in a private subnet fails with connection timeout — what do you check?<span class="qa-tag">Troubleshooting</span></summary>
+              <div class="qa-body">
+                <p>Verify a <strong>Glue connection</strong> with the correct VPC, subnet and security group; the job must reference that connection. The job role needs ENI permissions. The RDS security group must allow inbound from the Glue connection's security group on the DB port.</p>
+                <p>Also check Secrets Manager credential rotation, JDBC URL format, and that the subnet has a route to the database (same VPC or peered). Missing S3 endpoint access on the ENI causes a different failure — job connects to DB but cannot write output.</p>
+              </div>
+            </details>
+          </div>
+        </section>
+
+        <section class="section" id="practice">
+          <h2>Hands-on practice</h2>
+          <p class="muted">Free tier where possible. Delete everything at the end of each task.</p>
+          <ol class="practice-list">
+            <li class="practice">
+              <p class="practice-task">Create a Glue crawler on your lab bucket's <code>raw/customers/</code> prefix, run it, and confirm the table appears in the Data Catalog with correct column types.</p>
+              <span class="console-path">AWS Glue → Data catalog → Crawlers → Create crawler</span>
+              <p class="practice-expect">Database <code>dea_lab</code> contains table <code>customers</code> with seven columns; Athena can <code>SELECT COUNT(*) FROM dea_lab.customers</code> and returns 11.</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">Console</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li><strong>Glue → Crawlers → Create crawler</strong>. Name <code>customers-raw-crawler</code>.</li>
+                    <li>Data source: S3 path <code>s3://dea-lab-ab-4821/raw/customers/</code>.</li>
+                    <li>IAM role: create <code>AWSGlueServiceRole-dea-lab</code> with S3 read on the bucket.</li>
+                    <li>Target database: create <code>dea_lab</code>. Schedule: on demand.</li>
+                    <li>Run crawler → verify table in <strong>Tables</strong>.</li>
+                  </ol>
+                  <p class="muted">Cleanup: delete crawler and table if you rebuild later; catalog objects are free under one million.</p>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Author a Glue Spark ETL job that deduplicates <code>customers.csv</code> and writes Parquet partitioned by <code>State</code> to <code>curated/customers/</code>. Run it once with job bookmark disabled, then enable bookmarks and add a new file to <code>raw/</code>.</p>
+              <span class="console-path">Glue Studio → Visual ETL → Create job</span>
+              <p class="practice-expect">Curated prefix contains <code>State=NY/</code> etc. with Parquet files; second run with bookmark skips the original file and processes only the new one.</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">Console + CLI</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Create job from catalog source <code>dea_lab.customers</code>, transform Drop duplicates on ID+Email, sink to S3 Parquet with partition key State.</li>
+                    <li>Job details: Glue 4.0, G.1X, 2 workers, <strong>Job bookmark = Enable</strong>.</li>
+                    <li>Run job, inspect <code>s3://dea-lab-ab-4821/curated/customers/</code>.</li>
+                  </ol>
+<pre data-lang="shell"><code>aws glue start-job-run --job-name dea-customers-etl \
+  --arguments '{"--job-bookmark-option":"job-bookmark-enable"}'</code></pre>
+                  <p class="muted">Cleanup: delete job runs output if unneeded; stop interactive sessions.</p>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Open DataBrew, create a project on the customers dataset, apply Remove duplicates and Filter State equals NY, publish a recipe and run a job to <code>staging/customers-ny/</code>.</p>
+              <span class="console-path">AWS Glue → DataBrew → Projects → Create project</span>
+              <p class="practice-expect">Staging prefix holds only New York rows without the duplicate Sarah Smith row.</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">Console</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li><strong>DataBrew → Datasets → New dataset</strong> from S3 <code>raw/customers/customers.csv</code>.</li>
+                    <li>Create project → Recipe → Add step Remove duplicates → Add step Filter <code>State = "NY"</code>.</li>
+                    <li>Publish recipe → Create job → output to <code>s3://dea-lab-ab-4821/staging/customers-ny/</code>.</li>
+                    <li>Run job; download result and verify row count.</li>
+                  </ol>
+                  <p class="muted">Cleanup: delete DataBrew job, recipe, project and dataset; DataBrew sessions bill while open.</p>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Add a usage budget for Glue: alert when forecasted Glue DPU usage exceeds 10 DPU-hours in the month.</p>
+              <span class="console-path">Billing → Budgets → Create budget → Usage budget</span>
+              <p class="practice-expect">Budget shows Glue service filtered; test notification appears when you run several jobs.</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">Console</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li><strong>Budgets → Create → Usage budget</strong> → service <code>Glue</code>, metric DPU-Hours, amount 10.</li>
+                    <li>Alert: forecasted &gt; 80% → your email.</li>
+                  </ol>
+                  <p class="muted">Budgets are free; no cleanup needed.</p>
+                </div>
+              </details>
+            </li>
+          </ol>
+        </section>
+
+        <section class="section" id="recap">
+          <h2>Recap</h2>
+          <div class="recap">
+            <ul class="checklist">
+              <li>Glue bills DPU-hours (~$0.44/DPU-hr); Glue 2.0+ jobs have 1-min minimum, crawlers 10-min minimum.</li>
+              <li>1 DPU = 4 vCPU + 16 GB; Spark default 10 DPUs, Python Shell default 0.0625 DPU.</li>
+              <li>Data Catalog: first 1M objects free; job bookmarks make ingestion stateful and incremental.</li>
+              <li>AWS Budgets: cost vs usage vs RI/SP budgets; forecast alerts before actual; first two action budgets free.</li>
+              <li>DynamicFrame + ResolveChoice for messy schemas; pushdown predicates for partition pruning.</li>
+              <li>Job types: Spark batch, Spark Streaming (100s default window), Python Shell, Ray; Standard vs Flex execution.</li>
+              <li>Workers G.1X–G.8X; Glue 4.0 → Spark 3.3; connections + VPC for private JDBC.</li>
+              <li>Partition S3 as <code>key=value</code>; register in catalog; write with <code>partitionKeys</code>.</li>
+              <li>Workflows orchestrate Glue-native DAGs; EventBridge/Step Functions for wider integration.</li>
+              <li>DataBrew: Project → Recipe → Job; filter, join, pivot, nest/unnest without code.</li>
+              <li>Data Quality uses DQDL rulesets; Schema Registry enforces Avro/JSON/Protobuf compatibility.</li>
+            </ul>
+            <p style="margin-top:1rem;">
+              <button type="button" data-complete="section-04">Mark complete</button>
+            </p>
+          </div>
+        </section>
+
+      </div>
+
+      <aside class="toc" aria-label="On this page">
+        <strong>On this page</strong>
+        <ol>
+          <li><a href="#lectures">Lectures</a></li>
+          <li><a href="#glue-costs">Glue costs</a></li>
+          <li><a href="#budgets">AWS Budgets</a></li>
+          <li><a href="#stateful-stateless">Stateful vs stateless</a></li>
+          <li><a href="#transformations">Transformations</a></li>
+          <li><a href="#workflows">Workflows</a></li>
+          <li><a href="#job-types">Job types</a></li>
+          <li><a href="#partitioning">Partitioning</a></li>
+          <li><a href="#databrew">DataBrew</a></li>
+          <li><a href="#deeper">Deeper detail</a></li>
+          <li><a href="#interview">Interview questions</a></li>
+          <li><a href="#practice">Hands-on practice</a></li>
+          <li><a href="#recap">Recap</a></li>
+        </ol>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<footer class="footer">AWS Certified Data Engineer Associate (DEA-C01) · Section 4 · Offline study edition</footer>
+</body>
+</html>

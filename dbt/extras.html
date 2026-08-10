@@ -1,0 +1,1053 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Beyond the dbt bootcamp: dbt Mesh, Semantic Layer and MetricFlow, adapters beyond Snowflake, materialized views, Elementary observability, and warehouse cost control.">
+<title>Beyond the Course | The Complete dbt Bootcamp Notes</title>
+<link rel="stylesheet" href="assets/dbt.css">
+<script defer src="assets/search-index.js"></script>
+<script defer src="assets/code-highlight.js"></script>
+<script defer src="assets/dbt.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">Beyond the course · The Complete dbt Bootcamp: Zero to Hero</p>
+    <h1>Beyond the Course</h1>
+    <p class="subtitle">The bootcamp builds one Snowflake project end to end. Real organisations run multi-project meshes, semantic layers, alternate warehouses, materialized views, observability packages, and cost controls the course never touches. This page synthesises those topics so you know what exists, when to reach for it, and how it connects to the Airbnb pipeline you already built.</p>
+    <div class="hero-meta">
+      <span class="chip">5 topics</span>
+      <span class="chip">Not covered in the bootcamp</span>
+      <span class="chip">Current as of dbt 1.11+</span>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <nav class="pager" aria-label="Section navigation">
+    <a href="s22-certification.html">← Certification Exam Prep</a>
+    <a href="index.html">Course contents</a>
+    <a href="interview-prep.html">Next: Interview prep →</a>
+  </nav>
+
+  <main id="main">
+    <div class="layout">
+      <div class="content">
+
+        <section class="section" id="intro">
+          <h2>Why this page exists</h2>
+          <p class="lead">The 22 numbered sections teach dbt on Snowflake with one well-scoped project. That is the right place to start, but it is not the full product surface area. Teams at scale split projects, publish contracts across domain boundaries, define metrics once for every BI tool, run on BigQuery or Databricks, adopt materialized views where the warehouse supports them, layer Elementary on top of dbt tests, and treat warehouse spend as a first-class design constraint.</p>
+          <p>Nothing here replaces the course material. These topics assume you already understand <code>ref()</code>, materializations, tests, and production patterns from Sections 1&ndash;22. Read this page when you finish the certification prep or when an interview question goes beyond what the videos covered.</p>
+          <div class="callout tip"><strong>How to use this page.</strong> Skim the comparison tables first, then read the section that matches your next job or migration. Each topic cross-links back to the course sections where the foundation lives.</div>
+
+          <div class="stack">
+            <div class="layer"><strong>Section 1&ndash;22 (course)</strong> Single Snowflake project · models · tests · CI · certification prep</div>
+            <div class="layer"><strong>This page</strong> Mesh · Semantic Layer · multi-adapter · MV · Elementary · cost consolidation</div>
+            <div class="layer"><strong><a href="interview-prep.html">Interview prep</a></strong> Scenario debugging and design questions beyond exam scope</div>
+          </div>
+
+          <p>The five topics below are not a deployment checklist — you do not need mesh on day one of your first dbt job. They are the vocabulary senior analytics engineers use when the monolith outgrows one team, when the CFO asks why two dashboards disagree, or when your company picks a second warehouse.</p>
+        </section>
+
+        <section class="section" id="dbt-mesh">
+          <h2>dbt Mesh and multi-project setups</h2>
+          <p class="lead">dbt Mesh is the pattern for connecting multiple dbt projects so one team can depend on another team&rsquo;s models without copying SQL or sharing one monolithic repository. Instead of a single giant DAG, you get bounded domains with explicit public interfaces.</p>
+
+          <h3>Why large orgs split one giant project</h3>
+          <p>A single project with five hundred models works until it does not. Merge conflicts multiply. CI runs rebuild unrelated subgraphs. Ownership blurs: finance models break when marketing changes a staging table nobody knew they depended on. Blast radius of a bad deploy grows with every new model in the same repo.</p>
+          <p>Splitting by domain &mdash; ingestion staging in one project, core dimensions in another, domain marts in a third &mdash; gives each team a repo they can deploy independently, review with domain experts, and scale CI against a smaller DAG. The cost is coordination: downstream projects must consume upstream outputs through a stable contract, not by reaching into private models.</p>
+
+          <div class="diagram">
+            <p class="diagram-title">dbt Mesh: three projects linked by public models and contracts</p>
+            <div class="dag">
+              <div class="dag-col">
+                <p class="dag-label">Project: raw_staging</p>
+                <div class="node is-model"><b>stg_listings</b><small>private</small></div>
+                <div class="node is-mart pulse"><b>pub_listings</b><small>public + contract</small></div>
+              </div>
+              <div class="dag-col">
+                <p class="dag-label">Project: core</p>
+                <div class="node is-model"><b>dim_listings_cleansed</b><small>refs pub_listings</small></div>
+                <div class="node is-mart pulse"><b>pub_dim_listings</b><small>public + contract</small></div>
+              </div>
+              <div class="dag-col">
+                <p class="dag-label">Project: marketing_mart</p>
+                <div class="node is-mart"><b>mart_campaign_listings</b><small>refs pub_dim_listings</small></div>
+              </div>
+            </div>
+          </div>
+
+          <h3>Cross-project ref()</h3>
+          <p>Within one project, <code>{{ ref('dim_listings_cleansed') }}</code> resolves to a relation in your target schema. Across projects, dbt resolves the same syntax against models declared in a dependency project. You install the upstream project as a package-like dependency (see <code>dependencies.yml</code> below), and dbt knows which relations are addressable from outside.</p>
+          <p>The mental model: <code>ref()</code> still means &ldquo;the model I depend on,&rdquo; but the compiler may fetch that model&rsquo;s metadata from another repository&rsquo;s manifest rather than from a file in your tree.</p>
+
+<pre data-lang="sql" data-title="models/mart/mart_fullmoon_reviews.sql (hypothetical cross-project)" data-explain="Same ref() syntax; dim_listings_cleansed would live in an upstream core project published to the mesh."><code>WITH listings AS (
+  SELECT * FROM {{ ref('dim_listings_cleansed') }}
+),
+reviews AS (
+  SELECT * FROM {{ ref('fct_reviews') }}
+)
+SELECT
+  l.listing_id,
+  r.review_date,
+  r.review_sentiment
+FROM listings l
+INNER JOIN reviews r ON l.listing_id = r.listing_id</code></pre>
+
+          <h3>Project dependencies via dependencies.yml</h3>
+          <p>dbt 1.6+ introduced first-class project dependencies. A downstream project lists upstream projects in <code>dependencies.yml</code> (alongside or instead of package-only workflows). Each entry names the project, where to find its artifacts (Git revision, registry, or local path for development), and which environment&rsquo;s manifest to trust.</p>
+
+<pre data-lang="yaml" data-title="dependencies.yml (downstream marketing project)" data-explain="Declares that this project consumes the airbnb_core project; dbt downloads or resolves its manifest for cross-project refs."><code>projects:
+  - name: airbnb_core
+    project: airbnb_core
+    revision: 1.2.0
+    repository: https://github.com/myorg/dbt-airbnb-core.git</code></pre>
+
+          <p>After <code>dbt deps</code>, the downstream project can reference public models from <code>airbnb_core</code> as if they lived in the same graph, subject to access rules. Private models in the upstream project remain invisible.</p>
+
+          <h3>Public models as the mesh boundary</h3>
+          <p>Not every upstream model should be consumable. Mark the interface layer explicitly with <code>access: public</code> in schema YAML. Private models stay internal; protected models may be visible but not ref-able across projects depending on configuration. Public models are the published API of a domain.</p>
+
+<pre data-lang="yaml" data-title="models/schema.yml (upstream core project)" data-explain="dim_listings_cleansed from the course becomes a public contract-backed model other projects may ref."><code>models:
+  - name: dim_listings_cleansed
+    access: public
+    description: Cleansed listings dimension — stable interface for downstream marts.
+    config:
+      contract:
+        enforced: true
+    columns:
+      - name: listing_id
+        data_type: integer
+      - name: price
+        data_type: number(10,2)</code></pre>
+
+          <p>The course already enforces a contract on <code>dim_hosts_cleansed</code> in the real Airbnb <code>models/schema.yml</code>. In a mesh, that same pattern marks the model as something downstream teams can rely on without reading the SQL.</p>
+
+<pre data-lang="yaml" data-title="models/schema.yml (course repo — dim_hosts_cleansed contract)" data-explain="Real file from the Airbnb project; enforced contract is the same mechanism mesh public models use at domain boundaries."><code>  - name: dim_hosts_cleansed
+    config:
+      contract:
+        enforced: true
+    columns:
+      - name: host_id
+        data_type: integer
+        constraints:
+          - type: not_null
+      - name: host_name
+        data_type: string
+        constraints:
+          - type: not_null</code></pre>
+
+          <h3>Contracts as the interface between meshes</h3>
+          <p>Model contracts (covered in <a href="s12-advanced-testing.html">Section 12</a>) become more important in a mesh than in a monolith. The upstream team commits to column names, types, and constraints; the downstream team codes against the contract, not against tribal knowledge. When the upstream team needs a breaking change, they version the model (<a href="s19-production.html">Section 19</a>) or publish a new public model and deprecate the old one.</p>
+          <div class="callout warn"><strong>Contracts fail the build on drift.</strong> If <code>dim_listings_cleansed</code> suddenly adds a non-null column without updating YAML, enforced contracts stop the run before downstream marts compile against a surprise shape. That is desirable pain in a mesh; it replaces silent breakage in twelve dependent dashboards.</div>
+
+          <h3>Group-based access control</h3>
+          <p>Large deployments pair mesh boundaries with <code>groups</code> in schema YAML. A group names a set of models owned by a team; access levels (<code>private</code>, <code>protected</code>, <code>public</code>) attach to models in that group. The course Airbnb project does not define groups &mdash; it is a single-team tutorial &mdash; but the YAML shape is the same as contracts:</p>
+
+<pre data-lang="yaml" data-title="models/schema.yml (group pattern — not in course repo)" data-explain="Groups document ownership and default access for every model in the finance domain."><code>groups:
+  - name: finance
+    owner:
+      name: Finance Analytics
+      email: finance-analytics@example.com
+
+models:
+  - name: fct_reviews
+    group: finance
+    access: protected</code></pre>
+
+          <p>Groups feed documentation, ownership metadata, and (on dbt Cloud) governance features. On Core, they primarily structure who may mark models public and which models appear in cross-project dependency graphs.</p>
+
+          <h3>Monolith versus mesh trade-offs</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Concern</th><th>Single project</th><th>dbt Mesh</th></tr></thead>
+              <tbody>
+                <tr><td>Onboarding</td><td>One clone, one profile</td><td>Multiple repos; understand dependency order</td></tr>
+                <tr><td>CI time</td><td>Grows with entire DAG</td><td>Smaller per-project runs; artifact sync overhead</td></tr>
+                <tr><td>Breaking changes</td><td>Internal ref() only</td><td>Requires contract discipline and versioning</td></tr>
+                <tr><td>Ownership</td><td>Informal CODEOWNERS</td><td>Public models + groups as explicit API</td></tr>
+                <tr><td>When to adopt</td><td>&lt; ~100 models, one team</td><td>Multiple teams, conflicting deploy cadences</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="analogy"><strong>Everyday analogy —</strong> a monolith is one apartment building with shared utilities. A mesh is a street of townhouses: each owner maintains their unit, but water mains (public models) connect through regulated junction boxes (contracts) everyone agreed on.</div>
+
+          <h3>End-to-end mesh workflow</h3>
+          <p>A typical week for two teams: the core team merges a change to <code>dim_listings_cleansed</code>, runs prod CI, uploads <code>manifest.json</code> to an artifact store or registry. The marketing team bumps the pinned revision in <code>dependencies.yml</code>, runs <code>dbt deps</code>, and their CI compiles <code>mart_fullmoon_reviews</code> against the new upstream contract. If the core team added a breaking column without a version bump, the downstream compile or contract test fails before any warehouse write.</p>
+
+          <div class="terminal">
+            <p class="term-head">Downstream project after upstream release</p>
+            <pre class="term-body"><span class="tt-cmd">dbt deps</span>
+<span class="tt-dim">Installing project dependency airbnb_core@2.4.1</span>
+<span class="tt-ok">Installed 1 project dependency</span>
+<span class="tt-cmd">dbt compile --select mart_fullmoon_reviews</span>
+<span class="tt-ok">Found 847 models, 312 tests, 12 semantic models (upstream)</span>
+<span class="tt-ok">Compiled node mart_fullmoon_reviews</span></pre>
+          </div>
+
+          <p>Compare that to a monolith: the same change triggers one CI run but every team watches the same pipeline. Mesh trades operational overhead for blast-radius isolation.</p>
+
+          <h3>Mapping the Airbnb course project to mesh boundaries</h3>
+          <p>If you were to mesh-ify the course DAG without changing business logic, a sensible cut is:</p>
+          <ul>
+            <li><strong>Project raw_and_staging</strong> — sources, ephemeral <code>src_*</code> models, snapshots on raw tables. Public output: cleansed staging views if downstream needs them, often none (core reads raw via contracts on snapshots).</li>
+            <li><strong>Project core</strong> — <code>dim_listings_cleansed</code>, <code>dim_hosts_cleansed</code>, <code>fct_reviews</code>, <code>dim_listings_w_hosts</code>. All marked public with contracts mirroring the course <code>schema.yml</code>.</li>
+            <li><strong>Project marts</strong> — <code>mart_fullmoon_reviews</code>, exposures in <code>dashboards.yml</code>, domain-specific analyses. Depends on core via <code>dependencies.yml</code>.</li>
+          </ul>
+          <p>The course keeps all three layers in one repo for pedagogy. In production, the marts team should not need write access to snapshot definitions owned by the ingestion team.</p>
+        </section>
+
+        <section class="section" id="semantic-layer">
+          <h2>The Semantic Layer and MetricFlow</h2>
+          <p class="lead">The dbt Semantic Layer defines business metrics and dimensions once, in YAML, and exposes them to BI tools through a consistent query interface. MetricFlow is the engine that compiles metric requests into warehouse SQL. The goal is the same as centralising <code>dim_listings_cleansed</code> in the course project, but at the metric definition layer above facts and dimensions.</p>
+
+          <h3>The different revenue number problem</h3>
+          <p><a href="s02-data-maturity.html#stage-3-analytics">Section 2</a> describes stage 3 failure mode: finance and product report different revenue on the same day because each dashboard encodes its own filters, grain, and fee logic. dbt models fix the table layer &mdash; everyone reads the same <code>fct_reviews</code> &mdash; but BI tools can still define &ldquo;revenue&rdquo; differently in their semantic models.</p>
+          <p>The Semantic Layer pushes the definition into dbt: one <code>metric: total_booking_value</code> with documented filters, grain, and aggregation. Tableau, Hex, Excel (via API), and custom apps query the same metric object; MetricFlow generates the SQL so the number matches everywhere.</p>
+
+          <div class="diagram">
+            <p class="diagram-title">Semantic Layer: one metric definition, many consumers</p>
+            <div class="flow">
+              <div class="node is-model"><b>fct_reviews</b><small>dbt model</small></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-model pulse"><b>semantic_model reviews</b><small>entities + dimensions</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-mart"><b>metric: review_count</b><small>defined once</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-serve"><b>BI tools</b><small>consistent SQL</small></div>
+            </div>
+          </div>
+
+          <h3>Semantic models</h3>
+          <p>A semantic model sits on top of one or more dbt models (often a fact and its dimensions). It declares entities (primary and foreign keys), dimensions (attributes you filter or group by), and measures (raw aggregatable columns before metrics wrap them).</p>
+
+<pre data-lang="yaml" data-title="models/semantic/reviews_semantic.yml (illustrative — not in course repo)" data-explain="Semantic model on fct_reviews from the Airbnb project; entities link to dim_listings_cleansed grain."><code>semantic_models:
+  - name: reviews
+    model: ref('fct_reviews')
+    description: Review fact table for sentiment and volume metrics.
+    defaults:
+      agg_time_dimension: review_date
+    entities:
+      - name: review
+        type: primary
+        expr: review_id
+      - name: listing
+        type: foreign
+        expr: listing_id
+    dimensions:
+      - name: review_date
+        type: time
+        type_params:
+          time_granularity: day
+      - name: review_sentiment
+        type: categorical
+    measures:
+      - name: review_count
+        agg: count
+        expr: review_id</code></pre>
+
+          <h3>Metrics defined once</h3>
+          <p>Metrics reference semantic models and apply business logic: filters, derived calculations, cumulative windows, and conversion to consistent units. A ratio metric might divide booking value by night count; a derived metric might combine two measures with coalesce rules finance signed off on.</p>
+
+<pre data-lang="yaml" data-title="models/semantic/reviews_metrics.yml (illustrative)" data-explain="Simple count metric on the reviews semantic model — the kind of KPI dashboards repeat in every tool."><code>metrics:
+  - name: total_reviews
+    label: Total reviews
+    type: simple
+    type_params:
+      measure: review_count
+    filter: |
+      {{ Dimension('review_sentiment__review_sentiment') }} is not null</code></pre>
+
+          <h3>dbt Semantic Layer versus the old dbt Metrics package</h3>
+          <p>Before MetricFlow, the community <code>dbt_metrics</code> package (and early dbt Cloud metrics) offered a parallel YAML spec with a different compiler. The modern stack unifies on semantic models + MetricFlow; the old package is deprecated for new work.</p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Aspect</th><th>Legacy dbt Metrics package</th><th>Semantic Layer + MetricFlow</th></tr></thead>
+              <tbody>
+                <tr><td>Spec location</td><td>Package macros + YAML</td><td>First-class <code>semantic_models</code> / <code>metrics</code> in project</td></tr>
+                <tr><td>Query engine</td><td>Package-generated SQL</td><td>MetricFlow compiler</td></tr>
+                <tr><td>BI integration</td><td>Limited</td><td>dbt Cloud SL API, JDBC, partner connectors</td></tr>
+                <tr><td>Core-only path</td><td>Package on any warehouse</td><td>MetricFlow available in dbt Fusion / SL CLI for Core workflows (see callout)</td></tr>
+                <tr><td>Course coverage</td><td>Not taught</td><td>This page</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>How MetricFlow prevents inconsistent KPIs</h3>
+          <p>When an analyst asks for &ldquo;total reviews by sentiment last month,&rdquo; the BI tool sends a metric request to MetricFlow, not a hand-written <code>SELECT COUNT(*)</code>. MetricFlow resolves join paths between semantic models, applies the metric filter, respects the time spine, and emits warehouse-specific SQL. Two tools requesting the same metric with the same filters get identical queries modulo adapter dialect.</p>
+          <p>That does not remove the need for good dbt models. Garbage in <code>fct_reviews</code> still produces garbage metrics. The Semantic Layer governs the last mile where definitions used to diverge.</p>
+
+          <div class="callout info"><strong>Cloud-only history, Core and Fusion today.</strong> The hosted Semantic Layer API launched on dbt Cloud first. dbt Core users historically had no supported SL path without Cloud. As of dbt 1.11+ and the Fusion line, MetricFlow-powered semantic projects can be developed and queried locally via the Semantic Layer CLI and Fusion tooling, but hosted multi-tenant SL (scheduling, caching, partner OAuth) remains a Cloud product. Check current docs before promising a Core-only SL deployment to stakeholders.</div>
+
+          <div class="callout exam"><strong>Certification:</strong> the Analytics Engineering exam focuses on models, tests, and deployment — not MetricFlow YAML. Expect conceptual &ldquo;why centralise metrics&rdquo; questions at the maturity level of Section 2, not syntax drills on <code>semantic_models</code>.</div>
+
+          <h3>Querying metrics in practice</h3>
+          <p>Once metrics exist, consumers request them through the Semantic Layer API (Cloud), JDBC/ODBC drivers, or partner integrations (Tableau, Hex, etc.). The request specifies metric names, dimensions to group by, and time range. MetricFlow compiles to SQL against the underlying dbt models — typically facts and dimensions you already test in CI.</p>
+
+<pre data-lang="shell" data-title="MetricFlow CLI example (illustrative)" data-explain="Local query against a defined metric; exact CLI flags vary by Fusion/MetricFlow version."><code>mf query --metrics total_reviews \
+  --group-by review_sentiment \
+  --where "review_date &gt;= '2024-01-01'"</code></pre>
+
+          <p>For the Airbnb project, sensible first metrics might be <code>total_reviews</code>, <code>avg_sentiment_score</code> (if derived from a dimension), and <code>listings_with_reviews</code> at listing grain — all grounded in <code>fct_reviews</code> and <code>dim_listings_cleansed</code> you already built.</p>
+
+          <h3>Relationship to exposures</h3>
+          <p>The course defines a dashboard exposure in <code>models/dashboards.yml</code> pointing at <code>mart_fullmoon_reviews</code>. Exposures document lineage to BI assets; semantic metrics document lineage to KPI definitions. Mature teams link exposures to metrics so the docs site shows both the mart table and the official metric objects built on it.</p>
+
+          <h3>Time spines and cumulative metrics</h3>
+          <p>MetricFlow supports derived and cumulative metrics (running totals, conversion rates) when you define a time spine model — a dense date dimension dbt materialises once. The course seed <code>seed_full_moon_dates.csv</code> is a specialised calendar; a general time spine would be a generated date series joined in semantic YAML. Getting time spine grain wrong (day vs week) is a common source of metric mismatch between Finance (monthly) and Product (daily).</p>
+
+          <div class="grid-2">
+            <div class="mini-card">
+              <h4>Start here</h4>
+              <p>One semantic model on <code>fct_reviews</code>, two metrics (<code>total_reviews</code>, <code>distinct_listings_reviewed</code>), one BI tool connected.</p>
+            </div>
+            <div class="mini-card">
+              <h4>Scale later</h4>
+              <p>Join multiple semantic models on shared entities (listing, host), add saved queries, expose via API to reverse-ETL tools.</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="section" id="adapters">
+          <h2>Adapters beyond Snowflake</h2>
+          <p class="lead">dbt is warehouse-agnostic in architecture but not in behaviour. Every adapter translates the same Jinja model into dialect-specific DDL and DML. The course runs on Snowflake; the same Airbnb SQL compiles differently on BigQuery, Databricks, Redshift, Postgres, or DuckDB.</p>
+
+          <h3>How models translate across warehouses</h3>
+          <p>Core concepts &mdash; <code>ref()</code>, materializations, tests, snapshots &mdash; are shared. Adapter code paths differ for: identifier quoting, <code>CREATE TABLE AS</code> syntax, incremental strategies (<code>merge</code> versus <code>delete+insert</code>), Python model execution, clustering or partitioning clauses, and support for newer materializations like <code>materialized_view</code> or microbatch.</p>
+          <p>The Airbnb staging model <code>src_listings</code> reads a raw table; on Snowflake the instructor uses <code>:: NUMBER(10,2)</code> casts in <code>dim_listings_cleansed</code>. On BigQuery you would use <code>CAST(... AS NUMERIC)</code>; on Postgres <code>::numeric(10,2)</code>. dbt does not auto-translate casts inside your SQL &mdash; only the wrapper DDL and incremental macros are adapter-aware.</p>
+
+          <h3>The course repo databricks branch</h3>
+          <p>The bootcamp Git repository includes a <code>databricks</code> branch with the same Airbnb project adapted for Databricks SQL / Unity Catalog: profile targets, catalog and schema naming, and incremental nuances that differ from Snowflake. If your job runs on Databricks, compare that branch against <code>main</code> side by side &mdash; the business logic in <code>dim_listings_cleansed.sql</code> and <code>fct_reviews.sql</code> stays the same; connection and materialization config change.</p>
+
+          <div class="filetree">
+            <ul>
+              <li><span class="dir">airbnb/</span> <span class="note">same layout on every branch</span>
+                <ul>
+                  <li><span class="dir">models/</span>
+                    <ul>
+                      <li><span class="file">dim/dim_listings_cleansed.sql</span></li>
+                      <li><span class="file">fct/fct_reviews.sql</span></li>
+                      <li><span class="file">schema.yml</span></li>
+                    </ul>
+                  </li>
+                  <li><span class="file">dbt_project.yml</span> <span class="new">← adapter-specific configs on databricks branch</span></li>
+                </ul>
+              </li>
+            </ul>
+          </div>
+
+          <h3>Materialization and feature support by adapter</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Capability</th><th>Snowflake</th><th>BigQuery</th><th>Databricks</th><th>Redshift</th><th>Postgres</th><th>DuckDB</th></tr></thead>
+              <tbody>
+                <tr><td>table / view / incremental</td><td>Full</td><td>Full</td><td>Full</td><td>Full</td><td>Full</td><td>Full (dev scale)</td></tr>
+                <tr><td><code>merge</code> incremental</td><td>Yes</td><td>Yes</td><td>Yes (Delta)</td><td>Limited</td><td>Via delete+insert</td><td>Yes</td></tr>
+                <tr><td>Python models</td><td>Snowpark</td><td>No</td><td>PySpark / pandas on SQL warehouse</td><td>No</td><td>No</td><td>No</td></tr>
+                <tr><td>Microbatch incremental</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td><td>No</td><td>No</td></tr>
+                <tr><td><code>materialized_view</code></td><td>Yes</td><td>Yes</td><td>Yes (Delta MVs)</td><td>No</td><td>Extension-dependent</td><td>Limited</td></tr>
+                <tr><td>Snapshots</td><td>Timestamp/check</td><td>Timestamp/check</td><td>Timestamp/check</td><td>Timestamp/check</td><td>Timestamp/check</td><td>Timestamp/check</td></tr>
+                <tr><td>Persist docs</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Limited</td><td>Comments only</td><td>Comments only</td></tr>
+                <tr><td>Typical use</td><td>Enterprise default in course</td><td>GCP native</td><td>Lakehouse</td><td>Legacy AWS DW</td><td>Small OLTP + analytics</td><td>Local CI / learning</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>BigQuery specifics</h3>
+          <p>Partitioning and clustering belong in model config (<code>partition_by</code>, <code>cluster_by</code>). Incremental models often use <code>merge</code> with partition filters to limit scan cost. Python models are not supported &mdash; the course&rsquo;s disabled <code>dim_review_sentiment.py</code> would need a SQL port or a separate Spark job outside dbt.</p>
+
+          <h3>Databricks specifics</h3>
+          <p>Unity Catalog three-level names (<code>catalog.schema.table</code>) replace Snowflake database.schema. Delta Lake underpins merges and materialized views. The databricks branch shows profile and catalog settings; grants in <code>dbt_project.yml</code> map to UC privileges differently from Snowflake roles.</p>
+
+          <h3>Redshift and Postgres</h3>
+          <p>Redshift lacks microbatch and native materialized view support in dbt&rsquo;s adapter at the same maturity as Snowflake. Merge performance depends on distribution keys and sort keys you must design. Postgres suits smaller datasets; incremental <code>merge</code> is emulated. Many teams use DuckDB locally with the DuckDB adapter for fast unit-test loops, then deploy to Snowflake or BigQuery in CI.</p>
+
+          <h3>DuckDB as local adapter</h3>
+          <p>DuckDB adapter lets you run a subset of the Airbnb DAG on a laptop with no cloud account. Limitations: no Python models, dialect differs from Snowflake, source definitions must point at loaded CSV or parquet instead of <code>AIRBNB.RAW.RAW_LISTINGS</code>. Useful for teaching, unit tests, and compile-time graph validation — not a prod target for this course project.</p>
+
+          <div class="diagram">
+            <p class="diagram-title">Adapter choice: dev loop versus production target</p>
+            <div class="flow">
+              <div class="node is-compute"><b>DuckDB local</b><small>graph + unit tests</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-compute"><b>CI compile</b><small>Snowflake target</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-store pulse"><b>Prod Snowflake</b><small>course default</small></div>
+            </div>
+          </div>
+          <div class="grid-2">
+            <div class="mini-card">
+              <h4>Stay close to the course</h4>
+              <p>Snowflake or Databricks branch: same SQL patterns, incremental strategies, and Python optional path the instructor demonstrates.</p>
+            </div>
+            <div class="mini-card">
+              <h4>Validate before migrating</h4>
+              <p>Run <code>dbt compile</code> and diff <code>target/compiled</code> on a sample model. Cast syntax, date functions, and merge keys differ first.</p>
+            </div>
+          </div>
+
+          <div class="callout tip"><strong>DuckDB for cheap iteration.</strong> Pair DuckDB adapter with <code>dbt run --empty</code> from <a href="s16-debugging-logging.html">Section 16</a> to validate graph structure without warehouse spend; switch target to Snowflake for integration tests.</div>
+
+          <h3>Porting dim_listings_cleansed: concrete diff</h3>
+          <p>The course model casts price with Snowflake syntax. This is the line every adapter migration hits first:</p>
+
+<pre data-lang="sql" data-title="models/dim/dim_listings_cleansed.sql (Snowflake — course file)" data-explain="Real project file; REPLACE and :: NUMBER are Snowflake-specific."><code>  REPLACE(
+    price_str,
+    '$'
+  ) :: NUMBER(
+    10,
+    2
+  ) AS price,</code></pre>
+
+          <p>BigQuery equivalent: <code>CAST(REPLACE(price_str, '$') AS NUMERIC)</code>. Postgres: <code>CAST(REPLACE(price_str, '$', '') AS numeric(10,2))</code>. dbt will not rewrite this for you — adapter portability stops at the materialization wrapper.</p>
+
+          <h3>Incremental and Python on alternate adapters</h3>
+          <p><code>fct_reviews</code> uses <code>is_incremental()</code> and <code>dbt_utils.generate_surrogate_key</code> — both work across adapters. Microbatch config on <code>mart_fullmoon_reviews</code> requires Snowflake, BigQuery, or Databricks. The disabled Python models <code>dim_review_sentiment.py</code> and <code>dim_long_term_listings.py</code> run on Snowflake Snowpark and Databricks; they fail compile on Postgres or Redshift until rewritten in SQL or moved to an external Spark job.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Airbnb model</th><th>Snowflake (course)</th><th>BigQuery</th><th>Databricks branch</th></tr></thead>
+              <tbody>
+                <tr><td><code>src_listings</code> (ephemeral)</td><td>Works</td><td>Works; change source database</td><td>Works; UC catalog path</td></tr>
+                <tr><td><code>dim_listings_cleansed</code></td><td>Works</td><td>Fix casts</td><td>Fix casts + catalog</td></tr>
+                <tr><td><code>fct_reviews</code> incremental</td><td>Works</td><td>Add partition hint recommended</td><td>Delta merge</td></tr>
+                <tr><td><code>mart_fullmoon_reviews</code> microbatch</td><td>Section 19 pattern</td><td>Supported with BQ adapter</td><td>Check branch config</td></tr>
+                <tr><td><code>dim_review_sentiment.py</code></td><td>Snowpark (disabled)</td><td>Not supported in dbt</td><td>Spark path on Databricks</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="section" id="materialized-views">
+          <h2>Materialized views</h2>
+          <p class="lead">dbt&rsquo;s <code>materialized_view</code> materialization creates warehouse-native materialized views instead of plain views or full tables. The warehouse maintains precomputed results and refreshes them according to its own rules; dbt owns the DDL lifecycle on each run.</p>
+
+          <h3>materialized_view versus view and table</h3>
+          <p>A <code>view</code> (the default for most Airbnb models in <code>dbt_project.yml</code>) stores only a query definition; every consumer pays the full compute. A <code>table</code> stores data and refreshes only when dbt rebuilds it. A <code>materialized_view</code> stores precomputed results <em>and</em> lets the warehouse refresh incrementally when supported &mdash; a middle ground for read-heavy, moderately fresh datasets.</p>
+
+<pre data-lang="sql" data-title="models/dim/dim_listings_w_hosts.sql (hypothetical MV config)" data-explain="Same SELECT as the course model; only materialization changes to use warehouse MV refresh."><code>{{
+  config(
+    materialized='materialized_view',
+    on_configuration_change='apply'
+  )
+}}
+SELECT
+  l.listing_id,
+  l.listing_name,
+  l.price,
+  h.host_name,
+  h.is_superhost
+FROM {{ ref('dim_listings_cleansed') }} l
+LEFT JOIN {{ ref('dim_hosts_cleansed') }} h ON l.host_id = h.host_id</code></pre>
+
+          <h3>Warehouse-native refresh versus dbt run</h3>
+          <p>When dbt runs a materialized view model, it issues <code>CREATE MATERIALIZED VIEW</code> or the adapter equivalent on first build, then compares config on subsequent runs. The warehouse may also auto-refresh when base tables change (Snowflake dynamic tables overlap this space; materialized views are the dbt-native path on supported adapters).</p>
+          <p>dbt does not poll refresh status. If upstream <code>dim_listings_cleansed</code> updates between dbt runs, the MV becomes stale until the warehouse refreshes it or dbt recreates it. Understand your platform&rsquo;s refresh semantics before choosing MV over incremental table.</p>
+
+          <h3>on_configuration_change behaviour</h3>
+          <p>Model config can include <code>on_configuration_change</code>: <code>apply</code> (alter the MV when cluster keys, indexes, or refresh options change), <code>continue</code> (warn and keep existing), or <code>fail</code> (stop the run). This mirrors incremental <code>on_schema_change</code> but targets MV-specific settings.</p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Setting</th><th>When config drift detected</th><th>Risk</th></tr></thead>
+              <tbody>
+                <tr><td><code>apply</code></td><td>Adapter attempts in-place alter</td><td>May trigger full refresh on some platforms</td></tr>
+                <tr><td><code>continue</code></td><td>Run succeeds; MV keeps old config</td><td>Silent mismatch between docs and reality</td></tr>
+                <tr><td><code>fail</code></td><td>Run stops</td><td>Safest for prod when someone edits warehouse UI manually</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Adapter support summary</h3>
+          <p>First-class <code>materialized_view</code> materialization targets Snowflake, BigQuery, and Databricks in current adapter releases. Redshift and Postgres either lack support or require falling back to <code>table</code> with scheduled refreshes. Always check the adapter changelog for your pinned version before planning MV-heavy architectures.</p>
+
+          <div class="callout cost"><strong>MV is not free freshness.</strong> Auto-refresh bills warehouse compute on every base-table change. A hot staging table feeding an MV can cost more than a nightly incremental table rebuild. Model the refresh frequency before swapping every view for an MV.</div>
+
+          <h3>When the course models are MV candidates</h3>
+          <p><code>dim_listings_w_hosts</code> joins two cleansed dimensions — expensive if every dashboard repeats the join. A materialized view refreshed when <code>dim_listings_cleansed</code> or <code>dim_hosts_cleansed</code> updates could serve read-heavy workloads. <code>fct_reviews</code> is a poor MV candidate: append-heavy fact with incremental logic already optimised in the course.</p>
+
+          <h3>Config reference</h3>
+<pre data-lang="yaml" data-title="dbt_project.yml (MV defaults — illustrative)" data-explain="Project-level defaults for MV models; override per model in SQL config block."><code>models:
+  airbnb:
+    dim:
+      +materialized: table
+    marts:
+      +materialized: materialized_view
+      +on_configuration_change: fail</code></pre>
+
+          <p>Start with <code>on_configuration_change: fail</code> in production until you understand how your warehouse alters MVs. Relax to <code>apply</code> only after observability confirms alter behaviour is acceptable.</p>
+
+          <h3>Snowflake dynamic tables versus dbt materialized_view</h3>
+          <p>Snowflake also offers dynamic tables as a native refresh mechanism with a different operational model. dbt&rsquo;s <code>materialized_view</code> materialization targets warehouse materialized view objects through adapter macros. Teams on Snowflake should read both docs before choosing: dynamic tables integrate tightly with Snowflake scheduling; dbt MVs integrate with your existing <code>dbt run</code> DAG and lineage. The course does not cover either; both appear in advanced production architectures after incrementals stop being enough for read latency.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Approach</th><th>Owned by</th><th>Refresh trigger</th><th>Lineage in dbt docs</th></tr></thead>
+              <tbody>
+                <tr><td>View (course default)</td><td>dbt</td><td>Every query</td><td>Yes</td></tr>
+                <tr><td>Incremental table</td><td>dbt</td><td><code>dbt run</code> schedule</td><td>Yes</td></tr>
+                <tr><td>dbt materialized_view</td><td>dbt + warehouse MV</td><td>Warehouse MV policy + dbt DDL</td><td>Yes</td></tr>
+                <tr><td>Snowflake dynamic table</td><td>Snowflake UI/SQL</td><td>Snowflake lag target</td><td>Only if wrapped in dbt model</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="section" id="elementary">
+          <h2>Elementary and data observability</h2>
+          <p class="lead">dbt tests (Sections 11&ndash;12, 16) assert rules you define: uniqueness, relationships, accepted values, expectations. Elementary adds observability on top: statistical anomaly detection, lineage-aware alerting, and report UI for trends dbt alone does not surface.</p>
+
+          <h3>What Elementary adds beyond built-in tests</h3>
+          <ul>
+            <li><strong>Anomaly detection</strong> &mdash; learns typical row counts, null rates, and column distributions; alerts when today&rsquo;s run deviates without you writing a threshold for every metric.</li>
+            <li><strong>Lineage-aware alerting</strong> &mdash; ties failures to upstream models and sources so on-call knows whether <code>src_listings</code> or <code>fct_reviews</code> triggered the blast radius.</li>
+            <li><strong>Slack and email reports</strong> &mdash; scheduled data quality digests for stakeholders who never open the dbt Cloud UI.</li>
+            <li><strong>Observability UI</strong> &mdash; HTML report from test and run metadata stored in your warehouse.</li>
+          </ul>
+
+          <div class="diagram">
+            <p class="diagram-title">Elementary sits after dbt run: metadata in, alerts and reports out</p>
+            <div class="flow">
+              <div class="node is-compute"><b>dbt build</b><small>models + tests</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-store"><b>elementary schema</b><small>run results</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-compute pulse"><b>Elementary CLI</b><small>anomaly + report</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-serve"><b>Slack / UI</b><small>on-call</small></div>
+            </div>
+          </div>
+
+          <h3>Installation as dbt package plus CLI</h3>
+          <p>Add Elementary to <code>packages.yml</code>, run <code>dbt deps</code>, enable the package models in <code>dbt_project.yml</code>, then run <code>dbt run</code> to materialise Elementary&rsquo;s metadata tables. After your normal build, invoke the Elementary CLI (<code>edr monitor</code>, <code>edr report</code>) to evaluate anomalies and generate the observability report.</p>
+
+<pre data-lang="yaml" data-title="packages.yml (Elementary added — illustrative)" data-explain="Elementary installs alongside dbt_utils and dbt_expectations from the course repo."><code>packages:
+  - package: dbt-labs/dbt_utils
+    version: 1.3.3
+  - package: metaplane/dbt_expectations
+    version: 0.10.10
+  - package: elementary-data/elementary
+    version: 0.16.0</code></pre>
+
+<pre data-lang="yaml" data-title="dbt_project.yml (Elementary models config)" data-explain="Elementary models land in a dedicated schema; run after your main DAG or in the same job."><code>models:
+  elementary:
+    +schema: elementary
+    +enabled: true</code></pre>
+
+          <div class="terminal">
+            <p class="term-head">Typical Elementary workflow after dbt build</p>
+            <pre class="term-body"><span class="tt-cmd">dbt build --select tag:daily</span>
+<span class="tt-ok">Completed successfully</span>
+<span class="tt-cmd">edr monitor --days-back 1</span>
+<span class="tt-warn">Anomaly detected: fct_reviews row count -34% vs 7-day median</span>
+<span class="tt-cmd">edr report</span>
+<span class="tt-ok">Report generated: edr_report.html</span></pre>
+          </div>
+
+          <h3>Elementary versus dbt_expectations</h3>
+          <p><a href="s13-jinja-macros-packages.html#packages">Section 13</a> installs <code>dbt_expectations</code>; <a href="s16-debugging-logging.html#dbt-expectations">Section 16</a> applies <code>expect_column_quantile_values_to_be_between</code> and regex tests on <code>dim_listings_cleansed</code>. Those tests encode explicit rules you chose. Elementary watches the same tables for patterns you did not anticipate.</p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Tool</th><th>Best for</th><th>Runs when</th><th>Course section</th></tr></thead>
+              <tbody>
+                <tr><td>Built-in + custom tests</td><td>Hard constraints (unique, not_null)</td><td><code>dbt test</code></td><td>11&ndash;12</td></tr>
+                <tr><td>dbt_expectations</td><td>Distribution, regex, row-count parity</td><td><code>dbt test</code></td><td>13, 16</td></tr>
+                <tr><td>Elementary</td><td>Volume drift, freshness anomalies, reporting</td><td>Post-build CLI</td><td>This page</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>Use both: expectations guard known invariants on <code>raw_listings.price</code>; Elementary catches &ldquo;review volume collapsed because ingestion paused&rdquo; even when every explicit test still passes on an empty slice.</p>
+
+          <h3>Installation steps in order</h3>
+          <ol>
+            <li>Add Elementary to <code>packages.yml</code> next to the existing <code>dbt_utils</code> and <code>dbt_expectations</code> pins from the course repo.</li>
+            <li>Run <code>dbt deps</code> — same workflow as Section 13.</li>
+            <li>Enable Elementary models in <code>dbt_project.yml</code> under an <code>elementary</code> schema.</li>
+            <li>Run <code>dbt run --select elementary</code> after your main DAG or include Elementary models in nightly prod job.</li>
+            <li>Install the Elementary CLI (<code>pip install elementary-data</code>) in the same virtualenv or a dedicated observability venv.</li>
+            <li>Configure Slack webhook or email in Elementary config for <code>edr monitor</code> alerts.</li>
+            <li>Schedule <code>edr monitor</code> after prod <code>dbt build</code> from your orchestrator (Section 18).</li>
+          </ol>
+
+          <p>Elementary does not replace <code>dbt test</code> in CI. Keep failing tests blocking merges; use Elementary for trend detection and executive-friendly reports that aggregate last night&rsquo;s run metadata.</p>
+
+          <div class="callout info"><strong>Package version pinning.</strong> Pin Elementary in <code>packages.yml</code> the same way the course pins <code>metaplane/dbt_expectations</code> at 0.10.10. Upgrading observability packages without CI validation can break metadata model schemas.</div>
+
+          <div class="callout warn"><strong>Elementary stores metadata in your warehouse.</strong> Budget storage and compute for its schema. Disable in dev sandboxes if you only need it in prod and staging.</div>
+
+          <h3>What to monitor on the Airbnb DAG</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Object</th><th>Elementary signal</th><th>Existing dbt test</th><th>Gap filled</th></tr></thead>
+              <tbody>
+                <tr><td><code>raw_listings</code></td><td>Row count vs 7-day median</td><td>Freshness, regex on price</td><td>Ingestion pause without schema break</td></tr>
+                <tr><td><code>fct_reviews</code></td><td>Volume anomaly by day</td><td>incremental append, unique review_id</td><td>Partial load / silent filter</td></tr>
+                <tr><td><code>dim_listings_cleansed</code></td><td>Null rate on price</td><td>not_null, positive_values</td><td>Gradual null creep within bounds</td></tr>
+                <tr><td><code>mart_fullmoon_reviews</code></td><td>Join cardinality drift</td><td>minimum_row_count</td><td>Seed join skew after calendar change</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="section" id="warehouse-cost">
+          <h2>Warehouse cost control</h2>
+          <p class="lead">dbt is free; Snowflake, BigQuery, and Databricks are not. The course mentions cost in passing across materializations, tests, CI, and orchestration. This section consolidates those threads into one operational checklist.</p>
+
+          <h3>Query result caching</h3>
+          <p>Snowflake caches result sets for 24 hours when the underlying data is unchanged. Repeated <code>dbt docs generate</code> catalog queries and identical test SQL may hit cache. Do not rely on cache for cost planning &mdash; CI always runs fresh. BigQuery offers similar behaviour with shorter TTL and slot billing nuances. Design pipelines assuming every scheduled run pays full compute.</p>
+
+          <h3>Resource monitors and budgets</h3>
+          <p>On Snowflake, resource monitors cap warehouse credit burn and can suspend or notify. Pair a monitor with the course&rsquo;s separate dev and prod warehouses from <a href="s19-production.html">Section 19</a> profiles. Alerts before the invoice teaches more than post-hoc finance reviews.</p>
+
+          <h3>Workload isolation with multiple warehouses</h3>
+          <p>Route dev schemas to an X-Small warehouse that auto-suspends aggressively; prod and CI use larger warehouses with longer suspend timeouts. The course post-hook on every model writes to <code>audit_log</code> &mdash; small overhead per model, but hundreds of models on a Large warehouse add up. Tag-based selectors (<a href="s17-selectors-commands.html">Section 17</a>) let nightly jobs run facts on one warehouse and lightweight tests on another.</p>
+
+          <h3>Incremental over full-refresh</h3>
+          <p><code>fct_reviews</code> in the Airbnb project is incremental for a reason: appending new review dates scans only recent rows. A mistaken <code>dbt run --full-refresh --select fct_reviews</code> on production rescans history. Microbatch on <code>mart_fullmoon_reviews</code> (<a href="s19-production.html">Section 19</a>) limits batch windows. Default to incremental; treat full-refresh as a named backfill operation with approval.</p>
+
+          <h3>Testing cost</h3>
+          <p>Every <code>unique</code> test is a <code>GROUP BY</code> over the full column. <code>dbt_expectations</code> quantile tests scan entire tables. <code>store_failures: true</code> in the course <code>dbt_project.yml</code> writes failing rows to <code>_test_failures</code> &mdash; useful for debugging, extra storage and insert cost. Split fast tests into every CI run; run expensive expectations nightly (<a href="s18-orchestration.html">Section 18</a>).</p>
+
+<pre data-lang="yaml" data-title="dbt_project.yml (course repo — store_failures)" data-explain="Real project config: every failing test inserts rows into _test_failures schema, which has a storage and DML cost."><code>data_tests:
+  +store_failures: true
+  +schema: _test_failures</code></pre>
+
+          <p>On a small Airbnb dev schema the cost is negligible. On a billion-row fact in prod, a failing <code>unique</code> test that stores ten million duplicate keys hurts. Use <code>severity: warn</code> or sampling for exploratory tests; keep <code>error</code> severity on business-critical constraints only.</p>
+
+          <h3>Right-sizing dev versus prod</h3>
+          <p>Developers should not use prod warehouses. Use <code>dbt run --select my_model+</code>, <code>--empty</code>, and <code>--sample</code> from Section 16 before touching full tables. Slim CI with defer (<a href="s19-production.html">Section 19</a>) prevents PR builds from replaying production-scale fact loads in dev schemas.</p>
+
+          <h3>Top eight cost levers</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Lever</th><th>Where it applies</th><th>Expected saving pattern</th></tr></thead>
+              <tbody>
+                <tr><td>Incremental models + no accidental full-refresh</td><td>Fact tables like <code>fct_reviews</code></td><td>Orders of magnitude vs daily full table rebuild</td></tr>
+                <tr><td>Slim CI with defer + <code>state:modified+</code></td><td>GitHub Actions / GitLab CI</td><td>PR runs touch 5&ndash;15% of DAG, not 100%</td></tr>
+                <tr><td>Separate dev/prod warehouses + auto-suspend</td><td>Snowflake / Databricks SQL</td><td>Idle dev clusters stop billing within minutes</td></tr>
+                <tr><td>Resource monitors and alerts</td><td>Account admin</td><td>Hard stop before runaway job drains credits</td></tr>
+                <tr><td>Test selection and tiering</td><td><code>dbt test --select tag:fast</code></td><td>CI skips heavy distribution tests on every push</td></tr>
+                <tr><td>Materialize hot paths; view cold paths</td><td>Marts vs exploratory models</td><td>Dashboard queries stop re-running join logic</td></tr>
+                <tr><td><code>--empty</code> / <code>--sample</code> in dev</td><td>Local iteration</td><td>Compile and shape validation without full scans</td></tr>
+                <tr><td>Drop stale dev schemas</td><td><code>drop_dev_schemas</code> macro</td><td>Storage + accidental query against wrong schema</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout cost"><strong>The single biggest waste in this curriculum&rsquo;s context.</strong> Running every model and every <code>dbt_expectations</code> test on a production-sized warehouse for each pull request without defer. Fix CI selection before tuning warehouse size.</div>
+
+          <h3>Cost threads pulled from earlier sections</h3>
+          <p>This checklist consolidates callouts scattered through the notes — follow the links when you need the full mechanism.</p>
+          <ul>
+            <li><a href="s08-materializations.html#incremental-models">Section 8</a> — table vs view vs incremental: views push cost to every query; tables and incrementals pay once at build time.</li>
+            <li><a href="s11-tests.html">Section 11</a> — <code>unique</code> and <code>relationships</code> scan full relations; scope tests to columns that matter.</li>
+            <li><a href="s16-debugging-logging.html">Section 16</a> — <code>--empty</code> and <code>--sample</code> for dev iteration; expectations tests are expensive at scale.</li>
+            <li><a href="s17-selectors-commands.html">Section 17</a> — selectors and tags to avoid <code>dbt build</code> on the entire DAG.</li>
+            <li><a href="s18-orchestration.html">Section 18</a> — nightly full builds without selection; split schedules by tag.</li>
+            <li><a href="s19-production.html">Section 19</a> — defer, Slim CI, microbatch windows, <code>threads: 4</code> for microbatch hangs.</li>
+            <li><a href="s20-poweruser-fusion-ai.html">Section 20</a> — compile before run; AI-generated SQL still bills the warehouse on <code>dbt run</code>.</li>
+          </ul>
+
+          <h3>Audit post-hook overhead</h3>
+          <p>The course <code>dbt_project.yml</code> runs an <code>INSERT INTO audit_log</code> post-hook on every model. On Snowflake that is one small DML per model per run. At hundreds of models, consider restricting the hook to prod-only via <code>{% if target.name == 'prod' %}</code> in a macro wrapper, or batching audit writes — a pattern beyond the course but relevant when estimating run time and cost at scale.</p>
+
+<pre data-lang="sql" data-title="macros/logging.sql (course — prod-only pattern idea)" data-explain="The course logs every run; wrapping in target check reduces dev warehouse chatter."><code>{% macro audit_log_insert() %}
+  {% if target.name == 'prod' %}
+    INSERT INTO {{ target.schema }}.audit_log
+    VALUES ('{{ this }}', CURRENT_TIMESTAMP)
+  {% endif %}
+{% endmacro %}</code></pre>
+
+          <h3>Snowflake-specific levers (course warehouse)</h3>
+          <p>Because the bootcamp targets Snowflake, these controls appear most often in real jobs aligned with the course:</p>
+          <ul>
+            <li><strong>Warehouse auto-suspend</strong> — set to 60 seconds on dev; prod CI may use 300 seconds to avoid cold-start thrash on chained jobs.</li>
+            <li><strong>Query timeout</strong> — abort runaway tests at the session level before they scan a fact table for an hour.</li>
+            <li><strong>Result cache</strong> — do not disable for cost savings; it helps repeated doc generation. Do not depend on it for budget math.</li>
+            <li><strong>Zero-copy clone</strong> — useful for prod-like dev datasets without doubling storage; out of course scope but cheaper than full copy.</li>
+            <li><strong>Credit visibility</strong> — map dbt model tags to warehouse query tags in a macro so Snowflake query history attributes spend to <code>fct_reviews</code> vs tests.</li>
+          </ul>
+
+          <div class="terminal">
+            <p class="term-head">Expensive mistake: full build on prod warehouse from laptop</p>
+            <pre class="term-body"><span class="tt-cmd">dbt build --target prod</span>
+<span class="tt-warn">Building 42 models including fct_reviews incremental full window</span>
+<span class="tt-err">Consider: was --target prod intentional?</span></pre>
+          </div>
+
+          <h3>Cost-aware exposure consumption</h3>
+          <p>The course exposure <code>executive_dashboard</code> in <code>models/dashboards.yml</code> depends on <code>dim_listings_w_hosts</code> and <code>mart_fullmoon_reviews</code>. Every Superset refresh queries those relations. If they remain views, each dashboard load re-executes joins; if they are tables or incrementals, cost shifts to the dbt schedule. Document materialization choices next to exposures so dashboard owners know whether they are paying at query time or at build time.</p>
+
+<pre data-lang="yaml" data-title="models/dashboards.yml (course repo)" data-explain="Real exposure file; depends_on drives lineage and helps estimate which models BI refresh cost affects."><code>exposures:
+  - name: executive_dashboard
+    type: dashboard
+    depends_on:
+      - ref('dim_listings_w_hosts')
+      - ref('mart_fullmoon_reviews')
+    owner:
+      name: Zoltan C. Toth
+      email: dbtstudent@gmail.com</code></pre>
+
+          <p>Tag exposures with maturity and owner email (already in the course file) so cost reviews know whom to ask when a dashboard drives unexpected warehouse load.</p>
+
+          <p>When <code>mart_fullmoon_reviews</code> uses microbatch with year-sized batches (Section 19), nightly cost is bounded by batches touched, not full history. Align orchestrator schedules with batch boundaries so you do not accidentally widen the event-time window in cron args.</p>
+
+          <div class="callout tip"><strong>Measure before optimising.</strong> Use Snowflake query history (or your warehouse&rsquo;s equivalent) tagged by dbt model name for one week before changing materializations. Optimising a model that accounts for 1% of spend is procrastination; optimising <code>fct_reviews</code> full-refresh mistakes is survival.</div>
+
+          <p class="muted">For a printable cost checklist, copy the eight-lever table above into your team runbook and annotate the &ldquo;Expected saving pattern&rdquo; column with your warehouse&rsquo;s actual credit or slot metrics after the first month of measurement. Revisit after major DAG changes such as adding microbatch or splitting into a mesh.</p>
+        </section>
+
+        <section class="section" id="deeper">
+          <h2>Deeper detail and edge cases</h2>
+          <p class="lead">Advanced platform features fail in subtle ways: mesh contracts block deploys, MetricFlow specs drift from models, adapters differ on merge and MV support, and observability tools bill storage you forgot to prune. This block collects version, cost, and operational detail the bootcamp skips.</p>
+
+          <h3>Version notes</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Behaviour</th><th>Before</th><th>Now</th><th>Version</th></tr></thead>
+              <tbody>
+                <tr><td>Cross-project refs</td><td>Package hacks only</td><td><code>dependencies.yml</code> + public models</td><td>1.6+</td></tr>
+                <tr><td>Model access levels</td><td>All models equal</td><td><code>access: public|protected|private</code></td><td>1.5+</td></tr>
+                <tr><td>Semantic Layer spec</td><td><code>dbt_metrics</code> package</td><td><code>semantic_models</code> + MetricFlow</td><td>1.6+ / Cloud</td></tr>
+                <tr><td>Materialized views in dbt</td><td>Manual DDL</td><td><code>materialized='materialized_view'</code></td><td>1.6+ adapters</td></tr>
+                <tr><td>Microbatch incremental</td><td>N/A</td><td>Time-batched rebuilds</td><td>1.9+ (Snowflake, BQ, Databricks)</td></tr>
+                <tr><td>Elementary integration</td><td>Standalone scripts</td><td>dbt package + <code>edr</code> CLI</td><td>0.13+ package</td></tr>
+                <tr><td>Groups in schema YAML</td><td>N/A</td><td>Ownership metadata</td><td>1.5+</td></tr>
+                <tr><td>dbt Fusion / SL CLI</td><td>Cloud-only SL queries</td><td>Local MetricFlow development</td><td>1.11+ / Fusion</td></tr>
+                <tr><td>Python models</td><td>Experimental</td><td>Snowflake / Databricks first-class</td><td>1.3+</td></tr>
+                <tr><td>Generic test YAML key</td><td><code>tests:</code></td><td><code>data_tests:</code></td><td>1.8+</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>What it costs to run</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>What runs</th><th>Where the cost lands</th><th>How to spend less</th></tr></thead>
+              <tbody>
+                <tr><td>Cross-project CI without caching artifacts</td><td>Repeated manifest fetches + full parses</td><td>Pin dependency revisions; cache <code>dbt_packages</code></td></tr>
+                <tr><td>Materialized view auto-refresh</td><td>Warehouse refresh on every upstream change</td><td>Use incremental table for volatile upstreams</td></tr>
+                <tr><td>MetricFlow / SL queries</td><td>Cloud compute or warehouse slots</td><td>Push heavy metrics to scheduled dbt models</td></tr>
+                <tr><td>Elementary metadata models</td><td>Storage + daily <code>edr</code> scans</td><td>Enable only prod; retention policies on reports</td></tr>
+                <tr><td>Multi-adapter CI matrix</td><td>N warehouses × same DAG</td><td>Compile-only on secondary adapters</td></tr>
+                <tr><td>Public model contract failures retried blindly</td><td>Repeated failed DDL</td><td>Fix YAML locally before merge</td></tr>
+                <tr><td>Full mesh rebuild</td><td>Every project <code>dbt build</code> in sequence</td><td>Topological deploy with selective selectors</td></tr>
+                <tr><td>DuckDB local + Snowflake prod drift</td><td>Surprise prod compile errors</td><td>Prod-target compile in CI at minimum</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout cost"><strong>Biggest mesh-adjacent waste.</strong> Downstream projects running full builds because upstream did not publish a fresh manifest after deploy. Treat upstream artifacts like API versions: stale manifest, broken dependents, duplicated compute.</div>
+
+          <h3>Traps that catch people</h3>
+          <ul>
+            <li><strong>Ref to private upstream model —</strong> cross-project <code>ref()</code> fails at parse time if the model is not public. Mark interface models <code>access: public</code> explicitly.</li>
+            <li><strong>Contract enforced on wrong adapter —</strong> not all adapters validate constraints identically. Test contract failures in the target warehouse, not only on Snowflake.</li>
+            <li><strong>Semantic model stale grain —</strong> MetricFlow joins break silently if <code>fct_reviews</code> grain changes but semantic YAML does not. Version metrics with model changes.</li>
+            <li><strong>Assuming SL fixes bad models —</strong> metrics aggregate garbage the same way dashboards did; fix facts first.</li>
+            <li><strong>MV on ephemeral upstream —</strong> cannot materialize through ephemeral; build on table or view models only.</li>
+            <li><strong>on_configuration_change apply surprise —</strong> alters MV and triggers full refresh on some platforms during a minor config tweak.</li>
+            <li><strong>Elementary without dbt run results —</strong> CLI has nothing to analyse if tests never ran or metadata models disabled.</li>
+            <li><strong>dbt_expectations + Elementary duplicate alerts —</strong> tune severity so one row-count dip does not page three channels.</li>
+            <li><strong>Databricks branch copied without UC grants —</strong> compile succeeds, run fails on permission. Mirror grants from Snowflake roles conceptually, not literally.</li>
+            <li><strong>DuckDB prod syntax —</strong> casts and functions that work locally fail in Snowflake. CI must compile against prod adapter.</li>
+            <li><strong>Mesh dependency pin drift —</strong> downstream pins <code>revision: main</code> and breaks weekly. Pin semver tags.</li>
+            <li><strong>Groups without owners —</strong> documentation shows orphan domains. Fill <code>owner</code> email for on-call routing.</li>
+            <li><strong>SL metric without tested upstream —</strong> MetricFlow query succeeds while fact table fails uniqueness tests. Keep model tests as gate before publishing metrics.</li>
+            <li><strong>Cross-region artifact latency —</strong> mesh manifest fetch from distant registry slows CI. Mirror artifacts to same region as warehouse.</li>
+            <li><strong>Materialized view on wide join —</strong> refresh cost exceeds incremental table maintenance for <code>dim_listings_w_hosts</code>-scale joins with volatile dimensions.</li>
+          </ul>
+
+          <h3>Troubleshooting playbook</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Symptom</th><th>Most likely cause</th><th>What to check / fix</th></tr></thead>
+              <tbody>
+                <tr><td><code>Dependency project not found</code></td><td>Missing <code>dbt deps</code> or bad <code>dependencies.yml</code></td><td>Run <code>dbt deps</code>; verify Git URL and revision</td></tr>
+                <tr><td>Cross-project ref unresolved</td><td>Model not public</td><td>Upstream <code>access: public</code> in schema.yml</td></tr>
+                <tr><td>Contract compilation error</td><td>SQL output mismatch YAML types</td><td>Compare <code>target/compiled</code> columns to schema.yml</td></tr>
+                <tr><td>MetricFlow compile error</td><td>Missing entity join</td><td>Validate semantic_model entities match fact keys</td></tr>
+                <tr><td><code>materialized_view</code> not supported</td><td>Wrong adapter / version</td><td>Fall back to table or check adapter changelog</td></tr>
+                <tr><td>MV never refreshes</td><td>Platform refresh policy</td><td>Warehouse docs; manual <code>REFRESH MATERIALIZED VIEW</code></td></tr>
+                <tr><td>Elementary empty report</td><td>Package models not run</td><td><code>dbt run --select elementary</code></td></tr>
+                <tr><td>Anomaly false positives</td><td>Seasonality not learned</td><td>Increase <code>days-back</code>; exclude known maintenance windows</td></tr>
+                <tr><td>BigQuery merge slow</td><td>Missing partition filter</td><td>Add <code>partition_by</code> on incremental model</td></tr>
+                <tr><td>CI bill doubled after mesh split</td><td>Each repo runs full build</td><td>Defer + state selectors per project</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Production patterns</h3>
+          <p>Teams adopting mesh start by extracting one stable domain &mdash; often core dimensions like <code>dim_listings_cleansed</code> and <code>dim_hosts_cleansed</code> &mdash; into a <code>core</code> project with public contracts. Domain marts stay downstream. Semantic models attach only to public facts and dimensions so MetricFlow never references staging SQL teams should not see.</p>
+          <p>Observability: run Elementary after prod <code>dbt build</code>, route anomalies to the same Slack channel as orchestrator failures from Section 18. Keep explicit expectations on sources; let Elementary watch row counts on <code>fct_reviews</code> and ingestion freshness on <code>raw_listings</code>.</p>
+          <div class="grid-2">
+            <div class="mini-card">
+              <h4>Pattern: adapter matrix in CI</h4>
+              <p>Job 1: Snowflake full build. Job 2: BigQuery <code>dbt compile</code> only on main. Catches dialect drift without doubling run cost.</p>
+            </div>
+            <div class="mini-card">
+              <h4>Anti-pattern: mesh as copy-paste</h4>
+              <p>Duplicating SQL into two repos without public models recreates monolith pain with extra git overhead. Publish contracts or stay monolith.</p>
+            </div>
+          </div>
+
+<pre data-lang="yaml" data-title="dependencies.yml (pinned semver pattern)" data-explain="Pin upstream mesh projects to release tags, not floating main, so downstream CI stays reproducible."><code>projects:
+  - name: airbnb_core
+    project: airbnb_core
+    revision: "{{ env_var('CORE_DBT_REVISION', '2.4.1') }}"
+    repository: https://github.com/myorg/dbt-airbnb-core.git</code></pre>
+
+          <h3>Certification pointers</h3>
+          <p>The dbt Analytics Engineering certification (<a href="s22-certification.html">Section 22</a>) tests monolith-project skills: materializations, tests, deployment, defer, packages. It does <em>not</em> test MetricFlow YAML syntax, Elementary CLI flags, or mesh <code>dependencies.yml</code> details. It <em>does</em> test concepts that underpin this page: model contracts, access levels at a high level, incremental cost awareness, and when to centralise definitions (aligned with Section 2 maturity).</p>
+          <ul>
+            <li><a href="s02-data-maturity.html#stage-3-analytics">Section 2</a> — why centralised metrics and models matter; the exam asks maturity questions in prose.</li>
+            <li><a href="s12-advanced-testing.html">Section 12</a> — contracts and constraints; mesh public models extend the same mechanism.</li>
+            <li><a href="s08-materializations.html#incremental-models">Section 8</a> — incremental vs table; adapter tables on this page assume that baseline.</li>
+            <li><a href="s19-production.html">Section 19</a> — defer, Slim CI, microbatch; cost levers reference these patterns.</li>
+            <li><a href="s13-jinja-macros-packages.html#packages">Section 13</a> — packages vs project dependencies; know <code>dbt deps</code> for both.</li>
+            <li><a href="s16-debugging-logging.html#dbt-expectations">Section 16</a> — expectations vs observability; exam tests package tests, not Elementary.</li>
+          </ul>
+
+          <h3>Mesh readiness checklist (conceptual)</h3>
+          <ul class="checklist">
+            <li>Core dimensions have enforced contracts (course already does this for hosts).</li>
+            <li>Breaking changes use model versions or new public model names.</li>
+            <li>Upstream CI publishes <code>manifest.json</code> on every prod deploy.</li>
+            <li>Downstream pins semver revisions, not floating <code>main</code>.</li>
+            <li>Private staging models never appear in downstream selectors.</li>
+            <li>Documentation site links public models to owning group email.</li>
+            <li>Runbooks describe how to bump dependency revision safely.</li>
+            <li>Incident response knows which mesh project owns <code>fct_reviews</code> failures.</li>
+          </ul>
+
+          <div class="callout exam"><strong>Certification:</strong> for mesh, know that public models and contracts define cross-team interfaces. For SL, know the <em>problem</em> it solves (metric consistency), not MetricFlow CLI flags. For adapters, know materialization names and that Python models are adapter-specific. Elementary and deep mesh ops are interview territory, not exam rote memorisation.</div>
+        </section>
+
+        <section class="section" id="interview">
+          <h2>Interview questions</h2>
+          <p class="muted">Answer each one out loud before opening it.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+            <details class="qa">
+              <summary>When would you split a dbt monolith into a mesh instead of using folders inside one project?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>Split when independent teams need separate deploy cadences, CI blast radius grows painful, or ownership boundaries are clearer than a shared repo. Separate repos with public models and contracts beat folders when merge conflicts and unrelated test failures block releases weekly.</p>
+                <p>Stay monolith when one team owns fewer than roughly a hundred models and coordination overhead exceeds merge pain. Mesh adds artifact sync, dependency pinning, and contract governance — worth it only when organisational boundaries match domain boundaries.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How do public models and contracts work together in dbt Mesh?<span class="qa-tag">Modelling</span></summary>
+              <div class="qa-body">
+                <p><code>access: public</code> marks which models downstream projects may reference via cross-project <code>ref()</code>. Contracts specify column names, types, and constraints those consumers can rely on. Enforced contracts fail the build if SQL drift breaks the published shape.</p>
+                <p>The course&rsquo;s <code>dim_hosts_cleansed</code> contract is the same idea inside one repo; mesh exports it as the API between teams.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What problem does the Semantic Layer solve that well-tested dbt models alone do not?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p>Tested models guarantee table shape and row-level rules, not consistent metric definitions in BI tools. Finance and product can still define different aggregations on the same <code>fct_reviews</code>. The Semantic Layer centralises metrics and dimensions so MetricFlow generates identical SQL for every consumer.</p>
+                <p>Section 2&rsquo;s &ldquo;different revenue number&rdquo; problem moves from duplicated dashboard SQL to duplicated metric YAML if you skip the SL layer.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How does MetricFlow differ from the legacy dbt_metrics package?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p>MetricFlow is the supported compiler for <code>semantic_models</code> and first-class <code>metrics</code> YAML. The old package used a parallel spec and macro layer that diverged from dbt Core releases. New work should use semantic models; the package is legacy.</p>
+                <p>MetricFlow also powers partner BI integrations and (depending on deployment) Cloud SL APIs, whereas the package only emitted SQL inside dbt runs.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>You migrate the Airbnb project from Snowflake to BigQuery. What breaks first?<span class="qa-tag">Troubleshooting</span></summary>
+              <div class="qa-body">
+                <p>Cast syntax in <code>dim_listings_cleansed</code> (<code>:: NUMBER</code>), Snowflake-specific functions in macros, profile and auth config, and incremental merge/partition settings. Python models like <code>dim_review_sentiment.py</code> are not portable to BigQuery within dbt.</p>
+                <p>Run <code>dbt compile --target bigquery</code> and diff compiled SQL before claiming parity. The databricks branch of the course repo shows which files change for another adapter.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>When would you choose materialized_view over incremental table?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>Choose MV when the warehouse supports efficient auto-refresh, read volume is high, staleness of minutes to hours is acceptable, and upstream change rate is moderate. Choose incremental table when you need explicit control over merge windows, microbatch slices, or adapter lacks MV support.</p>
+                <p><code>dim_listings_w_hosts</code> is a read-heavy join candidate; <code>fct_reviews</code> with append-only dates fits incremental better than MV on volatile upstreams.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What does on_configuration_change control for materialized views?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>It defines behaviour when MV-specific config (cluster keys, refresh options) drifts between dbt&rsquo;s recorded state and the model config. <code>apply</code> attempts to alter the MV; <code>continue</code> warns and proceeds; <code>fail</code> stops the run. Similar philosophy to incremental <code>on_schema_change</code> but for MV metadata.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How does Elementary complement dbt_expectations rather than replace it?<span class="qa-tag">Testing</span></summary>
+              <div class="qa-body">
+                <p><code>dbt_expectations</code> encodes explicit rules: regex on price, quantile bounds, row-count parity. Elementary learns baselines and flags statistical anomalies you did not write tests for. Expectations catch known bad data; Elementary catches &ldquo;something changed about volume or distribution.&rdquo;</p>
+                <p>Run both: expectations in CI on critical columns; Elementary after prod builds for trend monitoring and Slack digests.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Your PR CI bill tripled after adding mesh projects. What do you investigate?<span class="qa-tag">Cost</span></summary>
+              <div class="qa-body">
+                <p>Check whether each repo runs a full <code>dbt build</code> without defer, whether downstream rebuilds upstream facts locally, and whether artifact download fails silently forcing full graph runs. Verify selectors use <code>state:modified+</code> and prod manifest freshness.</p>
+                <p>Also check test tiering: expectations on every push across three projects multiply scan cost.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Explain cross-project ref() to someone who only knows single-repo dbt.<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>Syntax is identical: <code>{{ ref('dim_listings_cleansed') }}</code>. The compiler resolves the model from an upstream project listed in <code>dependencies.yml</code> instead of from a local SQL file. Only public models are visible. Private staging models stay inside the upstream repo.</p>
+                <p>Developers still run <code>dbt deps</code> to fetch dependency metadata before compile, analogous to packages but for whole projects.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How would you decide between Elementary, dbt Cloud metadata, and custom Great Expectations for observability?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p>Elementary fits teams already running dbt Core with tests in CI who want anomaly detection and Slack reports without a second orchestration stack. It reuses dbt run results and installs as a package — minimal new infrastructure beyond the CLI and a schema.</p>
+                <p>dbt Cloud observability is integrated if you are on Cloud for scheduling and already pay for the platform; less relevant for pure Core shops. Standalone Great Expectations suits organisations with non-dbt pipelines that also need validation — heavier operational footprint than Elementary for a dbt-only shop like the Airbnb project.</p>
+                <p>For the course project specifically: start with built-in tests and <code>dbt_expectations</code>; add Elementary when row-count drift on <code>fct_reviews</code> becomes a production incident category.</p>
+              </div>
+            </details>
+          </div>
+        </section>
+
+        <section class="section" id="practice">
+          <h2>Hands-on practice</h2>
+          <p class="muted">These tasks are design and research exercises. Some require infrastructure you may not have locally; each includes a concrete verification step against the course Airbnb project where possible.</p>
+          <ol class="practice-list">
+            <li class="practice">
+              <p class="practice-task">Draw a three-project mesh for the Airbnb pipeline: which models would you mark public in a <code>core</code> project, and which would stay in a <code>marketing_mart</code> downstream project? Write a draft <code>dependencies.yml</code> for the downstream repo.</p>
+              <span class="console-path">airbnb/models/schema.yml · design doc or notes file</span>
+              <p class="practice-expect">A diagram or bullet list naming at least <code>dim_listings_cleansed</code>, <code>dim_hosts_cleansed</code>, and <code>fct_reviews</code> as public core outputs; <code>mart_fullmoon_reviews</code> stays downstream-only.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>List current refs in <code>mart_fullmoon_reviews.sql</code> — it depends on listings, hosts, reviews, and the seed.</li>
+                    <li>Propose <code>core</code> public models: <code>dim_listings_cleansed</code>, <code>dim_hosts_cleansed</code>, <code>fct_reviews</code>, plus sources package if raw stays upstream.</li>
+                    <li>Keep <code>mart_fullmoon_reviews</code> and <code>seed_full_moon_dates</code> in <code>marketing_mart</code>; ref public core models only.</li>
+                    <li>Draft dependencies YAML pointing at <code>airbnb_core</code> revision tag.</li>
+                  </ol>
+<pre data-lang="yaml" data-title="dependencies.yml (marketing_mart draft)" data-explain="Downstream project consumes pinned core release."><code>projects:
+  - name: airbnb_core
+    project: airbnb_core
+    revision: 1.0.0
+    repository: https://github.com/myorg/dbt-airbnb-core.git</code></pre>
+                  <p class="muted">Undo: N/A — design exercise only; no warehouse changes.</p>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Compare Snowflake and BigQuery compiled SQL for <code>dim_listings_cleansed</code>: identify every dialect-specific line you would change when porting adapters.</p>
+              <span class="console-path">airbnb/models/dim/dim_listings_cleansed.sql · target/compiled/</span>
+              <p class="practice-expect">A short list with at least the <code>:: NUMBER(10,2)</code> cast and any Snowflake-specific functions flagged for rewrite.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Run <code>dbt compile --select dim_listings_cleansed</code> on Snowflake target.</li>
+                    <li>Open <code>target/compiled/airbnb/models/dim/dim_listings_cleansed.sql</code>.</li>
+                    <li>Flag <code>REPLACE(price_str, '$') :: NUMBER(10, 2)</code> — rewrite as <code>CAST(REPLACE(price_str, '$') AS NUMERIC)</code> on BigQuery.</li>
+                    <li>Check <code>dbt_project.yml</code> grants and post-hooks — BigQuery uses different privilege model.</li>
+                    <li>Optional: checkout course repo <code>databricks</code> branch and diff the same file.</li>
+                  </ol>
+                  <p class="muted">Undo: N/A — compile only.</p>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Design a cost tiering plan for the Airbnb project: which tests run on every PR, which run nightly, and which warehouse size each tier uses.</p>
+              <span class="console-path">airbnb/selectors.yml · airbnb/dbt_project.yml</span>
+              <p class="practice-expect">A table or YAML selector with at least two tiers: fast (unique, not_null, relationships) vs slow (dbt_expectations quantile and row-count tests).</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Tag built-in tests implicitly via model tags or define selector <code>test_tier_fast</code> matching <code>test_type:generic</code> excluding <code>dbt_expectations</code>.</li>
+                    <li>Nightly selector <code>test_tier_slow</code> for <code>package:dbt_expectations</code> tests on sources and dims.</li>
+                    <li>PR CI: <code>dbt build --selector ci_slim</code> with defer (Section 19) on X-Small dev warehouse.</li>
+                    <li>Nightly: full expectations on Small warehouse with resource monitor cap.</li>
+                  </ol>
+<pre data-lang="yaml" data-title="selectors.yml (cost tier draft)" data-explain="Separate fast tests for PR from expensive expectations nightly."><code>selectors:
+  - name: test_tier_fast
+    definition:
+      method: test_type
+      value: generic
+      exclude:
+        - package:dbt_expectations
+  - name: test_tier_slow
+    definition:
+      method: package
+      value: dbt_expectations</code></pre>
+                  <p class="muted">Undo: remove draft selectors if experimenting in shared repo.</p>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Write a one-page comparison: if your team added Elementary tomorrow, which three signals would you alert on for <code>fct_reviews</code> and <code>raw_listings</code> that existing dbt tests might miss?</p>
+              <span class="console-path">airbnb/models/fct/fct_reviews.sql · airbnb/models/sources.yml</span>
+              <p class="practice-expect">Three anomaly scenarios with expected Elementary behaviour — e.g. row count drop, null spike in <code>review_sentiment</code>, stale <code>raw_listings</code> freshness.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Row count drop on <code>fct_reviews</code> when ingestion pauses but uniqueness tests still pass on empty recent slice.</li>
+                    <li>Distribution shift on <code>review_sentiment</code> proportions without violating accepted_values.</li>
+                    <li>Source freshness lag on <code>raw_listings</code> beyond SLA — pair Elementary volume anomaly with source freshness test from Section 9.</li>
+                  </ol>
+                  <p class="muted">Undo: N/A — design doc; install Elementary only in a dev schema if prototyping.</p>
+                </div>
+              </details>
+            </li>
+          </ol>
+        </section>
+
+        <section class="section" id="recap">
+          <h2>Recap</h2>
+          <div class="recap">
+            <ul class="checklist">
+              <li>dbt Mesh splits monoliths into domain projects linked by <code>dependencies.yml</code> and cross-project <code>ref()</code>.</li>
+              <li>Public models with enforced contracts are the API between mesh projects.</li>
+              <li>Groups in schema YAML document ownership; the course repo does not use them yet.</li>
+              <li>The Semantic Layer + MetricFlow centralise metrics so BI tools agree on KPIs.</li>
+              <li>Legacy <code>dbt_metrics</code> is superseded by semantic models — check Cloud vs Core/Fusion availability before promising SL.</li>
+              <li>Adapters share concepts but differ on merge, microbatch, Python models, and materialized views.</li>
+              <li>The course Git repo has a <code>databricks</code> branch for adapter-specific Airbnb config.</li>
+              <li><code>materialized_view</code> uses warehouse refresh; tune <code>on_configuration_change</code> carefully.</li>
+              <li>Elementary adds anomaly detection and reporting atop dbt tests; it complements <code>dbt_expectations</code>.</li>
+              <li>Warehouse cost control: incremental models, Slim CI with defer, test tiering, and right-sized warehouses.</li>
+              <li>The certification exam tests contracts and maturity concepts, not MetricFlow syntax or Elementary CLI.</li>
+            </ul>
+            <p style="margin-top:1rem;">
+              <button type="button" data-complete="extras">Mark complete</button>
+            </p>
+          </div>
+        </section>
+
+      </div>
+
+      <aside class="toc" aria-label="On this page">
+        <strong>On this page</strong>
+        <ol>
+          <li><a href="#intro">Why this page</a></li>
+          <li><a href="#dbt-mesh">dbt Mesh</a></li>
+          <li><a href="#semantic-layer">Semantic Layer</a></li>
+          <li><a href="#adapters">Adapters</a></li>
+          <li><a href="#materialized-views">Materialized views</a></li>
+          <li><a href="#elementary">Elementary</a></li>
+          <li><a href="#warehouse-cost">Cost control</a></li>
+          <li><a href="#deeper">Deeper detail</a></li>
+          <li><a href="#interview">Interview questions</a></li>
+          <li><a href="#practice">Hands-on practice</a></li>
+          <li><a href="#recap">Recap</a></li>
+        </ol>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<footer class="footer">The Complete dbt Bootcamp: Zero to Hero · Beyond the course · Offline study edition</footer>
+</body>
+</html>

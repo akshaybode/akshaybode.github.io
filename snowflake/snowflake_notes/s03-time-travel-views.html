@@ -1,0 +1,817 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="SnowPro Core COF-C03 Section 3: Time Travel, UNDROP, data transformation, billing, and standard/secure/materialized views.">
+<title>Section 3 — Time Travel, Transformation, Billing, Views | Snowflake COF-C03 Course Notes</title>
+<link rel="stylesheet" href="assets/snowflake.css">
+<script defer src="assets/search-index.js"></script>
+<script defer src="assets/sql-glossary.js"></script>
+<script defer src="assets/sql-highlight.js"></script>
+<script defer src="assets/snowflake.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">Course section 3 of 17 · SnowPro Core (COF-C03)</p>
+    <h1>Time Travel, Transformation, Billing, Views</h1>
+    <p class="subtitle">Query historical data with AT and BEFORE, restore dropped objects with UNDROP, transform data in SQL, understand credit and storage billing, and work with standard, secure, and materialized views.</p>
+    <div class="hero-meta">
+      <span class="chip">7 lectures · 39min</span>
+      <span class="chip">Exam domain: Snowflake AI Data Cloud Features &amp; Architecture</span>
+      <span class="chip">Last verified: 28 Jul 2026</span>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <nav class="pager" aria-label="Section navigation">
+    <a href="s02-basic-concepts.html">← Basic Concepts</a>
+    <a href="../index.html">Course contents</a>
+    <a href="s04-data-loading-unloading.html">Next: Data Loading →</a>
+  </nav>
+
+  <main id="main">
+    <div class="layout">
+      <div class="content">
+
+        <section class="section" id="lectures">
+          <h2>Lectures in this section</h2>
+          <p class="muted">Every lecture below links to the notes that cover it.</p>
+          <ol class="lecture-list">
+            <li class="lecture">
+              <a class="lec-title" href="#time-travel-concept">Time Travel Concept</a>
+              <span class="lec-time">3:29</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#demo-time-travel">Demo : Time Travel</a>
+              <span class="lec-time">8:30</span>
+              <span class="lec-src">2. Time Travel, Transformation, Billing, Views/Time Travel.txt</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#time-travel-quiz">Time Travel Quiz</a>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#demo-data-transformation">Demo : Data Transformation Part I</a>
+              <span class="lec-time">4:31</span>
+              <span class="lec-src">2. Time Travel, Transformation, Billing, Views/Data Transformation Part I.txt</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#demo-insert-overwrite">Demo : Insert Overwrite</a>
+              <span class="lec-time">2:03</span>
+              <span class="lec-src">2. Time Travel, Transformation, Billing, Views/INSERT OVERWRITE.txt</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#data-transformation-quiz">Data Transformation Quiz</a>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#billing">Billing in Snowflake</a>
+              <span class="lec-time">8:39</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#views-concept">Snowflake Views : Concept</a>
+              <span class="lec-time">5:45</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#demo-views">Demo : Snowflake Views</a>
+              <span class="lec-time">5:37</span>
+              <span class="lec-src">2. Time Travel, Transformation, Billing, Views/Views.txt</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#billing-views-quiz">Billing and Views Quiz</a>
+            </li>
+          </ol>
+        </section>
+
+        <section class="section" id="time-travel-concept">
+          <h2>Time Travel Concept</h2>
+          <p class="lead">Every DML change in Snowflake leaves a trail. Instead of restoring from tape backups, you can <strong>query historical versions</strong> or <strong>restore dropped tables</strong> — as long as you act inside the retention window.</p>
+
+          <div class="analogy">
+            <strong>Everyday analogy — revision history in a document:</strong> The current file is what everyone sees today. Time Travel is like opening "version history" and reading an older save. Fail-safe is the vendor's locked archive you cannot open yourself — see <a href="s05-advance-data-loading.html">Section 5</a> for advanced recovery topics.
+          </div>
+
+          <div class="diagram" role="img" aria-label="Data lifecycle from active through time travel to purged">
+            <p class="muted" style="text-align:center;margin:0 0 14px;font-size:.85rem;text-transform:uppercase;letter-spacing:.08em;">Continuous Data Protection lifecycle</p>
+            <div class="flow">
+              <div class="node pulse">Current data storage</div>
+              <span class="arrow" aria-hidden="true">→</span>
+              <div class="node">Time Travel retention</div>
+              <span class="arrow" aria-hidden="true">→</span>
+              <div class="node">Fail-safe</div>
+              <span class="arrow" aria-hidden="true">→</span>
+              <div class="node">Purged</div>
+            </div>
+          </div>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-048-cdp-lifecycle.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-048-cdp-lifecycle.png" alt="Continuous Data Protection lifecycle: current data storage with standard operations and AT/BEFORE queries, Time Travel retention configurable via DATA_RETENTION_TIME_IN_DAYS, then Fail-safe seven days for permanent tables with no user operations" loading="lazy" width="1920" height="1080">
+            </a>
+            <figcaption><span class="slide-no">Slide 48</span>Users query and restore during Time Travel; Fail-safe is a fixed 7-day window with no user access — only Snowflake staff can recover.</figcaption>
+          </figure>
+
+          <p>While data is in <strong>current storage</strong>, you run all standard DML and query operations. During the <strong>Time Travel retention</strong> period you can read historical versions with <code>AT</code> or <code>BEFORE</code> using <code>TIMESTAMP =></code>, <code>OFFSET =></code>, or <code>STATEMENT =></code>, and restore dropped objects with <code>UNDROP</code>. Retention is configurable per object (and at account level) via <code>DATA_RETENTION_TIME_IN_DAYS</code>: <strong>0–1 day on Standard edition</strong>, <strong>0–90 days on Enterprise edition and above</strong>.</p>
+          <p>After Time Travel expires, permanent tables enter <strong>Fail-safe</strong> for a fixed <strong>7 days</strong>. No user operations are allowed during Fail-safe — recovery requires Snowflake Support. Transient and temporary tables skip Fail-safe entirely.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Table type</th><th>Time Travel (default max)</th><th>Fail-safe</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>Permanent</td><td>0–1 day (Standard) · 0–90 days (Enterprise+)</td><td>7 days (fixed)</td></tr>
+                <tr><td>Transient</td><td>0–1 day</td><td>0 days</td></tr>
+                <tr><td>Temporary</td><td>0–1 day (session)</td><td>0 days</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout exam">
+            <strong>COF-C03 exam tip:</strong> Know the lifecycle order: <em>Active → Time Travel → Fail-safe → Purged</em>. Users control Time Travel duration; Fail-safe is fixed at 7 days for permanent tables and is <em>not</em> user-queryable.
+          </div>
+        </section>
+
+        <section class="section" id="demo-time-travel">
+          <h2>Demo : Time Travel</h2>
+          <p class="muted">Course file: <code>2. Time Travel, Transformation, Billing, Views/Time Travel.txt</code></p>
+
+          <p>Use <code>AT</code> or <code>BEFORE</code> on tables, schemas, and databases to read data as it existed at a point in time. Both clauses accept exactly one of three arguments.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Clause</th><th>Argument</th><th>Meaning</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><code>AT</code> / <code>BEFORE</code></td><td><code>TIMESTAMP =></code></td><td>Exact moment (set <code>TIMEZONE</code> explicitly in labs)</td></tr>
+                <tr><td><code>AT</code> / <code>BEFORE</code></td><td><code>OFFSET =></code></td><td>Seconds relative to now; negative = past (e.g. <code>-300</code> = 5 minutes ago)</td></tr>
+                <tr><td><code>BEFORE</code></td><td><code>STATEMENT =></code></td><td>State immediately before a specific query ID ran — ideal for undoing a bad UPDATE</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <pre><code>USE ROLE SYSADMIN;
+USE WAREHOUSE compute_wh;
+USE DATABASE la_db;
+USE SCHEMA la_schema;
+
+ALTER SESSION SET TIMEZONE = 'UTC';
+
+CREATE OR REPLACE TABLE customer (
+  customer_id INT,
+  first_name  VARCHAR(50),
+  last_name   VARCHAR(50),
+  email       VARCHAR(100),
+  phone       VARCHAR(20),
+  address     VARCHAR(200),
+  city        VARCHAR(50),
+  state       VARCHAR(50),
+  country     VARCHAR(50),
+  join_date   DATE
+);
+
+INSERT INTO customer (customer_id, first_name, last_name, email, phone, address, city, state, country, join_date)
+VALUES
+  (1, 'John', 'Doe',   'john@example.com',  '+1-555-1234', '123 Main St', 'Anytown', 'CA', 'USA', '2022-01-01'),
+  (2, 'Jane', 'Smith', 'jane@example.com',  '+1-555-5678', '456 Oak St',  'Anycity', 'NY', 'USA', '2022-01-02');
+
+SELECT SYSTIMESTAMP() AS snapshot_time;
+
+UPDATE customer SET phone = '+3-555-5678' WHERE customer_id = 1;
+
+SELECT * FROM customer;
+
+-- Replace with YOUR query ID from Activity → Query History
+SELECT * FROM customer
+  BEFORE(STATEMENT => '&lt;your_query_id&gt;');
+
+SELECT * FROM customer AT(OFFSET => -300);
+
+SELECT * FROM customer
+  AT(TIMESTAMP => '2026-07-28 10:00:00'::TIMESTAMP_NTZ);
+
+DROP TABLE customer;
+
+UNDROP TABLE customer;
+
+SELECT * FROM customer;</code></pre>
+
+          <div class="callout warn">
+            <strong>Course file corrections:</strong> <code>Time Travel.txt</code> uses a hard-coded query ID (<code>01ad0729-…</code>) and comments "20 seconds ago" while using <code>OFFSET => -150</code> (150 seconds). Always use <strong>your own</strong> query ID from Query History and match OFFSET seconds to your intent.
+          </div>
+
+          <h3>Retention settings</h3>
+          <pre><code>ALTER TABLE customer SET DATA_RETENTION_TIME_IN_DAYS = 30;
+
+SHOW PARAMETERS LIKE 'DATA_RETENTION%' IN TABLE customer;
+
+-- ACCOUNTADMIN only — raises floor for ALL permanent objects; use with care
+-- ALTER ACCOUNT SET MIN_DATA_RETENTION_TIME_IN_DAYS = 10;
+-- ALTER ACCOUNT UNSET MIN_DATA_RETENTION_TIME_IN_DAYS;</code></pre>
+
+          <div class="callout danger">
+            <strong>Account-wide warning:</strong> <code>ALTER ACCOUNT SET MIN_DATA_RETENTION_TIME_IN_DAYS</code> increases Time Travel storage cost account-wide. Do not run in shared trial accounts without approval.
+          </div>
+
+          <p>Zero-copy cloning at a point in time (<code>CREATE TABLE … CLONE … AT/BEFORE</code>) is covered in advanced recovery material — see <a href="s05-advance-data-loading.html">Section 5</a>.</p>
+        </section>
+
+        <section class="section" id="time-travel-quiz">
+          <h2>Time Travel Quiz</h2>
+          <ul>
+            <li>What is the difference between <code>AT(TIMESTAMP => …)</code> and <code>BEFORE(STATEMENT => …)</code>?</li>
+            <li>What units does <code>OFFSET</code> use?</li>
+            <li>How long is Fail-safe and can users query it?</li>
+            <li>What does <code>UNDROP</code> restore?</li>
+          </ul>
+          <div class="callout exam">
+            <strong>Quick check:</strong> <code>BEFORE(STATEMENT => id)</code> shows data from just before that statement executed — the usual "undo my last change" pattern. Fail-safe is 7 days after Time Travel ends; only Snowflake Support can recover from it.
+          </div>
+        </section>
+
+        <section class="section" id="demo-data-transformation">
+          <h2>Demo : Data Transformation Part I</h2>
+          <p class="muted">Course file: <code>2. Time Travel, Transformation, Billing, Views/Data Transformation Part I.txt</code></p>
+
+          <p>Transform data with standard SQL functions. These run on your warehouse and consume compute credits.</p>
+
+          <pre><code>USE DATABASE la_db;
+USE SCHEMA la_schema;
+
+SELECT customer_id,
+       CONCAT(first_name, ' ', last_name) AS full_name,
+       email, phone, join_date
+FROM customer;
+
+SELECT customer_id, first_name, last_name, email,
+       LTRIM(phone, '+') AS clean_phone, join_date
+FROM customer;
+
+SELECT customer_id, first_name, last_name, email, phone, join_date
+FROM customer
+WHERE first_name ILIKE '%john%';
+
+SELECT customer_id, first_name, last_name,
+       LEN(address) AS address_length, join_date
+FROM customer;
+
+-- Re-run previous query result without re-executing logic
+SELECT customer_id FROM TABLE(RESULT_SCAN(LAST_QUERY_ID()));
+
+SELECT LAST_QUERY_ID(-2);</code></pre>
+
+          <div class="callout tip">
+            <strong><code>RESULT_SCAN</code> / <code>LAST_QUERY_ID</code>:</strong> Useful for chaining transformations in scripts. Negative indices in <code>LAST_QUERY_ID(n)</code> refer to prior queries in the session. More transform functions for bulk loads are in <a href="s05-advance-data-loading.html">Section 5</a>.
+          </div>
+        </section>
+
+        <section class="section" id="demo-insert-overwrite">
+          <h2>Demo : Insert Overwrite</h2>
+          <p class="muted">Course file: <code>2. Time Travel, Transformation, Billing, Views/INSERT OVERWRITE.txt</code></p>
+
+          <pre><code>CREATE OR REPLACE TABLE employees (
+  id         INT,
+  name       VARCHAR(255),
+  department VARCHAR(255)
+);
+
+INSERT INTO employees (id, name, department) VALUES
+  (1, 'John Doe', 'Engineering'),
+  (2, 'Jane Doe', 'Sales');
+
+SELECT * FROM employees;</code></pre>
+
+          <div class="callout warn">
+            <strong>Course file error:</strong> The file is titled <em>INSERT OVERWRITE</em> but the demo runs a plain <code>INSERT INTO employees SELECT … FROM employees WHERE department = 'Engineering'</code> — that <strong>appends</strong> rows; it does not overwrite the table. The course comment "This will overwrite…" is incorrect.
+          </div>
+
+          <p>To truly replace table contents, use <code>INSERT OVERWRITE INTO</code> (or truncate + insert):</p>
+          <pre><code>-- Correct overwrite semantics — replaces all rows in employees
+INSERT OVERWRITE INTO employees
+SELECT id, name, department FROM employees WHERE department = 'Engineering';
+
+SELECT * FROM employees;
+-- Expected: only Engineering rows remain</code></pre>
+
+          <div class="callout exam">
+            <strong>Exam tip:</strong> <code>INSERT OVERWRITE INTO</code> replaces the entire table contents atomically. Plain <code>INSERT INTO … SELECT</code> adds rows. Know the difference.
+          </div>
+        </section>
+
+        <section class="section" id="data-transformation-quiz">
+          <h2>Data Transformation Quiz</h2>
+          <ul>
+            <li>When would you use <code>ILIKE</code> instead of <code>LIKE</code>?</li>
+            <li>What does <code>RESULT_SCAN(LAST_QUERY_ID())</code> return?</li>
+            <li>What is the difference between <code>INSERT INTO … SELECT</code> and <code>INSERT OVERWRITE INTO … SELECT</code>?</li>
+          </ul>
+        </section>
+
+        <section class="section" id="billing">
+          <h2>Billing in Snowflake</h2>
+          <p>Snowflake uses <strong>credits</strong> as the billing unit. Three major consumption categories appear on every invoice; rates depend on edition, cloud provider, and region — see <a href="https://www.snowflake.com/pricing/">snowflake.com/pricing</a> for current numbers.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-051-billing.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-051-billing.png" alt="Snowflake billing overview: compute including user-managed warehouses, Snowflake-managed serverless compute and cloud services; storage including staged files, database tables, materialized views, Time Travel and Fail-safe; and data transfer costs" loading="lazy" width="1920" height="1080">
+            </a>
+            <figcaption><span class="slide-no">Slide 51</span>The three billable pillars — compute, storage, and data transfer — and what falls under each.</figcaption>
+          </figure>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Category</th><th>What bills</th><th>Billing model</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td rowspan="3"><strong>Compute</strong></td>
+                  <td>User-managed virtual warehouses</td>
+                  <td>Credits per second (60s minimum); size × runtime, not query complexity</td>
+                </tr>
+                <tr>
+                  <td>Snowflake-managed / serverless compute</td>
+                  <td>Credits for Snowflake-provisioned resources (Snowpipe, tasks, materialized view maintenance, etc.)</td>
+                </tr>
+                <tr>
+                  <td>Cloud services</td>
+                  <td>Credits; <strong>waived if ≤ 10%</strong> of daily warehouse credits consumed</td>
+                </tr>
+                <tr>
+                  <td rowspan="5"><strong>Storage</strong></td>
+                  <td>Staged files</td>
+                  <td>Per TB / month</td>
+                </tr>
+                <tr>
+                  <td>Database tables (active data)</td>
+                  <td>Per TB / month (compressed)</td>
+                </tr>
+                <tr>
+                  <td>Materialized views</td>
+                  <td>Per TB / month for stored results</td>
+                </tr>
+                <tr>
+                  <td>Time Travel and Fail-safe</td>
+                  <td>Per TB / month for historical micro-partitions</td>
+                </tr>
+                <tr>
+                  <td>Transient / temporary tables and clones</td>
+                  <td>Per TB / month (no Fail-safe charge on transient/temp)</td>
+                </tr>
+                <tr>
+                  <td><strong>Data transfer</strong></td>
+                  <td>Ingress, egress, replication, external functions</td>
+                  <td>Ingress free; egress per byte; see breakdown below</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Compute billing details</h3>
+          <p>A virtual warehouse is one or more clusters of compute resources for executing queries, loading data, and other DML. Snowflake credits pay for processing time based on <strong>warehouse size and how long it runs</strong>, not on query complexity.</p>
+          <ul>
+            <li>Billed <strong>by the second</strong> with a <strong>60-second minimum</strong> each time a warehouse resumes.</li>
+            <li>When you <strong>scale up</strong>, you are charged only for the <em>extra</em> compute of the larger size for the duration of the resize.</li>
+            <li>When you <strong>scale down</strong>, you are briefly charged for <em>both</em> sizes until the resize completes.</li>
+            <li><strong>Cloud services</strong> (authentication, security enforcement, query compilation and optimisation, request/query caching) consume credits but are <strong>free when daily usage is ≤ 10%</strong> of warehouse credits consumed that day.</li>
+          </ul>
+
+          <h3>Storage lifecycle costs</h3>
+          <ul>
+            <li><strong>Active data:</strong> Compressed micro-partitions for permanent/transient tables.</li>
+            <li><strong>Time Travel:</strong> Historical versions retained per retention setting — billed as storage.</li>
+            <li><strong>Fail-safe:</strong> 7-day disaster-recovery window after Time Travel ends (permanent only).</li>
+            <li><strong>Transient/temp:</strong> Skip Fail-safe charges — good for rebuildable staging data.</li>
+            <li><strong>Clones:</strong> Zero-copy at creation, but changes to cloned objects bill storage independently.</li>
+          </ul>
+
+          <h3>Data transfer</h3>
+          <p>Data transfer is moving data into (ingress) and out of (egress) Snowflake.</p>
+          <ul>
+            <li><strong>Ingress (loading):</strong> Free — no charge to load data into Snowflake.</li>
+            <li><strong>Egress (unloading):</strong> Charged per byte when data leaves Snowflake (for example, unloading to an external stage or downloading large result sets that exceed client-side thresholds).</li>
+            <li><strong>Replication:</strong> Free within the same region and cloud provider; charged when region or cloud provider differs.</li>
+            <li><strong>External functions:</strong> Charged when data is transferred out to the external service.</li>
+          </ul>
+          <div class="callout info">
+            <strong>Current behaviour:</strong> Snowflake does <em>not</em> apply data egress charges when a Snowflake client or driver retrieves query results across regions within the same cloud platform, or across different cloud platforms. This exemption applies to result retrieval — not to bulk <code>COPY INTO</code> unloads to external storage.
+          </div>
+
+          <h3>On-demand vs capacity pricing</h3>
+          <p>Most accounts start on <strong>on-demand</strong> (pay-as-you-go) billing. Larger commitments can move to <strong>capacity</strong> pricing with discounted rates by reserving credits in advance.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Feature</th><th>On-demand</th><th>Capacity</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><strong>Billing</strong></td><td>Pay-as-you-go</td><td>Reserve credits in advance</td></tr>
+                <tr><td><strong>Rates</strong></td><td>Prevailing (list) prices</td><td>Discounted prices</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-062-on-demand-capacity.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-062-on-demand-capacity.png" alt="On-demand versus capacity pricing: on-demand is pay-as-you-go at prevailing rates; capacity reserves credits in advance at discounted rates" loading="lazy" width="1920" height="1080">
+            </a>
+            <figcaption><span class="slide-no">Slide 62</span>On-demand for flexibility; capacity for predictable workloads at lower per-credit cost.</figcaption>
+          </figure>
+
+          <ul>
+            <li>Monitor usage: <code>SNOWFLAKE.ACCOUNT_USAGE.WAREHOUSE_METERING_HISTORY</code>, Snowsight Admin → Cost Management.</li>
+          </ul>
+
+          <div class="callout exam">
+            <strong>Exam tip:</strong> Dropping a permanent table moves data through Time Travel, then Fail-safe, before permanent deletion. Longer retention = higher storage bills. Resource monitors and cost attribution are covered in <a href="s09-performance.html">Section 9</a> and <a href="s15-cof-c03-exclusive.html">Section 15</a>.
+          </div>
+        </section>
+
+        <section class="section" id="views-concept">
+          <h2>Snowflake Views : Concept</h2>
+          <p>A view lets you access the result of a query as if it were a table — the query is stored in the <code>CREATE VIEW</code> statement. Snowflake supports three view types: non-materialized (standard), materialized, and secure.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>View type</th><th>Definition</th><th>Storage</th><th>Typical use case</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>Non-materialized (standard)</strong></td>
+                  <td>Virtual table based on a <code>SELECT</code> statement</td>
+                  <td>Data not stored — computed on each query</td>
+                  <td>Data transformation; simplified view of underlying data</td>
+                </tr>
+                <tr>
+                  <td><strong>Materialized</strong></td>
+                  <td>Pre-computed and stored table based on a <code>SELECT</code></td>
+                  <td>Results stored in cache/micro-partitions for faster reads</td>
+                  <td>Reporting and analytics on frequently queried data</td>
+                </tr>
+                <tr>
+                  <td><strong>Secure</strong></td>
+                  <td>Same as underlying view type, with hidden definition</td>
+                  <td>Same as underlying view (none for standard; stored for materialized)</td>
+                  <td>Limit access to data and hide logic from consumers</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-070-views.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-070-views.png" alt="Comparison of non-materialized, materialized and secure views: definition, whether data is stored, and typical use cases for transformation, analytics and access control" loading="lazy" width="1920" height="1080">
+            </a>
+            <figcaption><span class="slide-no">Slide 70</span>Standard views are virtual; materialized views store results; secure can be applied to either type to hide the SQL definition.</figcaption>
+          </figure>
+
+          <p>A <strong>secure view</strong> can wrap either a standard or materialized view — it adds a privacy layer without changing how data is stored. Standard views behave like tables but re-execute live SQL; materialized views are serverless-maintained and faster for repeat queries but carry storage and refresh cost.</p>
+
+          <h3>Materialized views — when to use</h3>
+          <p>Materialized views (Enterprise+) suit specific patterns:</p>
+          <ul>
+            <li>Query results contain a <strong>small number of rows and/or columns</strong>.</li>
+            <li>Results require <strong>significant processing</strong> — analysis of semi-structured data, slow aggregates, or queries against external tables.</li>
+            <li>The <strong>base table does not change frequently</strong> — frequent refreshes erode the benefit.</li>
+          </ul>
+
+          <div class="grid-2">
+            <div class="mini-card">
+              <h4>Advantages</h4>
+              <ul>
+                <li>Improve performance of repeat queries.</li>
+                <li>Automatically maintained by Snowflake.</li>
+                <li>Data accessed through them is always up to date.</li>
+              </ul>
+            </div>
+            <div class="mini-card">
+              <h4>Cost &amp; limitations</h4>
+              <ul>
+                <li><strong>Cost:</strong> Storage for results + serverless compute for maintenance.</li>
+                <li>Single base table only — no joins.</li>
+                <li>Many aggregate functions not allowed.</li>
+                <li>Full restriction list: <a href="https://docs.snowflake.com/en/user-guide/views-materialized#limitations-on-creating-materialized-views">materialized view limitations</a>.</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="callout warn">
+            <strong>Common mistake:</strong> Using a standard view for secure data sharing — consumers might infer underlying logic with <code>GET_DDL</code>. Use <code>SECURE VIEW</code> when exposing data externally.
+          </div>
+        </section>
+
+        <section class="section" id="demo-views">
+          <h2>Demo : Snowflake Views</h2>
+          <p class="muted">Course file: <code>2. Time Travel, Transformation, Billing, Views/Views.txt</code></p>
+
+          <pre><code>USE ROLE SYSADMIN;
+USE WAREHOUSE compute_wh;
+USE DATABASE la_db;
+USE SCHEMA la_schema;
+
+CREATE OR REPLACE VIEW customer_view AS
+SELECT customer_id, first_name, last_name, email, phone, join_date
+FROM customer;
+
+SELECT * FROM customer_view;
+
+CREATE OR REPLACE VIEW customer_location_view AS
+SELECT customer_id,
+       CONCAT(address, ', ', city, ', ', state, ', ', country) AS location
+FROM customer;
+
+-- Materialized views require Enterprise+
+CREATE OR REPLACE MATERIALIZED VIEW customer_location_mv AS
+SELECT customer_id,
+       CONCAT(address, ', ', city, ', ', state, ', ', country) AS location
+FROM customer
+WHERE state = 'CA';
+
+CREATE OR REPLACE SECURE VIEW customer_location_secure AS
+SELECT customer_id,
+       CONCAT(address, ', ', city, ', ', state, ', ', country) AS location
+FROM customer
+WHERE state = 'CA';
+
+SHOW VIEWS;</code></pre>
+
+          <div class="callout warn">
+            <strong>Course file note:</strong> The original creates <code>SECURE MATERIALIZED VIEW</code> — secure materialized views have specific restrictions. This demo uses a <code>SECURE VIEW</code> (non-materialized) for the secure-sharing pattern, which matches exam expectations.
+          </div>
+
+          <h3>Secure view DDL visibility</h3>
+          <pre><code>-- As ACCOUNTADMIN, grant access to a test role
+GRANT USAGE ON DATABASE la_db TO ROLE analyst_role;
+GRANT USAGE ON SCHEMA la_schema TO ROLE analyst_role;
+GRANT SELECT ON VIEW customer_location_secure TO ROLE analyst_role;
+GRANT USAGE ON WAREHOUSE compute_wh TO ROLE analyst_role;
+
+USE ROLE analyst_role;
+
+SELECT * FROM customer_location_secure;
+
+-- Secure view: definition hidden from non-owners
+SELECT GET_DDL('VIEW', 'customer_location_secure');</code></pre>
+        </section>
+
+        <section class="section" id="billing-views-quiz">
+          <h2>Billing and Views Quiz</h2>
+          <ul>
+            <li>When are cloud-services credits free?</li>
+            <li>What storage components bill beyond active table data?</li>
+            <li>Which view type hides its definition from consumers?</li>
+            <li>Which view type requires Enterprise edition?</li>
+          </ul>
+          <div class="callout exam">
+            <strong>Quick check:</strong> Cloud services are free when daily usage is ≤ 10% of warehouse credits. Materialized views store precomputed data and require Enterprise+. Secure views prevent consumers from reading the underlying SQL via <code>GET_DDL</code>.
+          </div>
+        </section>
+
+        <section class="section" id="interview">
+          <h2>Interview questions</h2>
+          <p class="muted">Try to answer each one before opening it.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+            <details class="qa">
+              <summary>What are the three Time Travel argument forms for <code>AT</code>/<code>BEFORE</code>, and when would you use each?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p><code>TIMESTAMP =></code> pins an exact moment — set <code>TIMEZONE</code> explicitly in labs. <code>OFFSET =></code> uses seconds relative to now; negative values go into the past (for example, <code>-300</code> is five minutes ago). <code>BEFORE(STATEMENT => '&lt;query_id&gt;')</code> shows data immediately before a specific statement ran — the usual undo pattern after a bad <code>UPDATE</code>. Use TIMESTAMP for audit replay, OFFSET for quick "a few minutes ago" checks, and STATEMENT when you have the query ID from Query History.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What are the default and maximum Time Travel retention values by edition and table type?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>Permanent tables: Standard defaults to 1 day and allows 0–1 day; Enterprise+ allows 0–90 days. Transient and temporary tables cap at 0–1 day regardless of edition. Fail-safe is fixed at 7 days for permanent tables only — not configurable. Transient and temporary tables have no Fail-safe. Setting retention to 0 disables Time Travel for that object but Fail-safe still applies to permanent tables until the lifecycle completes.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How do <code>DATA_RETENTION_TIME_IN_DAYS</code> and <code>MIN_DATA_RETENTION_TIME_IN_DAYS</code> interact?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p><code>DATA_RETENTION_TIME_IN_DAYS</code> is set per table (or inherited from schema/database defaults) and controls that object's Time Travel window within edition limits. <code>MIN_DATA_RETENTION_TIME_IN_DAYS</code> is an account-level parameter (ACCOUNTADMIN only) that sets a floor — effective retention is <code>MAX(table setting, account minimum)</code>. Raising the account minimum increases Time Travel storage cost account-wide; avoid running it in shared trial accounts without approval.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What is the difference between Time Travel and Fail-safe, and who can recover from each?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p>Time Travel is user-accessible — you query historical data with <code>AT</code>/<code>BEFORE</code>, restore with <code>UNDROP</code>, or clone at a point in time. Duration is configurable within edition limits. Fail-safe is a fixed 7-day disaster-recovery window after Time Travel ends, for permanent tables only. Users cannot query Fail-safe data; only Snowflake Support can recover from it. Lifecycle order: Active → Time Travel → Fail-safe → Purged.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What does <code>UNDROP</code> restore, and what happens if someone recreated an object with the same name?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p><code>UNDROP</code> restores dropped tables, schemas, or databases still within their Time Travel retention window — it reverses the drop, not individual row changes. If a new object with the same fully qualified name already exists, <code>UNDROP</code> fails because the name is taken. You must drop or rename the replacement object first, then undrop. Row-level undo still uses <code>BEFORE(STATEMENT => …)</code>, not <code>UNDROP</code>.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How do standard, secure, and materialized views differ?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p><strong>Standard views</strong> store only the query definition and re-execute it on every query — always current, no extra storage. <strong>Secure views</strong> also store only a definition but hide it from consumers and are required for secure data sharing. <strong>Materialized views</strong> (Enterprise+) physically store precomputed results and are auto-maintained — faster reads but storage cost and refresh overhead. Standard and secure views are available on all editions; materialized views require Enterprise or higher.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What does a secure view actually protect?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>A secure view prevents consumers from seeing the underlying SQL definition — <code>GET_DDL('VIEW', …)</code> does not reveal the base-table logic or filter predicates to non-owner roles. That stops analysts from inferring row-level security rules or sensitive join logic. It is required for secure data sharing when exposing data externally. It does not encrypt data at rest or bypass warehouse compute — queries still run on a warehouse and consume credits.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What are the main limitations of materialized views compared with standard views?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p>Materialized views require Enterprise edition or higher, physically store precomputed results (extra storage cost), and need maintenance when base tables change — unlike standard views that re-execute live SQL with no stored data. They suit repetitive read-heavy patterns; ad-hoc queries that change often are better served by standard or secure views. Snowflake also imposes supported-query restrictions on materialized view definitions (not every SELECT qualifies), though the exact rules are beyond this section's scope.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What are the three main things Snowflake bills for?<span class="qa-tag">Cost</span></summary>
+              <div class="qa-body">
+                <p><strong>Virtual warehouse compute</strong> — credits per second (60-second minimum on resume), based on warehouse size × runtime. <strong>Storage</strong> — per TB/month for active data, Time Travel history, Fail-safe, and staged files. <strong>Cloud services</strong> — credits for coordination work, waived when daily usage is ≤ 10% of warehouse credits. Serverless features (Snowpipe, tasks) and data transfer are additional categories beyond these three core buckets.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Why might a query that returns instantly cost nothing in compute credits?<span class="qa-tag">Scenario</span></summary>
+              <div class="qa-body">
+                <p>If an identical query ran recently and the result is still in the <strong>result cache</strong> maintained by Cloud Services, Snowflake returns cached results without re-executing on a warehouse — no warehouse credits consumed. Metadata-only commands (<code>SHOW</code>, <code>DESCRIBE</code>, empty DDL) also run on Cloud Services without starting a warehouse. Cloud-services usage is free when it stays at or below 10% of daily warehouse credits. Cached results require the same user, role, and warehouse context as the original query.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>When is data transfer free versus charged in Snowflake?<span class="qa-tag">Cost</span></summary>
+              <div class="qa-body">
+                <p><strong>Ingress (loading into Snowflake)</strong> is free. <strong>Replication</strong> within the same region and cloud provider is free; cross-region or cross-cloud replication is charged. <strong>Egress</strong> is charged per byte when data leaves Snowflake — bulk unloads to external stages, external function calls that send data out, and similar. Snowflake does <em>not</em> charge egress when a client or driver retrieves query results across regions or clouds — that exemption applies to result retrieval, not to <code>COPY INTO</code> unloads.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>When should you create a materialized view instead of a standard view?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p>Create a materialized view when the same expensive query runs repeatedly and the base table changes infrequently — especially when results are a small row/column set, involve heavy aggregates or semi-structured parsing, or query an external table. You pay storage for the cached results plus serverless compute for automatic maintenance, and you accept limitations: single table only, no joins, restricted aggregates. Ad-hoc or frequently changing queries are better served by standard views.</p>
+              </div>
+            </details>
+          </div>
+        </section>
+
+        <section class="section" id="practice">
+          <h2>Hands-on practice</h2>
+          <p class="muted">Run these in a trial account on an X-Small warehouse with <code>AUTO_SUSPEND = 60</code>. Clean up when you finish.</p>
+          <ol class="practice-list">
+            <li class="practice">
+              <p class="practice-task">Create the <code>customer</code> table in <code>LA_DB.LA_SCHEMA</code> with two sample rows. Update John Doe's phone, then use <code>BEFORE(STATEMENT => '&lt;your_query_id&gt;')</code> with the UPDATE's query ID from Activity → Query History to recover the original phone number.</p>
+              <p class="practice-expect">Current row shows the new phone. The <code>BEFORE(STATEMENT => …)</code> query returns <code>+1-555-1234</code> for customer_id 1.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">SQL</span></summary>
+                <div class="qa-body">
+<pre><code>USE ROLE SYSADMIN;
+USE WAREHOUSE compute_wh;
+USE DATABASE la_db;
+USE SCHEMA la_schema;
+
+ALTER SESSION SET TIMEZONE = 'UTC';
+
+CREATE OR REPLACE TABLE customer (
+  customer_id INT,
+  first_name  VARCHAR(50),
+  last_name   VARCHAR(50),
+  email       VARCHAR(100),
+  phone       VARCHAR(20),
+  address     VARCHAR(200),
+  city        VARCHAR(50),
+  state       VARCHAR(50),
+  country     VARCHAR(50),
+  join_date   DATE
+);
+
+INSERT INTO customer (customer_id, first_name, last_name, email, phone, address, city, state, country, join_date)
+VALUES
+  (1, 'John', 'Doe',   'john@example.com',  '+1-555-1234', '123 Main St', 'Anytown', 'CA', 'USA', '2022-01-01'),
+  (2, 'Jane', 'Smith', 'jane@example.com',  '+1-555-5678', '456 Oak St',  'Anycity', 'NY', 'USA', '2022-01-02');
+
+UPDATE customer SET phone = '+3-555-5678' WHERE customer_id = 1;
+
+SELECT * FROM customer;
+
+-- Replace with YOUR query ID from Query History
+SELECT * FROM customer
+  BEFORE(STATEMENT => '&lt;your_query_id&gt;');</code></pre>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Drop the <code>customer</code> table, then run <code>UNDROP TABLE customer</code> and confirm both rows are back. Also test <code>AT(OFFSET => -300)</code> after making another change.</p>
+              <p class="practice-expect"><code>UNDROP</code> restores the table with all rows intact. <code>AT(OFFSET => -300)</code> returns data as it existed five minutes ago (if within retention).</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">SQL</span></summary>
+                <div class="qa-body">
+<pre><code>DROP TABLE customer;
+
+UNDROP TABLE customer;
+
+SELECT COUNT(*) AS row_count FROM customer;
+-- Expected: 2
+
+SELECT * FROM customer AT(OFFSET => -300);</code></pre>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Create a standard view <code>customer_view</code>, a materialized view <code>customer_location_mv</code> filtered to <code>state = 'CA'</code>, and a secure view <code>customer_location_secure</code>. Query each and run <code>SHOW VIEWS</code>.</p>
+              <p class="practice-expect"><code>SHOW VIEWS</code> lists all three. Materialized view returns only CA customers (customer_id 1). Secure and standard views execute successfully.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">SQL</span></summary>
+                <div class="qa-body">
+<pre><code>CREATE OR REPLACE VIEW customer_view AS
+SELECT customer_id, first_name, last_name, email, phone, join_date
+FROM customer;
+
+CREATE OR REPLACE MATERIALIZED VIEW customer_location_mv AS
+SELECT customer_id,
+       CONCAT(address, ', ', city, ', ', state, ', ', country) AS location
+FROM customer
+WHERE state = 'CA';
+
+CREATE OR REPLACE SECURE VIEW customer_location_secure AS
+SELECT customer_id,
+       CONCAT(address, ', ', city, ', ', state, ', ', country) AS location
+FROM customer
+WHERE state = 'CA';
+
+SELECT * FROM customer_view;
+SELECT * FROM customer_location_mv;
+SELECT * FROM customer_location_secure;
+
+SHOW VIEWS;</code></pre>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Compare on-demand and capacity pricing in your own words, then look up current credit rates for your trial account's cloud and region at <code>snowflake.com/pricing</code>. Note one compute billing rule (60-second minimum) and one data-transfer rule (ingress free).</p>
+              <p class="practice-expect">You can explain pay-as-you-go vs reserved credits, and cite at least one free vs charged transfer scenario from the billing section.</p>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Clean up: drop all views and the <code>customer</code> table created in this section.</p>
+              <p class="practice-expect">All views and the base table are removed. <code>SHOW VIEWS</code> and <code>SHOW TABLES LIKE 'CUSTOMER'</code> return no matching objects.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">SQL</span></summary>
+                <div class="qa-body">
+<pre><code>DROP VIEW IF EXISTS customer_view;
+DROP MATERIALIZED VIEW IF EXISTS customer_location_mv;
+DROP VIEW IF EXISTS customer_location_secure;
+DROP TABLE IF EXISTS customer;</code></pre>
+                </div>
+              </details>
+            </li>
+          </ol>
+        </section>
+
+        <section class="section" id="recap">
+          <h2>Recap</h2>
+          <div class="recap">
+            <ul class="checklist">
+              <li>Continuous Data Protection: current storage → Time Travel (<code>DATA_RETENTION_TIME_IN_DAYS</code> 0–1 Standard, 0–90 Enterprise+) → Fail-safe (7d, permanent only, no user access) → Purged.</li>
+              <li>Query past with <code>AT</code>/<code>BEFORE</code> + <code>TIMESTAMP</code>, <code>OFFSET</code> (seconds), or <code>STATEMENT</code> (query ID); restore drops with <code>UNDROP</code>.</li>
+              <li>Billing pillars: compute (user VW + serverless + cloud services with 10% daily waiver), storage (staged files, tables, MVs, Time Travel, Fail-safe, clones), data transfer (ingress free, egress per byte).</li>
+              <li>Compute billed per second (60s min); scale-up charges extra compute only; scale-down briefly charges both sizes.</li>
+              <li>On-demand = pay-as-you-go; capacity = reserved credits at discounted rates.</li>
+              <li>Query-result retrieval across regions/clouds is not charged as egress; bulk unloads are.</li>
+              <li><code>INSERT OVERWRITE INTO</code> replaces table contents; plain <code>INSERT INTO … SELECT</code> appends.</li>
+              <li>Views: standard (virtual), materialized (stored, Enterprise+, single-table limits), secure (hides definition on either type).</li>
+            </ul>
+            <p style="margin-top:1rem;">
+              <button type="button" data-complete="section-03">Mark complete</button>
+            </p>
+          </div>
+        </section>
+
+      </div>
+
+      <aside class="toc" aria-label="On this page">
+        <strong>On this page</strong>
+        <ol>
+          <li><a href="#lectures">Lectures</a></li>
+          <li><a href="#time-travel-concept">Time Travel Concept</a></li>
+          <li><a href="#demo-time-travel">Time Travel Demo</a></li>
+          <li><a href="#time-travel-quiz">Time Travel Quiz</a></li>
+          <li><a href="#demo-data-transformation">Transformation</a></li>
+          <li><a href="#demo-insert-overwrite">Insert Overwrite</a></li>
+          <li><a href="#data-transformation-quiz">Transformation Quiz</a></li>
+          <li><a href="#billing">Billing</a></li>
+          <li><a href="#views-concept">Views Concept</a></li>
+          <li><a href="#demo-views">Views Demo</a></li>
+          <li><a href="#billing-views-quiz">Billing &amp; Views Quiz</a></li>
+          <li><a href="#interview">Interview questions</a></li>
+          <li><a href="#practice">Hands-on practice</a></li>
+          <li><a href="#recap">Recap</a></li>
+        </ol>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<footer class="footer">Snowflake COF-C03 Course Notes · Section 3 · Offline study edition</footer>
+</body>
+</html>

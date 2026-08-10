@@ -1,0 +1,1300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="dbt bootcamp Section 12: unit tests with mocked inputs, model contracts, warehouse constraints, custom generic tests, test parameters, and severity configuration.">
+<title>Section 12 — Advanced Testing | The Complete dbt Bootcamp Notes</title>
+<link rel="stylesheet" href="assets/dbt.css">
+<script defer src="assets/search-index.js"></script>
+<script defer src="assets/code-highlight.js"></script>
+<script defer src="assets/dbt.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">Course section 12 of 22 · The Complete dbt Bootcamp: Zero to Hero</p>
+    <h1>Advanced Testing</h1>
+    <p class="subtitle">Move beyond scanning live warehouse tables. Unit tests mock upstream inputs so you can verify model logic in isolation. Contracts declare column types at compile time. Constraints push integrity rules into the warehouse DDL. Custom generic tests encode team-specific assertions once and reuse them everywhere.</p>
+    <div class="hero-meta">
+      <span class="chip">8 lectures · ~50min</span>
+      <span class="chip">unit tests and contracts</span>
+      <span class="chip">custom generic tests</span>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <nav class="pager" aria-label="Section navigation">
+    <a href="s11-tests.html">← Tests</a>
+    <a href="index.html">Course contents</a>
+    <a href="s13-jinja-macros-packages.html">Next: Jinja, Macros and Packages →</a>
+  </nav>
+
+  <main id="main">
+    <div class="layout">
+      <div class="content">
+
+        <section class="section" id="lectures">
+          <h2>Lectures in this section</h2>
+          <ol class="lecture-list">
+            <li class="lecture">
+              <a class="lec-title" href="#unit-tests">Unit tests: mocked inputs and expected outputs</a>
+              <span class="lec-time">~8:00</span>
+              <span class="lec-src">models/mart/unit_tests.yml</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#unit-test-selectors">Selecting tests by model and test type</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">course-resources.md · Unit Tests</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#contracts">Model contracts and enforced column types</a>
+              <span class="lec-time">~8:00</span>
+              <span class="lec-src">models/schema.yml · contract block</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#constraints">Warehouse constraints: not_null, primary_key, foreign_key, check</a>
+              <span class="lec-time">~10:00</span>
+              <span class="lec-src">models/schema.yml · constraints</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#custom-generic-tests">Writing custom generic tests with {% test %}</a>
+              <span class="lec-time">~8:00</span>
+              <span class="lec-src">tests/generic/positive_values.sql</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#test-parameters">Passing parameters to generic tests</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">tests/generic/minimum_row_count.sql</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#test-severity">Test severity: warn versus error</a>
+              <span class="lec-time">~4:00</span>
+              <span class="lec-src">models/schema.yml · minimum_row_count</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#test-severity">warn_if and error_if thresholds</a>
+              <span class="lec-time">~2:00</span>
+              <span class="lec-src">dbt docs · test config</span>
+            </li>
+          </ol>
+          <p class="muted">This section builds on <a href="s11-tests.html">Section 11</a>, which covers built-in generic tests (<code>unique</code>, <code>not_null</code>, <code>relationships</code>, <code>accepted_values</code>), singular tests, and storing failures. Here you add unit tests, contracts, constraints, and team-authored generic tests.</p>
+
+          <div class="grid-2">
+            <div class="mini-card">
+              <h4>Section 11 (prerequisite)</h4>
+              <p>Generic tests on live data, singular SQL files, <code>store_failures</code>, selecting a single test by name. Read that section first if you have not written <code>schema.yml</code> tests yet.</p>
+            </div>
+            <div class="mini-card">
+              <h4>Section 12 (this page)</h4>
+              <p>Mocked unit tests, compile-time contracts, warehouse constraints, <code>{% test %}</code> macros, parameters, and severity thresholds.</p>
+            </div>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Capability</th><th>Section 11</th><th>Section 12</th></tr></thead>
+              <tbody>
+                <tr><td>Test live warehouse rows</td><td>Yes — generics and singular</td><td>Yes — custom generics and severity</td></tr>
+                <tr><td>Test logic without warehouse data</td><td>No</td><td>Yes — unit tests</td></tr>
+                <tr><td>Compile-time schema enforcement</td><td>No</td><td>Yes — contracts</td></tr>
+                <tr><td>Warehouse DDL constraints</td><td>No</td><td>Yes — not_null, keys, check</td></tr>
+                <tr><td>Custom reusable test SQL</td><td>Singular only (one-off files)</td><td>Generic macros in tests/generic/</td></tr>
+                <tr><td>Graduated CI severity</td><td>Mentioned via store_failures</td><td>warn, error, warn_if, error_if</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="section" id="unit-tests">
+          <h2>Unit tests</h2>
+          <p class="lead">A unit test runs a model against fake input rows you define in YAML &mdash; no warehouse data required. dbt substitutes your mocked <code>given</code> inputs for the real upstream relations, executes the model SQL, and compares the result to <code>expect</code> rows. If they differ, the test fails.</p>
+
+          <p>Generic and singular tests scan whatever is currently in the warehouse. That is fine for integrity checks on production-sized tables, but awkward for logic you want to verify in isolation: a join predicate, a <code>CASE</code> branch, an edge date. Unit tests let you pin down those cases with three rows of input and an expected output, run them in CI without seeding the warehouse, and fail fast when someone changes the SQL.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Test type</th><th>What it checks</th><th>Needs warehouse data?</th><th>Defined in</th></tr></thead>
+              <tbody>
+                <tr><td>Generic (<a href="s11-tests.html">Section 11</a>)</td><td>Column/table properties on live data</td><td>Yes</td><td><code>schema.yml</code> under <code>data_tests:</code></td></tr>
+                <tr><td>Singular (<a href="s11-tests.html">Section 11</a>)</td><td>Arbitrary SQL returning failing rows</td><td>Yes</td><td><code>tests/*.sql</code></td></tr>
+                <tr><td>Unit (this section)</td><td>Model output for mocked inputs</td><td>No &mdash; inputs are inline YAML</td><td><code>unit_tests.yml</code> or model YAML</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Why mart_fullmoon_reviews is a good first unit test</h3>
+          <p>The mart joins <code>fct_reviews</code> to <code>seed_full_moon_dates</code> and labels each review as <code>'full moon'</code> or <code>'not full moon'</code> based on whether the review date equals the day after a full moon. The business rule is easy to get wrong by one day; a unit test with three review dates and one seed date proves the join and <code>CASE</code> logic without loading 273 lunar rows or millions of reviews.</p>
+
+          <p>The model SQL (from <a href="s09-seeds-sources.html">Section 9</a>) ends with:</p>
+
+<pre data-lang="sql" data-title="models/mart/mart_fullmoon_reviews.sql (full model)" data-explain="Microbatch incremental in the finished repo; unit test exercises the SELECT logic regardless of materialization."><code>{{ config(
+  materialized = 'incremental',
+  incremental_strategy='microbatch',
+  event_time='review_date',
+  begin='2009-06-20',
+  batch_size='year',
+  full_refresh=false,
+  tags = ['fact'],
+  schema='mart'
+) }}
+
+WITH fct_reviews AS (
+    SELECT * FROM {{ ref('fct_reviews') }}
+),
+full_moon_dates AS (
+    SELECT * FROM {{ ref('seed_full_moon_dates') }}
+)
+
+SELECT
+  r.*,
+  CASE
+    WHEN fm.full_moon_date IS NULL THEN 'not full moon'
+    ELSE 'full moon'
+  END AS is_full_moon
+FROM
+  fct_reviews r
+  LEFT JOIN full_moon_dates fm
+  ON (TO_DATE(r.review_date) = DATEADD(DAY, 1, fm.full_moon_date))</code></pre>
+
+          <p>The unit test does not load the incremental config branches; it exercises the core SELECT. For incremental-specific branches, use <code>overrides</code> in the unit test YAML (see <a href="#deeper">Deeper detail</a>).</p>
+
+          <p>The join and label portion alone:</p>
+
+<pre data-lang="sql" data-title="models/mart/mart_fullmoon_reviews.sql (join and label logic)" data-explain="LEFT JOIN to the seed; full moon when review_date equals full_moon_date plus one day."><code>SELECT
+  r.*,
+  CASE
+    WHEN fm.full_moon_date IS NULL THEN 'not full moon'
+    ELSE 'full moon'
+  END AS is_full_moon
+FROM
+  fct_reviews r
+  LEFT JOIN full_moon_dates fm
+  ON (TO_DATE(r.review_date) = DATEADD(DAY, 1, fm.full_moon_date))</code></pre>
+
+          <div class="diagram">
+            <p class="diagram-title">Unit test substitutes mocked rows for real upstream tables</p>
+            <div class="dag">
+              <div class="dag-col">
+                <p class="dag-label">given (mocked)</p>
+                <div class="node is-source"><b>fct_reviews</b><small>3 rows in YAML</small></div>
+                <div class="node is-seed"><b>seed_full_moon_dates</b><small>1 row in YAML</small></div>
+              </div>
+              <div class="dag-col">
+                <p class="dag-label">model under test</p>
+                <div class="node is-mart pulse"><b>mart_fullmoon_reviews</b><small>SQL runs in memory</small></div>
+              </div>
+              <div class="dag-col">
+                <p class="dag-label">expect</p>
+                <div class="node is-test"><b>3 expected rows</b><small>is_full_moon labels</small></div>
+              </div>
+            </div>
+          </div>
+
+          <h3>unit_tests.yml syntax</h3>
+          <p>Unit tests live in YAML files anywhere under <code>model-paths</code>. The course places them in <code>models/mart/unit_tests.yml</code> next to the mart they exercise. Each entry names the test, the target model, mocked inputs, and expected output.</p>
+
+          <div class="filetree">
+            <ul>
+              <li><span class="dir">airbnb/</span>
+                <ul>
+                  <li><span class="dir">models/</span>
+                    <ul>
+                      <li><span class="dir">mart/</span>
+                        <ul>
+                          <li><span class="file">mart_fullmoon_reviews.sql</span></li>
+                          <li><span class="file">unit_tests.yml</span> <span class="new">← new in this section</span></li>
+                        </ul>
+                      </li>
+                    </ul>
+                  </li>
+                </ul>
+              </li>
+            </ul>
+          </div>
+
+<pre data-lang="yaml" data-title="models/mart/unit_tests.yml" data-explain="Mock two upstream refs with inline rows; expect exact output rows including the is_full_moon label."><code>unit_tests:
+  - name: unittest_fullmoon_matcher
+    model: mart_fullmoon_reviews
+    given:
+      - input: ref('fct_reviews')
+        rows:
+          - {review_date: '2025-01-13'}
+          - {review_date: '2025-01-14'}
+          - {review_date: '2025-01-15'}
+      - input: ref('seed_full_moon_dates')
+        rows:
+          - {full_moon_date: '2025-01-14'}
+    expect:
+      rows:
+        - {review_date: '2025-01-13', is_full_moon: "not full moon"}
+        - {review_date: '2025-01-14', is_full_moon: "not full moon"}
+        - {review_date: '2025-01-15', is_full_moon: "full moon"}</code></pre>
+
+          <h3>Reading the given and expect blocks</h3>
+          <p><strong><code>given</code></strong> is a list of mocked upstream relations. Each item has <code>input:</code> (a <code>ref()</code>, <code>source()</code>, or literal relation) and <code>rows:</code> (inline dicts). dbt replaces those relations with ephemeral tables built from your rows when it compiles and runs the unit test. You only mock what the model reads directly &mdash; here <code>fct_reviews</code> and <code>seed_full_moon_dates</code>, not staging models further upstream.</p>
+
+          <p><strong><code>expect</code></strong> holds the rows the model should produce. Comparison is set-based: column values must match. Order may matter depending on adapter and dbt version; for deterministic tests, keep inputs small and sort keys explicit in the model if needed.</p>
+
+          <p>Walk through the expected labels:</p>
+          <ul>
+            <li><code>2025-01-13</code> &mdash; no seed row where <code>full_moon_date + 1 day = 2025-01-13</code>, so <code>LEFT JOIN</code> misses and the <code>CASE</code> yields <code>'not full moon'</code>.</li>
+            <li><code>2025-01-14</code> &mdash; seed has full moon on <code>2025-01-14</code>, but the join compares review date to <code>2025-01-15</code> (<code>14 + 1</code>), so still no match.</li>
+            <li><code>2025-01-15</code> &mdash; matches <code>DATEADD(DAY, 1, '2025-01-14')</code>, join hits, label is <code>'full moon'</code>.</li>
+          </ul>
+
+          <div class="callout tip"><strong>Unit tests are logic tests, not data-quality tests.</strong> Use them for transforms you own. Keep scanning live tables with generic tests from <a href="s11-tests.html">Section 11</a> for production volume checks.</div>
+
+          <h3>Running unit tests</h3>
+
+          <div class="terminal">
+            <p class="term-head">dbt test — unit test only</p>
+            <pre class="term-body"><span class="tt-cmd">dbt test --select unittest_fullmoon_matcher</span>
+<span class="tt-dim">15:04:12  Running with dbt=1.11.12</span>
+<span class="tt-dim">15:04:14  1 of 1 START unit test unittest_fullmoon_matcher .................... [RUN]</span>
+<span class="tt-ok">15:04:15  1 of 1 PASS unittest_fullmoon_matcher ............................... [PASS in 0.89s]</span>
+<span class="tt-ok">15:04:15  Completed successfully</span></pre>
+          </div>
+
+          <p>Unit tests compile the model SQL against mocked CTEs. They do not require <code>fct_reviews</code> or the seed to exist in the warehouse, though in practice you usually run them after the project parses cleanly.</p>
+
+          <div class="callout info"><strong>dbt 1.8+ unit tests.</strong> Unit tests graduated from experimental to supported in recent dbt Core versions. The course project pins dbt 1.11; syntax matches the YAML above. Older pins may need a behaviour flag &mdash; check release notes if tests are skipped.</div>
+
+          <h3>Unit test YAML reference</h3>
+          <p>Each entry under the top-level <code>unit_tests:</code> key is one test case. Required fields are <code>name</code>, <code>model</code>, <code>given</code>, and <code>expect</code>. Optional fields extend behaviour for incremental models, versions, and formatting.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Field</th><th>Required</th><th>Purpose</th></tr></thead>
+              <tbody>
+                <tr><td><code>name</code></td><td>Yes</td><td>Unique test identifier; used in <code>--select unittest_fullmoon_matcher</code></td></tr>
+                <tr><td><code>model</code></td><td>Yes</td><td>Model name under test (not the file path)</td></tr>
+                <tr><td><code>given</code></td><td>Yes</td><td>List of mocked inputs with <code>input:</code> and <code>rows:</code> or <code>format: sql</code></td></tr>
+                <tr><td><code>expect</code></td><td>Yes</td><td>Expected output rows or <code>format: sql</code> block</td></tr>
+                <tr><td><code>description</code></td><td>No</td><td>Human-readable note; appears in docs and logs</td></tr>
+                <tr><td><code>overrides</code></td><td>No</td><td>Override config or macros (e.g. force non-incremental run)</td></tr>
+                <tr><td><code>versions</code></td><td>No</td><td>Test a specific model version when using the versions feature</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Inline rows versus SQL fixtures</h3>
+          <p>The course uses inline dict rows because the inputs are tiny. For wider schemas, use <code>format: sql</code> with a multi-line SQL string that returns rows, or reference a fixture file. Inline dicts are the fastest to read in notes and diffs:</p>
+
+<pre data-lang="yaml" data-title="Alternative — given with format sql" data-explain="Use when mocking many columns; same semantics as inline rows."><code>    given:
+      - input: ref('fct_reviews')
+        format: sql
+        rows: |
+          SELECT '2025-01-13'::DATE AS review_date
+          UNION ALL
+          SELECT '2025-01-14'::DATE
+          UNION ALL
+          SELECT '2025-01-15'::DATE</code></pre>
+
+          <p>On BigQuery use <code>DATE '2025-01-13'</code> instead of Snowflake cast syntax. Unit tests compile with your active adapter, so fixture SQL must be warehouse-valid.</p>
+
+          <h3>What unit tests do not cover</h3>
+          <p>Unit tests validate the SQL logic dbt compiles for a model. They do not replace:</p>
+          <ul>
+            <li>Performance testing on billion-row facts</li>
+            <li>Freshness checks on sources (<a href="s09-seeds-sources.html">Section 9</a>)</li>
+            <li>Cross-model singular tests like <code>consistent_created_at</code> from the Section 11 exercise (reviews after listing creation)</li>
+            <li>Package-provided expectations from <code>dbt_expectations</code> (<a href="s16-debugging-logging.html">Section 16</a>)</li>
+          </ul>
+
+          <p>The course exercise after unit tests asks you to write a singular test in <code>tests/consistent_created_at.sql</code> joining <code>dim_listings_cleansed</code> to <code>fct_reviews</code> &mdash; that belongs in <a href="s11-tests.html">Section 11</a> as a warehouse scan, not a unit test, because it validates referential timing across two built models on real data.</p>
+
+<pre data-lang="sql" data-title="tests/consistent_created_at.sql (Section 11 exercise)" data-explain="Singular test: returns rows where review_date is before listing created_at — cross-link only, defined in Section 11."><code>SELECT * FROM {{ ref('dim_listings_cleansed') }} l
+INNER JOIN {{ ref('fct_reviews') }} r
+USING (listing_id)
+WHERE l.created_at &gt; r.review_date</code></pre>
+
+          <div class="analogy"><strong>Everyday analogy —</strong> unit tests are like checking a recipe with three measured ingredients in a test kitchen. Generic data tests are like tasting every dish that leaves the restaurant on a Friday night. You need the kitchen test to trust the recipe; you need the tasting to catch supplier problems.</div>
+
+          <h3>Unit test failure output</h3>
+          <p>When <code>expect</code> does not match actual output, dbt shows a diff-style failure. Fix the model or update expectations when the business rule intentionally changed.</p>
+
+          <div class="terminal">
+            <p class="term-head">dbt test — unit test failure</p>
+            <pre class="term-body"><span class="tt-cmd">dbt test --select unittest_fullmoon_matcher</span>
+<span class="tt-dim">15:06:01  Running with dbt=1.11.12</span>
+<span class="tt-dim">15:06:03  1 of 1 START unit test unittest_fullmoon_matcher .................... [RUN]</span>
+<span class="tt-err">15:06:04  1 of 1 FAIL 1 unittest_fullmoon_matcher ............................. [FAIL 1 in 0.72s]</span>
+<span class="tt-err">15:06:04  Failure in unit test unittest_fullmoon_matcher (models/mart/unit_tests.yml)</span>
+<span class="tt-err">15:06:04    expected row {review_date: 2025-01-15, is_full_moon: full moon} not found</span>
+<span class="tt-err">15:06:04    actual row   {review_date: 2025-01-15, is_full_moon: not full moon}</span>
+<span class="tt-err">15:06:04  Completed with 1 error</span></pre>
+          </div>
+        </section>
+
+        <section class="section" id="unit-test-selectors">
+          <h2>Selecting and scoping test runs</h2>
+          <p class="lead">The same <code>--select</code> syntax that limits models applies to tests. Scope runs to one model's test suite, or run only unit tests across the project.</p>
+
+          <h3>All tests attached to one model</h3>
+          <p>When you change <code>mart_fullmoon_reviews</code>, run every test that depends on it &mdash; generic column tests, singular tests, and unit tests &mdash; without executing the whole project:</p>
+
+<pre data-lang="shell" data-title="Tests for one model" data-explain="Selects the model node and all downstream tests that reference it."><code>dbt test --select mart_fullmoon_reviews</code></pre>
+
+          <p>This is the everyday loop during development: edit SQL, run scoped tests, fix, repeat. It is cheaper than <code>dbt test</code> with no selector on a large project.</p>
+
+          <h3>Only unit tests</h3>
+          <p>The <code>test_type:unit</code> selector runs unit tests and skips generic and singular tests. Useful in CI when you split fast logic tests from heavy warehouse scans:</p>
+
+<pre data-lang="shell" data-title="All unit tests in the project" data-explain="test_type:unit is a resource-type filter introduced for unit tests."><code>dbt test --select "test_type:unit"</code></pre>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Command</th><th>Runs</th><th>Skips</th></tr></thead>
+              <tbody>
+                <tr><td><code>dbt test</code></td><td>All tests</td><td>Nothing</td></tr>
+                <tr><td><code>dbt test --select mart_fullmoon_reviews</code></td><td>Tests on that model (unit + data)</td><td>Tests on other models</td></tr>
+                <tr><td><code>dbt test --select "test_type:unit"</code></td><td>All unit tests</td><td>Generic and singular tests</td></tr>
+                <tr><td><code>dbt test --select dim_listings_minimum_nights</code></td><td>One singular test by name</td><td>Everything else (<a href="s11-tests.html">Section 11</a>)</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout tip"><strong>Combine selectors when needed.</strong> <code>dbt test --select mart_fullmoon_reviews,test_type:unit</code> narrows further. Use <code>dbt ls --select test_type:unit</code> to preview which tests match before running them.</div>
+
+          <h3>dbt build versus dbt test</h3>
+          <p><code>dbt build</code> runs models, tests, snapshots, and seeds in DAG order. When a test fails, downstream nodes skip. In development you often run <code>dbt test --select model_name</code> after a quick <code>dbt run</code> on the same model. In CI, <code>dbt build --select state:modified+</code> keeps cost down while still running tests on what changed.</p>
+
+          <div class="diagram">
+            <p class="diagram-title">Scoped test run after editing mart_fullmoon_reviews</p>
+            <div class="flow">
+              <div class="node is-model"><b>Edit SQL</b><small>mart_fullmoon_reviews.sql</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-compute"><b>dbt run --select mart_fullmoon_reviews</b></div>
+              <span class="arrow">→</span>
+              <div class="node is-test pulse"><b>dbt test --select mart_fullmoon_reviews</b><small>unit + data tests</small></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="section" id="contracts">
+          <h2>Model contracts</h2>
+          <p class="lead">A model contract is a promise about the shape of the relation dbt will create: which columns exist and what type each one is. With <code>enforced: true</code>, dbt validates that promise at compile time against your model SQL and fails the build before the warehouse runs anything if the contract is broken.</p>
+
+          <p>Data tests from <a href="s11-tests.html">Section 11</a> run <em>after</em> the table exists and scan rows. Contracts run <em>before</em> or <em>during</em> the build and catch structural breaking changes: a renamed column, a dropped field, a type widening you did not document. Downstream tools, APIs, and BI layers that depend on a stable schema benefit most.</p>
+
+          <h3>Enabling a contract on dim_hosts_cleansed</h3>
+          <p>Add a <code>config.contract</code> block and declare <code>data_type</code> on every column in the model YAML:</p>
+
+<pre data-lang="yaml" data-title="models/schema.yml — contract on dim_hosts_cleansed" data-explain="enforced: true turns compile-time validation on; each column needs an explicit data_type."><code>  - name: dim_hosts_cleansed
+    config:
+      contract:
+        enforced: true
+    columns:
+      - name: host_id
+        data_type: integer
+      - name: host_name
+        data_type: string
+      - name: is_superhost
+        data_type: string
+      - name: updated_at
+        data_type: timestamp
+      - name: created_at
+        data_type: timestamp</code></pre>
+
+          <h3>What enforced: true actually checks</h3>
+          <p>At parse/compile time dbt compares the contract to the model's inferred output schema:</p>
+          <ul>
+            <li>Every contracted column must appear in the model <code>SELECT</code>.</li>
+            <li>Column types must match the declared <code>data_type</code> (with adapter-specific mapping).</li>
+            <li>Extra columns not listed in the contract may fail the build depending on adapter and contract settings.</li>
+          </ul>
+
+          <p>If you rename <code>host_name</code> to <code>host_display_name</code> in SQL but forget the YAML, compilation fails with a contract violation instead of silently breaking every dashboard that selected <code>host_name</code>.</p>
+
+          <div class="diagram">
+            <p class="diagram-title">Contract failure stops the build before warehouse DDL runs</p>
+            <div class="flow">
+              <div class="node is-model"><b>Model SQL</b><small>SELECT columns + types</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-compute pulse"><b>Contract check</b><small>compile time</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-store"><b>CREATE TABLE</b><small>only if contract passes</small></div>
+            </div>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Mechanism</th><th>When it runs</th><th>What it catches</th></tr></thead>
+              <tbody>
+                <tr><td>Contract (<code>enforced: true</code>)</td><td>Compile / pre-build</td><td>Missing columns, wrong types, undeclared schema changes</td></tr>
+                <tr><td>Generic <code>not_null</code> test</td><td>After table exists</td><td>NULL values in live data</td></tr>
+                <tr><td>Generic <code>unique</code> test</td><td>After table exists</td><td>Duplicate keys in live data</td></tr>
+                <tr><td>Unit test</td><td>Test phase with mocked data</td><td>Wrong transform logic for given inputs</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout exam"><strong>Certification:</strong> contracts are compile-time schema enforcement; data tests are runtime row checks. The exam contrasts them directly. Know that <code>data_type</code> is required on every contracted column.</div>
+
+          <h3>When to adopt contracts</h3>
+          <p>Enable contracts on models that external systems consume: marts synced to CRM tools, tables exposed through a semantic layer, or datasets listed in an exposure (<a href="s15-analyses-hooks-exposures.html">Section 15</a>). Staging models change often during development; contracting every <code>src_</code> model adds friction without benefit.</p>
+
+          <p>A practical rollout: start with one published mart or dimension, enforce the contract in CI via <code>dbt build</code>, and expand to other gold tables once the team keeps YAML in sync with SQL changes.</p>
+
+          <h3>Warehouse differences</h3>
+          <p>Contracts are supported on Snowflake, BigQuery, Databricks, Redshift, and Postgres with adapter-specific type names. On BigQuery, use types like <code>int64</code> and <code>string</code> in YAML where the adapter expects them. When unsure, run <code>dbt compile</code> and read the error &mdash; it names the mismatch explicitly.</p>
+
+          <h3>Contract failure at compile time</h3>
+          <p>Deliberately break a contract to see the failure mode. Rename a column in SQL without updating YAML:</p>
+
+          <div class="terminal">
+            <p class="term-head">dbt compile — contract violation</p>
+            <pre class="term-body"><span class="tt-cmd">dbt compile --select dim_hosts_cleansed</span>
+<span class="tt-dim">15:10:02  Running with dbt=1.11.12</span>
+<span class="tt-err">15:10:03  Compilation Error in model dim_hosts_cleansed (models/dim/dim_hosts_cleansed.sql)</span>
+<span class="tt-err">15:10:03    Contracted model 'dim_hosts_cleansed' has mismatched columns.</span>
+<span class="tt-err">15:10:03    Missing from SQL: host_name</span>
+<span class="tt-err">15:10:03    Extra in SQL: host_label</span></pre>
+          </div>
+
+          <p>No warehouse credits spent &mdash; the build never started. That is the value proposition for downstream consumers who depend on stable column names in Looker, Tableau, or an API layer.</p>
+
+          <h3>data_type mapping on Snowflake</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>YAML data_type</th><th>Snowflake type</th><th>Notes</th></tr></thead>
+              <tbody>
+                <tr><td><code>integer</code></td><td>NUMBER (integer scale)</td><td>Matches <code>host_id</code></td></tr>
+                <tr><td><code>string</code></td><td>VARCHAR</td><td>Text columns like <code>host_name</code></td></tr>
+                <tr><td><code>timestamp</code></td><td>TIMESTAMP_NTZ or equivalent</td><td><code>created_at</code>, <code>updated_at</code></td></tr>
+                <tr><td><code>float</code></td><td>FLOAT</td><td>Price after cast in listings dim</td></tr>
+                <tr><td><code>boolean</code></td><td>BOOLEAN</td><td>Prefer on engines with native bool; course uses string for superhost</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>On Postgres, <code>string</code> maps to <code>text</code> or <code>varchar</code>. On BigQuery, use adapter-documented names. Mismatches surface at compile time, not after a full table rebuild.</p>
+        </section>
+
+        <section class="section" id="constraints">
+          <h2>Warehouse constraints</h2>
+          <p class="lead">Constraints go further than contracts: dbt emits actual DDL constraints on the created table &mdash; <code>NOT NULL</code>, primary keys, foreign keys, and check clauses &mdash; where the adapter supports them. Tests <em>detect</em> violations after the fact; constraints <em>prevent</em> some violations at insert time.</p>
+
+          <p>The course switches <code>dim_hosts_cleansed</code> from a view to a <code>table</code> before adding constraints. Views cannot carry warehouse constraints in most engines; tables can.</p>
+
+<pre data-lang="sql" data-title="models/dim/dim_hosts_cleansed.sql" data-explain="Table materialization is required for constraint DDL on most adapters. The comment in the repo reminds you why it changed from view."><code>{{
+  config(
+    materialized = 'table'
+  )
+}}
+WITH src_hosts AS (
+    SELECT * FROM {{ ref('src_hosts') }}
+)
+SELECT
+    host_id,
+    NVL(host_name, 'Anonymous') AS host_name,
+    is_superhost,
+    created_at,
+    updated_at
+FROM src_hosts</code></pre>
+
+          <h3>Constraint YAML on dim_hosts_cleansed</h3>
+          <p>Combine contract, constraints, and data tests in one model block. Constraints and tests overlap for <code>not_null</code> and <code>unique</code> &mdash; constraints enforce at the warehouse; tests still scan and report in dbt's test output:</p>
+
+<pre data-lang="yaml" data-title="models/schema.yml — constraints on dim_hosts_cleansed" data-explain="not_null constraints on host_id and host_name; unique data_test on host_id; accepted_values on is_superhost."><code>  - name: dim_hosts_cleansed
+    config:
+      contract:
+        enforced: true
+    columns:
+      - name: host_id
+        data_type: integer
+        constraints:
+          - type: not_null
+        data_tests:
+          - unique
+
+      - name: host_name
+        data_type: string
+        constraints:
+          - type: not_null
+
+      - name: is_superhost
+        data_type: string
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['t', 'f']
+
+      - name: updated_at
+        data_type: timestamp
+
+      - name: created_at
+        data_type: timestamp</code></pre>
+
+          <h3>Constraint types and warehouse support</h3>
+          <p>Not every adapter enforces every constraint type as real DDL. dbt still documents the intent in the manifest; some adapters emit informational constraints only.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Constraint type</th><th>What it does</th><th>Snowflake</th><th>BigQuery</th><th>Postgres</th><th>Databricks</th></tr></thead>
+              <tbody>
+                <tr><td><code>not_null</code></td><td>Column cannot be NULL</td><td>Enforced</td><td>Enforced (NOT NULL)</td><td>Enforced</td><td>Enforced</td></tr>
+                <tr><td><code>primary_key</code></td><td>Unique + not null on column set</td><td>Enforced</td><td>Not as PK DDL; use tests</td><td>Enforced</td><td>Enforced (Unity Catalog)</td></tr>
+                <tr><td><code>foreign_key</code></td><td>Values must exist in parent table</td><td>Enforced (limited)</td><td>Not enforced</td><td>Enforced</td><td>Enforced (Unity Catalog)</td></tr>
+                <tr><td><code>check</code></td><td>Boolean SQL expression on row</td><td>Enforced (recent)</td><td>Limited</td><td>Enforced</td><td>Varies</td></tr>
+                <tr><td><code>unique</code></td><td>Unique values</td><td>Via tests primarily</td><td>Via tests</td><td>UNIQUE constraint</td><td>Via tests / UC</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout warn"><strong>Constraints are not a replacement for dbt tests on every warehouse.</strong> On BigQuery, many constraint types are metadata-only. Keep <code>data_tests:</code> for <code>unique</code>, <code>relationships</code>, and custom checks even when you declare constraints. The dbt docs matrix for your adapter is authoritative.</div>
+
+          <div class="callout danger"><strong>Foreign keys on full refreshes.</strong> Building a child table before its parent exists fails FK creation. dbt's DAG ordering usually prevents this, but manual runs with partial selectors can hit ordering issues. Use <code>dbt build</code> for constraint-heavy projects.</div>
+
+          <h3>Constraints versus data tests</h3>
+          <p>A <code>not_null</code> constraint stops bad inserts at the warehouse boundary. A <code>not_null</code> generic test scans the whole table on every test run and reports rows in dbt's failure output (and optional <code>store_failures</code> table from <a href="s11-tests.html">Section 11</a>). Teams use both: constraints for hard guarantees on published marts, tests for observability and CI reporting.</p>
+
+          <h3>primary_key and foreign_key examples</h3>
+          <p>The course stops at <code>not_null</code> plus a <code>unique</code> data test on <code>host_id</code>. In production you might add explicit key constraints when the adapter enforces them:</p>
+
+<pre data-lang="yaml" data-title="Illustrative — primary_key and foreign_key (Postgres / Snowflake)" data-explain="Not in the course repo; shows how constraint blocks extend beyond not_null. Verify adapter support before enabling."><code>      - name: host_id
+        data_type: integer
+        constraints:
+          - type: not_null
+          - type: primary_key
+
+      - name: listing_id
+        data_type: integer
+        constraints:
+          - type: not_null
+          - type: primary_key
+
+      - name: host_id
+        data_type: integer
+        constraints:
+          - type: foreign_key
+            expression: "dim_hosts_cleansed (host_id)"</code></pre>
+
+          <p>Foreign key syntax and whether <code>expression</code> or <code>to:</code> is required depends on dbt version and adapter. Read the constraints page for your warehouse before enabling on large facts &mdash; enforced FKs on incremental loads can add insert latency.</p>
+
+          <h3>check constraints</h3>
+          <p>A <code>check</code> constraint embeds a boolean expression that each row must satisfy. Example: <code>price &gt; 0</code> on a listings mart. Postgres and Snowflake enforce checks in DDL; BigQuery often does not. Overlap with custom generics like <code>positive_values</code> is common &mdash; choose constraint for warehouse-native enforcement, generic test for portable CI reporting.</p>
+
+          <div class="diagram">
+            <p class="diagram-title">Three layers of protection on a published mart</p>
+            <div class="stack">
+              <div class="layer"><strong>Contract</strong> &mdash; compile-time column names and types (<code>enforced: true</code>)</div>
+              <div class="layer"><strong>Constraints</strong> &mdash; warehouse DDL where adapter supports it (<code>not_null</code>, keys, check)</div>
+              <div class="layer"><strong>data_tests</strong> &mdash; runtime scans and custom generics (<a href="s11-tests.html">Section 11</a> + this section)</div>
+            </div>
+          </div>
+
+          <div class="callout info"><strong>Materialization note from the repo.</strong> The comment at the top of <code>dim_hosts_cleansed.sql</code> reminds you that the model started as a view and became a table specifically for constraints. Reverting to view removes DDL enforcement.</div>
+
+          <h3>Rebuild after adding constraints</h3>
+          <p>Changing from view to table triggers a full rebuild. Expect a longer first run than a view swap:</p>
+
+          <div class="terminal">
+            <p class="term-head">dbt build — dim_hosts_cleansed as table with constraints</p>
+            <pre class="term-body"><span class="tt-cmd">dbt build --select dim_hosts_cleansed</span>
+<span class="tt-dim">15:14:01  Running with dbt=1.11.12</span>
+<span class="tt-dim">15:14:03  1 of 3 START sql table model DEV.dim_hosts_cleansed .................... [RUN]</span>
+<span class="tt-ok">15:14:06  1 of 3 OK created sql table model DEV.dim_hosts_cleansed ............. [SUCCESS 1 in 2.41s]</span>
+<span class="tt-dim">15:14:06  2 of 3 START test unique_dim_hosts_cleansed_host_id ................... [RUN]</span>
+<span class="tt-ok">15:14:07  2 of 3 PASS unique_dim_hosts_cleansed_host_id ......................... [PASS in 0.52s]</span>
+<span class="tt-dim">15:14:07  3 of 3 START test not_null_dim_hosts_cleansed_host_id ................. [RUN]</span>
+<span class="tt-ok">15:14:07  3 of 3 PASS not_null_dim_hosts_cleansed_host_id ....................... [PASS in 0.31s]</span>
+<span class="tt-ok">15:14:07  Completed successfully</span></pre>
+          </div>
+
+          <p>Inspect the generated DDL in <code>target/run/airbnb/models/dim/dim_hosts_cleansed.sql</code> to see how dbt rendered <code>NOT NULL</code> and contract column types for Snowflake.</p>
+        </section>
+
+        <section class="section" id="custom-generic-tests">
+          <h2>Custom generic tests</h2>
+          <p class="lead">When built-in tests are not enough, write a reusable generic test as a Jinja macro in <code>tests/generic/</code>. The <code>{% test name(...) %}</code> block defines SQL that returns failing rows; zero rows means pass &mdash; same contract as singular tests, but parameterised and attachable from YAML.</p>
+
+          <p><a href="s11-tests.html">Section 11</a> uses stock generics like <code>unique</code> and <code>relationships</code>. Here you author <code>positive_values</code> to assert a numeric column is strictly greater than zero, and reuse it on <code>minimum_nights</code> and <code>price</code> without duplicating SQL.</p>
+
+          <div class="filetree">
+            <ul>
+              <li><span class="dir">airbnb/</span>
+                <ul>
+                  <li><span class="dir">tests/</span>
+                    <ul>
+                      <li><span class="dir">generic/</span>
+                        <ul>
+                          <li><span class="file">positive_values.sql</span> <span class="new">← new in this section</span></li>
+                          <li><span class="file">minimum_row_count.sql</span> <span class="new">← new in this section</span></li>
+                        </ul>
+                      </li>
+                      <li><span class="file">dim_listings_minimum_nights.sql</span> <span class="note">singular test from Section 11</span></li>
+                    </ul>
+                  </li>
+                </ul>
+              </li>
+            </ul>
+          </div>
+
+          <h3>positive_values</h3>
+          <p>Parameters <code>model</code> and <code>column_name</code> are injected by dbt when the test is attached to a column. Return any row where the column fails the rule:</p>
+
+<pre data-lang="sql" data-title="tests/generic/positive_values.sql" data-explain="Generic test macro: returns rows where column is zero or negative. Empty result set = pass."><code>{% test positive_values(model, column_name) %}
+SELECT * FROM {{ model }} WHERE {{ column_name }} &lt;= 0
+{% endtest %}</code></pre>
+
+          <p>Attach it in YAML like any built-in generic:</p>
+
+<pre data-lang="yaml" data-title="models/schema.yml — positive_values on minimum_nights" data-explain="Column-level data_tests reference the macro name without arguments for standard model and column_name params."><code>      - name: minimum_nights
+        data_tests:
+          - positive_values</code></pre>
+
+          <h3>How {% test %} differs from {% macro %}</h3>
+          <p>Generic tests live under <code>tests/generic/</code> and use the <code>{% test %}</code> … <code>{% endtest %}</code> block. dbt registers them as test macros with the test name. Reusable SQL fragments without the test wrapper belong in <code>macros/</code> and are covered in <a href="s13-jinja-macros-packages.html">Section 13</a>.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Artifact</th><th>Location</th><th>Block syntax</th><th>Invoked from</th></tr></thead>
+              <tbody>
+                <tr><td>Singular test</td><td><code>tests/*.sql</code></td><td>Plain SQL file</td><td>Filename only</td></tr>
+                <tr><td>Generic test (built-in)</td><td>dbt core / package</td><td>Internal macro</td><td><code>data_tests:</code> in YAML</td></tr>
+                <tr><td>Generic test (custom)</td><td><code>tests/generic/*.sql</code></td><td><code>{% test %}</code></td><td><code>data_tests:</code> in YAML</td></tr>
+                <tr><td>Macro</td><td><code>macros/*.sql</code></td><td><code>{% macro %}</code></td><td><code>{{ macro_name() }}</code> in models</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="terminal">
+            <p class="term-head">dbt test — custom generic failure</p>
+            <pre class="term-body"><span class="tt-cmd">dbt test --select dim_listings_cleansed</span>
+<span class="tt-dim">15:18:02  Running with dbt=1.11.12</span>
+<span class="tt-dim">15:18:05  4 of 8 START test positive_values_dim_listings_cleansed_minimum_nights .. [RUN]</span>
+<span class="tt-err">15:18:06  4 of 8 FAIL 2 positive_values_dim_listings_cleansed_minimum_nights .... [FAIL 2 in 0.44s]</span>
+<span class="tt-err">15:18:07  Completed with 1 error</span></pre>
+          </div>
+
+          <p>The test name dbt generates combines the macro name, model, and column. <code>FAIL 2</code> means two rows violated the rule. Fix the data or the model logic, or inspect failures in a <code>store_failures</code> table if enabled.</p>
+
+          <h3>Generic test naming and discovery</h3>
+          <p>Files in <code>tests/generic/</code> register macros named after the file (without extension). The test name in YAML is the macro name: <code>positive_values</code>, not <code>positive_values.sql</code>. List discovered tests with:</p>
+
+<pre data-lang="shell" data-title="List tests on a model" data-explain="Shows generic, singular, and unit test nodes attached to dim_listings_cleansed."><code>dbt ls --select dim_listings_cleansed --resource-type test</code></pre>
+
+          <p>Package tests like <code>dbt_utils.unique_combination_of_columns</code> follow the same YAML attachment pattern but live in <code>dbt_packages/</code> after <code>dbt deps</code> (<a href="s13-jinja-macros-packages.html">Section 13</a>).</p>
+
+          <h3>Debugging a failing positive_values test</h3>
+          <p>When the test fails, dbt reports a failure count. Query the failing rows directly with the same predicate, or enable <code>store_failures</code> from Section 11 to persist them:</p>
+
+<pre data-lang="sql" data-title="Ad hoc — rows failing positive_values" data-explain="Same predicate as the generic test; run in a worksheet against dim_listings_cleansed."><code>SELECT listing_id, minimum_nights
+FROM {{ ref('dim_listings_cleansed') }}
+WHERE minimum_nights &lt;= 0</code></pre>
+
+          <p>In the course project, <code>dim_listings_cleansed</code> normalises <code>minimum_nights</code> from 0 to 1 in SQL, so the test often passes. If you remove that <code>CASE</code> from Section 7, the test fails until data or logic is fixed &mdash; demonstrating why custom generics encode team rules explicitly.</p>
+
+          <h3>Multiple columns with one generic</h3>
+          <p>Attach the same generic to many columns independently. Each attachment becomes its own test node with a generated name:</p>
+
+<pre data-lang="yaml" data-title="models/schema.yml — positive_values on price" data-explain="Same macro, different column; dbt runs two separate queries."><code>      - name: minimum_nights
+        data_tests:
+          - positive_values
+
+      - name: price
+        data_tests:
+          - positive_values</code></pre>
+
+          <p>Each test scans one column. For multi-column rules (e.g. end date after start date), use a singular test or a custom generic with extra parameters.</p>
+        </section>
+
+        <section class="section" id="test-parameters">
+          <h2>Test parameters</h2>
+          <p class="lead">Generic test macros can accept extra arguments beyond <code>model</code> and <code>column_name</code>. Declare them in the <code>{% test %}</code> signature and pass values from YAML under <code>arguments:</code>.</p>
+
+          <p>dbt injects standard parameters automatically based on where you attach the test. Column-level tests always receive <code>model</code> (a relation) and <code>column_name</code> (a string). Table-level tests like <code>minimum_row_count</code> only receive <code>model</code> plus whatever you add to the signature.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Attachment level</th><th>Auto-injected params</th><th>Example tests</th></tr></thead>
+              <tbody>
+                <tr><td>Column</td><td><code>model</code>, <code>column_name</code></td><td><code>positive_values</code>, <code>unique</code>, <code>not_null</code></td></tr>
+                <tr><td>Model (table)</td><td><code>model</code> only</td><td><code>minimum_row_count</code>, custom volume checks</td></tr>
+                <tr><td>Source column</td><td><code>model</code> (source relation), <code>column_name</code></td><td>Package tests on raw tables (<a href="s16-debugging-logging.html">Section 16</a>)</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>minimum_row_count with min_row_count</h3>
+          <p>This test warns when a table has fewer rows than a threshold. It is a table-level test (no column), so the macro takes <code>model</code> and <code>min_row_count</code>:</p>
+
+<pre data-lang="sql" data-title="tests/generic/minimum_row_count.sql" data-explain="Counts rows in the model; HAVING returns a row when count is below min_row_count — that row is a failure. Default severity warn is set inside the macro."><code>{% test minimum_row_count(model, min_row_count) %}
+{{ config(severity = 'warn') }}
+
+SELECT
+    COUNT(*) as cnt
+FROM
+    {{ model }}
+HAVING
+    COUNT(*) &lt; {{ min_row_count }}
+{% endtest %}</code></pre>
+
+          <p>Attach with the argument value in YAML (current dbt 1.11 syntax nests args under <code>arguments:</code>):</p>
+
+<pre data-lang="yaml" data-title="models/schema.yml — minimum_row_count on dim_listings_cleansed" data-explain="min_row_count is passed to the macro; config.severity overrides the macro default."><code>  - name: dim_listings_cleansed
+    data_tests:
+      - minimum_row_count:
+          arguments:
+            min_row_count: 1000
+          config:
+            severity: error</code></pre>
+
+          <p>The macro sets <code>severity = 'warn'</code> as a default inside the test body. The YAML <code>config.severity: error</code> overrides that default for this specific attachment &mdash; the listings dimension is critical enough that an unexpectedly small table should fail the pipeline, not just warn.</p>
+
+          <div class="callout info"><strong>Argument nesting changed in dbt 1.8+.</strong> Older projects passed <code>min_row_count: 1000</code> at the top level next to the test name. Current form uses <code>arguments:</code>. The course repo uses the modern shape.</div>
+
+          <h3>Validating parameter wiring</h3>
+          <p>After adding a parameterized generic, confirm dbt parsed the argument by listing the test node. The compiled test SQL in <code>target/compiled/airbnb/tests/generic/</code> should show the literal threshold value substituted into the <code>HAVING</code> clause.</p>
+
+<pre data-lang="shell" data-title="Inspect compiled custom test" data-explain="Compile tests without running warehouse queries."><code>dbt compile --select minimum_row_count_dim_listings_cleansed_
+type target\compiled\airbnb\tests\generic\minimum_row_count.sql</code></pre>
+
+          <p>On Mac or Linux use <code>cat target/compiled/...</code> instead of <code>type</code>. If <code>min_row_count</code> is missing, the YAML <code>arguments:</code> block is mis-indented or the macro signature does not declare the parameter name.</p>
+        </section>
+
+        <section class="section" id="test-severity">
+          <h2>Test severity and thresholds</h2>
+          <p class="lead">Every test resolves to a severity: <code>error</code> (fail the run) or <code>warn</code> (log a warning, continue). Set severity in the test macro, in YAML per test, or dynamically with <code>warn_if</code> and <code>error_if</code>.</p>
+
+          <h3>error versus warn</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Severity</th><th>Exit code</th><th>Typical use</th></tr></thead>
+              <tbody>
+                <tr><td><code>error</code></td><td>Non-zero on failure</td><td>Primary keys, revenue facts, legal reporting columns</td></tr>
+                <tr><td><code>warn</code></td><td>Zero unless configured otherwise</td><td>Nice-to-have checks, staging tables, experimental marts</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>Precedence: YAML <code>config</code> on a specific test beats the default inside the macro. Project-level <code>data_tests:</code> config in <code>dbt_project.yml</code> (<a href="s11-tests.html">Section 11</a>) can set defaults for all tests of a type.</p>
+
+          <h3>Setting severity in three places</h3>
+          <ol>
+            <li><strong>Inside the test macro</strong> &mdash; <code>{{ config(severity = 'warn') }}</code> in <code>minimum_row_count.sql</code> applies to every use unless overridden.</li>
+            <li><strong>On the YAML attachment</strong> &mdash; <code>config: severity: error</code> under <code>minimum_row_count:</code> for one model.</li>
+            <li><strong>In dbt_project.yml</strong> &mdash; global defaults, e.g. all <code>dbt_utils.expression_is_true</code> tests warn in dev.</li>
+          </ol>
+
+          <h3>warn_if and error_if</h3>
+          <p>For tests that return a count of failures, dbt can escalate or de-escalate based on how many rows failed. <code>warn_if</code> and <code>error_if</code> accept a Jinja expression, often comparing failure count to a threshold:</p>
+
+<pre data-lang="yaml" data-title="Example — severity thresholds on a relationships test" data-explain="Warn when fewer than 100 orphan rows; error only when 500 or more orphans exist. Illustrative pattern — tune thresholds to your SLA."><code>      - name: host_id
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_hosts_cleansed')
+                field: host_id
+              config:
+                warn_if: "&gt;0"
+                error_if: "&gt;=500"</code></pre>
+
+          <p><code>warn_if: "&gt;0"</code> means any failure warns. <code>error_if: "&gt;=500"</code> upgrades to error only at scale &mdash; a handful of orphan keys from a late-arriving dimension might warn in CI while a systemic join break fails hard. Expressions refer to the number of failing rows dbt counted.</p>
+
+          <div class="callout tip"><strong>Do not warn on everything.</strong> Teams that set every test to <code>warn</code> train CI to ignore yellow output. Reserve warnings for thresholds you actually triage; keep contract-breaking columns at <code>error</code>.</div>
+
+          <div class="terminal">
+            <p class="term-head">dbt test — warn severity</p>
+            <pre class="term-body"><span class="tt-cmd">dbt test --select minimum_row_count_dim_listings_cleansed_</span>
+<span class="tt-dim">15:22:11  Running with dbt=1.11.12</span>
+<span class="tt-warn">15:22:14  1 of 1 WARN 1 minimum_row_count_dim_listings_cleansed_ ............... [WARN 1 in 0.31s]</span>
+<span class="tt-ok">15:22:14  Completed successfully</span></pre>
+          </div>
+
+          <p>A WARN line still shows <code>Completed successfully</code> with exit code 0 unless your orchestrator treats warnings as failures. Configure that explicitly in production pipelines.</p>
+
+          <h3>Project-level test defaults</h3>
+          <p>Combine with the <code>data_tests:</code> block in <code>dbt_project.yml</code> from <a href="s11-tests.html">Section 11</a> to set severity or <code>store_failures</code> for all tests under a folder:</p>
+
+<pre data-lang="yaml" data-title="dbt_project.yml — folder-level test config" data-explain="All tests on mart models warn by default; override per test in schema.yml."><code>models:
+  airbnb:
+    mart:
+      +data_tests:
+        +severity: warn</code></pre>
+
+          <p>Specific test YAML <code>config.severity: error</code> on <code>minimum_row_count</code> overrides the folder default for that one attachment. Precedence: test YAML &gt; macro inline config &gt; project/folder config.</p>
+
+          <h3>warn_if / error_if in practice</h3>
+          <p>Graduated severity suits slowly drifting data: a relationships test on <code>host_id</code> might warn on ten orphan listings after a partial host load but error on ten thousand. Document thresholds in the test description so on-call engineers know when to escalate.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Config</th><th>Expression meaning</th><th>Result when 3 rows fail</th><th>Result when 500 rows fail</th></tr></thead>
+              <tbody>
+                <tr><td><code>severity: error</code> only</td><td>Any failure errors</td><td>ERROR</td><td>ERROR</td></tr>
+                <tr><td><code>severity: warn</code> only</td><td>Any failure warns</td><td>WARN</td><td>WARN</td></tr>
+                <tr><td><code>warn_if: "&gt;0"</code>, <code>error_if: "&gt;=500"</code></td><td>Graduated</td><td>WARN</td><td>ERROR</td></tr>
+                <tr><td><code>error_if: "&gt;0"</code></td><td>Same as error severity</td><td>ERROR</td><td>ERROR</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout exam"><strong>Certification:</strong> know default severity is <code>error</code> for built-in tests unless overridden. Custom macros can embed <code>{{ config(severity='warn') }}</code> as default; YAML overrides win.</div>
+        </section>
+
+        <section class="section" id="deeper">
+          <h2>Deeper detail and edge cases</h2>
+          <p class="lead">Operational detail the videos skip: unit test limits, contract breakage in CI, constraint support gaps across warehouses, and how teams layer fast unit tests against slow data scans.</p>
+
+          <h3>Version notes</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Behaviour</th><th>Before</th><th>Now</th><th>Version</th></tr></thead>
+              <tbody>
+                <tr><td>YAML key for tests</td><td><code>tests:</code></td><td><code>data_tests:</code></td><td>1.8+ / course pin 1.11</td></tr>
+                <tr><td>Generic test arguments</td><td>Top-level next to test name</td><td>Nested under <code>arguments:</code></td><td>1.8+</td></tr>
+                <tr><td>Unit tests</td><td>Experimental flag</td><td>Supported first-class</td><td>1.8+</td></tr>
+                <tr><td>Model contracts</td><td>Limited adapters</td><td>Snowflake, BigQuery, Databricks, Redshift, Postgres</td><td>1.5+ evolving</td></tr>
+                <tr><td>Constraints</td><td>Not available</td><td>YAML <code>constraints:</code> on columns</td><td>1.5+</td></tr>
+                <tr><td><code>{% test %}</code> block</td><td>Same</td><td>Preferred over legacy test macros in <code>macros/</code></td><td>1.x</td></tr>
+                <tr><td>Test severity config</td><td>Top-level <code>severity:</code></td><td>Under <code>config:</code> on test</td><td>1.8+</td></tr>
+                <tr><td><code>test_type:unit</code> selector</td><td>N/A</td><td>Filter unit tests in CLI</td><td>1.8+</td></tr>
+                <tr><td><code>store_failures</code></td><td><code>tests:</code> in project yaml</td><td><code>data_tests:</code> in project yaml</td><td>1.8+</td></tr>
+                <tr><td>Contract on views</td><td>Discouraged</td><td>Still discouraged; use tables for constraints</td><td>1.x</td></tr>
+                <tr><td>dbt-expectations package</td><td>calogica/dbt_expectations</td><td>metaplane/dbt_expectations fork pinned in course</td><td>packages.yml 0.10.10</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>What it costs to run</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>What runs</th><th>Where the cost lands</th><th>How to spend less</th></tr></thead>
+              <tbody>
+                <tr><td>Unit test</td><td>Small in-memory query; negligible warehouse</td><td>Run <code>test_type:unit</code> on every PR; skip in nightly if redundant</td></tr>
+                <tr><td>Contract check</td><td>Compile-time only; no scan</td><td>Free; enable on all published marts</td></tr>
+                <tr><td>Constraint DDL</td><td>One-time per build; FK validation on insert</td><td>Avoid redundant FKs on huge fact tables if adapter validates on every microbatch insert</td></tr>
+                <tr><td><code>minimum_row_count</code></td><td>Full table <code>COUNT(*)</code></td><td>Scope to critical marts; use warn in dev</td></tr>
+                <tr><td><code>positive_values</code></td><td>Full column scan</td><td>Combine with <code>where</code> config or sample in dev only via custom macro</td></tr>
+                <tr><td><code>unique</code> + constraint</td><td>Duplicate work: DDL + GROUP BY test</td><td>Pick one enforcement layer or accept cost for defence in depth on small dims</td></tr>
+                <tr><td>All tests unscoped</td><td>Every test on every table nightly</td><td><code>--select state:modified+</code> in CI (<a href="s19-production.html">Section 19</a>)</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout cost"><strong>The biggest waste is running full data tests on every commit without selectors.</strong> Unit tests and compile-time contracts are cheap. A project-wide <code>dbt test</code> against production-sized facts on each push burns warehouse credits. Split fast logic tests from heavy scans in CI.</div>
+
+          <h3>Traps that catch people</h3>
+          <ul>
+            <li><strong>Unit test mocks wrong columns —</strong> YAML rows omit columns the model SELECT expects. dbt may infer NULLs or fail compilation. Match column names to the model output, not the raw source.</li>
+            <li><strong>Expecting unit tests to need seeds loaded —</strong> mocked <code>ref('seed_full_moon_dates')</code> replaces the seed; you do not run <code>dbt seed</code> first for that test.</li>
+            <li><strong>Contract without data_type on every column —</strong> partial contracts fail compilation or give false confidence. List all output columns.</li>
+            <li><strong>Constraints on views —</strong> <code>dim_hosts_cleansed</code> must be a table. Building as view silently skips or errors on constraint DDL depending on adapter.</li>
+            <li><strong>Assuming FK enforcement on BigQuery —</strong> FK metadata may exist but inserts are not blocked. Keep <code>relationships</code> tests.</li>
+            <li><strong>Custom test returns zero rows on error —</strong> inverted logic (SELECT passing rows) makes failures pass. Return failing rows only.</li>
+            <li><strong>Forgetting {% endtest %} —</strong> generic test files with unclosed blocks fail parse. One block per file in the course pattern.</li>
+            <li><strong>severity: error in macro overridden accidentally —</strong> project-level test config can surprise you. Check effective config with <code>dbt ls --resource-type test</code> and manifest.</li>
+            <li><strong>warn_if never errors —</strong> setting only <code>warn_if</code> without <code>error_if</code> on catastrophic tests lets CI stay green during outages.</li>
+            <li><strong>Unit test for incremental without overrides —</strong> incremental models may need <code>unit_tests:</code> <code>overrides:</code> for config; otherwise mocked runs hit incremental branches incorrectly.</li>
+            <li><strong>Duplicate enforcement —</strong> <code>not_null</code> constraint plus <code>not_null</code> test doubles maintenance without doubling protection on metadata-only adapters.</li>
+            <li><strong>Changing join logic without updating unit test —</strong> the full-moon date offset change passes compile but fails unit test; that is intended — update expect rows when business rules change.</li>
+                <li><strong>SQL fixture dialect mismatch —</strong> unit test SQL using Snowflake <code>::DATE</code> syntax fails on BigQuery CI. Write fixture SQL for your adapter or use inline dict rows.</li>
+                <li><strong>Contract on incremental without fixed schema —</strong> dynamic columns from macro loops break contracts. Contract explicit columns only on stable marts.</li>
+                <li><strong>Running test_type:unit in old dbt —</strong> selector not recognised on pins before unit test support; upgrade or use test name selector.</li>
+              </ul>
+
+          <h3>Troubleshooting playbook</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Symptom</th><th>Most likely cause</th><th>What to check / fix</th></tr></thead>
+              <tbody>
+                <tr><td><code>Compilation Error: Contracted model must have data_type</code></td><td>Missing <code>data_type</code> on a column</td><td>Complete every column in contract YAML</td></tr>
+                <tr><td>Unit test column mismatch</td><td><code>expect</code> rows missing columns or wrong types</td><td>Compare to model SELECT; run <code>dbt show --select mart_fullmoon_reviews --limit 1</code> on real data for reference</td></tr>
+                <tr><td><code>test_type:unit</code> selects nothing</td><td>No unit_tests YAML or wrong path</td><td><code>dbt ls --select test_type:unit</code>; confirm file under <code>model-paths</code></td></tr>
+                <tr><td>Constraint creation failed on build</td><td>View materialization or invalid FK parent</td><td>Switch to table; build parent model first with <code>dbt build --select +child_model</code></td></tr>
+                <tr><td>Custom generic not found</td><td>File not in <code>tests/generic/</code> or wrong name</td><td>Filename must match test name; run <code>dbt parse</code></td></tr>
+                <tr><td>positive_values always passes</td><td>Column is VARCHAR not NUMBER</td><td>Check cleansed types in <code>dim_listings_cleansed</code>; cast in model</td></tr>
+                <tr><td>minimum_row_count WARN in prod</td><td>Partial load or wrong environment</td><td>Verify row count; confirm target schema</td></tr>
+                <tr><td>Contract passed but BI breaks</td><td>Renamed column in SQL with alias matching old name</td><td>Contracts check schema names, not business labels; update docs and exposures</td></tr>
+                <tr><td>Tests pass after obvious bug</td><td>Running unit tests only while data tests skipped</td><td>Run <code>dbt test --select mart_fullmoon_reviews</code> without type filter</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Production patterns</h3>
+          <p>Mature teams split the test pyramid: unit tests on PR for every model with non-trivial logic; contract enforcement on all marts exposed to BI; full data tests nightly or on <code>state:modified+</code> in slim CI. Custom generics live in a shared internal package once the project outgrows two copies of the same SQL.</p>
+          <p>Constraints go on published gold tables with stable schemas, not on ephemeral staging. Foreign keys from facts to dimensions are common on Postgres and Snowflake; on BigQuery teams rely on <code>relationships</code> tests exclusively.</p>
+
+          <div class="grid-2">
+            <div class="mini-card">
+              <h4>Pattern: two-stage CI</h4>
+              <p>Job 1: <code>dbt test --select test_type:unit</code> + <code>dbt compile</code> (contracts). Job 2: data tests on modified nodes only. Keeps PR feedback under two minutes.</p>
+            </div>
+            <div class="mini-card">
+              <h4>Anti-pattern: unit test everything</h4>
+              <p>Mocking ten upstream refs for a wide mart is brittle. Unit-test the logic-heavy intermediate; data-test the final mart.</p>
+            </div>
+          </div>
+
+<pre data-lang="yaml" data-title="Example — unit test overrides for incremental model" data-explain="When the model under test is incremental, override materialization to view or table for the unit test context."><code>unit_tests:
+  - name: test_incremental_filter
+    model: fct_reviews
+    overrides:
+      macros:
+        is_incremental: false
+    given:
+      - input: ref('src_reviews')
+        rows:
+          - {review_date: '2024-01-01'}
+    expect:
+      rows:
+        - {review_date: '2024-01-01'}</code></pre>
+
+          <h3>Certification pointers</h3>
+          <p>The exam distinguishes unit tests from data tests, contracts from constraints, and warn from error severity. Expect scenarios where compile-time contract failure is the right answer for preventing breaking schema changes, and where a relationships test with <code>warn_if</code> is appropriate for soft integrity checks.</p>
+          <ul>
+            <li><a href="s11-tests.html">Section 11</a> — built-in generics, singular tests, and <code>store_failures</code> you combine with this section.</li>
+            <li><a href="s09-seeds-sources.html">Section 9</a> — <code>mart_fullmoon_reviews</code> join logic the unit test exercises.</li>
+            <li><a href="s13-jinja-macros-packages.html">Section 13</a> — <code>{% macro %}</code> versus <code>{% test %}</code>; packages that ship generic tests.</li>
+            <li><a href="s19-production.html">Section 19</a> — slim CI selectors that keep test cost down at scale.</li>
+            <li><a href="s16-debugging-logging.html">Section 16</a> — <code>dbt_expectations</code> package tests as an alternative to custom generics.</li>
+          </ul>
+          <div class="callout exam"><strong>Certification:</strong> know that unit tests use mocked <code>given</code>/<code>expect</code> rows, contracts require <code>enforced: true</code> and column <code>data_type</code>, custom generics use <code>{% test %}</code>, and <code>dbt test --select "test_type:unit"</code> runs only unit tests.</div>
+
+          <h3>Testing strategy summary</h3>
+          <p>A balanced Airbnb project test suite after Sections 11 and 12 might look like: generic tests on every primary key column; singular tests for cross-model business rules; unit tests on marts with non-obvious joins; contracts on dimensions exposed to BI; constraints where Snowflake or Postgres enforce them; custom generics for domain rules like positive prices and minimum row counts on critical tables.</p>
+
+          <p>Review cost monthly: if test runtime exceeds model runtime, tighten selectors in CI and demote nice-to-have checks to warn severity.</p>
+        </section>
+
+        <section class="section" id="interview">
+          <h2>Interview questions</h2>
+          <p class="muted">Answer each one out loud before opening it.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+
+            <details class="qa">
+              <summary>What is the difference between a unit test and a generic data test?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p>A unit test mocks upstream inputs in YAML, runs the model SQL against those rows, and compares output to expected rows. It validates transform logic without warehouse data.</p>
+                <p>A generic data test scans the materialised relation in the warehouse and checks a property &mdash; uniqueness, not-null, relationships. It validates live data quality at runtime.</p>
+                <p>Use unit tests for logic and edge cases; use data tests for production integrity. See <a href="s11-tests.html">Section 11</a> for generic and singular tests.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How do given and expect work in a unit test?<span class="qa-tag">Testing</span></summary>
+              <div class="qa-body">
+                <p><code>given</code> lists mocked upstream relations with inline <code>rows</code>. dbt substitutes them for real tables when executing the model under test.</p>
+                <p><code>expect</code> defines the rows the model should output. Mismatch fails the test. You mock direct parents only &mdash; for <code>mart_fullmoon_reviews</code>, mock <code>fct_reviews</code> and <code>seed_full_moon_dates</code>, not <code>src_reviews</code>.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How do you run only unit tests in dbt?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p><code>dbt test --select "test_type:unit"</code> runs all unit tests and skips generic and singular tests. Quote the selector in shells that treat colon specially.</p>
+                <p>To run unit tests for one model, combine selectors: <code>dbt test --select mart_fullmoon_reviews,test_type:unit</code>. Use <code>dbt ls --select test_type:unit</code> to list matches first.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What does enforced: true on a model contract do?<span class="qa-tag">Modelling</span></summary>
+              <div class="qa-body">
+                <p>It requires every contracted column to be declared with <code>data_type</code> and validates at compile time that the model SQL output matches that schema. Breaking changes fail before warehouse DDL runs.</p>
+                <p>Contracts catch structural drift; they do not scan for NULLs or duplicates. Pair with data tests and constraints for full coverage.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Why did dim_hosts_cleansed change from a view to a table?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>Warehouse constraints (<code>not_null</code>, primary keys, foreign keys) apply to tables, not views, on most adapters. The course switches materialization to <code>table</code> before adding constraints in YAML.</p>
+                <p>Views remain valid for models without constraints. Published marts with DDL guarantees are often materialized as tables or incremental tables.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What is the difference between a constraint and a not_null data test?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p>A <code>not_null</code> constraint is DDL on the table that rejects inserts violating the rule at the warehouse boundary where the adapter enforces it.</p>
+                <p>A <code>not_null</code> generic test queries existing rows and reports violations in dbt's test output, optionally storing failures. It runs on schedule in CI, not at insert time.</p>
+                <p>On BigQuery, constraints may be metadata-only; tests remain essential.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How do you write a custom generic test?<span class="qa-tag">Jinja</span></summary>
+              <div class="qa-body">
+                <p>Create a file in <code>tests/generic/</code> with a <code>{% test test_name(model, column_name) %}</code> block. Write SQL returning failing rows; zero rows means pass. Close with <code>{% endtest %}</code>.</p>
+                <p>Reference the test in YAML under <code>data_tests:</code>. Extra parameters go in the macro signature and are passed via <code>arguments:</code> in YAML, as with <code>minimum_row_count</code>.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>When would you use warn severity instead of error on a test?<span class="qa-tag">Production</span></summary>
+              <div class="qa-body">
+                <p>Use <code>warn</code> for checks you want visibility on without blocking deploys &mdash; staging tables, soft SLAs, or thresholds handled with <code>warn_if</code>. The default in <code>minimum_row_count.sql</code> is warn.</p>
+                <p>Use <code>error</code> for tests that must gate merges: primary keys, financial totals, contracted marts. Override macro defaults in YAML <code>config.severity</code> per attachment.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What are warn_if and error_if?<span class="qa-tag">Testing</span></summary>
+              <div class="qa-body">
+                <p>Config options that set severity based on how many rows failed. <code>warn_if: "&gt;0"</code> warns on any failure; <code>error_if: "&gt;=500"</code> errors only at scale.</p>
+                <p>Useful for relationships tests where a few orphan keys are tolerable but hundreds indicate a broken join. Without <code>error_if</code>, warnings may never fail the job.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Your unit test passes but production data is wrong. Why?<span class="qa-tag">Troubleshooting</span></summary>
+              <div class="qa-body">
+                <p>Unit tests only cover mocked scenarios you wrote. Missing edge cases, wrong mock data, or upstream quality issues not exercised by the unit test still break production.</p>
+                <p>Unit tests prove logic for given inputs; data tests scan live tables. You need both. Add a generic test or singular test for the production failure mode you discovered.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Which warehouses enforce foreign key constraints from dbt?<span class="qa-tag">Certification</span></summary>
+              <div class="qa-body">
+                <p>Snowflake, Postgres, and Databricks (Unity Catalog) enforce foreign keys in varying degrees. BigQuery records FK metadata but does not enforce referential integrity on insert.</p>
+                <p>Always keep <code>relationships</code> data tests for portable integrity checks regardless of constraint DDL.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How do you pass min_row_count to a custom generic test?<span class="qa-tag">Modelling</span></summary>
+              <div class="qa-body">
+                <p>Declare <code>min_row_count</code> in the <code>{% test minimum_row_count(model, min_row_count) %}</code> signature. In YAML:</p>
+                <p><code>minimum_row_count:</code> with <code>arguments: min_row_count: 1000</code> under the model's <code>data_tests:</code>. Override severity with <code>config: severity: error</code> at the same level as <code>arguments</code>.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>When would you choose a unit test over a singular test for mart_fullmoon_reviews?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>Use a unit test when you care about the join and <code>CASE</code> logic for known dates without depending on warehouse volume or seed load order. Three mocked rows prove the offset rule cheaply on every PR.</p>
+                <p>Use a singular test when the assertion spans models on live data &mdash; like the <code>consistent_created_at</code> exercise &mdash; or when the rule requires production scale (no reviews before listing exists across the full history).</p>
+                <p>Keep the unit test for regression on the full-moon label; add singular or generic tests for cross-table rules documented in <a href="s11-tests.html">Section 11</a>.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What happens if you enable enforced contract but omit data_type on one column?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p>dbt fails at parse or compile time. Every column in the model output must declare <code>data_type</code> when <code>contract.enforced</code> is true. Partial contracts are not allowed.</p>
+                <p>The error points at the model YAML file. Add the missing column block before any warehouse build runs. This is stricter than data tests, which only need column names in YAML for documentation.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Can you attach minimum_row_count to a column?<span class="qa-tag">Testing</span></summary>
+              <div class="qa-body">
+                <p>No. <code>minimum_row_count</code> is a table-level test &mdash; its macro signature only takes <code>model</code> and <code>min_row_count</code>, not <code>column_name</code>. Attach it under the model's <code>data_tests:</code>, not under a column.</p>
+                <p>Column-level generics like <code>positive_values</code> receive <code>column_name</code> automatically from dbt based on where you attach them in YAML.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How do contracts interact with model versions?<span class="qa-tag">Modelling</span></summary>
+              <div class="qa-body">
+                <p>When a model uses the <code>versions:</code> feature (see <a href="s19-production.html">Section 19</a>), each version can declare its own columns, constraints, and contracts. The course's <code>dim_hosts_cleansed</code> v2 adds a stricter <code>host_name</code> column block inside the version definition while sharing contract config at the model level.</p>
+                <p>Unit tests can target a specific version with the <code>versions:</code> key in unit test YAML when you need to test breaking changes between v1 and v2 before deprecation.</p>
+              </div>
+            </details>
+
+          </div>
+        </section>
+
+        <section class="section" id="practice">
+          <h2>Hands-on practice</h2>
+          <p class="muted">Run these from the <code>airbnb</code> folder with your virtualenv active.</p>
+          <ol class="practice-list">
+
+            <li class="practice">
+              <p class="practice-task">Create <code>models/mart/unit_tests.yml</code> with the full-moon unit test, run it, and confirm PASS.</p>
+              <span class="console-path">airbnb/models/mart/unit_tests.yml</span>
+              <p class="practice-expect"><code>dbt test --select unittest_fullmoon_matcher</code> reports PASS; changing <code>is_full_moon</code> in expect to wrong values fails the test.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Copy the YAML from this section into <code>models/mart/unit_tests.yml</code>.</li>
+                    <li>Run <code>dbt test --select unittest_fullmoon_matcher</code>.</li>
+                    <li>Temporarily change expected label for 2025-01-15 to <code>"not full moon"</code> and confirm FAIL.</li>
+                    <li>Restore correct expect rows.</li>
+                  </ol>
+<pre data-lang="shell" data-title="Run unit test"><code>dbt test --select unittest_fullmoon_matcher
+dbt test --select "test_type:unit"</code></pre>
+                  <p class="muted">Undo: delete <code>unit_tests.yml</code> or revert expect rows to course defaults.</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">Enable contract on <code>dim_hosts_cleansed</code>, add <code>not_null</code> constraints, switch materialization to <code>table</code>, and rebuild.</p>
+              <span class="console-path">airbnb/models/schema.yml · models/dim/dim_hosts_cleansed.sql</span>
+              <p class="practice-expect"><code>dbt build --select dim_hosts_cleansed</code> succeeds; describe table shows NOT NULL on <code>host_id</code> and <code>host_name</code> in Snowflake.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Set <code>materialized = 'table'</code> in <code>dim_hosts_cleansed.sql</code>.</li>
+                    <li>Add contract, constraints, and data_types from this section to schema.yml.</li>
+                    <li>Run <code>dbt build --select dim_hosts_cleansed</code>.</li>
+                    <li>Verify constraints in worksheet or <code>SHOW PRIMARY KEYS</code> / column nullability.</li>
+                  </ol>
+<pre data-lang="shell" data-title="Build with contract"><code>dbt build --select dim_hosts_cleansed</code></pre>
+                  <p class="muted">Undo: revert materialization to view and remove contract/constraints blocks if following later sections that expect view defaults.</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">Add <code>positive_values</code> generic test and attach it to <code>minimum_nights</code>; add <code>minimum_row_count</code> at model level with <code>severity: error</code>.</p>
+              <span class="console-path">airbnb/tests/generic/ · airbnb/models/schema.yml</span>
+              <p class="practice-expect"><code>dbt test --select dim_listings_cleansed</code> runs both custom tests; lowering <code>min_row_count</code> to 999999 fails or warns depending on severity.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Create <code>tests/generic/positive_values.sql</code> and <code>minimum_row_count.sql</code> from this section.</li>
+                    <li>Add <code>positive_values</code> under <code>minimum_nights</code> column tests.</li>
+                    <li>Add model-level <code>minimum_row_count</code> with <code>min_row_count: 1000</code> and <code>config.severity: error</code>.</li>
+                    <li>Run <code>dbt test --select dim_listings_cleansed</code>.</li>
+                  </ol>
+<pre data-lang="yaml" data-title="schema.yml excerpt"><code>  - name: dim_listings_cleansed
+    data_tests:
+      - minimum_row_count:
+          arguments:
+            min_row_count: 1000
+          config:
+            severity: error
+    columns:
+      - name: minimum_nights
+        data_tests:
+          - positive_values</code></pre>
+                  <p class="muted">Undo: remove custom test files and YAML entries; run <code>dbt test --select dim_listings_cleansed</code> to confirm stock tests only.</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">Break the contract deliberately by renaming a column in SQL without updating YAML; observe compile failure, then fix.</p>
+              <span class="console-path">airbnb/models/dim/dim_hosts_cleansed.sql</span>
+              <p class="practice-expect"><code>dbt compile --select dim_hosts_cleansed</code> fails with contract error before any warehouse query runs.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>With contract enforced, rename <code>host_name</code> to <code>host_label</code> in SQL only.</li>
+                    <li>Run <code>dbt compile --select dim_hosts_cleansed</code> and read contract violation message.</li>
+                    <li>Revert SQL or update YAML column name to match.</li>
+                  </ol>
+                  <p class="muted">Undo: restore <code>host_name</code> in SQL and YAML alignment.</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">Run all tests scoped to <code>mart_fullmoon_reviews</code>, then run only unit tests project-wide. Compare runtime and node count.</p>
+              <span class="console-path">airbnb/ (project root)</span>
+              <p class="practice-expect"><code>dbt ls --select mart_fullmoon_reviews --resource-type test</code> lists unit and any data tests; <code>test_type:unit</code> lists only unit tests.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Run <code>dbt ls --select mart_fullmoon_reviews --resource-type test</code> and note test names.</li>
+                    <li>Run <code>dbt test --select mart_fullmoon_reviews</code> and record elapsed time.</li>
+                    <li>Run <code>dbt test --select "test_type:unit"</code> and compare.</li>
+                    <li>Run <code>dbt test --select mart_fullmoon_reviews,test_type:unit</code> for intersection.</li>
+                  </ol>
+<pre data-lang="shell" data-title="Compare selectors"><code>dbt ls --select mart_fullmoon_reviews --resource-type test
+dbt test --select mart_fullmoon_reviews
+dbt test --select "test_type:unit"</code></pre>
+                  <p class="muted">Undo: no project changes required for this observability exercise.</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">Add <code>warn_if</code> and <code>error_if</code> to the <code>relationships</code> test on <code>host_id</code> in <code>dim_listings_cleansed</code>; document when CI should warn versus fail.</p>
+              <span class="console-path">airbnb/models/schema.yml</span>
+              <p class="practice-expect">With synthetic orphan rows (if you insert test data), severity follows threshold; remove test data after verification.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Locate <code>relationships</code> under <code>dim_listings_cleansed.host_id</code> from Section 11.</li>
+                    <li>Add <code>config: warn_if: "&gt;0" error_if: "&gt;=100"</code> under the test.</li>
+                    <li>Run <code>dbt test --select relationships_dim_listings_cleansed_host_id_</code>.</li>
+                    <li>Revert config after experiment unless team adopts thresholds.</li>
+                  </ol>
+<pre data-lang="yaml" data-title="relationships with graduated severity"><code>      - name: host_id
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_hosts_cleansed')
+                field: host_id
+              config:
+                warn_if: "&gt;0"
+                error_if: "&gt;=100"</code></pre>
+                  <p class="muted">Undo: remove <code>warn_if</code> / <code>error_if</code> to restore default error-on-any-failure behaviour.</p>
+                </div>
+              </details>
+            </li>
+
+          </ol>
+        </section>
+
+        <section class="section" id="recap">
+          <h2>Recap</h2>
+          <div class="recap">
+            <ul class="checklist">
+              <li>Unit tests mock upstream rows in <code>given</code> and assert output in <code>expect</code> &mdash; no warehouse data required.</li>
+              <li><code>models/mart/unit_tests.yml</code> tests <code>mart_fullmoon_reviews</code> full-moon labelling with three review dates and one seed date.</li>
+              <li><code>dbt test --select mart_fullmoon_reviews</code> runs all tests on that model; <code>dbt test --select "test_type:unit"</code> runs only unit tests.</li>
+              <li>Built-in generic and singular tests are covered in <a href="s11-tests.html">Section 11</a> &mdash; this section adds unit tests, contracts, constraints, and custom generics.</li>
+              <li>Model contracts with <code>enforced: true</code> validate column names and types at compile time; every column needs <code>data_type</code>.</li>
+              <li>Constraints emit warehouse DDL (<code>not_null</code>, primary_key, foreign_key, check); support varies by adapter &mdash; tables required, not views.</li>
+              <li><code>dim_hosts_cleansed</code> becomes a <code>table</code> with contract, <code>not_null</code> constraints, and existing data tests together.</li>
+              <li>Custom generic tests live in <code>tests/generic/</code> using <code>{% test name(...) %} ... {% endtest %}</code>; return failing rows.</li>
+              <li><code>positive_values</code> fails rows where <code>column &lt;= 0</code>; attach like any generic under <code>data_tests:</code>.</li>
+              <li><code>minimum_row_count</code> takes <code>min_row_count</code> via <code>arguments:</code>; default severity warn in macro, override in YAML.</li>
+              <li><code>warn_if</code> and <code>error_if</code> tune severity by failure count for graduated CI gates.</li>
+              <li>Contracts catch schema breaks early; data tests and unit tests catch bad rows and bad logic respectively.</li>
+              <li>Use <code>dbt ls --resource-type test</code> to audit which tests attach to a model before a large test run.</li>
+              <li>Folder-level <code>+severity</code> in <code>dbt_project.yml</code> sets defaults; per-test YAML overrides win.</li>
+            </ul>
+            <p style="margin-top:1rem;">
+              <button type="button" data-complete="section-12">Mark complete</button>
+            </p>
+          </div>
+        </section>
+
+      </div>
+
+      <aside class="toc" aria-label="On this page">
+        <strong>On this page</strong>
+        <ol>
+          <li><a href="#lectures">Lectures</a></li>
+          <li><a href="#unit-tests">Unit tests</a></li>
+          <li><a href="#unit-test-selectors">Test selectors</a></li>
+          <li><a href="#contracts">Contracts</a></li>
+          <li><a href="#constraints">Constraints</a></li>
+          <li><a href="#custom-generic-tests">Custom generic tests</a></li>
+          <li><a href="#test-parameters">Test parameters</a></li>
+          <li><a href="#test-severity">Severity</a></li>
+          <li><a href="#deeper">Deeper detail</a></li>
+          <li><a href="#interview">Interview questions</a></li>
+          <li><a href="#practice">Hands-on practice</a></li>
+          <li><a href="#recap">Recap</a></li>
+        </ol>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<footer class="footer">The Complete dbt Bootcamp: Zero to Hero &middot; Section 12 &middot; Offline study edition</footer>
+</body>
+</html>

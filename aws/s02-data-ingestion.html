@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="DEA-C01 Section 2: Amazon S3 buckets, objects, keys and storage classes; batch versus streaming ingestion; AWS Glue overview and the Glue Data Catalog.">
+<title>Section 2 — Data Ingestion | AWS Data Engineer DEA-C01 Notes</title>
+<link rel="stylesheet" href="assets/aws.css">
+<script defer src="assets/search-index.js"></script>
+<script defer src="assets/code-highlight.js"></script>
+<script defer src="assets/aws.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">Course section 2 of 21 · AWS Certified Data Engineer Associate</p>
+    <h1>Data Ingestion</h1>
+    <p class="subtitle">The vocabulary every later section reuses: how Amazon S3 stores data as buckets and objects, why it is not a file system, how batch and streaming ingestion differ, and how AWS Glue and the Data Catalog turn raw files into queryable tables.</p>
+    <div class="hero-meta">
+      <span class="chip">15 slides · ~45min</span>
+      <span class="chip">Exam domain: Data Ingestion and Transformation (34%)</span>
+      <span class="chip">Deck slides 8–22</span>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <nav class="pager" aria-label="Section navigation">
+    <a href="s01-introduction.html">← Introduction</a>
+    <a href="index.html">Course contents</a>
+    <a href="s03-athena.html">Next: Querying with Athena →</a>
+  </nav>
+
+  <main id="main">
+    <div class="layout">
+      <div class="content">
+
+        <section class="section" id="lectures">
+          <h2>Lectures in this section</h2>
+          <p class="muted">Each lecture links to the notes that cover it. Reuse the bucket and prefix layout from <a href="s01-introduction.html#account-setup">Section 1</a>: <code>raw/</code>, <code>staging/</code>, <code>curated/</code>.</p>
+          <ol class="lecture-list">
+            <li class="lecture">
+              <a class="lec-title" href="#s3-foundation">Amazon S3 — buckets, objects, keys and naming rules</a>
+              <span class="lec-time">~12:00</span>
+              <span class="lec-src">Slides 9–14</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#s3-storage-classes">S3 storage classes — overview and durability</a>
+              <span class="lec-time">~6:00</span>
+              <span class="lec-src">Slide 15</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#ingestion-methods">Batch versus streaming ingestion</a>
+              <span class="lec-time">~8:00</span>
+              <span class="lec-src">Slides 16–17</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#glue">AWS Glue — managed ETL at a glance</a>
+              <span class="lec-time">~10:00</span>
+              <span class="lec-src">Slides 18–21</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#glue-catalog">The Glue Data Catalog and crawlers</a>
+              <span class="lec-time">~9:00</span>
+              <span class="lec-src">Slide 22</span>
+            </li>
+          </ol>
+        </section>
+
+        <section class="section" id="s3-foundation">
+          <h2>Amazon S3 — the foundation of every data lake</h2>
+          <p class="lead">Amazon Simple Storage Service (S3) is the default answer when an exam question says "store data in AWS". It is cost-effective object storage with a simple web interface and API, and it underpins data lakes, backups, static websites, and the raw layer of nearly every pipeline in this course.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-010.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-010.png" alt="Course slide introducing S3 as the main storage solution: buckets hold objects, with a console screenshot showing folders, CSV and PDF files in different storage classes." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 10</span>S3 as the main storage building block. The console screenshot shows what the exam expects you to recognise: a bucket contains objects (files) and prefix "folders" such as <code>pics/</code>, and individual objects can sit in different storage classes — here a CSV in Standard and a PDF in Glacier Flexible Retrieval.</figcaption>
+          </figure>
+
+          <h3>Buckets, objects and keys — the vocabulary</h3>
+          <p>S3 organises data in two levels only:</p>
+          <ul>
+            <li><strong>Bucket</strong> — a globally unique container created in one AWS Region. Think of it as the top-level namespace, not a folder on a disk.</li>
+            <li><strong>Object</strong> — the actual bytes you store: a CSV, a Parquet file, a JSON log line batch, an image. Each object has data, metadata (key/value pairs you set), and a system-generated version ID if versioning is on.</li>
+            <li><strong>Key</strong> — the full name of the object within the bucket, including any "path". The key <code>documents/example.txt</code> is one string; S3 does not have real directories.</li>
+            <li><strong>Prefix</strong> — the part of a key before the final slash, used for listing and partitioning. <code>raw/customers/</code> is a prefix, not a folder object — though the console displays it like one.</li>
+          </ul>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-011.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-011.png" alt="Course slide showing S3 buckets are regional, with console screenshots of object listings and a bucket list across multiple regions." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 11</span>Every bucket lives in exactly one Region. The bottom screenshot shows buckets in <code>ca-central-1</code> and <code>us-east-1</code> — a crawler or Athena query in the wrong region is the most common cause of "table has zero rows".</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-013.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-013.png" alt="Course slide explaining S3 object keys: example.txt at the bucket root versus documents/example.txt where documents is a prefix in the key." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 13</span>The key is the object's full identifier. <code>example.txt</code> and <code>documents/example.txt</code> are two different objects in the same bucket — the slash is part of the key string, not a filesystem path separator.</figcaption>
+          </figure>
+
+          <div class="analogy"><strong>Everyday analogy —</strong> An S3 bucket is a flat warehouse with infinitely long aisle labels painted on every crate. <code>raw/customers/2026/file.parquet</code> is one label on one crate, not three nested rooms. You can list everything whose label starts with <code>raw/customers/</code>, but there is no directory object called <code>raw/</code>.</div>
+
+          <h3>Why S3 is not a file system</h3>
+          <p>Unlike EBS or EFS, S3 is object storage. There is no append-in-place, no POSIX permissions on individual paths, no rename without a copy, and no atomic directory move. Operations are PUT (upload whole object), GET (read whole object or a byte range), LIST (by prefix), and DELETE. That simplicity is what makes it cheap at exabyte scale — and what forces you to design pipelines around immutable files and partition prefixes instead of updating rows in place.</p>
+
+          <div class="callout info"><strong>Read-after-write consistency.</strong> Since December 2020, S3 provides <strong>strong read-after-write consistency</strong> for all operations: PUT, DELETE, and LIST immediately reflect the latest state. Older material (and some deck slides) still describe S3 as "eventually consistent" — that was true before 2020 and is no longer accurate. You can safely read an object the moment a PUT returns 200.</div>
+
+          <h3>Bucket naming rules</h3>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-012.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-012.png" alt="Course slide listing S3 bucket naming rules: globally unique, 3 to 63 characters, lowercase letters numbers dots and hyphens, cannot look like an IP address." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 12</span>Bucket names are global across all AWS accounts and all Regions. That is why lab buckets use a random suffix — <code>dea-lab-ab-4821</code> is unlikely to collide with someone else's name.</figcaption>
+          </figure>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Rule</th><th>Detail</th></tr></thead>
+              <tbody>
+                <tr><td>Global uniqueness</td><td>The name must not exist in any account or Region. DNS-style, so it becomes <code>bucketname.s3.region.amazonaws.com</code>.</td></tr>
+                <tr><td>Length</td><td>3–63 characters.</td></tr>
+                <tr><td>Characters</td><td>Lowercase letters, numbers, dots (.), hyphens (-) only.</td></tr>
+                <tr><td>Start and end</td><td>Must begin and end with a letter or number.</td></tr>
+                <tr><td>Forbidden</td><td>Cannot be formatted as an IP address (e.g. <code>192.168.5.4</code>).</td></tr>
+                <tr><td>Region</td><td>Chosen at creation time and fixed for the life of the bucket.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Object size limits and upload mechanics</h3>
+          <p>These limits appear in exam questions about large-file uploads and pipeline design:</p>
+          <ul>
+            <li><strong>Maximum object size:</strong> 5 TB per object.</li>
+            <li><strong>Single PUT upload limit:</strong> 5 GB. Anything larger must use <strong>multipart upload</strong> — split the file into parts (each 5 MB–5 GB except the last), upload parts in parallel, then complete with an ETag manifest.</li>
+            <li><strong>Request rate guidance:</strong> S3 scales automatically, but for sustained very high request rates AWS recommends randomising key prefixes so traffic spreads across partitions. The old rule of thumb was ~3,500 PUT/COPY/POST/DELETE and ~5,500 GET/HEAD requests per second <em>per prefix</em>; prefix randomisation (e.g. <code>raw/year=2026/month=08/uuid/file.parquet</code>) avoids hot prefixes.</li>
+          </ul>
+
+          <div class="callout exam"><strong>Exam tip:</strong> "Upload a 50 GB file to S3" → multipart upload, not a single PUT. "Millions of small writes per second to one key" → redesign the key layout or use a different store (Kinesis, DynamoDB). S3 is optimised for large, immutable objects, not random small writes to one path.</div>
+
+          <h3>Common use cases</h3>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-014.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-014.png" alt="Course slide listing S3 use cases: backup, websites, archiving, data lakes, with a console screenshot of mixed object types." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 14</span>S3 use cases the exam recycles: backup and recovery, static websites and application assets, long-term archiving, and data lakes. For a data engineer the last two matter most — raw and curated layers of the lake live here.</figcaption>
+          </figure>
+
+          <ul>
+            <li><strong>Backup and recovery</strong> — versioning plus cross-Region replication for durability beyond a single Region.</li>
+            <li><strong>Static websites and application assets</strong> — host HTML, CSS, images; often fronted by CloudFront.</li>
+            <li><strong>Data archiving</strong> — lifecycle rules move cold data to Glacier classes (see <a href="s07-s3.html">Section 7</a>).</li>
+            <li><strong>Data lakes</strong> — the canonical store for raw, staging and curated data queried by Athena, Redshift Spectrum, and EMR.</li>
+          </ul>
+        </section>
+
+        <section class="section" id="s3-storage-classes">
+          <h2>S3 storage classes — overview</h2>
+          <p class="lead">Storage class controls <strong>cost</strong>, <strong>availability</strong>, and <strong>retrieval latency</strong>. Every object in a bucket can be in a different class. The full lifecycle, Intelligent-Tiering monitoring fees, and Glacier retrieval tiers are covered in <a href="s07-s3.html">Section 7</a>; here is the map you need before ingestion makes sense.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-015.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-015.png" alt="Course slide comparing six S3 storage classes with durability, availability, and use case columns, plus definitions of durability, availability, lifecycle rules and versioning." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 15</span>Storage class comparison. All classes share 99.999999999% (11 nines) durability — the probability of losing an object in a year is roughly 1 in 100 billion. Availability and retrieval time differ; Glacier classes trade instant access for cost.</figcaption>
+          </figure>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Storage class</th><th>Use case</th><th>Durability</th><th>Availability</th></tr></thead>
+              <tbody>
+                <tr><td><strong>S3 Standard</strong></td><td>Frequently accessed data</td><td>99.999999999%</td><td>99.99%</td></tr>
+                <tr><td><strong>S3 Intelligent-Tiering</strong></td><td>Unknown or changing access patterns</td><td>99.999999999%</td><td>99.90%</td></tr>
+                <tr><td><strong>S3 Standard-IA</strong></td><td>Infrequent access, rapid retrieval when needed</td><td>99.999999999%</td><td>99.90%</td></tr>
+                <tr><td><strong>S3 One Zone-IA</strong></td><td>Infrequent access, single-AZ (lower cost, less resilience)</td><td>99.999999999%</td><td>99.50%</td></tr>
+                <tr><td><strong>S3 Glacier Flexible Retrieval</strong></td><td>Archive; retrieval minutes to hours</td><td>99.999999999%</td><td>99.99% after retrieval</td></tr>
+                <tr><td><strong>S3 Glacier Deep Archive</strong></td><td>Longest-term archive; retrieval ~12 hours</td><td>99.999999999%</td><td>99.99% after retrieval</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Definitions worth memorising</h3>
+          <ul>
+            <li><strong>Durability</strong> — likelihood of losing an object in a year (11 nines ≈ 1 in 100 billion). S3 replicates across multiple devices and AZs (except One Zone-IA).</li>
+            <li><strong>Availability</strong> — percentage of time the service can serve requests. Glacier availability applies after a restore completes.</li>
+            <li><strong>Lifecycle rules</strong> — automatically transition objects between classes or expire them after N days. The main cost lever for aging log data.</li>
+            <li><strong>Versioning</strong> — keep previous versions of an object when it is overwritten or deleted. Essential for audit and recovery; pair with lifecycle to expire old versions.</li>
+          </ul>
+
+          <div class="callout tip"><strong>Where to go deeper.</strong> Retrieval tiers, minimum storage durations, Intelligent-Tiering archive access tiers, and S3 Express One Zone are in <a href="s07-s3.html">Section 7</a>. For ingestion, default new raw data to <strong>Standard</strong> or <strong>Intelligent-Tiering</strong> and let lifecycle move it later.</div>
+        </section>
+
+        <section class="section" id="ingestion-methods">
+          <h2>Batch versus streaming ingestion</h2>
+          <p class="lead">Ingestion is how data enters the pipeline. The exam splits the world into two patterns — <strong>batch</strong> (periodic, large volumes) and <strong>streaming</strong> (continuous, latency-sensitive) — and expects you to pick the AWS service that matches.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-017.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-017.png" alt="Course slide comparing streaming ingestion versus batch ingestion side by side with bullet points on latency, cost and example services." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 17</span>The deck's batch-vs-streaming split. Streaming is real-time and more complex; batch is periodic and cost-effective. The table below adds the dimensions the exam actually tests.</figcaption>
+          </figure>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Dimension</th><th>Streaming ingestion</th><th>Batch ingestion</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Latency</strong></td><td>Sub-second to seconds (real time)</td><td>Minutes to hours (scheduled or triggered)</td></tr>
+                <tr><td><strong>Data pattern</strong></td><td>Continuous events — clicks, IoT, logs, transactions</td><td>Large periodic dumps — nightly DB exports, daily files</td></tr>
+                <tr><td><strong>Cost profile</strong></td><td>Higher — always-on shards/brokers, more moving parts</td><td>Lower — pay only when the job runs</td></tr>
+                <tr><td><strong>Complexity</strong></td><td>Ordering, checkpoints, late data, scaling consumers</td><td>Simpler — read file, transform, write file</td></tr>
+                <tr><td><strong>Replay</strong></td><td>Kinesis Data Streams, MSK — retain and re-read</td><td>Re-run the job from the same S3/RDS source</td></tr>
+                <tr><td><strong>Typical AWS services</strong></td><td>Kinesis Data Streams, Managed Flink, MSK, Firehose (near real time)</td><td>Glue, EMR, Lambda (scheduled), DMS, DataSync, AppFlow</td></tr>
+                <tr><td><strong>Typical use</strong></td><td>Fraud detection, live dashboards, alerting</td><td>Data warehouse loads, reporting, lake backfills</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout exam"><strong>Near real time is not real time.</strong> Amazon Data Firehose buffers records (minimum 60 seconds for most destinations) and writes in batches. Exam questions that say <em>near real time</em> or <em>minutes of latency is acceptable</em> are permission to choose Firehose over Kinesis Data Streams — it is cheaper and fully managed.</div>
+
+          <div class="diagram">
+            <p class="diagram-title">The reference pipeline — where ingestion sits</p>
+            <div class="flow">
+              <div class="node is-source"><b>Ingest</b><small>Batch: Glue · DMS · DataSync<br>Stream: Kinesis · Firehose · MSK</small></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-store pulse"><b>S3</b><small>raw/ · staging/ · curated/</small></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-compute"><b>Transform</b><small>Glue · Lambda · EMR</small></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-serve"><b>Serve</b><small>Athena · Redshift · QuickSight</small></div>
+            </div>
+            <div class="flow" style="margin-top:14px;">
+              <div class="node is-store"><b>Glue Data Catalog</b><small>schemas · partitions · crawlers</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-compute"><b>Athena / Spectrum</b><small>SQL over S3</small></div>
+            </div>
+          </div>
+
+          <p>Every scenario in this course is a variation of this shape. Ingestion (this section) lands data in S3. The catalog (Glue) makes it discoverable. Transform (Section 4+) cleans and partitions it. Serve (Section 3 onward) queries and visualises it. Kinesis streaming is covered in <a href="s06-streaming.html">Section 6</a>; batch orchestration in <a href="s04-glue.html">Section 4</a>.</p>
+        </section>
+
+        <section class="section" id="glue">
+          <h2>AWS Glue — managed ETL</h2>
+          <p class="lead">AWS Glue is the default <strong>batch transform</strong> service on the exam. It is fully managed, serverless, Spark-backed, and integrates with S3, the Data Catalog, Redshift, RDS, and streaming sources — without you provisioning a cluster.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-019.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-019.png" alt="Course slide introducing AWS Glue as a fully managed ETL service with a visual job diagram from S3 through Change Schema and Aggregate back to S3." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 19</span>Glue at a glance: read from S3, transform (change schema, aggregate), write back to S3. The visual editor generates the job; you do not have to write PySpark from scratch unless you choose to.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-020.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-020.png" alt="Course slide showing Glue integrations with S3, Redshift, RDS, Kinesis Data Streams, DocumentDB and the Glue Studio sources panel." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 20</span>Glue connects to far more than S3. The Studio sources panel lists the Data Catalog, S3, Kinesis, Kafka/MSK, JDBC databases via connections, and Redshift — one service for lake-house ETL.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-021.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-021.png" alt="Course slide stating Glue auto-generates PySpark scripts, runs Spark serverlessly, and charges pay-as-you-go, with a screenshot of generated job code." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 21</span>Under the hood every Glue job is PySpark. The visual editor generates <code>DynamicFrame</code> code you can unlock and edit. You pay per DPU-hour (Data Processing Unit) while the job runs — no idle cluster cost.</figcaption>
+          </figure>
+
+          <h3>What Glue provides at a high level</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Component</th><th>Role</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Crawler</strong></td><td>Scans a data source, infers schema, detects partitions, writes table metadata to the Data Catalog.</td></tr>
+                <tr><td><strong>Data Catalog</strong></td><td>Hive-compatible metastore of databases, tables, partitions — shared by Athena, Redshift Spectrum, EMR.</td></tr>
+                <tr><td><strong>ETL jobs</strong></td><td>Spark (PySpark/Scala) or Python shell jobs that transform and load data.</td></tr>
+                <tr><td><strong>Triggers</strong></td><td>Schedule jobs or fire them when another job completes (on-demand, scheduled, conditional).</td></tr>
+                <tr><td><strong>Workflows</strong></td><td>Orchestrate crawlers, jobs, and triggers as a directed acyclic graph with run history.</td></tr>
+                <tr><td><strong>Classifiers</strong></td><td>Custom or built-in rules that tell a crawler how to interpret a file format (CSV, JSON, Parquet, Avro, etc.).</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p><a href="s04-glue.html">Section 4</a> is the deep dive: job bookmarks, worker types, connections, Data Quality, and cost optimisation. For now, remember the exam's shorthand — "easiest way to ETL from S3 to Redshift" is almost always Glue.</p>
+
+          <div class="callout cost"><strong>Pricing unit.</strong> Glue ETL bills in <strong>DPU-hours</strong> (minimum 2 DPUs for standard Spark jobs). Crawlers bill per DPU-hour while scanning. The free tier includes one million objects stored in the Data Catalog. Always stop and delete test jobs; a forgotten daily crawler on a large bucket adds up.</div>
+        </section>
+
+        <section class="section" id="glue-catalog">
+          <h2>The Glue Data Catalog</h2>
+          <p class="lead">Raw files in S3 are not queryable until something registers their schema. The <strong>Glue Data Catalog</strong> is that registry — a central Hive metastore replacement that Athena, Amazon Redshift Spectrum, Amazon EMR, and QuickSight all read.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-022.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-022.png" alt="Course slide on the Glue Data Catalog: crawlers scan S3, infer schema, store metadata, and enable querying from Athena, Redshift, QuickSight and EMR." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 22</span>The catalog closes the gap between files and SQL. A crawler reads S3 (here a <code>customers.csv</code> with columns ID, Name, Age…), infers types, writes a table definition, and downstream engines use that metadata to plan queries without moving the data.</figcaption>
+          </figure>
+
+          <h3>How a crawler works</h3>
+          <ol>
+            <li><strong>Point at a data source</strong> — typically an S3 path such as <code>s3://bucket/raw/customers/</code>, or a JDBC connection to RDS.</li>
+            <li><strong>Classify</strong> — built-in or custom classifiers identify the format (CSV header row, JSON structure, Parquet footer).</li>
+            <li><strong>Infer schema</strong> — sample files to derive column names and types. You can override types in the console or with a Glue job.</li>
+            <li><strong>Detect partitions</strong> — if keys look like <code>year=2026/month=08/</code>, the crawler creates partition entries so Athena can prune.</li>
+            <li><strong>Write to the catalog</strong> — one table (or more) under a database, visible immediately to Athena and Spectrum.</li>
+          </ol>
+
+          <p>Crawlers run on a schedule or on demand, support incremental crawling (only new folders/files), and can be chained in workflows with ETL jobs. After the initial crawl, many teams switch to <strong>partition projection</strong> or <code>ALTER TABLE ADD PARTITION</code> for new dates instead of re-crawling the entire bucket — see <a href="s03-athena.html">Section 3</a>.</p>
+
+          <div class="diagram">
+            <p class="diagram-title">From S3 files to a queryable table</p>
+            <div class="flow">
+              <div class="node is-store"><b>S3 raw/</b><small>customers.csv · logs/ · events/</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-compute pulse"><b>Glue Crawler</b><small>classifiers · infer schema · partitions</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-store"><b>Data Catalog</b><small>db · table · columns · partitions</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-serve"><b>Athena</b><small>SELECT … FROM table</small></div>
+            </div>
+          </div>
+
+          <div class="callout exam"><strong>Shared metastore.</strong> One catalog table definition serves Athena, Redshift Spectrum, and EMR — you do not maintain three separate schemas. Lake Formation (Section 13) adds governance on top of the same catalog.</div>
+        </section>
+
+        <section class="section" id="deeper">
+          <h2>Deeper detail and exam edge cases</h2>
+          <p class="lead">Operational limits on S3 ingestion, storage-class economics, and catalog costs — the numbers behind landing-zone design that the overview slides mention but do not quantify.</p>
+
+          <h3>Limits and quotas that decide answers</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Limit</th><th>Value</th><th>Adjustable?</th><th>Why it matters</th></tr></thead>
+              <tbody>
+                <tr><td>S3 request rate per prefix</td><td>~3,500 PUT/COPY/POST/DELETE and ~5,500 GET/HEAD per second per prefix (hard at extreme sustained load)</td><td>Yes — randomise key prefixes (hash or date shards) to spread load</td><td>Hot prefix = throttling on high-frequency small writes; exam "millions of PUTs/sec to one path" → redesign keys or use Kinesis/DynamoDB.</td></tr>
+                <tr><td>Maximum object size</td><td>5 TB</td><td>No (hard)</td><td>Archive and media pipelines; multipart required well before this ceiling.</td></tr>
+                <tr><td>Single PUT upload maximum</td><td>5 GB</td><td>No (hard)</td><td>Anything larger must use multipart upload — common exam distractor.</td></tr>
+                <tr><td>Multipart part size range</td><td>5 MB–5 GB per part (last part can be smaller)</td><td>No (hard)</td><td>Tune part size for parallel upload bandwidth on large files.</td></tr>
+                <tr><td>Buckets per account (default)</td><td>100 soft quota per Region</td><td>Yes — Service Quotas increase request</td><td>Multi-tenant lakes rarely hit this; account design matters for isolation.</td></tr>
+                <tr><td>Data Catalog objects free tier</td><td>First 1 million tables/partitions/schemas per month</td><td>N/A — billing tier above threshold</td><td>Millions of daily partitions without projection can push catalog storage over free tier.</td></tr>
+                <tr><td>Data Catalog above free tier</td><td>~1 USD per 100,000 objects/month (us-east-1)</td><td>Yes — reduce partition count, use partition projection</td><td>Cost appears on high-cardinality partition strategies, not on small lab crawlers.</td></tr>
+                <tr><td>Crawler minimum bill</td><td>10 minutes per crawl run</td><td>No (hard)</td><td>Hourly crawls on tiny prefixes waste money — prefer event-driven partition registration.</td></tr>
+                <tr><td>Standard-IA / One Zone-IA minimum storage duration</td><td>30 days</td><td>No (hard)</td><td>Deleting or transitioning early still bills the remainder of 30 days.</td></tr>
+                <tr><td>Glacier Flexible Retrieval minimum storage duration</td><td>90 days</td><td>No (hard)</td><td>Lifecycle to Glacier on data you might delete within three months is expensive.</td></tr>
+                <tr><td>Glacier Deep Archive minimum storage duration</td><td>180 days</td><td>No (hard)</td><td>Compliance archives only — wrong class for staging data read during ETL.</td></tr>
+                <tr><td>IA / Glacier minimum billable object size</td><td>128 KB for Standard-IA, One Zone-IA, Glacier Instant Retrieval</td><td>No (hard)</td><td>Millions of tiny objects in IA classes pay as if each were 128 KB — small-file problem hits billing too.</td></tr>
+                <tr><td>Standard-IA retrieval charge</td><td>Per GB retrieved plus per-request fee</td><td>No — design access pattern instead</td><td>Frequent reads on IA objects cost more than Standard — exam "monthly report" vs "daily dashboard" split.</td></tr>
+                <tr><td>Free tier S3 Standard storage (new accounts)</td><td>5 GB for 12 months</td><td>N/A</td><td>Course labs fit easily; cost comes from other services, not raw storage.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>What you actually pay for</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Billed dimension</th><th>Unit</th><th>How to spend less</th></tr></thead>
+              <tbody>
+                <tr><td>S3 Standard storage</td><td>GB-month</td><td>Lifecycle to IA/Glacier for cold prefixes; Intelligent-Tiering when access pattern is unknown.</td></tr>
+                <tr><td>S3 requests</td><td>Per 1,000 PUT/GET/LIST</td><td>Batch small files into Parquet; reduce LIST-heavy crawlers; use S3 Inventory instead of daily full crawls.</td></tr>
+                <tr><td>Early delete / transition (IA, Glacier)</td><td>Remaining minimum duration</td><td>Do not lifecycle raw landing data to Glacier until retention policy is stable.</td></tr>
+                <tr><td>Glacier retrieval</td><td>Per GB + tier (expedited/standard/bulk)</td><td>Keep queryable layers in Standard or Intelligent-Tiering; Glacier for true archive.</td></tr>
+                <tr><td>Glue crawler</td><td>DPU-hour (~0.44 USD/DPU-hr us-east-1) with 10-min minimum</td><td>Crawl once, then ADD PARTITION or partition projection; incremental crawl only new folders.</td></tr>
+                <tr><td>Data Catalog storage</td><td>Per 100K objects/month above 1M free</td><td>Partition projection for date keys; avoid MSCK on millions of paths.</td></tr>
+                <tr><td>Cross-AZ / cross-Region replication</td><td>Per GB transferred + storage duplicate</td><td>Single-Region lake for analytics; replicate only when DR/compliance requires it.</td></tr>
+                <tr><td>KMS SSE-KMS requests</td><td>Per API call on encrypted objects</td><td>SSE-S3 for internal lake tiers; SSE-KMS when audit trail per key use is required.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout cost"><strong>Biggest landing-zone waste.</strong> Scheduled crawlers on large buckets plus storing millions of small JSON files in Standard without compaction — you pay crawler 10-minute minimums repeatedly and S3 request charges on every Athena query listing tiny objects.</div>
+          <div class="callout danger"><strong>IA/Glacier on hot paths.</strong> Lifecycle rules that transition data still read by hourly Glue jobs trigger retrieval fees and minimum-duration penalties. Raw and staging layers should stay Standard or Intelligent-Tiering until access frequency drops.</div>
+
+          <h3>Traps that catch people</h3>
+          <ul>
+            <li><strong>Single PUT for a 50 GB file —</strong> Upload fails or times out because the 5 GB single-PUT limit applies. Multipart upload is mandatory above 5 GB and recommended for large files on unreliable networks.</li>
+            <li><strong>Hot prefix on high write rate —</strong> All producers write to <code>logs/current/</code> without sharding. S3 scales, but sustained per-prefix limits cause throttling. Randomise or date-shard prefixes instead.</li>
+            <li><strong>Small-file problem —</strong> Kinesis Firehose or streaming writers emit one S3 object per minute. Athena and Spark spend more time listing and opening files than reading data. Compact with scheduled Glue jobs.</li>
+            <li><strong>Assuming crawlers are free —</strong> Catalog storage is cheap at lab scale, but crawlers bill DPU-hours with a 10-minute floor every run. Re-crawling the whole bucket daily on production data adds up.</li>
+            <li><strong>IA class for daily ETL reads —</strong> Standard-IA charges per GB retrieved. Raw data read every night by Glue belongs in Standard or Intelligent-Tiering, not IA.</li>
+            <li><strong>Ignoring minimum storage duration —</strong> Lifecycle moves data to Glacier then a retention policy deletes it after 30 days. You still pay for 90 or 180 days minimum depending on class.</li>
+            <li><strong>Non-idempotent append paths —</strong> Retried batch jobs write <code>output/run_timestamp/</code> duplicates. Deterministic partition paths (<code>date=2026-08-03/</code>) with overwrite semantics keep replays safe.</li>
+            <li><strong>Region mismatch —</strong> Bucket in <code>us-west-2</code>, crawler and Athena in <code>us-east-1</code>. Metadata points at wrong Region or empty listings. Pick one Region and tag resources.</li>
+            <li><strong>Treating prefix as a folder —</strong> Copying "the folder" does not move objects without listing every key. Pipeline code must handle keys explicitly — no atomic directory rename.</li>
+          </ul>
+
+          <h3>Troubleshooting playbook</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Symptom</th><th>Most likely cause</th><th>What to check / fix</th></tr></thead>
+              <tbody>
+                <tr><td>Athena returns zero rows but S3 has files</td><td>Table LOCATION or Region wrong; or no partition registered</td><td>Compare <code>SHOW CREATE TABLE</code> LOCATION to actual keys; run crawler or <code>ALTER TABLE ADD PARTITION</code>; confirm same Region.</td></tr>
+                <tr><td><code>503 SlowDown</code> on heavy PUT rate</td><td>Hot prefix throttling</td><td>CloudWatch S3 <code>4xxErrors</code>; spread writes across randomized sub-prefixes; review request rate per prefix guidance.</td></tr>
+                <tr><td>Multipart upload orphaned parts</td><td>Failed complete-multipart; no lifecycle abort rule</td><td>S3 → Metrics → Incomplete multipart uploads; add lifecycle rule to abort incomplete uploads after 7 days.</td></tr>
+                <tr><td>Crawler finishes fast but schema wrong</td><td>Classifier sampled wrong files or mixed formats in one path</td><td>Separate formats by prefix; add custom classifier; override column types in catalog.</td></tr>
+                <tr><td>Glue job succeeds but duplicate rows after retry</td><td>Non-idempotent write — append without bookmark or merge</td><td>Enable job bookmarks; write to deterministic partition; use overwrite mode for Parquet partition.</td></tr>
+                <tr><td>Storage bill spike after lifecycle change</td><td>Early delete fees on IA/Glacier transitions</td><td>Cost Explorer by storage class; review transition age rules vs actual retention.</td></tr>
+                <tr><td>Queries slow on new partition layout</td><td>Small files — thousands of objects under one partition</td><td>S3 Inventory or <code>aws s3 ls --summarize</code> object counts; compact to 128 MB–1 GB files with Glue.</td></tr>
+                <tr><td>Upload works but downstream cannot read</td><td>Encryption — SSE-KMS key policy blocks Glue/Athena role</td><td>Verify KMS key policy grants decrypt to crawler and job IAM roles; or use SSE-S3 for shared lake.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Production patterns</h3>
+          <p>Production landing zones use a <strong>medallion layout</strong>: <code>raw/</code> (immutable source), <code>staging/</code> (typed, lightly cleaned), <code>curated/</code> (modelled, partitioned Parquet). Ingestion is either batch (DMS, DataSync, scheduled files) or streaming (Firehose → S3 with date prefixes). The catalog is populated once per source, then partitions are registered by the ETL job that writes them — not by an hourly full-bucket crawler.</p>
+          <div class="diagram">
+            <p class="diagram-title">Idempotent batch landing with deterministic keys</p>
+            <div class="flow">
+              <div class="node is-source"><b>Source</b><small>DMS · SFTP · App</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-store"><b>S3 raw/</b><small>date=YYYY-MM-DD/</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-compute pulse"><b>Glue</b><small>bookmark · Parquet</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-store"><b>curated/</b><small>partitioned · catalog sync</small></div>
+            </div>
+          </div>
+          <p>Anti-pattern: one bucket prefix per tenant with no date partitioning and a nightly crawler over the entire bucket. At scale, LIST operations, catalog object count, and crawler runtime grow linearly with history. Replace with partition projection or explicit daily partitions written by the ingest job.</p>
+<pre data-lang="shell" data-title="S3 — multipart upload for large batch files" data-explain="CLI automatically uses multipart above multipart-threshold (default 8 MB). For 5 GB+ files this is required, not optional."><code>aws s3 cp large_export.parquet s3://dea-lab-ab-4821/raw/exports/ \
+  --storage-class STANDARD \
+  --expected-size 85899345920
+
+aws s3api list-multipart-uploads --bucket dea-lab-ab-4821</code></pre>
+
+          <h3>Where this fits with the rest of the exam</h3>
+          <p>This section defines the lake foundation every downstream service assumes. Without S3 vocabulary and catalog registration, Athena, Glue jobs, Redshift COPY, and Spectrum have nothing to target.</p>
+          <ul>
+            <li><a href="s03-athena.html">Section 3 (Athena)</a> — queries the tables crawlers register here; partition layout directly drives scan cost.</li>
+            <li><a href="s04-glue.html">Section 4 (Glue deep dive)</a> — job bookmarks, worker sizing, and DataBrew build on the ingestion patterns introduced above.</li>
+            <li><a href="s06-streaming.html">Section 6 (Streaming)</a> — when batch landing is too slow; Firehose and Kinesis write the same S3 prefixes with different latency guarantees.</li>
+            <li><a href="s07-s3.html">Section 7 (S3 depth)</a> — lifecycle rules, replication, and access points extend storage-class choices sketched here.</li>
+            <li><a href="s10-redshift.html">Section 10 (Redshift)</a> — COPY from S3 and Spectrum both expect hive-partitioned curated data.</li>
+            <li><a href="s18-migration.html">Section 18 (Migration)</a> — DMS and DataSync as alternate batch ingest paths into the same raw layer.</li>
+          </ul>
+          <div class="callout exam"><strong>Service selection on ingest questions.</strong> Periodic large dumps → Glue, DMS, or DataSync to S3. Sub-second decisions → Kinesis Data Streams or MSK, not S3 PUT from the application. Near real time with minutes of latency → Firehose to S3. "Easiest S3-to-Redshift ETL" → Glue, not custom Lambda or EMR unless the scenario demands custom Spark libraries.</div>
+        </section>
+
+        <section class="section" id="interview">
+          <h2>Interview questions</h2>
+          <p class="muted">Answer each one out loud before opening it.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+            <details class="qa">
+              <summary>Explain the difference between an S3 bucket, object, key and prefix.<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>A <strong>bucket</strong> is a globally unique container in one AWS Region. An <strong>object</strong> is the stored data plus metadata. The <strong>key</strong> is the object's full name within the bucket — e.g. <code>raw/customers/file.parquet</code> — including any slash-separated segments. A <strong>prefix</strong> is the leading portion of keys used for listing and partitioning, such as <code>raw/customers/</code>; S3 has no real directories, only key strings that share a prefix.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Why is S3 described as object storage rather than a file system, and what does that mean for pipeline design?<span class="qa-tag">Architecture</span></summary>
+              <div class="qa-body">
+                <p>Object storage treats each file as an independent blob addressed by key. There is no in-place append, rename is a copy-plus-delete, and listing is by prefix not by inode. Pipelines must write immutable files (often partitioned by date), use overwrite-by-path for idempotency, and avoid patterns that need random small writes to one key. That is why analytics workloads convert to columnar Parquet in partition folders rather than updating individual rows in a CSV.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What is S3's consistency model today, and why might older study material be wrong?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p>Since December 2020, Amazon S3 provides <strong>strong read-after-write consistency</strong> for PUT, DELETE, LIST, and GET. A successful write is immediately visible to all readers. Before 2020, new objects were eventually consistent for LIST/GET (updates and deletes were already strongly consistent). Exam answers should reflect the current model unless the question explicitly references legacy behaviour.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>You need to upload an 80 GB file to S3. What approach do you use and why?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>Use <strong>multipart upload</strong>. A single PUT is limited to 5 GB; the maximum object size is 5 TB. Multipart splits the file into parts (5 MB–5 GB each), uploads them in parallel, and completes with an aggregate ETag. It is faster, resumable on failure, and required above 5 GB. The AWS CLI and SDKs do this automatically for large files.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>When would you choose streaming ingestion over batch, and which AWS services fit each?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p>Choose <strong>streaming</strong> when decisions must happen in seconds — fraud, live metrics, operational alerting — using Kinesis Data Streams, MSK, or Managed Flink. Choose <strong>batch</strong> when latency of minutes or hours is fine and volumes are large — nightly warehouse loads, lake backfills — using Glue, EMR, DMS, or scheduled Lambda. <strong>Near real time</strong> (Firehose, minute-level latency) sits between the two at lower cost than true streaming.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What does a Glue crawler do, step by step?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>A crawler connects to a data store (usually S3), uses <strong>classifiers</strong> to recognise file formats, samples files to <strong>infer column names and types</strong>, detects <strong>partition keys</strong> from path patterns like <code>year=2026/</code>, and writes <strong>table and partition metadata</strong> to the Glue Data Catalog. Scheduled or on-demand runs can incrementally pick up new folders. The data itself never moves — only metadata is updated.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Why is the Glue Data Catalog described as a Hive metastore replacement?<span class="qa-tag">Architecture</span></summary>
+              <div class="qa-body">
+                <p>Apache Hive (and Presto/Trino, Spark SQL) expect a <strong>metastore</strong> — a database of table locations, column schemas, and partition lists. The Glue Data Catalog implements that interface so Athena, EMR, and Redshift Spectrum can all query the same S3 datasets using one set of table definitions. Without it, each engine would need its own schema copy.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Compare S3 Standard and S3 Glacier Deep Archive for a ten-year compliance archive.<span class="qa-tag">Cost</span></summary>
+              <div class="qa-body">
+                <p><strong>Standard</strong> gives instant access at the highest storage cost — wrong for rarely touched compliance data. <strong>Glacier Deep Archive</strong> is the cheapest storage class with retrieval in roughly 12 hours, suitable when reads are almost never needed. Use lifecycle rules to transition objects automatically after N days. Remember minimum storage duration charges and retrieval fees on Glacier classes.</p>
+              </div>
+            </details>
+          </div>
+        </section>
+
+        <section class="section" id="practice">
+          <h2>Hands-on practice</h2>
+          <p class="muted">Free tier where possible. Delete everything at the end of each task unless noted.</p>
+          <ol class="practice-list">
+            <li class="practice">
+              <p class="practice-task">Explore your lab bucket: list objects under <code>raw/customers/</code>, note the key versus prefix, and upload the same file under a second key <code>staging/customers/customers.csv</code> to see two independent objects.</p>
+              <span class="console-path">S3 → Buckets → your bucket → Objects</span>
+              <p class="practice-expect">The console shows two objects with different keys; <code>aws s3 ls s3://$BUCKET/ --recursive</code> lists both.</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">CLI</span></summary>
+                <div class="qa-body">
+<pre data-lang="shell"><code>BUCKET=dea-lab-ab-4821   # your bucket from Section 1
+
+aws s3 ls s3://$BUCKET/raw/customers/
+aws s3 cp data/customers.csv s3://$BUCKET/staging/customers/customers.csv
+aws s3 ls s3://$BUCKET/ --recursive --human-readable</code></pre>
+                  <p class="muted">No cleanup — these files are reused in Sections 3 and 4.</p>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Run a Glue crawler against <code>s3://$BUCKET/raw/customers/</code>, create a database <code>dea_lab</code>, and confirm the table appears in the Athena data source dropdown.</p>
+              <span class="console-path">Glue → Crawlers → Create crawler</span>
+              <p class="practice-expect">Athena shows database <code>dea_lab</code> with a table whose columns match <code>customers.csv</code> (ID, Name, Age, Address, City, State, Email).</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">Console</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li><strong>Glue → Databases → Add database</strong> → name <code>dea_lab</code>.</li>
+                    <li><strong>Glue → Crawlers → Create crawler</strong> → name <code>customers-raw</code>.</li>
+                    <li>Data source → S3 path <code>s3://$BUCKET/raw/customers/</code>.</li>
+                    <li>IAM role: create <code>AWSGlueServiceRole-dea-lab</code> with the AWS managed Glue service policy.</li>
+                    <li>Output → target database <code>dea_lab</code>. Run the crawler.</li>
+                    <li>Open <strong>Athena</strong> → Data source <code>AwsDataCatalog</code> → database <code>dea_lab</code>.</li>
+                  </ol>
+                  <p class="muted">Leave the crawler and table for Section 3. Delete the crawler later if you recreate it in Section 4.</p>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Enable versioning on your lab bucket, overwrite <code>customers.csv</code> with a modified copy (change one name), then restore the previous version from the console.</p>
+              <span class="console-path">S3 → Bucket → Properties → Bucket Versioning → Enable</span>
+              <p class="practice-expect">Two versions of the object exist; you can download the older version and see the original name.</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">Console + CLI</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li><strong>Properties → Bucket Versioning → Enable</strong>.</li>
+                    <li>Edit <code>data/customers.csv</code> locally (change row 1's name), re-upload to the same key.</li>
+                    <li>In the object detail view, open <em>Versions</em> and download the prior version.</li>
+                  </ol>
+<pre data-lang="shell"><code>aws s3api list-object-versions --bucket $BUCKET --prefix raw/customers/customers.csv</code></pre>
+                  <p class="muted">Optional cleanup: suspend versioning and delete markers if you want a single version again. Versioning itself has no extra charge beyond stored bytes.</p>
+                </div>
+              </details>
+            </li>
+          </ol>
+        </section>
+
+        <section class="section" id="recap">
+          <h2>Recap</h2>
+          <div class="recap">
+            <ul class="checklist">
+              <li>S3: buckets (regional, globally unique names) hold objects addressed by keys; prefixes organise listing, not real folders.</li>
+              <li>S3 is object storage — immutable files, not a POSIX file system. Strong read-after-write consistency since Dec 2020.</li>
+              <li>Limits: 5 TB max object, 5 GB single PUT → use multipart upload above 5 GB; spread hot prefixes for high request rates.</li>
+              <li>Storage classes trade cost for access speed; all share 11 nines durability. Details in Section 7.</li>
+              <li>Batch ingestion: periodic, cheap, Glue/EMR/DMS. Streaming: real-time, Kinesis/MSK/Flink. Firehose = near real time.</li>
+              <li>Glue: serverless Spark ETL — crawlers, jobs, triggers, workflows, classifiers, pay per DPU-hour.</li>
+              <li>Glue Data Catalog = Hive metastore shared by Athena, Redshift Spectrum, EMR. Crawlers infer schema and partitions from S3.</li>
+              <li>Pipeline shape: ingest → S3 → catalog → transform → query/serve.</li>
+            </ul>
+            <p style="margin-top:1rem;">
+              <button type="button" data-complete="section-02">Mark complete</button>
+            </p>
+          </div>
+        </section>
+
+      </div>
+
+      <aside class="toc" aria-label="On this page">
+        <strong>On this page</strong>
+        <ol>
+          <li><a href="#lectures">Lectures</a></li>
+          <li><a href="#s3-foundation">S3 foundation</a></li>
+          <li><a href="#s3-storage-classes">Storage classes</a></li>
+          <li><a href="#ingestion-methods">Ingestion methods</a></li>
+          <li><a href="#glue">AWS Glue</a></li>
+          <li><a href="#glue-catalog">Data Catalog</a></li>
+          <li><a href="#deeper">Deeper detail</a></li>
+          <li><a href="#interview">Interview questions</a></li>
+          <li><a href="#practice">Hands-on practice</a></li>
+          <li><a href="#recap">Recap</a></li>
+        </ol>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<footer class="footer">AWS Certified Data Engineer Associate (DEA-C01) · Section 2 · Offline study edition</footer>
+</body>
+</html>

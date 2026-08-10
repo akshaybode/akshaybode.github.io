@@ -1,0 +1,1042 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="dbt bootcamp Section 18: why dbt needs an external scheduler, Dagster and Airflow orchestration, partitioned incremental runs, and how the course repo branches relate.">
+<title>Section 18 — Orchestration | The Complete dbt Bootcamp Notes</title>
+<link rel="stylesheet" href="assets/dbt.css">
+<script defer src="assets/search-index.js"></script>
+<script defer src="assets/code-highlight.js"></script>
+<script defer src="assets/dbt.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">Course section 18 of 22 · The Complete dbt Bootcamp: Zero to Hero</p>
+    <h1>Orchestration</h1>
+    <p class="subtitle">dbt compiles and runs your DAG, but it does not decide <em>when</em> to run it, retry failed models, or coordinate upstream loads with downstream transforms. This section compares schedulers, walks through the course's Dagster integration with daily partitions on <code>fct_reviews</code>, and shows the Airflow branch's simplest possible <code>BashOperator</code> DAG.</p>
+    <div class="hero-meta">
+      <span class="chip">6 lectures · ~35min</span>
+      <span class="chip">Dagster and Airflow</span>
+      <span class="chip">scheduled dbt runs</span>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <nav class="pager" aria-label="Section navigation">
+    <a href="s17-selectors-commands.html">← Selectors, Commands and Python Models</a>
+    <a href="index.html">Course contents</a>
+    <a href="s19-production.html">Next: dbt in Production →</a>
+  </nav>
+
+  <main id="main">
+    <div class="layout">
+      <div class="content">
+
+        <section class="section" id="lectures">
+          <h2>Lectures in this section</h2>
+          <p class="muted">Six lectures over roughly 35 minutes. You scaffold a Dagster code location, wire dbt models as Dagster assets with a daily partition on <code>fct_reviews</code>, and preview how Airflow runs the same project from a sibling branch. Production CI patterns land in <a href="s19-production.html">Section 19</a>; incremental mechanics were introduced in <a href="s08-materializations.html#incremental-models">Section 8</a> and extended with <code>--vars</code> in <a href="s17-selectors-commands.html#variables">Section 17</a>.</p>
+          <ol class="lecture-list">
+            <li class="lecture">
+              <a class="lec-title" href="#why-scheduler">Why dbt needs an external scheduler</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">course-resources.md · dbt Orchestration</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#orchestrator-comparison">Choosing an orchestrator</a>
+              <span class="lec-time">~6:00</span>
+              <span class="lec-src">course-resources.md · Links to different orchestrators</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#dagster-setup">Dagster setup and <code>dagster dev</code></a>
+              <span class="lec-time">~6:00</span>
+              <span class="lec-src">dbt_dagster_project/ · requirements.txt</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#dagster-project">The <code>dbt_dagster_project</code> walkthrough</a>
+              <span class="lec-time">~8:00</span>
+              <span class="lec-src">assets.py · definitions.py · schedules.py</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#partitioned-incremental">Partitioned incremental runs on <code>fct_reviews</code></a>
+              <span class="lec-time">~6:00</span>
+              <span class="lec-src">models/fct/fct_reviews.sql</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#airflow-integration">Airflow: <code>BashOperator</code> and Cosmos</a>
+              <span class="lec-time">~4:00</span>
+              <span class="lec-src">branch airflow · airflow/dags/dbt_pipeline.py</span>
+            </li>
+          </ol>
+        </section>
+
+        <section class="section" id="why-scheduler">
+          <h2>Why dbt needs an external scheduler</h2>
+          <p class="lead">dbt is a build tool, not a workflow engine. When you run <code>dbt build</code>, dbt executes the selected subgraph once and exits. Nothing in dbt Core wakes up at midnight, checks whether Fivetran finished loading, retries a failed test, or sends a Slack alert when a mart is stale.</p>
+
+          <p>Section 1 already stated this plainly: dbt does not schedule itself. You need cron, an orchestrator, or dbt Cloud's job scheduler. That gap is not a missing feature — it is a deliberate boundary. dbt owns transformation logic inside the warehouse; everything around it (ingestion timing, retries, alerting, cross-system dependencies) belongs to a scheduler that understands your whole pipeline, not just SQL models.</p>
+
+          <h3>What cron alone cannot do</h3>
+          <p>A naive setup is <code>0 6 * * * dbt build</code> in crontab. That works until it does not:</p>
+          <ul>
+            <li><strong>No upstream awareness.</strong> If the raw load finishes at 06:45, cron still fires at 06:00 and builds against yesterday's data — or half-loaded tables.</li>
+            <li><strong>No dependency graph across systems.</strong> dbt knows <code>ref()</code> order inside the project, but cron does not know that Snowpipe must finish before <code>dbt run</code> starts.</li>
+            <li><strong>Blunt retries.</strong> A single model failure re-runs the entire <code>dbt build</code> unless you wrap it in shell logic. Orchestrators retry at task granularity.</li>
+            <li><strong>No partition backfill UI.</strong> Reprocessing one bad day of incremental data requires passing <code>--vars</code> or partition keys — awkward from cron, natural from Dagster or Airflow.</li>
+            <li><strong>Observability gap.</strong> Cron emails stderr. Orchestrators store run history, task logs, SLA metrics, and lineage across dbt and non-dbt steps.</li>
+          </ul>
+
+          <div class="diagram">
+            <p class="diagram-title">Where the scheduler sits relative to dbt</p>
+            <div class="flow">
+              <div class="node is-compute"><b>Scheduler</b><small>Dagster · Airflow · dbt Cloud</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-model pulse"><b>dbt CLI</b><small>build · test · snapshot</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-store"><b>Warehouse</b><small>tables · views · incremental</small></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-serve"><b>BI consumers</b><small>dashboards · ML</small></div>
+            </div>
+          </div>
+
+          <div class="callout info"><strong>dbt Cloud is also an orchestrator.</strong> If your team pays for dbt Cloud, the built-in job scheduler, environment management, and Slim CI replace much of what you would otherwise wire in Dagster or Airflow. dbt Core users must bring their own scheduler — which is what this section demonstrates.</div>
+
+          <h3>Where scheduling fits in the modern data stack</h3>
+          <p>Section 4 placed orchestration alongside ingestion and transformation. By Section 18 you have the full Airbnb DAG — sources, staging, dimensions, facts, marts, snapshots, tests, and exposures. None of it runs on a clock until you add a scheduler. In a typical stack the sequence is:</p>
+          <ol>
+            <li>Fivetran or Airbyte loads raw tables on its own schedule (or near-real-time).</li>
+            <li>A sensor or time-based trigger waits until the load marks complete (or a fixed offset, e.g. 30 minutes after midnight).</li>
+            <li>dbt runs <code>build</code> or a tagged subset — staging and dimensions first, then facts, then marts and tests.</li>
+            <li>Downstream consumers (Looker, Metabase, reverse ETL) read refreshed marts.</li>
+          </ol>
+          <p>dbt sits at step 3 only. Steps 1, 2, and 4 are orchestrator or SaaS responsibilities. That separation is why analytics engineers learn both dbt <em>and</em> a scheduler — the job is not "write SQL" alone, it is "keep the SQL running reliably after the data lands."</p>
+
+          <h3>What a good dbt orchestration layer provides</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Capability</th><th>Why it matters for dbt</th></tr></thead>
+              <tbody>
+                <tr><td>Trigger on schedule or event</td><td>Nightly full build, hourly incremental, or "run after Fivetran sync completes"</td></tr>
+                <tr><td>Pass runtime parameters</td><td><code>--vars</code> for partition windows, <code>--select</code> for tiered runs, target switching for prod vs dev</td></tr>
+                <tr><td>Respect the dbt DAG</td><td>Run models in dependency order; optionally one task per model (Cosmos, Dagster assets)</td></tr>
+                <tr><td>Retry and alert</td><td>Re-run failed models without rebuilding the whole project; page on test failure</td></tr>
+                <tr><td>Backfill partitions</td><td>Re-materialise one day of <code>fct_reviews</code> without a full refresh</td></tr>
+                <tr><td>Centralised logs</td><td>Task logs capture dbt stdout; easier than hunting cron mail</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="analogy"><strong>Everyday analogy —</strong> dbt is the kitchen crew that knows the recipes and cooking order. The scheduler is the restaurant manager who decides when service starts, checks that deliveries arrived, and re-fires a dish if one plate burns — without making the chefs rewrite the menu.</div>
+
+          <h3>Common scheduling patterns in production</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Pattern</th><th>Schedule</th><th>Typical dbt command</th></tr></thead>
+              <tbody>
+                <tr><td>Nightly full build</td><td><code>0 6 * * *</code> after load SLA</td><td><code>dbt build</code> or <code>dbt build --select tag:daily</code></td></tr>
+                <tr><td>Hourly incremental facts</td><td>Every hour on the hour</td><td><code>dbt run --select tag:hourly+</code></td></tr>
+                <tr><td>Partition backfill</td><td>Manual or catch-up sensor</td><td><code>dbt run --select fct_reviews --vars '{start_date: ..., end_date: ...}'</code></td></tr>
+                <tr><td>CI on pull request</td><td>GitHub webhook</td><td><code>dbt build --select state:modified+</code> (Section 19)</td></tr>
+                <tr><td>Test-only sweep</td><td>After nightly build completes</td><td><code>dbt test --select tag:nightly</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>None of these patterns require dbt to change — the orchestrator chooses the command, target, and vars. That is why the same Airbnb project runs from your terminal, Dagster, Airflow, and GitHub Actions with only the wrapper differing.</p>
+
+          <div class="callout cost"><strong>Cron without selection is the hidden bill.</strong> A nightly <code>dbt build</code> on a growing project re-runs every test and rebuilds every incremental model's default path. Before adding orchestration, fix selection — <a href="s17-selectors-commands.html">Section 17</a> tags and selectors pay off immediately when the scheduler starts firing unattended.</div>
+        </section>
+
+        <section class="section" id="orchestrator-comparison">
+          <h2>Choosing an orchestrator</h2>
+          <p class="lead">The course links to dbt Cloud, Dagster, Airflow, Prefect, and Azure Data Factory. In practice, analytics engineering teams most often choose among dbt Cloud's scheduler, Dagster, Airflow, or Prefect. The right pick depends on who operates the platform, whether you need dbt-native asset lineage, and how much setup you will tolerate.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Orchestrator</th><th>Setup effort</th><th>dbt-native asset support</th><th>Cost</th><th>Best fit</th></tr></thead>
+              <tbody>
+                <tr><td><strong>dbt Cloud scheduler</strong></td><td>Low — jobs and environments are UI-driven once the project is connected</td><td>Full — models, tests, and lineage are first-class in the dbt Cloud UI</td><td>Per-seat SaaS; no infra to run</td><td>Teams already on dbt Cloud who want scheduling, CI, and docs in one product</td></tr>
+                <tr><td><strong>Dagster</strong></td><td>Medium — Python code location, <code>dagster-dbt</code> integration, manifest management</td><td>Strong — <code>@dbt_assets</code> maps manifest nodes to software-defined assets with partition support</td><td>OSS free; Dagster+ for hosted</td><td>Teams that want asset-centric orchestration, partition backfills, and tight dbt-Dagster lineage</td></tr>
+                <tr><td><strong>Airflow</strong></td><td>High — metadata DB, webserver, scheduler, executor; mature but operational overhead</td><td>Via Astronomer Cosmos (<code>DbtDag</code>) or manual <code>BashOperator</code> shell-outs</td><td>OSS free; managed Airflow (MWAA, Astronomer) costs infra + ops</td><td>Organisations already running Airflow for non-dbt pipelines; large platform teams</td></tr>
+                <tr><td><strong>Prefect</strong></td><td>Medium — Python flows, lighter than Airflow for many teams</td><td>Via Prefect-dbt patterns; less manifest-native than Dagster's <code>dagster-dbt</code></td><td>OSS free; Prefect Cloud per usage</td><td>Python-first teams wanting modern flow syntax without Airflow's DAG boilerplate</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>BashOperator versus native dbt integrations</h3>
+          <p>The Airflow branch starts with the simplest pattern: one <code>BashOperator</code> that runs <code>dbt build</code> in the <code>airbnb/</code> folder. That is one Airflow task for the entire dbt project. It works, but you lose per-model retries, granular SLA tracking, and visual lineage at the model level.</p>
+          <p>Dagster's <code>@dbt_assets</code> and Airflow's Astronomer Cosmos generate one orchestration node per dbt model (or configurable groupings). The setup cost is higher, but production teams almost always migrate to this because a failed test on <code>dim_listings_cleansed</code> should not require re-running every mart.</p>
+
+          <div class="grid-2">
+            <div class="mini-card">
+              <h4>When BashOperator is enough</h4>
+              <p>Small projects, proof-of-concept, or "we already have Airflow and need dbt running tonight." One task, one log stream, same venv as the CLI.</p>
+            </div>
+            <div class="mini-card">
+              <h4>When to invest in asset mapping</h4>
+              <p>More than ~15 models, incremental partitions, separate retry policies per layer, or stakeholders who need model-level run history in the orchestrator UI.</p>
+            </div>
+          </div>
+
+          <div class="callout tip"><strong>Same venv pattern as the course.</strong> Both Dagster and Airflow in this repo share the root <code>pyproject.toml</code> virtualenv with dbt. The orchestrator shells out to the same <code>dbt</code> binary your terminal uses — no duplicate installs, no container path translation for local dev.</div>
+
+          <h3>Other tools the course links</h3>
+          <p><code>course-resources.md</code> also lists Prefect, Azure Data Factory, and the official <a href="https://docs.getdbt.com/docs/deploy/deployment-tools">dbt deployment integrations</a> page. Prefect fits teams who want Python-native flows with less operational weight than Airflow — you decorate a Python function that calls <code>dbt run</code> and Prefect handles retries and scheduling. Azure Data Factory can invoke dbt via Azure-hosted compute or wrapper activities, common in Microsoft-centric enterprises already on ADF for ingestion. Neither is wired in the course repo; Dagster and Airflow are the hands-on paths because they represent the two most common self-hosted patterns in analytics engineering job postings.</p>
+
+          <h3>Decision checklist</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Your situation</th><th>Lean toward</th></tr></thead>
+              <tbody>
+                <tr><td>Already paying for dbt Cloud Teams/Enterprise</td><td>Cloud jobs + environments; add webhooks for external triggers</td></tr>
+                <tr><td>Greenfield, asset-centric mindset, partition backfills matter</td><td>Dagster + <code>dagster-dbt</code></td></tr>
+                <tr><td>Existing Airflow estate, platform team owns ops</td><td>Cosmos on Airflow; start with BashOperator for POC</td></tr>
+                <tr><td>Small team, few models, minimal ops budget</td><td>Cron + <code>dbt build</code> on a VM, or GitHub Actions schedule (<a href="s19-production.html">Section 19</a>)</td></tr>
+                <tr><td>Python-first team allergic to Airflow DAG boilerplate</td><td>Prefect flows calling dbt CLI</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="section" id="dagster-setup">
+          <h2>Dagster setup</h2>
+          <p class="lead">The course adds Dagster alongside the existing Airbnb project. You install <code>dagster-dbt</code> and <code>dagster-webserver</code>, scaffold a code location, point it at the dbt project, and launch the Dagster UI at <code>http://localhost:3000/</code>.</p>
+
+          <h3>Install dependencies</h3>
+          <p>Packages live in the repo root <code>requirements.txt</code> (also declared in <code>pyproject.toml</code> as <code>dagster-dbt~=0.28.0</code> and <code>dagster-webserver~=1.12.0</code>). From the bootcamp repo root with your virtualenv active:</p>
+
+          <div class="terminal">
+            <p class="term-head">Install Dagster packages</p>
+            <pre class="term-body"><span class="tt-cmd">pip install -r requirements.txt</span>
+<span class="tt-dim">Collecting dagster-dbt~=0.28.0</span>
+<span class="tt-dim">Collecting dagster-webserver~=1.12.0</span>
+<span class="tt-ok">Successfully installed dagster-1.12.x dagster-dbt-0.28.x dagster-webserver-1.12.x</span></pre>
+          </div>
+
+          <h3>Scaffold the Dagster project</h3>
+          <p>The instructor scaffolds with the Airbnb folder as the dbt project directory:</p>
+
+          <div class="terminal">
+            <p class="term-head">Create code location (instructor command)</p>
+            <pre class="term-body"><span class="tt-cmd">dagster-dbt project scaffold --project-name my_dbt_dagster_project --dbt-project-dir=airbnb</span>
+<span class="tt-ok">Created my_dbt_dagster_project/ with assets, definitions, and constants modules.</span></pre>
+          </div>
+
+          <p>The committed course project lives at <code>dbt_dagster_project/</code> (not <code>my_dbt_dagster_project/</code>). Its layout:</p>
+
+          <div class="filetree">
+            <ul>
+              <li><span class="dir">dbt_dagster_project/</span>
+                <ul>
+                  <li><span class="file">pyproject.toml</span> <span class="note">points Dagster at definitions module</span></li>
+                  <li><span class="dir">dbt_dagster_project/</span>
+                    <ul>
+                      <li><span class="file">constants.py</span> <span class="note">dbt project path + manifest</span></li>
+                      <li><span class="file">assets.py</span> <span class="note">@dbt_assets decorators</span></li>
+                      <li><span class="file">definitions.py</span> <span class="note">Definitions bundle</span></li>
+                      <li><span class="file">schedules.py</span> <span class="note">daily cron schedule</span></li>
+                      <li><span class="file">__init__.py</span></li>
+                    </ul>
+                  </li>
+                </ul>
+              </li>
+              <li><span class="dir">airbnb/</span> <span class="note">the dbt project Dagster runs</span></li>
+            </ul>
+          </div>
+
+          <h3>Uncommenting the schedule in the course</h3>
+          <p>The instructor notes say to open <code>schedules.py</code> and uncomment the schedule logic during the lecture. In the committed repo the schedule is already active — if yours is commented out after scaffold, uncomment the <code>build_schedule_from_dbt_selection</code> block so the Automation tab shows <code>materialize_dbt_models</code>. Without it, Dagster only runs when you manually materialise assets from the UI.</p>
+
+          <div class="callout warn"><strong>The <code>dbtlearn/</code> path gotcha.</strong> The committed <code>constants.py</code> resolves the dbt project to <code>dbtlearn/</code>, not <code>airbnb/</code>. If you scaffold with <code>--dbt-project-dir=airbnb</code> but do not edit <code>constants.py</code>, Dagster will look for a non-existent folder and fail at manifest load. Change line 8 to <code>"airbnb"</code> (or rename your folder to match). This is the single most common setup mistake in this section.</div>
+
+          <h3>Prerequisites before Dagster can load assets</h3>
+          <p>Dagster reads <code>target/manifest.json</code> from the dbt project. Generate it once from the <code>airbnb/</code> folder:</p>
+
+          <div class="terminal">
+            <p class="term-head">Build manifest</p>
+            <pre class="term-body"><span class="tt-cmd">cd airbnb &amp;&amp; dbt parse</span>
+<span class="tt-dim">Running with dbt=1.11.12</span>
+<span class="tt-ok">Performance info written to target/perf_info.json</span>
+<span class="tt-ok">Manifest written to target/manifest.json</span></pre>
+          </div>
+
+          <p>Alternatively, set <code>DAGSTER_DBT_PARSE_PROJECT_ON_LOAD=1</code> and Dagster will run <code>dbt parse</code> at startup (slower load, always fresh manifest).</p>
+
+          <h3>Start Dagster on Windows PowerShell</h3>
+          <p>From the course script — the instructor uses the VS Code terminal on Windows:</p>
+
+          <div class="terminal">
+            <p class="term-head">Launch Dagster dev server</p>
+            <pre class="term-body"><span class="tt-cmd">cd dbt_dagster_project</span>
+<span class="tt-cmd">dagster dev</span>
+<span class="tt-dim">Serving dagster-webserver on http://127.0.0.1:3000</span>
+<span class="tt-ok">Loaded definitions from dbt_dagster_project.definitions</span></pre>
+          </div>
+
+          <p>Open <code>http://localhost:3000/</code>. The UI shows software-defined assets mapped from your dbt manifest, job definitions, and (once uncommented) the daily schedule. Materialise assets manually from the UI to verify the Snowflake connection before relying on the schedule.</p>
+
+          <div class="callout info"><strong>Manifest staleness.</strong> After you add or rename dbt models, re-run <code>dbt parse</code> (or <code>dbt compile</code>) in <code>airbnb/</code> so <code>target/manifest.json</code> matches the project. Dagster will not see new models until the manifest updates.</div>
+
+          <h3>What you see in the Dagster UI</h3>
+          <p>After <code>dagster dev</code> loads successfully, the Assets page lists every dbt model from the manifest as a software-defined asset. Lineage view mirrors dbt docs — upstream <code>ref()</code> dependencies appear as edges. The partitioned asset group shows a partition picker (daily slots from 2022-01-24 forward). Materialising a single partition runs only <code>fct_reviews</code> with vars for that day; materialising the bulk group runs <code>dbt build</code> on everything except <code>fct_reviews</code>.</p>
+          <p>Schedules appear under Automation once <code>schedules.py</code> is active. The course schedule <code>materialize_dbt_models</code> runs at midnight UTC with <code>dbt_select="fqn:*"</code>. Toggle it on in the UI to enable automatic runs locally — be aware that triggers a real Snowflake build every night while enabled.</p>
+
+          <div class="terminal">
+            <p class="term-head">Dagster partition materialisation log excerpt</p>
+            <pre class="term-body"><span class="tt-dim">Running dbt command: build --vars {"start_date": "2024-02-15 00:00:00+00:00", "end_date": "2024-02-16 00:00:00+00:00"}</span>
+<span class="tt-dim">18:12:04  Loading DEV.fct_reviews incrementally (start_date: 2024-02-15 00:00:00+00:00, end_date: 2024-02-16 00:00:00+00:00)</span>
+<span class="tt-ok">18:12:06  1 of 1 OK created sql incremental model DEV.fct_reviews .......... [INSERT 37 in 1.44s]</span></pre>
+          </div>
+
+          <h3>Pinned package versions</h3>
+          <p>The reference <code>requirements.txt</code> pins <code>dagster-dbt==0.29.13</code> and <code>dagster-webserver==1.13.13</code>; the root <code>pyproject.toml</code> uses compatible tilde pins (<code>dagster-dbt~=0.28.0</code>, <code>dagster-webserver~=1.12.0</code>). Minor version drift between the instructor's environment and yours is normal — the API surface for <code>@dbt_assets</code> and <code>DbtCliResource</code> has been stable across 0.28–0.29.</p>
+        </section>
+
+        <section class="section" id="dagster-project">
+          <h2>The <code>dbt_dagster_project</code> walkthrough</h2>
+          <p class="lead">Four Python modules wire dbt into Dagster: <code>constants.py</code> locates the project, <code>assets.py</code> declares dbt-backed assets (including a partitioned asset for <code>fct_reviews</code>), <code>schedules.py</code> defines the daily cron job, and <code>definitions.py</code> bundles everything for <code>dagster dev</code>.</p>
+
+          <h3>constants.py — project path and manifest</h3>
+          <p>This module resolves the dbt project directory relative to the Dagster package and configures <code>DbtCliResource</code>:</p>
+
+<pre data-lang="python" data-title="dbt_dagster_project/dbt_dagster_project/constants.py" data-explain="Points Dagster at the dbt project folder and manifest.json. The path uses dbtlearn/ in the committed repo — change to airbnb/ for this course project."><code>import os
+from pathlib import Path
+
+from dagster_dbt import DbtCliResource
+
+dbt_project_dir = (
+    Path(__file__)
+    .joinpath("..", "..", "..", "dbtlearn")
+    .resolve()
+)
+dbt = DbtCliResource(project_dir=os.fspath(dbt_project_dir))
+
+if os.getenv("DAGSTER_DBT_PARSE_PROJECT_ON_LOAD"):
+    dbt_manifest_path = (
+        dbt.cli(
+            ["--quiet", "parse"],
+            target_path=Path("target"),
+        )
+        .wait()
+        .target_path.joinpath("manifest.json")
+    )
+else:
+    dbt_manifest_path = dbt_project_dir.joinpath("target", "manifest.json")</code></pre>
+
+          <p>The relative path walks up three directories from <code>constants.py</code> to the repo root, then into <code>dbtlearn/</code>. For the Airbnb project, replace <code>"dbtlearn"</code> with <code>"airbnb"</code>. <code>DbtCliResource</code> is the Dagster resource that invokes the dbt CLI with the correct working directory.</p>
+
+          <h3>assets.py — two asset groups</h3>
+          <p>The course splits dbt models into two <code>@dbt_assets</code> definitions: one for the bulk of the project, and one partitioned asset group exclusively for <code>fct_reviews</code>.</p>
+
+<pre data-lang="python" data-title="dbt_dagster_project/dbt_dagster_project/assets.py" data-explain="Main asset group runs dbt build on all models except fct_reviews. The second group handles fct_reviews with daily partitions and passes start_date/end_date as dbt vars."><code>import json
+from typing import Any, Mapping
+
+from dagster import (AssetExecutionContext, DailyPartitionsDefinition,
+                     OpExecutionContext)
+from dagster_dbt import (DagsterDbtTranslator, DbtCliResource, dbt_assets,
+                         default_metadata_from_dbt_resource_props)
+
+from .constants import dbt_manifest_path
+
+
+@dbt_assets(manifest=dbt_manifest_path, exclude="fct_reviews")
+def dbtlearn_dbt_assets(context: AssetExecutionContext, dbt: DbtCliResource):
+    yield from dbt.cli(["build"], context=context).stream()
+
+
+daily_partitions = DailyPartitionsDefinition(start_date="2022-01-24")
+
+
+class CustomDagsterDbtTranslator(DagsterDbtTranslator):
+    def get_metadata(self, dbt_resource_props: Mapping[str, Any]) -&gt; Mapping[str, Any]:
+        metadata = {"partition_expr": "date"}
+        default_metadata = default_metadata_from_dbt_resource_props(dbt_resource_props)
+        return {**default_metadata, **metadata}
+
+
+@dbt_assets(manifest=dbt_manifest_path,
+            select="fct_reviews",
+            partitions_def=daily_partitions,
+            dagster_dbt_translator=CustomDagsterDbtTranslator())
+def dbtlearn_partitioned_dbt_assets(context: AssetExecutionContext, dbt: DbtCliResource):
+    (
+        first_partition,
+        last_partition,
+    ) = context.asset_partitions_time_window_for_output(
+        list(context.selected_output_names)[0]
+    )
+    dbt_vars = {"start_date": str(first_partition), "end_date": str(last_partition)}
+    dbt_args = ["build", "--vars", json.dumps(dbt_vars)]
+    dbt_cli_task = dbt.cli(dbt_args, context=context, raise_on_error=False)
+
+    yield from dbt_cli_task.stream()</code></pre>
+
+          <p>Key design choices in this file:</p>
+          <ul>
+            <li><code>exclude="fct_reviews"</code> on the main asset group prevents double-building the partitioned model.</li>
+            <li><code>select="fct_reviews"</code> on the second group scopes Dagster partitions to that one incremental model.</li>
+            <li><code>DailyPartitionsDefinition(start_date="2022-01-24")</code> aligns with review data in the Airbnb dataset.</li>
+            <li><code>CustomDagsterDbtTranslator</code> adds <code>partition_expr: date</code> metadata so Dagster knows how to map partitions to warehouse rows.</li>
+            <li><code>asset_partitions_time_window_for_output</code> converts the selected partition into <code>start_date</code> and <code>end_date</code> strings passed to dbt via <code>--vars</code>.</li>
+            <li><code>raise_on_error=False</code> on the partitioned run lets Dagster capture partial stream output — useful during development; tighten for production.</li>
+          </ul>
+
+          <div class="diagram">
+            <p class="diagram-title">Dagster partition window maps to dbt --vars on fct_reviews</p>
+            <div class="dag">
+              <div class="dag-col">
+                <p class="dag-label">Dagster</p>
+                <div class="node is-compute"><b>2024-02-15 partition</b><small>DailyPartitionsDefinition</small></div>
+              </div>
+              <div class="dag-col">
+                <p class="dag-label">CLI vars</p>
+                <div class="node is-model"><b>start_date / end_date</b><small>JSON via --vars</small></div>
+              </div>
+              <div class="dag-col">
+                <p class="dag-label">dbt model</p>
+                <div class="node is-mart pulse"><b>fct_reviews</b><small>incremental filter</small></div>
+              </div>
+            </div>
+          </div>
+
+          <h3>schedules.py — daily materialisation</h3>
+          <p>The course starts with the schedule commented out; the instructor asks you to uncomment it. The committed file already has the schedule active:</p>
+
+<pre data-lang="python" data-title="dbt_dagster_project/dbt_dagster_project/schedules.py" data-explain="build_schedule_from_dbt_selection creates a Dagster schedule that runs dbt build on all models (fqn:*) at midnight UTC."><code>from dagster_dbt import build_schedule_from_dbt_selection
+
+from .assets import dbtlearn_dbt_assets
+
+schedules = [
+    build_schedule_from_dbt_selection(
+        [dbtlearn_dbt_assets],
+        job_name="materialize_dbt_models",
+        cron_schedule="0 0 * * *",
+        dbt_select="fqn:*",
+    ),
+]</code></pre>
+
+          <p><code>build_schedule_from_dbt_selection</code> is a Dagster-dbt helper that creates a schedule tied to dbt selection syntax. <code>cron_schedule="0 0 * * *"</code> fires at midnight UTC daily. Note this schedule targets <code>dbtlearn_dbt_assets</code> only — the partitioned <code>fct_reviews</code> group is materialised separately (by partition backfill or a second schedule you would add in production).</p>
+
+          <h3>definitions.py — wiring it together</h3>
+
+<pre data-lang="python" data-title="dbt_dagster_project/dbt_dagster_project/definitions.py" data-explain="The Definitions object is Dagster's entry point — assets, schedules, and the shared dbt CLI resource."><code>import os
+
+from dagster import Definitions
+from dagster_dbt import DbtCliResource
+
+from .assets import dbtlearn_dbt_assets, dbtlearn_partitioned_dbt_assets
+from .constants import dbt_project_dir
+from .schedules import schedules
+
+defs = Definitions(
+    assets=[dbtlearn_dbt_assets, dbtlearn_partitioned_dbt_assets],
+    schedules=schedules,
+    resources={
+        "dbt": DbtCliResource(project_dir=os.fspath(dbt_project_dir)),
+    },
+)</code></pre>
+
+          <p><code>pyproject.toml</code> in the Dagster folder tells the CLI where to find this module:</p>
+
+<pre data-lang="yaml" data-title="dbt_dagster_project/pyproject.toml" data-explain="Dagster reads module_name to load the Definitions object when you run dagster dev."><code>[tool.dagster]
+module_name = "dbt_dagster_project.definitions"
+code_location_name = "dbt_dagster_project"</code></pre>
+
+          <div class="callout exam"><strong>Certification:</strong> dbt does not schedule itself. Know that orchestrators invoke the dbt CLI (or Cloud API), pass <code>--select</code> and <code>--vars</code>, and handle retries and alerting outside dbt.</div>
+
+          <h3>Advanced Dagster features in the course README</h3>
+          <p>The <code>dbt_dagster_project/README.md</code> summarises what this code location implements:</p>
+          <ul>
+            <li><strong>Daily partitioned assets</strong> — <code>fct_reviews</code> with partitions from 2022-01-24.</li>
+            <li><strong>Custom DagsterDbtTranslator</strong> — adds partition metadata to dbt resources for Dagster's partition picker.</li>
+            <li><strong>Partition-aware dbt execution</strong> — passes <code>start_date</code> and <code>end_date</code> as dbt vars.</li>
+            <li><strong>Daily schedule</strong> — midnight cron on the non-partitioned asset group via <code>build_schedule_from_dbt_selection</code>.</li>
+          </ul>
+
+          <h3>Streaming CLI output with yield from</h3>
+          <p>Both asset functions use <code>yield from dbt.cli(...).stream()</code> rather than blocking <code>.wait()</code>. That streams dbt events into Dagster's event log in real time — you see model START/OK lines as they happen in the Dagster run timeline, similar to watching terminal output. For long nightly builds, streaming is the difference between a frozen UI and a progress view you can monitor.</p>
+
+          <h3>Two resources, one path</h3>
+          <p><code>constants.py</code> instantiates a module-level <code>dbt = DbtCliResource(...)</code> used for manifest parsing, while <code>definitions.py</code> registers a separate <code>DbtCliResource</code> in the <code>resources</code> dict injected into asset functions. Both must point at the same <code>project_dir</code>. If you refactor paths, update both — a mismatch causes manifest load from one directory and execution from another.</p>
+        </section>
+
+        <section class="section" id="partitioned-incremental">
+          <h2>Partitioned incremental runs</h2>
+          <p class="lead">Orchestrators shine when incremental models accept time-window parameters. The course updates <code>fct_reviews</code> to filter on <code>start_date</code> and <code>end_date</code> vars when an orchestrator passes them, falling back to max-timestamp logic when vars are absent.</p>
+
+          <h3>The updated fct_reviews model</h3>
+          <p>This is the committed model in the Airbnb project — it matches what the instructor types in the orchestration lecture:</p>
+
+<pre data-lang="sql" data-title="models/fct/fct_reviews.sql" data-explain="Incremental model with two strategies: orchestrator-driven date window via vars, or default max(review_date) watermark when vars are absent. event_time enables microbatch in Section 19."><code>{{
+  config(
+    materialized = 'incremental',
+    on_schema_change='fail',
+    event_time='review_date'
+    )
+}}
+
+WITH src_reviews AS (
+  SELECT * FROM {{ ref('src_reviews') }}
+)
+SELECT
+  {{ dbt_utils.generate_surrogate_key(['listing_id', 'review_date', 'reviewer_name', 'review_text']) }} as review_id,
+  *
+FROM src_reviews
+WHERE review_text is not null
+{% if is_incremental() %}
+  {% if var("start_date", False) and var("end_date", False) %}
+    {{ log('Loading ' ~ this ~ ' incrementally (start_date: ' ~ var("start_date") ~ ', end_date: ' ~ var("end_date") ~ ')', info=True) }}
+    AND review_date &gt;= '{{ var("start_date") }}'
+    AND review_date &lt; '{{ var("end_date") }}'
+  {% else %}
+    AND review_date &gt; (select max(review_date) from {{ this }})
+    {{ log('Loading ' ~ this ~ ' incrementally (all missing dates)', info=True)}}
+  {% endif %}
+{% endif %}</code></pre>
+
+          <p>The branching logic matters for two run modes:</p>
+          <ul>
+            <li><strong>Manual / cron without vars:</strong> the <code>else</code> branch appends every row newer than the current max <code>review_date</code> — standard incremental behaviour from <a href="s08-materializations.html#incremental-models">Section 8</a>.</li>
+            <li><strong>Orchestrator with vars:</strong> Dagster's partition handler passes <code>start_date</code> and <code>end_date</code>, so each daily partition processes exactly one day's reviews. The <code>log(..., info=True)</code> calls print which branch ran — visible in Dagster task logs.</li>
+          </ul>
+
+          <h3>Running a partition manually from the CLI</h3>
+          <p>Before wiring Dagster, the instructor proves the var path works from the terminal:</p>
+
+          <div class="terminal">
+            <p class="term-head">Incremental run with date window</p>
+            <pre class="term-body"><span class="tt-cmd">dbt run --select fct_reviews --vars '{start_date: "2024-02-15 00:00:00", end_date: "2024-03-15 23:59:59"}'</span>
+<span class="tt-dim">18:04:01  Running with dbt=1.11.12</span>
+<span class="tt-dim">18:04:02  Loading DEV.fct_reviews incrementally (start_date: 2024-02-15 00:00:00, end_date: 2024-03-15 23:59:59)</span>
+<span class="tt-dim">18:04:03  1 of 1 START sql incremental model DEV.fct_reviews ............... [RUN]</span>
+<span class="tt-ok">18:04:05  1 of 1 OK created sql incremental model DEV.fct_reviews .......... [INSERT 842 in 2.11s]</span>
+<span class="tt-ok">18:04:05  Completed successfully</span></pre>
+          </div>
+
+          <p>The log line confirms dbt took the vars branch, not the max-date fallback. In Dagster, the same vars are injected automatically from the partition time window — you do not type them by hand.</p>
+
+          <h3>Connection to microbatch and event_time</h3>
+          <p>The model config includes <code>event_time='review_date'</code>. That column enables dbt's <code>--sample</code> flag (Section 16) and the microbatch incremental strategy covered in <a href="s19-production.html">Section 19</a>. Microbatch is dbt-native partitioning: the engine splits the run into batches by time column. Dagster partitions solve a similar problem from the orchestrator side by passing vars.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Approach</th><th>Who owns the partition logic</th><th>When to use</th></tr></thead>
+              <tbody>
+                <tr><td><code>var("start_date")</code> / <code>var("end_date")</code></td><td>You write the Jinja; orchestrator passes vars</td><td>Course pattern; works on any dbt version; full control over filter SQL</td></tr>
+                <tr><td>Microbatch incremental (<code>incremental_strategy='microbatch'</code>)</td><td>dbt engine batches by <code>event_time</code></td><td>dbt 1.9+; needs <code>threads: 4</code> in profiles; see Section 19</td></tr>
+                <tr><td>Max timestamp fallback</td><td>Model SQL only</td><td>Simple nightly cron with no orchestrator vars</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout warn"><strong>Half-open interval.</strong> The filter uses <code>review_date &gt;= start_date</code> AND <code>review_date &lt; end_date</code>. Dagster's partition window end is exclusive. If you see duplicate or missing days at partition boundaries, check whether your orchestrator's end timestamp is inclusive when you expected exclusive.</div>
+
+          <div class="callout danger"><strong>Backfill without vars re-processes everything new.</strong> Running <code>dbt run --select fct_reviews</code> without vars uses max-date logic, not a historical window. To reprocess February 2024, you must pass explicit dates or use Dagster's partition backfill UI.</div>
+
+          <h3>Why on_schema_change='fail' here</h3>
+          <p>The model sets <code>on_schema_change='fail'</code> so an unexpected column add from the source stops the run instead of silently altering the incremental table. In orchestrated pipelines that is preferable: the scheduler alerts, you review the source change, and you deploy a deliberate model update. <code>sync_all_columns</code> is convenient in dev but dangerous in unattended nightly jobs.</p>
+
+          <h3>Mapping partition metadata to the warehouse</h3>
+          <p><code>CustomDagsterDbtTranslator</code> adds <code>partition_expr: date</code> to asset metadata. Dagster uses this to align partition keys with the column that filters rows — here, <code>review_date</code> cast or truncated to date. If your warehouse column is timestamp with timezone, ensure partition boundaries use the same timezone as the source data or you will see off-by-one-day gaps at midnight boundaries.</p>
+
+          <h3>Incremental strategy reference</h3>
+          <p>The course links to the dbt docs on <a href="https://docs.getdbt.com/docs/build/incremental-models#about-incremental_strategy">incremental strategies</a>. The Airbnb <code>fct_reviews</code> model uses default merge/append behaviour for Snowflake with a custom Jinja filter rather than a named strategy. When you adopt microbatch in Section 19, the orchestrator can simplify to plain <code>dbt build --select fct_reviews</code> while dbt batches internally — but you still need the external scheduler to trigger the run.</p>
+        </section>
+
+        <section class="section" id="airflow-integration">
+          <h2>Airflow integration</h2>
+          <p class="lead">The <code>airflow</code> branch adds a minimal Airflow setup: one DAG, one <code>BashOperator</code>, running <code>dbt build</code> against <code>airbnb/</code>. Cosmos — one task per model — is documented as the next step but not implemented in the branch.</p>
+
+          <h3>Why the course uses the devcontainer for Airflow</h3>
+          <p>Apache Airflow has no native Windows support. The course recommends the Linux-based devcontainer/Codespace (same environment as Section 6) rather than WSL2 or native Windows installs. Airflow and dbt share the root <code>pyproject.toml</code> venv managed by <code>uv</code>, so <code>BashOperator</code> shells out to the same <code>dbt</code> binary with no extra Snowflake provider configuration — connection details live in <code>airbnb/profiles.yml</code>.</p>
+
+          <h3>The dbt_pipeline.py DAG</h3>
+          <p>This file exists only on the <code>airflow</code> branch:</p>
+
+<pre data-lang="python" data-title="airflow/dags/dbt_pipeline.py (airflow branch)" data-explain="Simplest Airflow + dbt integration: cd into airbnb/ and run dbt build. schedule=None means manual trigger only."><code>from datetime import datetime
+from airflow import DAG
+from pathlib import Path
+from airflow.providers.standard.operators.bash import BashOperator
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+AIRBNB_DIR = REPO_ROOT / "airbnb"
+
+with DAG(
+    dag_id="dbt_build_bash_operator",
+    schedule=None,
+    start_date=datetime(2024, 1, 1),
+    catchup=False,
+) as dag:
+    dbt_build = BashOperator(
+        task_id="dbt_build",
+        bash_command=f'cd "{AIRBNB_DIR}" &amp;&amp; dbt build',
+    )</code></pre>
+
+          <p>Design notes:</p>
+          <ul>
+            <li><code>REPO_ROOT</code> resolves two levels up from <code>airflow/dags/</code> to the bootcamp repo root — portable regardless of where Airflow is installed.</li>
+            <li><code>schedule=None</code> means the DAG is manually triggered from the UI — a safe default while learning.</li>
+            <li><code>BashOperator</code> in Airflow 3 imports from <code>airflow.providers.standard.operators.bash</code> (the old <code>airflow.operators.bash</code> path still works but emits a deprecation warning).</li>
+            <li>One task runs the entire project. Failed test on any model fails the single task.</li>
+          </ul>
+
+          <h3>Environment setup and first run</h3>
+          <p>The branch includes <code>airflow/set-airflow-env.sh</code> to configure <code>AIRFLOW_HOME</code>, the DAGs folder, and port settings:</p>
+
+<pre data-lang="shell" data-title="airflow/set-airflow-env.sh (airflow branch)" data-explain="Source from repo root before every Airflow session. Sets port 8081 to avoid Docker Desktop conflicts on 8080."><code>export AIRFLOW_HOME="$(pwd)/airflow/.airflow_home"
+export AIRFLOW__CORE__DAGS_FOLDER="$(pwd)/airflow/dags"
+export AIRFLOW__CORE__LOAD_EXAMPLES=False
+export AIRFLOW__API__PORT=8081
+export AIRFLOW__CORE__EXECUTION_API_SERVER_URL="http://localhost:8081/execution"</code></pre>
+
+          <div class="terminal">
+            <p class="term-head">Start Airflow standalone (airflow branch, Linux/devcontainer)</p>
+            <pre class="term-body"><span class="tt-cmd">uv sync</span>
+<span class="tt-cmd">. airflow/set-airflow-env.sh</span>
+<span class="tt-cmd">uv run airflow standalone</span>
+<span class="tt-dim">Airflow is ready. Login with username: admin  password: admin</span>
+<span class="tt-dim">Airflow webserver running on http://0.0.0.0:8081</span></pre>
+          </div>
+
+          <p>Open <code>http://localhost:8081</code>, unpause <code>dbt_build_bash_operator</code>, and trigger it. Task logs show full <code>dbt build</code> output against Snowflake — models, tests, snapshots, seeds.</p>
+
+          <h3>BashOperator versus Astronomer Cosmos</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Pattern</th><th>Airflow tasks</th><th>Pros</th><th>Cons</th></tr></thead>
+              <tbody>
+                <tr><td><code>BashOperator</code> + <code>dbt build</code></td><td>1</td><td>Trivial setup; same venv; no extra packages</td><td>No per-model retry; no model-level lineage in Airflow</td></tr>
+                <tr><td>Cosmos <code>DbtDag</code> with <code>ExecutionMode.LOCAL</code></td><td>1 per model (configurable)</td><td>Model-level retries and observability; reads <code>profiles.yml</code> directly</td><td>Extra dependency; DAG generation from manifest</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>The branch README states Cosmos is "purely additive" — because dbt already runs in the same venv, you add <code>astronomer-cosmos</code>, point <code>ProfileConfig</code> at <code>airbnb/profiles.yml</code>, and add a second DAG. No folder restructuring required.</p>
+
+          <div class="callout info"><strong>Airflow 3 auth change.</strong> Airflow 3 dropped <code>airflow users create</code>. The default <code>SimpleAuthManager</code> generates random passwords. The course script pre-seeds <code>admin/admin</code> in <code>simple_auth_manager_passwords.json.generated</code> so login is predictable.</div>
+
+          <h3>Root dependency change on the airflow branch</h3>
+          <p>The branch adds <code>apache-airflow&gt;=2.10</code> to the root <code>pyproject.toml</code>. Pinning to Airflow 2.x failed <code>uv sync</code> because <code>dbt-autofix</code> requires <code>rich&gt;=14.0.0</code>, which conflicts with Airflow 2's Flask-AppBuilder chain. Leaving the version unpinned lets the resolver land on Airflow 3.2.x — the course documents this explicitly in <code>.praxbox/airflow-bashoperator-step1.md</code>.</p>
+
+          <h3>Triggering and verifying the DAG from CLI</h3>
+          <div class="terminal">
+            <p class="term-head">Airflow CLI trigger (second terminal, env sourced)</p>
+            <pre class="term-body"><span class="tt-cmd">. airflow/set-airflow-env.sh</span>
+<span class="tt-cmd">uv run airflow dags unpause dbt_build_bash_operator</span>
+<span class="tt-cmd">uv run airflow dags trigger dbt_build_bash_operator</span>
+<span class="tt-dim">Created dag run</span>
+<span class="tt-cmd">uv run airflow dags list-import-errors</span>
+<span class="tt-ok">No data found</span></pre>
+          </div>
+
+          <p>Verified end-to-end in the course repo: task logs contained genuine <code>dbt build</code> output against Snowflake ending in <code>Done. PASS=33 WARN=1 ERROR=0</code>. Kill Airflow processes after testing — standalone runs scheduler, triggerer, dag-processor, and api-server in one terminal.</p>
+
+          <h3>Future: Astronomer Cosmos sketch</h3>
+          <p>Cosmos is not in the branch yet, but the README describes the upgrade. Conceptually you replace the single BashOperator with a generated DAG where each dbt model is a task, using <code>ExecutionMode.LOCAL</code> so Cosmos shells out to the same venv-local <code>dbt</code> binary:</p>
+
+<pre data-lang="python" data-title="Conceptual Cosmos DAG (not in course repo)" data-partial="true" data-explain="Illustrates the upgrade path from BashOperator — one Airflow task per dbt model with local execution."><code># from cosmos import DbtDag, ProjectConfig, ProfileConfig, ExecutionConfig
+# from cosmos.constants import ExecutionMode
+#
+# profile_config = ProfileConfig(
+#     profile_name="default",
+#     profiles_yml_filepath=AIRBNB_DIR / "profiles.yml",
+# )
+# dbt_dag = DbtDag(
+#     project_config=ProjectConfig(AIRBNB_DIR),
+#     profile_config=profile_config,
+#     execution_config=ExecutionConfig(execution_mode=ExecutionMode.LOCAL),
+# )</code></pre>
+
+          <p>No Snowflake Airflow provider is required for either BashOperator or LOCAL Cosmos — dbt owns the warehouse connection via <code>profiles.yml</code>.</p>
+        </section>
+
+        <section class="section" id="repo-branches">
+          <h2>How the repo branches relate</h2>
+          <p class="lead">The bootcamp repo is one project with multiple branches, each highlighting a different concern. You stay on <code>main</code> for the core Airbnb build; you check out other branches when the curriculum covers orchestration, production CI, or adapter-specific patterns.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Branch</th><th>What it adds</th><th>Relevant section</th></tr></thead>
+              <tbody>
+                <tr><td><code>main</code></td><td>Canonical Airbnb project + <code>dbt_dagster_project/</code> on disk</td><td>Sections 6&ndash;18</td></tr>
+                <tr><td><code>airflow</code></td><td><code>airflow/</code> folder with DAG, env script, README; Airflow in root deps</td><td>Section 18 (this page)</td></tr>
+                <tr><td><code>production</code></td><td>CI workflows, prod profiles, schema macros</td><td><a href="s19-production.html">Section 19</a></td></tr>
+                <tr><td><code>poweruser</code></td><td>Intermediate models, SQLFluff, legacy folder</td><td><a href="s20-poweruser-fusion-ai.html">Section 20</a></td></tr>
+                <tr><td><code>databricks</code></td><td>Databricks adapter configuration</td><td>Adapter migration reference</td></tr>
+                <tr><td><code>official-extension</code></td><td>dbt Fusion VS Code extension setup</td><td><a href="s20-poweruser-fusion-ai.html">Section 20</a></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="diagram">
+            <p class="diagram-title">Course repo branches and orchestration paths</p>
+            <div class="stack">
+              <div class="layer"><b>main</b> — airbnb/ + dbt_dagster_project/ (Dagster, on Windows-friendly path)</div>
+              <div class="layer"><b>airflow</b> — adds airflow/dags/dbt_pipeline.py (Linux/devcontainer)</div>
+              <div class="layer"><b>production</b> — GitHub Actions slim CI + prod targets (Section 19)</div>
+            </div>
+          </div>
+
+          <p>You do not merge these branches together in real life — they are teaching snapshots. In production you would have one repo (or monorepo folder) with dbt project + chosen orchestrator co-located, exactly as <code>main</code> keeps <code>airbnb/</code> and <code>dbt_dagster_project/</code> as siblings.</p>
+
+          <h3>Checking out branch material without switching</h3>
+          <div class="terminal">
+            <p class="term-head">Read airflow branch files from main</p>
+            <pre class="term-body"><span class="tt-cmd">git fetch origin airflow</span>
+<span class="tt-cmd">git show origin/airflow:airflow/dags/dbt_pipeline.py</span>
+<span class="tt-cmd">git show origin/airflow:airflow/README.md</span>
+<span class="tt-cmd">git ls-tree -r --name-only origin/airflow | grep airflow</span></pre>
+          </div>
+
+          <p>The <code>production</code> branch adds GitHub Actions workflows with an <code>if: github.repository != ...</code> guard — they are reference-only in the course repo. The live CI pattern is documented in <a href="s19-production.html">Section 19</a> and the external reference repo <code>zoltanctoth/dbt-reference-production-repo</code>.</p>
+
+          <div class="callout tip"><strong>Reading branch-only files without checkout.</strong> From the bootcamp repo: <code>git show origin/airflow:airflow/dags/dbt_pipeline.py</code>. Useful when you are on <code>main</code> but need to reference the Airflow DAG in notes or code review.</div>
+        </section>
+
+        <section class="section" id="deeper">
+          <h2>Deeper detail and edge cases</h2>
+          <p class="lead">Operational detail for running dbt under Dagster or Airflow in production: manifest lifecycle, partition boundary bugs, Airflow 3 port traps, and cost patterns when nightly builds go wrong.</p>
+
+          <h3>Version notes</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Behaviour</th><th>Before</th><th>Now</th><th>Version</th></tr></thead>
+              <tbody>
+                <tr><td><code>dagster-dbt</code> integration</td><td><code>@dbt_assets</code> with manifest required</td><td>Same; <code>DbtCliResource</code> streams CLI events</td><td>dagster-dbt 0.28.x</td></tr>
+                <tr><td>Microbatch incremental</td><td>Not available</td><td><code>incremental_strategy='microbatch'</code> with <code>event_time</code></td><td>dbt 1.9+</td></tr>
+                <tr><td><code>event_time</code> config</td><td>N/A</td><td>Enables sample runs and microbatch</td><td>dbt 1.8+</td></tr>
+                <tr><td>Airflow <code>BashOperator</code> import</td><td><code>airflow.operators.bash</code></td><td><code>airflow.providers.standard.operators.bash</code></td><td>Airflow 3.x</td></tr>
+                <tr><td>Airflow user management</td><td><code>airflow users create</code></td><td><code>SimpleAuthManager</code> with generated passwords file</td><td>Airflow 3.x</td></tr>
+                <tr><td>dbt Cloud scheduling</td><td>Jobs + environments</td><td>Same; Slim CI native to Cloud</td><td>Cloud SaaS</td></tr>
+                <tr><td>Cosmos <code>ExecutionMode.LOCAL</code></td><td>N/A</td><td>Shells out to local dbt in same venv as Airflow</td><td>Cosmos 1.x</td></tr>
+                <tr><td><code>--vars</code> JSON format</td><td>Same</td><td>Orchestrators must JSON-encode; quote dates carefully in shell</td><td>dbt 1.x</td></tr>
+                <tr><td><code>build_schedule_from_dbt_selection</code></td><td>Dagster-dbt helper</td><td>Creates schedule from dbt selection syntax</td><td>dagster-dbt 0.28.x</td></tr>
+                <tr><td>Manifest parse on load</td><td>Manual <code>dbt parse</code></td><td><code>DAGSTER_DBT_PARSE_PROJECT_ON_LOAD</code> env var option</td><td>dagster-dbt</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>What it costs to run</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>What runs</th><th>Where the cost lands</th><th>How to spend less</th></tr></thead>
+              <tbody>
+                <tr><td>Nightly <code>dbt build</code> (full project)</td><td>Every model + every test scans warehouse tables</td><td>Tier schedules: staging nightly, marts hourly; use <code>--select tag:nightly</code></td></tr>
+                <tr><td>Partition backfill (30 days)</td><td>30 incremental runs on <code>fct_reviews</code></td><td>Backfill only failed partitions; widen window only when source data was late</td></tr>
+                <tr><td>Dagster <code>dbt parse</code> on every load</td><td>Small compile cost per Dagster restart</td><td>Commit to pre-built manifest in CI; set parse-on-load only in dev</td></tr>
+                <tr><td>Airflow standalone on laptop</td><td>Local CPU/RAM; negligible warehouse if DAG not triggered</td><td>Stop standalone after testing; do not leave scheduler running overnight</td></tr>
+                <tr><td>BashOperator full build on failure</td><td>Entire project re-run on retry</td><td>Migrate to Cosmos or Dagster assets for per-model retries</td></tr>
+                <tr><td>Incremental without vars after source delay</td><td>Max-date path may skip rows if clock skew</td><td>Pass explicit windows from orchestrator sensor on load completion</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout cost"><strong>The biggest waste is a nightly full <code>dbt build</code> with every expectations test.</strong> The course schedule uses <code>fqn:*</code> for teaching simplicity. Production splits fast tests on every run from expensive distribution tests nightly — see <a href="s19-production.html">Section 19</a> Slim CI.</div>
+
+          <h3>Traps that catch people</h3>
+          <ul>
+            <li><strong>dbtlearn/ vs airbnb/ —</strong> committed <code>constants.py</code> points at <code>dbtlearn/</code>. Dagster fails with manifest not found until you fix the path. Always verify after scaffold.</li>
+            <li><strong>Stale manifest —</strong> new models added in dbt but Dagster asset graph unchanged until <code>dbt parse</code> refreshes <code>target/manifest.json</code>.</li>
+            <li><strong>Double-building fct_reviews —</strong> if you remove <code>exclude="fct_reviews"</code> from the main asset group, both asset definitions run the same model.</li>
+            <li><strong>Partition boundary duplicates —</strong> inclusive end dates in vars when Dagster already provides exclusive window ends insert duplicate rows into incremental tables without proper unique keys.</li>
+            <li><strong>Vars JSON in shell —</strong> nested quotes break in BashOperator. Dagster's <code>json.dumps(dbt_vars)</code> avoids this; manual cron strings often do not.</li>
+            <li><strong>Airflow on native Windows —</strong> unsupported. Use devcontainer or WSL2 with a separate Linux venv — Windows <code>uv</code> venv does not carry over.</li>
+            <li><strong>Port 8080 conflict —</strong> Docker Desktop binds 8080; Airflow API server fails silently without <code>AIRFLOW__API__PORT=8081</code> and matching execution API URL.</li>
+            <li><strong>schedule=None forever —</strong> the course DAG is manual trigger only. Production needs a cron or dataset schedule.</li>
+            <li><strong>Missing threads for microbatch —</strong> if you migrate <code>fct_reviews</code> to microbatch in Section 19, <code>threads: 4</code> in profiles is required or runs hang.</li>
+            <li><strong>Orchestrator retry + incremental —</strong> retrying a partially successful partition without idempotent keys can duplicate rows. Surrogate key on <code>fct_reviews</code> helps only if merge strategy deduplicates.</li>
+            <li><strong>Wrong target in scheduled job —</strong> Dagster and Airflow inherit shell env. If <code>DBT_PROFILES_DIR</code> or target is unset, nightly jobs may write to dev schema. Pin target in orchestrator env or use explicit <code>--target prod</code>.</li>
+            <li><strong>Cosmos manifest drift —</strong> same as Dagster: Airflow DAG generation reads dbt manifest; stale manifest means new models never become tasks until CI regenerates it.</li>
+          </ul>
+
+          <h3>Troubleshooting playbook</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Symptom</th><th>Most likely cause</th><th>What to check / fix</th></tr></thead>
+              <tbody>
+                <tr><td>Dagster: manifest not found</td><td>Wrong <code>dbt_project_dir</code> or no parse yet</td><td>Fix <code>constants.py</code> path; run <code>dbt parse</code> in <code>airbnb/</code></td></tr>
+                <tr><td>Dagster: empty asset graph</td><td>Empty or corrupt manifest</td><td>Delete <code>target/manifest.json</code>; re-parse; check <code>dbt debug</code></td></tr>
+                <tr><td>Partition run inserts 0 rows</td><td>No source data in window</td><td>Query <code>src_reviews</code> for partition dates; check timezone on <code>review_date</code></td></tr>
+                <tr><td>Log shows max-date path despite Dagster partition</td><td>Vars not reaching dbt</td><td>Inspect Dagster stdout for <code>--vars</code> JSON; verify <code>json.dumps</code> in assets.py</td></tr>
+                <tr><td><code>dagster dev</code> import error</td><td>Wrong working directory</td><td>Run from <code>dbt_dagster_project/</code>; check <code>pyproject.toml</code> module_name</td></tr>
+                <tr><td>Airflow DAG not listed</td><td><code>AIRFLOW_HOME</code> or DAGs folder wrong</td><td>Re-source <code>set-airflow-env.sh</code>; run <code>airflow dags list-import-errors</code></td></tr>
+                <tr><td>Airflow scheduler crash on start</td><td>Execution API port mismatch</td><td>Set both <code>AIRFLOW__API__PORT</code> and <code>AIRFLOW__CORE__EXECUTION_API_SERVER_URL</code></td></tr>
+                <tr><td>BashOperator dbt command not found</td><td>Airflow worker env missing venv</td><td>Use <code>uv run dbt build</code> in bash_command or activate venv in script</td></tr>
+                <tr><td>Incremental model full refresh by accident</td><td><code>--full-refresh</code> in orchestrator args</td><td>Remove from scheduled job; restrict to manual backfill jobs</td></tr>
+                <tr><td>Schedule runs but fct_reviews stale</td><td>Schedule only targets non-partitioned assets</td><td>Add partition schedule or include partitioned asset group in job</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Production patterns</h3>
+          <p>Mature teams treat the orchestrator as the system of record for <em>when</em> and <em>with what parameters</em> dbt runs, while dbt remains the system of record for <em>what</em> SQL executes. A common pattern: upstream sensor (Fivetran sync complete or Snowpipe load) triggers a Dagster job that runs <code>dbt build --select state:modified+</code> in CI and a broader nightly job with <code>tag:nightly</code> tests. Partitioned facts get their own job with backfill policies — seven-day rolling catch-up, never unbounded full refresh.</p>
+
+          <div class="grid-2">
+            <div class="mini-card">
+              <h4>Pattern: sensor-driven dbt</h4>
+              <p>Do not cron dbt at 06:00 because the load "usually" finishes by then. Trigger on the load's success event or Airflow dataset outlet. dbt runs once, completely.</p>
+            </div>
+            <div class="mini-card">
+              <h4>Anti-pattern: orchestrator logic in SQL</h4>
+              <p>Encoding business calendars, holiday skips, or "run only on Tuesdays" inside Jinja makes models untestable from the CLI. Keep schedule policy in the orchestrator; keep SQL focused on data transforms.</p>
+            </div>
+          </div>
+
+<pre data-lang="shell" data-title="Example production cron replacement — Dagster schedule + selection" data-explain="Reusable pattern: nightly staging and marts, excluding expensive test tags until the weekly job."><code># Dagster schedule dbt_select examples (not in course repo):
+# dbt_select="tag:daily,tag:mart"
+# dbt_select="fqn:* --exclude tag:weekly_only"</code></pre>
+
+          <h3>Certification pointers</h3>
+          <p>The exam tests that dbt does not schedule itself, that orchestrators invoke dbt via CLI or API, and that runtime parameters flow through <code>--vars</code> and <code>--select</code>. Know the difference between dbt Cloud jobs and self-hosted orchestration. Understand incremental models can accept vars for partition windows.</p>
+          <ul>
+            <li><a href="s01-introduction.html">Section 1</a> — explicit list of what dbt does not do, including self-scheduling.</li>
+            <li><a href="s08-materializations.html#incremental-models">Section 8</a> — incremental materialisation and <code>is_incremental()</code> mechanics.</li>
+            <li><a href="s17-selectors-commands.html#variables">Section 17</a> — <code>--vars</code> and project variables orchestrators pass through.</li>
+            <li><a href="s19-production.html">Section 19</a> — microbatch, CI schedules, and production job tiers.</li>
+            <li><a href="s16-debugging-logging.html">Section 16</a> — reading <code>log(..., info=True)</code> output in orchestrator task logs.</li>
+          </ul>
+          <div class="callout exam"><strong>Certification:</strong> dbt requires an external scheduler (cron, orchestrator, or dbt Cloud). Orchestrators run <code>dbt build</code>/<code>dbt run</code> with optional <code>--select</code> and <code>--vars</code>. Incremental models can filter on vars for partition-based processing.</div>
+
+          <h3>Observability: where logs land</h3>
+          <p>dbt still writes to <code>airbnb/logs/dbt.log</code> when invoked from Dagster or Airflow — the orchestrator captures stdout/stderr separately in its task run UI. For partition debugging, the <code>log(..., info=True)</code> lines in <code>fct_reviews</code> appear in both places. Production teams often ship orchestrator logs to Datadog or CloudWatch and treat <code>dbt.log</code> as secondary unless debugging compile issues.</p>
+
+          <h3>Idempotency and partition replays</h3>
+          <p>Re-materialising the same Dagster partition re-runs the incremental filter for that date window. Without a unique key and merge strategy, duplicates accumulate. The course model generates <code>review_id</code> via <code>dbt_utils.generate_surrogate_key</code> but uses default incremental append — replaying a partition may insert duplicate business rows if the surrogate inputs repeat. Production teams add <code>unique_key='review_id'</code> or switch to merge incremental before enabling partition backfills in prod.</p>
+        </section>
+
+        <section class="section" id="interview">
+          <h2>Interview questions</h2>
+          <p class="muted">Answer each one out loud before opening it.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+
+            <details class="qa">
+              <summary>Why does dbt need an external orchestrator?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>dbt is a build tool that compiles and executes SQL against your warehouse once per invocation. It has no built-in scheduler, retry engine, cross-system dependency tracking, or alerting. When you run <code>dbt build</code>, it completes the selected subgraph and exits.</p>
+                <p>Production pipelines need to trigger dbt after loads finish, retry failed models without rebuilding everything, pass partition parameters to incremental models, and record run history. Cron can fire dbt on a timer but cannot express "run after Fivetran sync succeeds" or backfill one partition. Orchestrators (Dagster, Airflow, Prefect) or dbt Cloud's job scheduler fill that gap.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Compare running dbt under Dagster versus a simple Airflow BashOperator.<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p><code>BashOperator</code> runs one shell command — typically <code>cd airbnb &amp;&amp; dbt build</code> — as a single Airflow task. Setup is minimal and works in the same Python venv as dbt. The downside is no per-model retries, no model-level lineage in Airflow, and one failed test fails the entire task.</p>
+                <p>Dagster's <code>@dbt_assets</code> reads <code>manifest.json</code> and maps each dbt model to a software-defined asset. You get partition support (daily backfills on <code>fct_reviews</code>), granular materialisation in the UI, and native integration with <code>build_schedule_from_dbt_selection</code>. Setup cost is higher: manifest management, Python code location, and understanding partition vars.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How does Dagster pass partition dates to an incremental dbt model?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>Dagster defines <code>DailyPartitionsDefinition</code> on the partitioned asset group. When a partition is materialised, <code>asset_partitions_time_window_for_output</code> returns <code>first_partition</code> and <code>last_partition</code> timestamps. The asset function builds <code>dbt_vars = {"start_date": ..., "end_date": ...}</code> and invokes <code>dbt.cli(["build", "--vars", json.dumps(dbt_vars)])</code>.</p>
+                <p>In the dbt model, Jinja checks <code>var("start_date")</code> and <code>var("end_date")</code> inside <code>is_incremental()</code> and filters <code>review_date</code> to that half-open window. Without vars, the model falls back to max-timestamp incremental logic.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What is manifest.json and why does Dagster require it?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p><code>manifest.json</code> is dbt's compiled project graph — every model, test, source, and their dependencies. Dagster-dbt reads it to generate asset definitions without re-implementing dbt's parser. The path is configured in <code>constants.py</code>, defaulting to <code>&lt;dbt_project&gt;/target/manifest.json</code>.</p>
+                <p>You generate it with <code>dbt parse</code> or <code>dbt compile</code>. If the manifest is stale, Dagster's asset graph does not reflect new models. Setting <code>DAGSTER_DBT_PARSE_PROJECT_ON_LOAD</code> triggers parse at startup at the cost of slower loads.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>When would you choose dbt Cloud scheduling over self-hosted Airflow?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p>Choose dbt Cloud when your team already pays for it and wants scheduling, Slim CI, environment management, and documentation in one product with minimal ops overhead. Job configuration is UI-driven; no metadata database or scheduler process to maintain.</p>
+                <p>Choose self-hosted orchestration when you need dbt integrated into a broader platform (existing Airflow or Dagster estate), custom partition logic, or cost control at the expense of setup. The course demonstrates Dagster and Airflow for teams on dbt Core.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Your incremental model works from the CLI but inserts zero rows from Dagster partitions. How do you debug?<span class="qa-tag">Troubleshooting</span></summary>
+              <div class="qa-body">
+                <p>First, read Dagster task stdout for the <code>log(..., info=True)</code> line — it shows whether the vars branch or max-date branch executed. If max-date ran, vars did not arrive: inspect the <code>--vars</code> JSON in the CLI invocation inside Dagster logs.</p>
+                <p>If vars are correct but rows are zero, query source data for that date window — the partition may legitimately be empty. Check timezone alignment on <code>review_date</code> versus partition timestamps. Finally, confirm <code>constants.py</code> points at the correct dbt project folder.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Why does the course exclude fct_reviews from the main Dagster asset group?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p><code>fct_reviews</code> needs partition-aware execution with <code>start_date</code> and <code>end_date</code> vars. The main <code>@dbt_assets</code> group runs a plain <code>dbt build</code> without vars. Including <code>fct_reviews</code> in both groups would either double-build it or run it without partition filters.</p>
+                <p><code>exclude="fct_reviews"</code> on the bulk group and <code>select="fct_reviews"</code> on the partitioned group cleanly separates concerns. Production might add a dedicated partition schedule for the second group.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What are the risks of using BashOperator for dbt in production?<span class="qa-tag">Production</span></summary>
+              <div class="qa-body">
+                <p>One task equals one failure domain: any test failure fails the entire build, and retries re-run the whole project. There is no model-level SLA tracking, no selective retry, and no visual DAG at the dbt model granularity in Airflow.</p>
+                <p>Shell quoting for <code>--vars</code> and <code>--select</code> is fragile in bash_command strings. Logs are one stream — harder to pinpoint which model failed without parsing dbt output. Teams typically migrate to Astronomer Cosmos or Dagster assets once the project exceeds a handful of models.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Explain the dbtlearn/ versus airbnb/ path issue in the course Dagster project.<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p>The instructor scaffolds with <code>--dbt-project-dir=airbnb</code>, but the committed <code>constants.py</code> resolves the path to <code>dbtlearn/</code> — a folder name from an earlier course iteration. Dagster loads <code>dbtlearn/target/manifest.json</code>, which does not exist in your clone.</p>
+                <p>Fix line 8 in <code>constants.py</code> to <code>"airbnb"</code> (or symlink/rename). This is the most common setup failure in Section 18. Always verify <code>dbt_project_dir</code> matches your actual folder before running <code>dagster dev</code>.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How do orchestrator partitions differ from dbt microbatch incremental?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p>Orchestrator partitions (Dagster daily partitions + <code>--vars</code>) push time-window logic from outside dbt. You write explicit Jinja filters on <code>var("start_date")</code>. dbt microbatch (<code>incremental_strategy='microbatch'</code> with <code>event_time</code>) lets the dbt engine batch internally — no vars required, but needs <code>threads: 4</code> and dbt 1.9+.</p>
+                <p>Both solve backfill and daily processing. Orchestrator-side partitions give cross-system coordination (wait for load, then materialise partition). Microbatch keeps partition logic inside dbt, simpler when the orchestrator only runs <code>dbt build</code> without custom vars.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How would you add a nightly test-only job without rebuilding all models?<span class="qa-tag">Production</span></summary>
+              <div class="qa-body">
+                <p>dbt commands accept the same selection syntax everywhere — CLI, Dagster schedule, Airflow BashOperator. A test-only nightly job runs <code>dbt test --select fqn:*</code> or a tag subset like <code>tag:nightly</code> without <code>dbt run</code>. In Dagster, create a second schedule with <code>dbt_select</code> scoped to tests or use a separate <code>@dbt_assets</code> group that invokes <code>dbt test</code> instead of <code>dbt build</code>.</p>
+                <p>In Airflow, add a second BashOperator task or DAG with <code>dbt test --select tag:critical</code>. The key is not rebuilding models that did not change — tests still scan warehouse tables, so tag expensive tests separately from fast PR checks as covered in Section 19.</p>
+              </div>
+            </details>
+
+          </div>
+        </section>
+
+        <section class="section" id="practice">
+          <h2>Hands-on practice</h2>
+          <p class="muted">Run these from the bootcamp repo with your virtualenv active. Dagster exercises work on Windows PowerShell; Airflow exercises need the Linux devcontainer (checkout the <code>airflow</code> branch or use <code>git show</code> to read files while staying on <code>main</code>).</p>
+          <ol class="practice-list">
+
+            <li class="practice">
+              <p class="practice-task">Fix <code>constants.py</code> to point at <code>airbnb/</code>, parse the manifest, and confirm Dagster loads assets in the UI.</p>
+              <span class="console-path">dbt_dagster_project/dbt_dagster_project/constants.py</span>
+              <p class="practice-expect">Dagster UI at localhost:3000 shows dbt assets mapped from the Airbnb project; no manifest-not-found error in the terminal.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Change <code>"dbtlearn"</code> to <code>"airbnb"</code> in <code>constants.py</code> line 8.</li>
+                    <li>From <code>airbnb/</code>: <code>dbt parse</code></li>
+                    <li>From <code>dbt_dagster_project/</code>: <code>dagster dev</code></li>
+                    <li>Open <code>http://localhost:3000</code> and verify assets appear under the code location.</li>
+                  </ol>
+                  <p class="muted">Undo: revert <code>constants.py</code> to <code>dbtlearn</code> if you prefer the committed state; stop <code>dagster dev</code> with Ctrl+C.</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">Run <code>fct_reviews</code> incrementally with explicit date vars and confirm the log line shows the vars branch.</p>
+              <span class="console-path">airbnb/</span>
+              <p class="practice-expect">Terminal prints <code>Loading ... incrementally (start_date: ... end_date: ...)</code> and the model reports INSERT rows.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li><code>cd airbnb</code></li>
+                    <li><code>dbt run --select fct_reviews --vars '{start_date: "2024-02-15 00:00:00", end_date: "2024-03-15 23:59:59"}'</code></li>
+                    <li>Read stdout for the <code>log(..., info=True)</code> line from the model Jinja.</li>
+                    <li>Optional: query <code>SELECT COUNT(*), MIN(review_date), MAX(review_date) FROM &lt;your_schema&gt;.fct_reviews</code> to verify the window.</li>
+                  </ol>
+                  <p class="muted">Undo: rows inserted for that window remain; run with a different window or <code>dbt run --full-refresh --select fct_reviews</code> only if you accept rebuilding the whole table.</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">Materialise one Dagster partition for <code>fct_reviews</code> and compare the vars passed to dbt against your manual CLI run.</p>
+              <span class="console-path">http://localhost:3000 · Assets · dbtlearn_partitioned_dbt_assets</span>
+              <p class="practice-expect">Partition materialisation succeeds; Dagster logs show <code>--vars</code> with <code>start_date</code> and <code>end_date</code> matching the selected day.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Complete practice task 1 so Dagster loads correctly.</li>
+                    <li>In the UI, navigate to the partitioned asset group for <code>fct_reviews</code>.</li>
+                    <li>Select a partition date that has review data (e.g. 2024-02-15).</li>
+                    <li>Click Materialize and open the run logs.</li>
+                    <li>Find the dbt CLI invocation and compare vars to your manual command from task 2.</li>
+                  </ol>
+                  <p class="muted">Undo: incremental inserts for that partition remain in the warehouse; no clean undo without targeted delete or full refresh.</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">On the <code>airflow</code> branch (devcontainer), trigger <code>dbt_build_bash_operator</code> and verify task logs contain dbt build output.</p>
+              <span class="console-path">airflow/dags/dbt_pipeline.py · Airflow UI localhost:8081</span>
+              <p class="practice-expect">DAG run state <code>success</code>; task log shows model runs and test results ending in <code>Completed successfully</code> or PASS summary.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li><code>git checkout airflow</code> (or work in a separate clone).</li>
+                    <li><code>uv sync</code></li>
+                    <li><code>. airflow/set-airflow-env.sh</code></li>
+                    <li><code>uv run airflow standalone</code></li>
+                    <li>Open <code>http://localhost:8081</code>, log in admin/admin.</li>
+                    <li>Unpause and trigger <code>dbt_build_bash_operator</code>.</li>
+                    <li>Open task log for <code>dbt_build</code> and confirm dbt output.</li>
+                  </ol>
+                  <p class="muted">Undo: stop Airflow processes; warehouse changes from dbt build persist — same as any <code>dbt build</code> run.</p>
+                </div>
+              </details>
+            </li>
+
+          </ol>
+        </section>
+
+        <section class="section" id="recap">
+          <h2>Recap</h2>
+          <div class="recap">
+            <ul class="checklist">
+              <li>dbt does not schedule itself — you need cron, an orchestrator, or dbt Cloud jobs.</li>
+              <li>Orchestrators trigger dbt, pass <code>--select</code> and <code>--vars</code>, retry failures, and coordinate with upstream loads.</li>
+              <li>Dagster uses <code>@dbt_assets</code> + <code>manifest.json</code> to map dbt models to software-defined assets.</li>
+              <li>Committed <code>constants.py</code> points at <code>dbtlearn/</code> — change to <code>airbnb/</code> for this course project.</li>
+              <li><code>fct_reviews</code> accepts <code>start_date</code>/<code>end_date</code> vars for partition windows; falls back to max-date incremental otherwise.</li>
+              <li>Dagster daily partitions on <code>fct_reviews</code> inject vars via <code>json.dumps</code> in <code>assets.py</code>.</li>
+              <li>Main asset group uses <code>exclude="fct_reviews"</code> to avoid double-building the partitioned model.</li>
+              <li>Run <code>dbt parse</code> in <code>airbnb/</code> before <code>dagster dev</code> unless parse-on-load env var is set.</li>
+              <li>Airflow branch (<code>airflow/dags/dbt_pipeline.py</code>) uses one <code>BashOperator</code> running <code>dbt build</code> — Cosmos is the upgrade path.</li>
+              <li>Airflow needs Linux (devcontainer); Dagster dev runs on Windows PowerShell in the course.</li>
+              <li>Repo branches are teaching snapshots: <code>main</code> + Dagster, <code>airflow</code> + Airflow, <code>production</code> + CI.</li>
+              <li>Microbatch incremental in <a href="s19-production.html">Section 19</a> is the dbt-native alternative to orchestrator-driven vars.</li>
+            </ul>
+            <p style="margin-top:1rem;">
+              <button type="button" data-complete="section-18">Mark complete</button>
+            </p>
+          </div>
+        </section>
+
+      </div>
+
+      <aside class="toc" aria-label="On this page">
+        <strong>On this page</strong>
+        <ol>
+          <li><a href="#lectures">Lectures</a></li>
+          <li><a href="#why-scheduler">External scheduler</a></li>
+          <li><a href="#orchestrator-comparison">Choosing an orchestrator</a></li>
+          <li><a href="#dagster-setup">Dagster setup</a></li>
+          <li><a href="#dagster-project">dbt_dagster_project</a></li>
+          <li><a href="#partitioned-incremental">Partitioned incremental</a></li>
+          <li><a href="#airflow-integration">Airflow</a></li>
+          <li><a href="#repo-branches">Repo branches</a></li>
+          <li><a href="#deeper">Deeper detail</a></li>
+          <li><a href="#interview">Interview questions</a></li>
+          <li><a href="#practice">Hands-on practice</a></li>
+          <li><a href="#recap">Recap</a></li>
+        </ol>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<footer class="footer">The Complete dbt Bootcamp: Zero to Hero · Section 18 · Offline study edition</footer>
+</body>
+</html>

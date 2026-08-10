@@ -1,0 +1,1699 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="DEA-C01 Section 10: Amazon Redshift cluster architecture, distribution and sort keys, COPY and UNLOAD, Spectrum, materialized views, zero-ETL, data sharing, WLM, Serverless, security, RBAC, and fine-grained access control.">
+<title>Section 10 — Redshift Datawarehouse | AWS Data Engineer DEA-C01 Notes</title>
+<link rel="stylesheet" href="assets/aws.css">
+<script defer src="assets/search-index.js"></script>
+<script defer src="assets/code-highlight.js"></script>
+<script defer src="assets/aws.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">Course section 10 of 21 · AWS Certified Data Engineer Associate</p>
+    <h1>Redshift Datawarehouse</h1>
+    <p class="subtitle">Everything the DEA-C01 exam asks about Amazon Redshift: columnar MPP architecture, distribution and sort keys, COPY and UNLOAD, Spectrum over S3, materialized views with streaming ingestion, zero-ETL from Aurora, data sharing, WLM, Serverless versus provisioned, and fine-grained access control — written so you never need the slide deck.</p>
+    <div class="hero-meta">
+      <span class="chip">120 slides · ~180min</span>
+      <span class="chip">Exam domains: Data Store Management (26%) · Data Operations · Data Security</span>
+      <span class="chip">Deck slides 254–373</span>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <nav class="pager" aria-label="Section navigation">
+    <a href="s09-dynamodb.html">← DynamoDB</a>
+    <a href="index.html">Course contents</a>
+    <a href="s11-other-databases.html">Next: Other Database Services →</a>
+  </nav>
+
+  <main id="main">
+    <div class="layout">
+      <div class="content">
+
+        <section class="section" id="lectures">
+          <h2>Lectures in this section</h2>
+          <p class="muted">Redshift is the largest section in the course — give it three study days. Labs reuse bucket <code>dea-lab-&lt;initials&gt;-&lt;random&gt;</code> and <code>data/customers.csv</code>.</p>
+          <ol class="lecture-list">
+            <li class="lecture"><a class="lec-title" href="#overview">Redshift overview and when a warehouse beats a lake</a><span class="lec-time">~8:00</span><span class="lec-src">Slides 256–259</span></li>
+            <li class="lecture"><a class="lec-title" href="#cluster-architecture">Cluster architecture: leader node, compute nodes, slices</a><span class="lec-time">~10:00</span><span class="lec-src">Slides 261–264</span></li>
+            <li class="lecture"><a class="lec-title" href="#rms">Redshift Managed Storage (RMS)</a><span class="lec-time">~4:00</span><span class="lec-src">Slides 266</span></li>
+            <li class="lecture"><a class="lec-title" href="#node-types">Node types: RA3 versus DC2</a><span class="lec-time">~6:00</span><span class="lec-src">Slides 268–269</span></li>
+            <li class="lecture"><a class="lec-title" href="#resizing">Elastic resize, classic resize, snapshot-and-restore</a><span class="lec-time">~6:00</span><span class="lec-src">Slides 271–272</span></li>
+            <li class="lecture"><a class="lec-title" href="#snapshots">Automated and manual snapshots</a><span class="lec-time">~5:00</span><span class="lec-src">Slides 274–276</span></li>
+            <li class="lecture"><a class="lec-title" href="#cross-region-sharing">Cross-Region and cross-account data sharing</a><span class="lec-time">~4:00</span><span class="lec-src">Slide 278</span></li>
+            <li class="lecture"><a class="lec-title" href="#distribution">Distribution styles, sort keys, and zone maps</a><span class="lec-time">~12:00</span><span class="lec-src">Slides 280–284</span></li>
+            <li class="lecture"><a class="lec-title" href="#vacuum">VACUUM, ANALYZE, and table maintenance</a><span class="lec-time">~8:00</span><span class="lec-src">Slides 287–289</span></li>
+            <li class="lecture"><a class="lec-title" href="#integrations">Integrations, COPY, UNLOAD, auto-copy, zero-ETL</a><span class="lec-time">~12:00</span><span class="lec-src">Slides 291–297</span></li>
+            <li class="lecture"><a class="lec-title" href="#transformation">ETL versus ELT design patterns</a><span class="lec-time">~6:00</span><span class="lec-src">Slides 298–303</span></li>
+            <li class="lecture"><a class="lec-title" href="#federated">Federated queries to RDS and Aurora</a><span class="lec-time">~5:00</span><span class="lec-src">Slides 305–307</span></li>
+            <li class="lecture"><a class="lec-title" href="#materialized-views">Materialized views and streaming ingestion</a><span class="lec-time">~8:00</span><span class="lec-src">Slides 309–314</span></li>
+            <li class="lecture"><a class="lec-title" href="#spectrum">Redshift Spectrum over S3</a><span class="lec-time">~10:00</span><span class="lec-src">Slides 316–322</span></li>
+            <li class="lecture"><a class="lec-title" href="#system-tables">System tables and views for troubleshooting</a><span class="lec-time">~6:00</span><span class="lec-src">Slides 324–327</span></li>
+            <li class="lecture"><a class="lec-title" href="#data-api">Redshift Data API for Lambda and serverless callers</a><span class="lec-time">~5:00</span><span class="lec-src">Slides 329–333</span></li>
+            <li class="lecture"><a class="lec-title" href="#data-sharing">Data sharing: producer and consumer datashares</a><span class="lec-time">~6:00</span><span class="lec-src">Slides 335–340</span></li>
+            <li class="lecture"><a class="lec-title" href="#wlm">Workload management and concurrency scaling</a><span class="lec-time">~8:00</span><span class="lec-src">Slides 342–347</span></li>
+            <li class="lecture"><a class="lec-title" href="#serverless">Redshift Serverless versus provisioned</a><span class="lec-time">~6:00</span><span class="lec-src">Slides 349–351</span></li>
+            <li class="lecture"><a class="lec-title" href="#redshift-ml">Redshift ML and CREATE MODEL</a><span class="lec-time">~4:00</span><span class="lec-src">Slides 353–355</span></li>
+            <li class="lecture"><a class="lec-title" href="#security">Encryption, VPC, audit logging</a><span class="lec-time">~5:00</span><span class="lec-src">Slides 357–359</span></li>
+            <li class="lecture"><a class="lec-title" href="#access-control">Users, groups, RBAC, IAM authentication</a><span class="lec-time">~8:00</span><span class="lec-src">Slides 361–367</span></li>
+            <li class="lecture"><a class="lec-title" href="#fgac">Fine-grained access control: columns, rows, masking</a><span class="lec-time">~8:00</span><span class="lec-src">Slides 368–373</span></li>
+          </ol>
+        </section>
+
+        <section class="section" id="overview">
+          <h2>Redshift overview</h2>
+          <p class="lead"><strong>Amazon Redshift</strong> is AWS's fully managed, petabyte-scale <em>columnar</em> data warehouse. It runs ANSI SQL, connects from the <strong>Redshift query editor v2</strong> (browser-based SQL IDE in the console — no VPN or JDBC install needed for labs) or any JDBC/ODBC BI tool, and is the default answer when an exam scenario needs fast analytical SQL over modelled, structured data at high concurrency.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-256.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-256.png" alt="Slide describing Redshift as a fully managed petabyte-scale data warehouse with ANSI SQL and query editor v2 access." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 256</span>Redshift is a relational warehouse, not a lake engine. You model tables, load with COPY, and query with SQL — the exam treats it as the OLAP counterpart to RDS/Aurora OLTP.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-257.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-257.png" alt="Redshift supports large datasets and loads CSV, JSON, and Apache Parquet from multiple sources." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 257</span>Redshift ingests CSV, JSON, and Parquet — but COPY from columnar Parquet on S3 is the pattern the exam rewards for performance and cost.</figcaption>
+          </figure>
+
+          <h3>When a warehouse beats a data lake</h3>
+          <p>A <strong>data lake</strong> (S3 + Athena) wins on cheap storage of raw, schema-on-read data. A <strong>warehouse</strong> wins when many concurrent users need fast, repeatable SQL over cleaned, typed, joined tables — BI dashboards, executive reporting, regulated financial models. Redshift applies schema on write, pre-aggregates with sort keys and zone maps, and uses MPP to scan billions of rows in seconds. Hybrid architectures land raw in S3 and load curated subsets into Redshift, or query the lake in place with <a href="#spectrum">Spectrum</a>.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-258.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-258.png" alt="Redshift features: scalable columnar storage, MPP, AWS integration, compression, and security." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 258</span>Core differentiators: columnar storage, MPP parallelism, deep AWS integration, encoding/compression, and enterprise security. Every tuning decision in this section serves one of these.</figcaption>
+          </figure>
+
+          <h3>Columnar storage, compression, and zone maps</h3>
+          <p>Redshift stores each column separately on disk. Analytical queries that touch five columns out of eighty read only those five — unlike row stores that pull entire rows. Each column uses an encoding chosen by <code>ENCODE AUTO</code> (default) or by <code>ANALYZE COMPRESSION</code>, which samples data and recommends encodings per column. <strong>Zone maps</strong> store min/max values for each 1 MB block on disk; if your WHERE clause filters on the sort key, the leader node skips blocks whose zone map proves they cannot contain matching rows.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-259.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-259.png" alt="Redshift use cases: data warehousing, BI, analytics, log analysis, IoT, and real-time dashboards." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 259</span>Typical workloads: BI, analytics, log analysis, IoT aggregation, and dashboards fed by materialized views or streaming ingestion.</figcaption>
+          </figure>
+
+          <h3>Redshift query editor v2</h3>
+          <p>The console <strong>query editor v2</strong> is the zero-install SQL client for labs and ad-hoc work. It supports provisioned clusters and Serverless workgroups, saves query history, visualizes execution plans, and integrates with IAM authentication — no JDBC driver or bastion host. For production BI, tools like QuickSight, Tableau, and Power BI still connect via JDBC/ODBC, but every exam lab scenario that says "run SQL in the console" means query editor v2.</p>
+
+          <div class="callout info"><strong>MPP in one sentence.</strong> Massively Parallel Processing means the leader splits each query into steps that run simultaneously on every slice — like having hundreds of workers each scan their slice of the table instead of one worker scanning everything sequentially.</div>
+
+          <div class="callout exam"><strong>Exam tip:</strong> "Fast complex SQL over structured data with many concurrent BI users" → Redshift (or Redshift Serverless). "Ad-hoc SQL over raw files in S3 without loading" → Athena or Spectrum. "Key-value lookups at millisecond latency" → DynamoDB, not Redshift.</div>
+        </section>
+
+        <section class="section" id="cluster-architecture">
+          <h2>Cluster architecture</h2>
+          <p class="lead">A <strong>Redshift cluster</strong> is the core infrastructure: one Redshift engine, one or more databases, continuous backups, automatic failure recovery, and replication for multi-AZ RA3 deployments. Workloads arrive from BI tools, the query editor v2, the Data API, or ETL jobs over JDBC.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-261.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-261.png" alt="Redshift cluster runs the engine, holds databases, executes workloads, uses replication and backups, and auto-recovers." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 261</span>The cluster is the unit you resize, snapshot, encrypt, and attach IAM roles to — not individual databases inside it.</figcaption>
+          </figure>
+
+          <div class="diagram">
+            <p class="diagram-title">Leader node, compute nodes, and slices</p>
+            <div class="stack">
+              <div class="layer"><div class="node is-source"><b>Client / BI / Lambda</b><small>SQL · JDBC · Data API</small></div></div>
+              <div class="layer"><div class="node is-compute pulse"><b>Leader node</b><small>Parse · plan · distribute · aggregate</small></div></div>
+              <div class="layer">
+                <div class="flow">
+                  <div class="node is-store"><b>Compute node 1</b><small>4 slices</small></div>
+                  <div class="node is-store"><b>Compute node 2</b><small>4 slices</small></div>
+                  <div class="node is-store"><b>Compute node N</b><small>4 slices</small></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-262.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-262.png" alt="Architecture diagram showing client connecting to a Redshift cluster with leader node and compute nodes." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 262</span>Every query enters through the leader node. Compute nodes never talk directly to clients.</figcaption>
+          </figure>
+
+          <h3>Leader node responsibilities</h3>
+          <p>The <strong>leader node</strong> receives SQL from clients, parses it, builds a distributed execution plan, assigns work to compute-node slices, and aggregates partial results before returning the final answer. It holds metadata (table definitions, distribution keys, statistics) but, in a multi-node cluster, does not store user table data — only compute nodes do.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-263.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-263.png" alt="Leader node coordinates compute nodes, aggregates results, builds execution plans, and assigns data portions." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 263</span>Leader tasks: coordinate, plan, distribute, aggregate. A slow leader usually means a bad plan or massive final aggregation — check <code>SVL_QUERY_REPORT</code>.</figcaption>
+          </figure>
+
+          <h3>Compute nodes, slices, and node types</h3>
+          <p><strong>Compute nodes</strong> execute query steps, store data (or cache hot blocks from RMS), and shuffle rows among themselves during joins. Each compute node is divided into <strong>slices</strong> — independent memory/CPU partitions that process data in parallel. Slice count depends on node type: <code>dc2.large</code> has 2 slices, <code>dc2.8xlarge</code> has 16, <code>ra3.xlplus</code> has 4, <code>ra3.4xlarge</code> has 12, <code>ra3.16xlarge</code> has 48. Total cluster slices = slices per node × number of compute nodes. COPY and query parallelism target slice count — split input files to a multiple of total slices for even load.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-264.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-264.png" alt="Compute nodes have CPU memory and storage, run plans, transmit data, scale by node count or type, support provisioned or serverless." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 264</span>Scale by adding nodes, upgrading node type, or switching to Redshift Serverless. Capacity is slices × node power.</figcaption>
+          </figure>
+
+          <h3>Single-node versus multi-node</h3>
+          <p>A <strong>single-node</strong> cluster uses one node that acts as both leader and compute — fine for dev/test under ~160 GB. A <strong>multi-node</strong> cluster has one leader plus two or more compute nodes; production workloads almost always use multi-node or Serverless. Single-node cannot use concurrency scaling or some advanced features.</p>
+        </section>
+
+        <section class="section" id="rms">
+          <h2>Redshift Managed Storage</h2>
+          <p class="lead"><strong>Redshift Managed Storage (RMS)</strong> on RA3 nodes separates compute from durable storage. Hot data sits on high-performance local SSDs; colder blocks migrate automatically to S3 behind the scenes. You pay one RMS rate regardless of whether bytes are on SSD or S3.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-266.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-266.png" alt="RMS uses local SSD for fast access and S3 for durable storage with unified pricing." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 266</span>RMS is why RA3 can hold petabytes without proportionally scaling compute. DC2 keeps everything local — simpler but capacity-bound.</figcaption>
+          </figure>
+
+          <p>RA3 nodes cache frequently accessed blocks locally and fetch from S3 on cache miss. This is transparent to SQL — you do not manage tiers. Resize compute without moving data: add RA3 nodes for query power while storage stays in RMS. Cross-Region snapshot restore and data sharing require RA3 or Serverless.</p>
+          <p><strong>DS2 legacy note:</strong> DS2 nodes used HDD-local storage and are end-of-life path — migrate to RA3 via elastic resize (if supported) or snapshot restore. Exam questions mentioning DS2 → RA3 migration expect classic resize or snapshot, not a simple reboot.</p>
+        </section>
+
+        <section class="section" id="node-types">
+          <h2>Node types: RA3 versus DC2</h2>
+          <p class="lead">Choose node type at cluster creation (or migrate with elastic/classic resize). <strong>DS2</strong> is legacy — AWS recommends migrating DS2 workloads to RA3. For new clusters, pick RA3 for anything over ~1 TB compressed or when you need multi-AZ; pick DC2 for small, cost-sensitive dev clusters under 1 TB.</p>
+
+          <div class="slide-row">
+            <figure class="slide-fig">
+              <a href="assets/slides/slide-268.png" target="_blank" rel="noopener">
+                <img src="assets/slides/slide-268.png" alt="RA3 nodes use RMS, separate compute and storage, scale independently, support multi-AZ." loading="lazy">
+              </a>
+              <figcaption><span class="slide-no">Slide 268</span>RA3: managed storage, independent scaling, multi-AZ.</figcaption>
+            </figure>
+            <figure class="slide-fig">
+              <a href="assets/slides/slide-269.png" target="_blank" rel="noopener">
+                <img src="assets/slides/slide-269.png" alt="DC2 nodes use local SSD, single AZ, recommended under 1TB compressed, scale storage by adding nodes." loading="lazy">
+              </a>
+              <figcaption><span class="slide-no">Slide 269</span>DC2: local SSD, single AZ, best under 1 TB compressed.</figcaption>
+            </figure>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Dimension</th><th>RA3</th><th>DC2</th></tr></thead>
+              <tbody>
+                <tr><td>Storage model</td><td>RMS — local SSD cache + S3 durability</td><td>Local SSD only; data moves with nodes</td></tr>
+                <tr><td>Sizes</td><td><code>ra3.xlplus</code>, <code>ra3.4xlarge</code>, <code>ra3.16xlarge</code></td><td><code>dc2.large</code>, <code>dc2.8xlarge</code></td></tr>
+                <tr><td>When to choose</td><td>Production, &gt;1 TB, multi-AZ, data sharing, Spectrum at scale</td><td>Dev/test, &lt;1 TB compressed, lowest hourly cost</td></tr>
+                <tr><td>Scaling storage</td><td>Pay per GB in RMS; add compute nodes without rebalancing data</td><td>Add nodes — storage scales only with node count</td></tr>
+                <tr><td>Managed storage</td><td>Yes (RMS)</td><td>No</td></tr>
+                <tr><td>Price shape</td><td>Compute hourly + RMS per GB-month</td><td>All-in hourly (compute + local disk bundled)</td></tr>
+                <tr><td>Availability</td><td>Multi-AZ supported</td><td>Single AZ only</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout cost"><strong>Lab pricing.</strong> A <code>dc2.large</code> single-node cluster costs roughly 0.25 USD/hour and is <em>not</em> free tier. A weekend left running is ~12 USD. Prefer Redshift Serverless with base capacity 8 RPUs for short labs, or delete the cluster the same hour.</div>
+        </section>
+
+        <section class="section" id="resizing">
+          <h2>Resizing clusters</h2>
+          <p class="lead">Resize when query latency grows, storage fills, or you migrate node families (DC2 → RA3). Three mechanisms exist; the exam tests which is fast, which allows node-type changes, and whether the cluster stays available.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-271.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-271.png" alt="Elastic resize changes node count quickly without restart; slices redistribute across nodes; can add remove nodes or change DS2 to RA3." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 271</span>Elastic resize redistributes slices across nodes in minutes with no full restart — the default choice when constraints allow.</figcaption>
+          </figure>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Method</th><th>What changes</th><th>Duration</th><th>Availability</th><th>Constraints</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Elastic resize</strong></td><td>Node count (same node type) or some node-type upgrades</td><td>Minutes</td><td>Cluster stays up; brief read-only periods possible</td><td>Limited node-count delta per operation (often 2× up or ½ down — check current limits for your type)</td></tr>
+                <tr><td><strong>Classic resize</strong></td><td>Node type, large node-count changes</td><td>Hours to days (copies all data)</td><td>Cluster available but slower during copy</td><td>Use when elastic resize is not supported for your target configuration</td></tr>
+                <tr><td><strong>Snapshot → restore</strong></td><td>Anything — new Region, new account, new node type/count</td><td>Depends on data size</td><td>New cluster; old cluster unchanged until deleted</td><td>Creates a new cluster from snapshot; good for DR and migrations</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Elastic resize node-count constraints</h3>
+          <p>Elastic resize is fast because it redistributes slices without a full data copy, but AWS limits how far you can jump in one operation — typically you can double node count or halve it (exact limits vary by source/target node type; check the console resize wizard). To go from 2 nodes to 20, chain multiple elastic resizes or use classic resize. Changing from DC2 to RA3 often requires classic resize or snapshot-restore because node families store data differently (local SSD vs RMS).</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-272.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-272.png" alt="Classic resize similar to elastic but slower, used when elastic resize is not applicable." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 272</span>Classic resize is the fallback for large node-type jumps or when elastic limits are exceeded.</figcaption>
+          </figure>
+        </section>
+
+        <section class="section" id="snapshots">
+          <h2>Snapshots</h2>
+          <p class="lead">Snapshots are point-in-time cluster backups stored internally on S3. They are incremental — only changed blocks since the last snapshot are written — and underpin disaster recovery, cloning, and cross-Region migration.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-274.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-274.png" alt="Snapshots are point-in-time backups stored on S3, manual or automated." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 274</span>Snapshots capture the whole cluster state — not individual databases in isolation unless you restore and extract.</figcaption>
+          </figure>
+
+          <h3>Automated snapshots</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-275.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-275.png" alt="Automated snapshots are incremental, enabled by default, taken every 8 hours or 5GB per node changes, retention 1 day default." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 275</span>Default retention is one day — extend it for production (up to 35 days). Triggers: every 8 hours <em>or</em> every 5 GB per node of changes, whichever comes first.</figcaption>
+          </figure>
+
+          <h3>Manual snapshots</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-276.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-276.png" alt="Manual snapshots anytime, retained indefinitely by default, retention configurable." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 276</span>Take manual snapshots before risky DDL or major resize. Retained until you delete them unless you set a retention period.</figcaption>
+          </figure>
+
+          <p><strong>Cross-Region snapshot copy</strong> enables DR in another Region. <strong>Restore</strong> creates a <em>new</em> cluster from a snapshot — it does not overwrite the source. To restore a single table, use the AWS CLI/API <code>restore-table-from-cluster-snapshot</code>: specify source snapshot, source table, and a new table name in the target cluster — Redshift copies only that table's data without restoring the entire cluster. Alternatively restore snapshot to a temporary cluster, <code>CREATE TABLE … AS SELECT</code>, and COPY or UNLOAD/COPY into production.</p>
+
+          <h3>Snapshot retention and billing</h3>
+          <p>Automated snapshot storage beyond the free tier for your node count accrues standard S3-backed snapshot charges. Manual snapshots persist until deleted — a common cost leak in lab accounts. Set explicit retention on manual snapshots used for migration testing. Deleting a cluster offers "final snapshot" — always take one before deleting production, skip for throwaway labs.</p>
+
+          <div class="callout exam"><strong>Datashare vs snapshot copy.</strong> Snapshots copy static point-in-time data and require restore time. <a href="#data-sharing">Datashares</a> expose live data with no copy — prefer datashares when consumers need current rows; prefer snapshots for DR, account migration, or air-gapped backups.</div>
+        </section>
+
+        <section class="section" id="cross-region-sharing">
+          <h2>Cross-Region and cross-account sharing</h2>
+          <p>Redshift supports sharing data across Regions and accounts without manual S3 export/import. Cross-Region datashares (see <a href="#data-sharing">Data sharing</a>) and cross-Region snapshot copy cover most patterns. Both producer and consumer must use encrypted RA3 or Serverless for cross-account/Region datashares.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-278.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-278.png" alt="Share data across Regions and accounts without manual S3 copy or S3 as intermediary." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 278</span>Live cross-Region sharing uses datashares, not S3 staging. Snapshot copy is the alternative for static migration.</figcaption>
+          </figure>
+        </section>
+
+        <section class="section" id="distribution">
+          <h2>Distribution styles and sort keys</h2>
+          <p class="lead">Redshift physically shards table rows across compute-node slices. <strong>Distribution style</strong> and <strong>DISTKEY</strong> decide which slice owns which rows; <strong>SORTKEY</strong> decides order within a slice. Wrong choices cause <em>skew</em> (one slice does all the work) or expensive <em>redistribution</em> steps during joins — the two most common reasons a Redshift query is slow.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-280.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-280.png" alt="Distribution styles spread data across nodes, use distribution keys, minimize data movement during queries." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 280</span>Goals: uniform workload across slices and minimal network shuffle at query time.</figcaption>
+          </figure>
+
+          <h3>KEY distribution</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-281.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-281.png" alt="KEY distribution places rows with matching DISTKEY values on the same slice for co-located joins." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 281</span>KEY: hash the DISTKEY column — matching join keys land on the same slice so joins are local. Pick the column you join on most (often a foreign key). Skew happens if one key value dominates (e.g. NULL or a default "unknown").</figcaption>
+          </figure>
+
+          <h3>ALL distribution</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-282.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-282.png" alt="ALL distribution replicates entire small table to every node for fast local joins." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 282</span>ALL: full copy on every node — great for small dimension tables, wasteful for fact tables. Storage cost = table size × node count.</figcaption>
+          </figure>
+
+          <h3>EVEN distribution</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-283.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-283.png" alt="EVEN distribution round-robins rows across slices regardless of column values." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 283</span>EVEN: round-robin — no skew from hot keys, but every join requires redistribution. Use for staging tables or tables that rarely join.</figcaption>
+          </figure>
+
+          <h3>AUTO distribution</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-284.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-284.png" alt="AUTO distribution lets Redshift pick KEY ALL or EVEN based on table size and changes style in background." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 284</span>AUTO is the default — Redshift picks KEY, ALL, or EVEN from table size and query patterns. <strong>Automatic table optimization</strong> can change distribution in the background; check <code>SVV_ALTER_TABLE_RECOMMENDATIONS</code> for pending suggestions.</figcaption>
+          </figure>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Style</th><th>Physical behaviour</th><th>Skew risk</th><th>When to pick</th></tr></thead>
+              <tbody>
+                <tr><td><strong>KEY</strong></td><td>Hash on DISTKEY → same values co-located</td><td>High if one value dominates</td><td>Large fact tables with frequent equi-joins on one column</td></tr>
+                <tr><td><strong>ALL</strong></td><td>Full replica on every node</td><td>None (every node has everything)</td><td>Small, slow-changing dimensions (&lt; ~2 GB after compression)</td></tr>
+                <tr><td><strong>EVEN</strong></td><td>Round-robin across slices</td><td>Low</td><td>Staging tables, no clear join key, or tables that never join</td></tr>
+                <tr><td><strong>AUTO</strong></td><td>Redshift decides; may alter over time</td><td>Managed by service</td><td>Default for new tables; override when you know the join pattern</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Sort keys: compound, interleaved, and AUTO</h3>
+          <p><strong>Compound sort keys</strong> order rows by column precedence — first column primary, then second, etc. Best when queries filter on leading columns. <strong>Interleaved sort keys</strong> give equal weight to multiple columns — better when filters vary across columns, but expensive to maintain (requires <code>VACUUM REINDEX</code>). <strong>SORTKEY AUTO</strong> (default on newer clusters) lets Redshift choose and adjust sort keys automatically, similar to AUTO distribution.</p>
+          <p><strong>Zone maps</strong> track min/max per 1 MB block on disk. Filters and joins on sort-key columns skip irrelevant blocks — often a 10×–100× scan reduction. The core tuning move: <code>DISTKEY</code> on the join column, <code>SORTKEY</code> on the filter column (often the same).</p>
+
+          <pre data-lang="sql" data-title="Redshift — table DDL with distribution and sort keys" data-explain="Fact table uses KEY on the join column; dimension is small enough for ALL; staging uses EVEN. This is the pattern exam scenarios describe as 'optimise for join performance'."><code>CREATE TABLE dim_customer (
+  customer_id   INTEGER PRIMARY KEY,
+  customer_name VARCHAR(100),
+  region        VARCHAR(20)
+)
+DISTSTYLE ALL;
+
+CREATE TABLE fact_sales (
+  sale_id       BIGINT,
+  customer_id   INTEGER,
+  sale_date     DATE,
+  amount        DECIMAL(12,2)
+)
+DISTSTYLE KEY
+DISTKEY (customer_id)
+SORTKEY (sale_date);
+
+CREATE TABLE staging_sales (
+  sale_id       BIGINT,
+  customer_id   INTEGER,
+  sale_date     DATE,
+  amount        DECIMAL(12,2)
+)
+DISTSTYLE EVEN
+SORTKEY AUTO;</code></pre>
+
+          <div class="callout tip"><strong>Automatic table optimisation.</strong> With AUTO distribution and SORTKEY AUTO, Redshift monitors query history and may alter tables with minimal impact. For exam design questions where you control DDL explicitly, still state DISTKEY + SORTKEY on join/filter columns — that is what interviewers expect.</div>
+
+          <h3>Compound versus interleaved sort keys in practice</h3>
+          <p>With a <strong>compound</strong> key <code>SORTKEY (sale_date, customer_id)</code>, a filter on <code>sale_date</code> uses the zone map efficiently; a filter on <code>customer_id</code> alone does not. With <strong>interleaved</strong> keys giving equal weight to both columns, either filter works — but every VACUUM that re-sorts must touch all interleaved columns, making maintenance expensive on large tables. AWS recommends compound keys unless query filters are evenly split across multiple columns with no clear leading column. Prefer <code>SORTKEY AUTO</code> on new tables and override only when profiling proves a specific compound key wins.</p>
+
+          <h3>Detecting skew and unsorted data</h3>
+          <p>Run <code>SELECT "table", skew_rows, skew_sortkey1, unsorted FROM svv_table_info ORDER BY skew_rows DESC;</code> after major loads. <code>skew_rows</code> above ~4.0 means one slice holds disproportionate rows — often a bad DISTKEY (too many NULLs or one dominant key). High <code>unsorted</code> means zone maps are stale; range filters scan extra blocks. <code>SVV_ALTER_TABLE_RECOMMENDATIONS</code> may suggest AUTO key changes when the optimizer detects repeated redistribution steps on the same table.</p>
+        </section>
+
+        <section class="section" id="vacuum">
+          <h2>VACUUM and table maintenance</h2>
+          <p class="lead">Redshift is append-optimized: <code>DELETE</code> and <code>UPDATE</code> mark old rows dead but do not reclaim space immediately. Unsorted inserts degrade zone-map efficiency. <code>VACUUM</code> reclaims space and re-sorts; <code>ANALYZE</code> refreshes statistics so the planner picks good plans.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-287.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-287.png" alt="VACUUM re-sorts and reclaims space; auto vacuum runs in background; skips sort if 95 percent sorted." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 287</span>Auto-vacuum runs DELETE ONLY in the background. By default, sort phase skips tables already &gt;95% sorted. Tables remain queryable during VACUUM.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-288.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-288.png" alt="VACUUM options FULL SORT ONLY DELETE ONLY REINDEX RECLUSTER with threshold and BOOST." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 288</span>Modes: FULL (sort + reclaim), SORT ONLY, DELETE ONLY, REINDEX (interleaved sort keys), RECLUSTER (partial sort of unsorted regions).</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-289.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-289.png" alt="VACUUM TO threshold PERCENT and BOOST options explained." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 289</span><code>TO threshold PERCENT</code> skips sort/reclaim if already sorted enough. <code>BOOST</code> allocates extra resources when the cluster is quiet.</figcaption>
+          </figure>
+
+          <pre data-lang="sql" data-title="Redshift — VACUUM and ANALYZE" data-explain="Run after large DELETE/UPDATE batches or bulk loads that bypass automatic maintenance."><code>-- Reclaim space and resort after bulk delete
+VACUUM FULL fact_sales TO 95 PERCENT;
+
+-- Rebuild interleaved sort key statistics
+VACUUM REINDEX fact_events;
+
+-- Boost priority during maintenance window
+VACUUM DELETE ONLY staging_sales BOOST;
+
+-- Refresh planner statistics (also runs auto-analyze by default)
+ANALYZE fact_sales;
+
+-- Sample encodings for new columns
+ANALYZE COMPRESSION fact_sales;</code></pre>
+
+          <p>Query <code>SVV_TABLE_INFO</code> for <code>unsorted</code> (percent out of sort order), <code>skew_rows</code>, and <code>vacuum_sort_benefit</code> to find tables needing maintenance. High <code>unsorted</code> after loads means zone maps are stale and scans read extra blocks.</p>
+
+          <h3>Auto-vacuum and auto-analyze</h3>
+          <p>Redshift runs <strong>auto-vacuum</strong> (DELETE ONLY by default, plus sort when benefit exceeds threshold) and <strong>auto-analyze</strong> after COPY and significant DML without manual intervention. You can alter table-level settings with <code>ALTER TABLE … SET (autovacuum_enabled, auto_analyze_enabled)</code> on supported versions. When auto maintenance falls behind during heavy ETL windows, schedule manual <code>VACUUM</code> and <code>ANALYZE</code> in the maintenance slot. <code>STL_VACUUM</code> logs historical vacuum operations; compare start/end times to WLM queue depth to see if vacuum is starved.</p>
+        </section>
+
+        <section class="section" id="integrations">
+          <h2>Integrations and loading</h2>
+          <p class="lead">Redshift sits at the centre of AWS analytics — ingesting from S3, streams, operational databases, and ETL services. The exam favours <code>COPY</code> over <code>INSERT</code> for bulk loads and zero-ETL over custom CDC pipelines when the source is Aurora or RDS.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-291.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-291.png" alt="Integration fan-out diagram: S3 EMR Lambda DMS EC2 Data Pipeline MSK KDS DynamoDB connect to Redshift." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 291</span>Redshift integrates with S3, EMR, Lambda, DMS, Kinesis, MSK, DynamoDB, and legacy Data Pipeline — but S3 COPY and zero-ETL cover most DEA-C01 scenarios.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-292.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-292.png" alt="COPY command loads data in parallel using MPP and optimal compression from S3 or DynamoDB." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 292</span>COPY uses all slices in parallel, applies column encodings, and supports Gzip, LZOP, and Bzip2 compression on text files.</figcaption>
+          </figure>
+
+          <div class="diagram">
+            <p class="diagram-title">Recommended S3 load path: staging → curated with MERGE</p>
+            <div class="flow">
+              <div class="node is-source"><b>S3 raw/</b><small>CSV · JSON · Parquet</small></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-compute pulse"><b>COPY → staging</b><small>parallel per slice</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-compute"><b>SQL transform</b><small>dedupe · cast · join</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-compute"><b>MERGE → curated</b><small>upsert idempotent</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-store"><b>fact / dim tables</b><small>DISTKEY · SORTKEY</small></div>
+            </div>
+          </div>
+
+          <h3>COPY from S3 in depth</h3>
+          <p>Attach an IAM role to the cluster with S3 read permissions. Split files so count is a multiple of total slices (e.g. 32 files for 16 slices). Use a <strong>manifest file</strong> when loading many objects. <code>FORMAT AS PARQUET</code> reads columnar data efficiently. <code>COMPUPDATE ON</code> (default) analyses sample rows and applies encodings via the same logic as <code>ANALYZE COMPRESSION</code>. <code>MAXERROR</code> allows a tolerance for bad rows — check <code>STL_LOAD_ERRORS</code> for rejects. For encrypted S3 objects, COPY decrypts on the fly when the role has KMS decrypt permission.</p>
+
+          <h3>Manifest file format</h3>
+          <p>A COPY manifest is a JSON file listing S3 URLs and optional metadata. Redshift loads every file listed — useful when thousands of partition files exist under a prefix. Example entries: <code>{"url": "s3://bucket/path/file.parquet", "mandatory": true}</code>. Set <code>mandatory: false</code> to skip missing files without failing the whole load.</p>
+
+          <h3>Why COPY beats INSERT</h3>
+          <p>INSERT sends rows through the leader one batch at a time — one slice does the work, others idle. COPY assigns each slice a file segment (or whole file) and loads in parallel, applying encodings from <code>ANALYZE COMPRESSION</code> analysis. For 500 GB, COPY is orders of magnitude faster and is the only acceptable bulk-load answer on the exam.</p>
+
+          <pre data-lang="sql" data-title="Redshift — COPY from S3 (Parquet with manifest)" data-explain="Parallel load from curated Parquet under staging/; IAM role must be attached to the cluster."><code>COPY staging.customers
+FROM 's3://dea-lab-ab-4821/staging/customers/manifest.json'
+IAM_ROLE 'arn:aws:iam::123456789012:role/RedshiftLoadRole'
+FORMAT AS PARQUET
+MANIFEST
+COMPUPDATE ON
+MAXERROR 10
+REGION 'us-east-1';</code></pre>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-294.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-294.png" alt="COPY from S3 is faster than INSERT, decrypts on load, needs manifest and IAM role." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 294</span>COPY beats INSERT because every slice loads a file slice in parallel — INSERT is single-threaded through the leader.</figcaption>
+          </figure>
+
+          <h3>UNLOAD to S3</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-295.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-295.png" alt="UNLOAD exports query results to S3 in CSV Parquet or ORC format in parallel." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 295</span>UNLOAD writes one file per slice (parallel export). Supports CSV, Parquet, ORC.</figcaption>
+          </figure>
+
+          <pre data-lang="sql" data-title="Redshift — UNLOAD to partitioned Parquet" data-explain="Export curated data back to the lake for Athena or downstream consumers."><code>UNLOAD ('SELECT * FROM curated.sales WHERE sale_date &gt;= ''2024-01-01''')
+TO 's3://dea-lab-ab-4821/curated/sales/'
+IAM_ROLE 'arn:aws:iam::123456789012:role/RedshiftLoadRole'
+FORMAT AS PARQUET
+PARTITION BY (sale_date)
+HEADER
+PARALLEL ON
+ALLOWOVERWRITE;</code></pre>
+
+          <h3>Auto-copy from S3 and enhanced VPC routing</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-296.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-296.png" alt="Redshift auto-copy from S3 and enhanced VPC routing through VPC instead of internet." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 296</span>Auto-copy monitors an S3 prefix and loads new files automatically — least operational overhead for steady file drops. Enhanced VPC routing sends COPY/UNLOAD traffic through your VPC for compliance.</figcaption>
+          </figure>
+
+          <h3>Redshift auto-copy from S3</h3>
+          <p><strong>Auto-copy</strong> monitors an S3 event path and invokes COPY when new objects land — no Lambda, no EventBridge rule you maintain. Configure source bucket/prefix, target table, IAM role, and file format in the Redshift console or API. Idempotency depends on file naming: use date partitions or UUID prefixes so a repeated drop does not duplicate rows, or load to staging and MERGE. Pairs naturally with <a href="s07-s3.html">S3</a> event notifications and the course bucket layout (<code>raw/</code> → <code>staging/</code> → <code>curated/</code>).</p>
+
+          <h3>Zero-ETL integration</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-297.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-297.png" alt="Aurora zero-ETL replicates transactional changes to Redshift in seconds without custom pipelines." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 297</span>Zero-ETL from Aurora PostgreSQL/MySQL, RDS, and DynamoDB replicates changes into Redshift within seconds — no Glue job, no DMS, no S3 staging. Exam answer for "near real-time analytics on operational data with least overhead".</figcaption>
+          </figure>
+        </section>
+
+        <section class="section" id="transformation">
+          <h2>Transformation design patterns</h2>
+          <p class="lead">Redshift supports both traditional ETL (transform before load) and modern ELT (load raw, transform in-database). AWS and the exam default to ELT on Redshift because MPP SQL is faster and cheaper than external transform clusters for most warehouse workloads.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-298.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-298.png" alt="Section title for data transformation using Amazon Redshift design patterns." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 298</span>Transformation is where Glue/EMR hand off to Redshift SQL — the warehouse is both the destination and the compute engine.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-299.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-299.png" alt="Design patterns ETL and ELT when moving data from source systems to data warehouse." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 299</span>Two patterns: ETL transforms in middleware (Glue, Spark); ELT loads raw then transforms with warehouse SQL. ELT preserves raw history and simplifies reprocessing.</figcaption>
+          </figure>
+
+          <div class="slide-row">
+            <figure class="slide-fig">
+              <a href="assets/slides/slide-300.png" target="_blank" rel="noopener">
+                <img src="assets/slides/slide-300.png" alt="ETL diagram: extract from sources, transform in middleware, load to target." loading="lazy">
+              </a>
+              <figcaption><span class="slide-no">Slide 300</span>ETL: transform in Glue/EMR before load — use when data must be masked or filtered before landing.</figcaption>
+            </figure>
+            <figure class="slide-fig">
+              <a href="assets/slides/slide-301.png" target="_blank" rel="noopener">
+                <img src="assets/slides/slide-301.png" alt="ELT diagram: extract and load raw into MPP database, transform with SQL inside warehouse." loading="lazy">
+              </a>
+              <figcaption><span class="slide-no">Slide 301</span>ELT: load into staging, transform with SQL — default Redshift pattern.</figcaption>
+            </figure>
+          </div>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-302.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-302.png" alt="Redshift in-database ELT with SQL stored procedures and UDFs." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 302</span>In-database transforms: SQL, stored procedures, UDFs — all run on MPP slices.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-303.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-303.png" alt="Redshift connects to external ETL via JDBC ODBC including Glue Informatica Matillion dbt." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 303</span>External orchestration still valid: Glue, Step Functions, Matillion, dbt over JDBC — Redshift is the execution engine.</figcaption>
+          </figure>
+
+          <pre data-lang="sql" data-title="Redshift — MERGE upsert pattern" data-explain="Idempotent load from staging to curated — exam favourite for incremental pipelines."><code>MERGE INTO curated.customers
+USING staging.customers s
+ON curated.customers.customer_id = s.customer_id
+WHEN MATCHED THEN
+  UPDATE SET name = s.name, email = s.email, updated_at = GETDATE()
+WHEN NOT MATCHED THEN
+  INSERT (customer_id, name, email, created_at)
+  VALUES (s.customer_id, s.name, s.email, GETDATE());</code></pre>
+
+          <p><strong>Transformation pushdown</strong> means doing filters, projections, and aggregations in Redshift SQL rather than pulling raw rows into Lambda or a small EC2 instance — let MPP handle volume. Staging tables use DISTSTYLE EVEN; curated facts use KEY + SORTKEY.</p>
+        </section>
+
+        <section class="section" id="federated">
+          <h2>Federated queries</h2>
+          <p class="lead"><strong>Federated queries</strong> run SQL in Redshift that joins local tables with live data in Amazon RDS or Aurora (PostgreSQL and MySQL). Redshift pushes predicates to the remote engine where possible, reducing data movement — but latency and remote load limits make this a query-time integration, not a replacement for COPY or zero-ETL at scale.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-305.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-305.png" alt="Federated queries combine data across sources, reduce transmission, eliminate ETL for ad hoc joins." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 305</span>Use federated queries for occasional joins to operational data — not nightly 500 GB loads.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-306.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-306.png" alt="Federated queries access RDS and Aurora via JDBC external schemas." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 306</span>Supported remote sources: Aurora PostgreSQL, Aurora MySQL, RDS PostgreSQL, RDS MySQL via JDBC.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-307.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-307.png" alt="Federated queries use external schemas, live data, remote computation pushdown, parallel processing." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 307</span>Setup: external schema pointing at RDS/Aurora, Secrets Manager for credentials, IAM permissions on the Redshift cluster role.</figcaption>
+          </figure>
+
+          <div class="callout exam"><strong>Federated vs zero-ETL vs COPY.</strong> Federated = live query, low setup, poor for heavy scans. Zero-ETL = continuous replication, best for steady analytics on OLTP data. COPY = batch load from files, best for lake/historical bulk.</div>
+
+          <h3>Setup requirements</h3>
+          <p>Create an external schema with <code>CREATE EXTERNAL SCHEMA … FROM POSTGRES DATABASE 'dbname' SCHEMA 'schema' URI 'jdbc:…' SECRET_ARN '…' IAM_ROLE '…'</code>. The secret in Secrets Manager holds the RDS/Aurora credentials. The Redshift cluster IAM role needs permission to read the secret and reach the RDS security group (often via VPC peering or same-VPC placement). Federated queries show up in the plan as <code>Remote Query</code> steps in <code>SVL_QUERY_REPORT</code> — high remote row counts mean you should COPY or zero-ETL instead.</p>
+        </section>
+
+        <section class="section" id="materialized-views">
+          <h2>Materialized views</h2>
+          <p class="lead">A <strong>materialized view</strong> stores a precomputed query result physically on disk. Repeated SELECTs read the MV instead of re-scanning base tables — ideal for dashboard queries with predictable SQL. Redshift supports incremental refresh, auto-refresh, and <strong>auto query rewrite</strong> (optimizer substitutes the MV when equivalent).</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-309.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-309.png" alt="Materialized views store precomputed results queryable with SELECT." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 309</span>MVs are first-class objects — GRANT on them like tables.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-310.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-310.png" alt="Materialized views speed repeated queries; support AUTO REFRESH YES or NO syntax." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 310</span>Define with <code>AUTO REFRESH YES</code> for background incremental updates when base tables change.</figcaption>
+          </figure>
+
+          <pre data-lang="sql" data-title="Redshift — materialized view with auto refresh" data-explain="Daily revenue aggregate refreshed automatically when fact_sales changes."><code>CREATE MATERIALIZED VIEW mv_daily_revenue
+AUTO REFRESH YES
+AS
+SELECT sale_date,
+       SUM(amount) AS revenue,
+       COUNT(*)    AS order_count
+FROM fact_sales
+GROUP BY sale_date;</code></pre>
+
+          <h3>Streaming ingestion into a materialized view</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-311.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-311.png" alt="Streaming ingestion from Kinesis or MSK into materialized view via external schema." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 311</span>Near-real-time path: external schema on Kinesis/MSK → materialized view with AUTO REFRESH — no Lambda, no Firehose to Redshift.</figcaption>
+          </figure>
+
+          <pre data-lang="sql" data-title="Redshift — streaming ingestion materialized view" data-explain="External schema maps to Kinesis; MV consumes stream records with auto refresh."><code>CREATE EXTERNAL SCHEMA evdata FROM KINESIS
+IAM_ROLE 'arn:aws:iam::123456789012:role/redshift-streaming-role';
+
+CREATE MATERIALIZED VIEW mv_vehicle_events
+AUTO REFRESH YES
+AS
+SELECT approximate_arrival_timestamp,
+       partition_key,
+       JSON_EXTRACT_PATH_TEXT(kinesis_data, 'vehicle_id') AS vehicle_id,
+       JSON_EXTRACT_PATH_TEXT(kinesis_data, 'speed')      AS speed
+FROM evdata.raw_stream;</code></pre>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-312.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-312.png" alt="Auto refresh runs when cluster resources available; specify AUTO REFRESH in definition." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 312</span>Auto-refresh is deferred to quiet periods to protect WLM. Manual: <code>REFRESH MATERIALIZED VIEW mv_daily_revenue;</code></figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-313.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-313.png" alt="Scheduler API and console for materialized view refresh management." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 313</span>Scheduler API integrates with EventBridge for timed refresh policies.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-314.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-314.png" alt="MV commands CREATE ALTER REFRESH DROP MATERIALIZED VIEW." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 314</span>Core commands: CREATE, ALTER, REFRESH, DROP MATERIALIZED VIEW.</figcaption>
+          </figure>
+
+          <h3>Materialized view limitations</h3>
+          <p>Not every query supports incremental refresh — outer joins, certain aggregates, and non-deterministic functions may require full refresh only. Streaming-ingestion MVs require the external schema to stay reachable and the IAM role to retain Kinesis/MSK read permissions. Auto query rewrite substitutes an MV only when the optimizer proves equivalence; if users write slightly different SQL, they bypass the MV. Nested MVs refresh in dependency order — a stale base MV stalemates downstream MVs. For exam purposes: MVs accelerate repeated read-heavy dashboards; they are not a replacement for proper sort keys on base tables.</p>
+
+          <h3>Auto query rewrite</h3>
+          <p>When enabled, the optimizer rewrites a SELECT to read from a materialized view if the MV's precomputed result covers the query. This is transparent to the BI tool — no view redefinition required. It requires the MV to stay fresh (AUTO REFRESH or scheduled REFRESH) and statistics on base tables to be current.</p>
+        </section>
+
+        <section class="section" id="spectrum">
+          <h2>Redshift Spectrum</h2>
+          <p class="lead"><strong>Redshift Spectrum</strong> queries data in S3 without loading it into Redshift tables. External tables reference the <a href="s04-glue.html">Glue Data Catalog</a> (or Hive metastore). A separate <strong>Spectrum fleet</strong> of Redshift-managed nodes scans S3 in parallel while your cluster coordinates the query — you pay per TB of data scanned <em>in addition to</em> cluster compute.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-316.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-316.png" alt="Spectrum runs SQL against S3 data via external tables without loading into cluster." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 316</span>External tables look like local tables in SQL but storage lives in S3.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-317.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-317.png" alt="Spectrum retrieves only needed data, supports compression, runs on dedicated servers, pushes compute down." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 317</span>Predicate and aggregate pushdown reduces bytes read — partition external tables on filter columns.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-318.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-318.png" alt="Spectrum scales automatically; tables registered in Glue Athena or Hive catalog; joins with local tables." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 318</span>Catalog options: Glue (default on AWS), Athena catalog, Hive metastore on EMR.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-319.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-319.png" alt="Catalog changes immediate; partition external tables; join Spectrum tables like local tables." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 319</span>Partition pruning on <code>year/month/day</code> columns is mandatory for cost control at scale.</figcaption>
+          </figure>
+
+          <pre data-lang="sql" data-title="Redshift — external schema and Spectrum table" data-explain="Maps database spectrum_db to Glue catalog; external table reads Parquet under the lake path."><code>CREATE EXTERNAL SCHEMA spectrum_db
+FROM DATA CATALOG
+DATABASE 'dea_lake_db'
+IAM_ROLE 'arn:aws:iam::123456789012:role/RedshiftSpectrumRole'
+CREATE EXTERNAL DATABASE IF NOT EXISTS;
+
+CREATE EXTERNAL TABLE spectrum_db.customers (
+  id    INT,
+  name  VARCHAR(100),
+  city  VARCHAR(50)
+)
+STORED AS PARQUET
+LOCATION 's3://dea-lab-ab-4821/curated/customers/';</code></pre>
+
+          <h3>Spectrum considerations</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-320.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-320.png" alt="Spectrum requires same Region as S3 bucket; no enhanced VPC routing on provisioned; access point alias limits." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 320</span>Cluster and bucket must be same Region. Enhanced VPC routing not supported with Spectrum on provisioned clusters.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-321.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-321.png" alt="No UPDATE DELETE on external tables; INSERT into external catalog tables supported; Lake Formation permissions." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 321</span>No DML UPDATE/DELETE on external tables. Lake Formation governs permissions when enabled on the Glue catalog.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-322.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-322.png" alt="Spectrum users need temp table permission; no EMR Kerberos support." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 322</span>Users need permission to create temporary tables. Spectrum request count contributes to concurrency limits alongside WLM.</figcaption>
+          </figure>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Dimension</th><th>Redshift Spectrum</th><th>Athena</th></tr></thead>
+              <tbody>
+                <tr><td>Requires</td><td>Redshift cluster or Serverless workgroup</td><td>Standalone — no cluster</td></tr>
+                <tr><td>Best for</td><td>Joining lake data with loaded Redshift tables in one SQL</td><td>Ad-hoc lake queries, no warehouse</td></tr>
+                <tr><td>Pricing</td><td>Cluster compute + per-TB Spectrum scan</td><td>Per-TB scanned only (plus optional ACU for Spark)</td></tr>
+                <tr><td>Concurrency</td><td>WLM + concurrency scaling (400+ with scaling)</td><td>Service quotas on concurrent queries</td></tr>
+                <tr><td>Catalog</td><td>Glue, Hive, Athena catalog</td><td>Glue Data Catalog primary</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout info"><strong>Spectrum request accounting.</strong> Each Spectrum scan consumes WLM capacity and counts toward concurrency-scaling decisions. Heavy Spectrum on a small cluster starves local queries — size the cluster or pre-load hot partitions with COPY.</div>
+        </section>
+
+        <section class="section" id="system-tables">
+          <h2>System tables and views</h2>
+          <p class="lead">Redshift exposes hundreds of read-only system relations prefixed by family. They are how you diagnose load failures, queue waits, skew, and vacuum status — the first place to look when a query is slow.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-324.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-324.png" alt="System tables contain operational information; system views organize it." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 324</span>Queried like normal tables: <code>SELECT * FROM svv_table_info WHERE schema = 'public';</code></figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-325.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-325.png" alt="System tables queried like user tables; some restricted to AWS support." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 325</span>Some STL tables are AWS-support-only — stick to documented SVV/SVL views for self-service.</figcaption>
+          </figure>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Prefix</th><th>Scope</th><th>Examples</th></tr></thead>
+              <tbody>
+                <tr><td><strong>STL_</strong></td><td>Logs — historical events</td><td><code>STL_LOAD_ERRORS</code>, <code>STL_ALERT_EVENT_LOG</code>, <code>STL_VACUUM</code>, <code>STL_WLM_QUERY</code></td></tr>
+                <tr><td><strong>STV_</strong></td><td>Current state snapshots</td><td><code>STV_EXEC_STATE</code> (running queries), <code>STV_INFLIGHT</code></td></tr>
+                <tr><td><strong>SVL_</strong></td><td>Logs joined for readability</td><td><code>SVL_QUERY_REPORT</code>, <code>SVL_USER_INFO</code></td></tr>
+                <tr><td><strong>SVV_</strong></td><td>Metadata about objects</td><td><code>SVV_TABLE_INFO</code>, <code>SVV_ALTER_TABLE_RECOMMENDATIONS</code>, <code>SVV_ALL_TABLES</code></td></tr>
+                <tr><td><strong>SYS_</strong></td><td>Newer unified views</td><td><code>SYS_QUERY_HISTORY</code></td></tr>
+                <tr><td><strong>SVCS_</strong></td><td>Main + concurrency-scaling cluster</td><td><code>SVCS_QUERY_SUMMARY</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-326.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-326.png" alt="SVV STL STV SYS view families with examples for monitoring and tuning." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 326</span><code>STL_ALERT_EVENT_LOG</code> flags missing stats, nested loops, and large broadcasts. <code>SYS_QUERY_HISTORY</code> is the modern query audit view.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-327.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-327.png" alt="SVCS and SVL views for concurrency scaling and detailed query logs." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 327</span><code>SVCS_QUERY_SUMMARY</code> includes queries that ran on concurrency-scaling clusters — check it when users report intermittent slowness during peaks.</figcaption>
+          </figure>
+
+          <h3>Diagnostic queries worth memorising</h3>
+          <pre data-lang="sql" data-title="Redshift — troubleshooting queries" data-explain="Run these in query editor v2 when investigating slow loads or queries."><code>-- Recent load failures
+SELECT starttime, filename, colname, err_reason
+FROM stl_load_errors ORDER BY starttime DESC LIMIT 20;
+
+-- Query with highest disk spill or broadcast
+SELECT query, segment, step, label, bytes, workmem
+FROM svl_query_report WHERE query = 12345;
+
+-- Tables needing vacuum
+SELECT "table", unsorted, skew_rows, vacuum_sort_benefit
+FROM svv_table_info WHERE unsorted &gt; 5 OR skew_rows &gt; 4;
+
+-- Currently queued queries
+SELECT userid, query, service_class, queue_time, exec_time
+FROM stv_wlm_query_state WHERE queue_time &gt; 0;</code></pre>
+        </section>
+
+        <section class="section" id="data-api">
+          <h2>Redshift Data API</h2>
+          <p class="lead">The <strong>Redshift Data API</strong> runs SQL over HTTPS without a persistent JDBC/ODBC connection. IAM authenticates callers; execution is asynchronous — submit a statement, poll status, fetch results. This is the correct integration for Lambda, Step Functions, and web apps that should not hold database connections.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-329.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-329.png" alt="Data API is HTTPS-based async SQL for Lambda SageMaker and web apps without JDBC connections." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 329</span>No connection pool to manage — each call is stateless HTTPS. Ideal for short Lambda invocations.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-330.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-330.png" alt="Data API features: serverless execution, async processing, AWS integration, simplified management." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 330</span>Pair with Secrets Manager for database credentials or use IAM <code>GetClusterCredentials</code> for temporary DB user/password.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-331.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-331.png" alt="Data API limits: 24h query duration, 200 active queries, 100MB result, 24h result retention." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 331</span>Hard limits: 200 active queries per cluster, 100 MB compressed result set, 24-hour result retention, 100 KB statement size.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-332.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-332.png" alt="Data API supported on dc2 and ra3 node types single and multi-node." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 332</span>Available on provisioned dc2/ra3 clusters and Serverless workgroups.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-333.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-333.png" alt="Data API IAM policy AmazonRedshiftDataFullAccess and EventBridge monitoring." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 333</span>Attach <code>AmazonRedshiftDataFullAccess</code> or tighter custom policy. EventBridge captures Data API events for scheduling and alerting.</figcaption>
+          </figure>
+
+          <pre data-lang="shell" data-title="AWS CLI — Redshift Data API execute statement" data-explain="Submit async SQL from Lambda or CLI; poll describe-statement until FINISHED, then get-statement-result."><code>aws redshift-data execute-statement \
+  --cluster-identifier dea-lab-cluster \
+  --database dev \
+  --db-user admin \
+  --sql "SELECT COUNT(*) FROM curated.customers;"
+
+# Response: {"Id": "uuid-here"}
+
+aws redshift-data describe-statement --id uuid-here
+aws redshift-data get-statement-result --id uuid-here</code></pre>
+        </section>
+
+        <section class="section" id="data-sharing">
+          <h2>Data sharing</h2>
+          <p class="lead"><strong>Datashares</strong> grant consumer clusters live read access to producer objects without copying data. Consumers query shared tables as if local; storage billing stays with the producer, compute with the consumer. Requires RA3 or Serverless; supports cross-account and cross-Region when both sides are encrypted.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-335.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-335.png" alt="Data sharing provides live access across clusters workgroups accounts Regions and AZs." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 335</span>No ETL copy step — consumers see current data as producer commits changes.</figcaption>
+          </figure>
+
+          <div class="diagram">
+            <p class="diagram-title">Producer / consumer datashare topology</p>
+            <div class="flow">
+              <div class="node is-source"><b>Producer cluster</b><small>owns storage · creates datashare</small></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-store"><b>Datashare</b><small>tables · views · SQL UDFs</small></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-serve pulse"><b>Consumer cluster</b><small>queries live · pays compute</small></div>
+            </div>
+          </div>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-336.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-336.png" alt="Diagram: producer cluster shares tables views UDFs via datashare to consumer cluster." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 336</span>Producer adds objects to a datashare; consumer mounts it as a local schema.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-337.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-337.png" alt="Standard datashares vs AWS Data Exchange and Lake Formation managed datashares." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 337</span>Standard datashares for internal sharing; AWS Data Exchange for marketplace-style publication to external subscribers.</figcaption>
+          </figure>
+
+          <pre data-lang="sql" data-title="Redshift — create datashare and grant to consumer" data-explain="Producer-side DDL; consumer accepts with CREATE DATABASE from datashare in console or SQL."><code>-- Producer cluster
+CREATE DATASHARE sales_share;
+ALTER DATASHARE sales_share ADD SCHEMA curated;
+ALTER DATASHARE sales_share ADD TABLE curated.fact_sales;
+ALTER DATASHARE sales_share ADD ALL TABLES IN SCHEMA curated;
+
+GRANT USAGE ON DATASHARE sales_share TO ACCOUNT '987654321098';</code></pre>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-338.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-338.png" alt="Consumer pays compute and cross-region transfer; producer pays storage; works during resize and pause." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 338</span>Sharing survives producer resize and pause — consumers may see slightly stale metadata until refresh.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-339.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-339.png" alt="Data sharing requires RA3 or Serverless; cross-account Region needs encryption; SQL UDFs only." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 339</span>Python/Lambda UDFs cannot be shared. Cross-account/Region requires encryption on both sides.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-340.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-340.png" alt="Cannot share external Spectrum tables; consumers cannot re-export datashare objects." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 340</span>External Spectrum objects and late-binding views on external tables are not shareable. No datashare chaining.</figcaption>
+          </figure>
+
+          <h3>Standard versus managed datashares</h3>
+          <p><strong>Standard datashares</strong> are created and governed entirely in Redshift SQL — producer grants to another account ID or cluster namespace. <strong>AWS Data Exchange datashares</strong> wrap standard datashares for marketplace publication: external subscribers discover datasets through Data Exchange, and billing/subscription lifecycle is managed there. <strong>Lake Formation-managed datashares</strong> (where available) apply LF permissions on shared Glue-catalog-backed objects. All types expose live data — none copy bytes to the consumer's storage.</p>
+
+          <h3>Permissions model</h3>
+          <p>Producer: <code>CREATE DATASHARE</code>, <code>ALTER DATASHARE … ADD TABLE/VIEW/SCHEMA</code>, <code>GRANT USAGE ON DATASHARE TO ACCOUNT/ NAMESPACE</code>. Consumer: accept the share in console or <code>CREATE DATABASE … FROM DATASHARE</code>, then <code>GRANT USAGE ON SCHEMA/TABLE</code> to local roles. Consumers query shared objects with three-part names <code>shared_db.schema.table</code>. Writes always happen on the producer — consumers have read-only access to shared objects.</p>
+        </section>
+
+        <section class="section" id="wlm">
+          <h2>Workload management</h2>
+          <p class="lead"><strong>WLM</strong> routes incoming queries to queues with configured memory and concurrency slots. When queues fill, queries wait — or spill to <strong>concurrency scaling</strong> (extra transient clusters billed per second). <strong>Short query acceleration (SQA)</strong> steals cycles for predicted-short SELECTs so dashboards are not blocked by ETL.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-342.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-342.png" alt="WLM manages query performance with up to 8 queues routing by user group query group and priority." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 342</span>Up to 8 user-configurable queues plus superuser queue. Diagnose queueing with <code>STL_WLM_QUERY</code> and <code>STV_WLM_QUERY_STATE</code>.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-343.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-343.png" alt="Automatic WLM adjusts concurrency and memory per query complexity." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 343</span>Automatic WLM is default on new clusters — adjusts concurrency dynamically. Manual WLM gives fixed memory percentages per queue.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-344.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-344.png" alt="Automatic WLM queue settings: concurrency scaling mode, user groups, query groups, priority." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 344</span>Map ETL users to a batch queue, BI users to a high-priority queue via user groups or query groups.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-345.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-345.png" alt="Manual WLM offers fixed memory control; automatic usually higher throughput." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 345</span>Manual WLM when you need guaranteed SLA isolation — at the cost of tuning effort.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-346.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-346.png" alt="Short query acceleration prioritizes short SELECT and CTAS using ML execution time prediction." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 346</span>SQA uses ML to predict query duration and fast-tracks short read-only queries.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-347.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-347.png" alt="SQA eligible for SELECT and CTAS read-only statements." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 347</span>Concurrency scaling adds capacity for burst traffic — supports 400+ concurrent queries across main + scaling clusters when enabled.</figcaption>
+          </figure>
+
+          <h3>Concurrency scaling in depth</h3>
+          <p>When WLM queues exceed capacity, <strong>concurrency scaling</strong> spins up additional transient clusters to run queued queries. You enable it per WLM queue with a scaling mode (auto, manual off/on). Billing is per-second for the scaling cluster only while queries run there. Combined with the main cluster, Redshift supports <strong>400+ concurrent queries</strong> at peak — the number the exam cites. Scaling clusters do not hold your data; they read from RMS/local storage on compute nodes. Disable scaling on ETL queues if you prefer queueing over extra cost for batch jobs that can wait.</p>
+
+          <h3>Diagnosing queueing</h3>
+          <p>Users report "spinning" queries: check <code>SELECT * FROM stv_wlm_query_state WHERE queue_time &gt; 0;</code> for current waits. Historically <code>STL_WLM_QUERY</code> shows total queue time per query ID. If queue time dominates execution time, add concurrency scaling, split queues, or reduce long-running ETL concurrency. QMR can abort queries running longer than N minutes to free slots.</p>
+        </section>
+
+        <section class="section" id="serverless">
+          <h2>Redshift Serverless</h2>
+          <p class="lead"><strong>Redshift Serverless</strong> removes node management. You configure a <strong>namespace</strong> (data) and <strong>workgroup</strong> (compute) with <strong>base capacity in RPUs</strong> (Redshift Processing Units). Compute scales automatically within max-RPU limits; billing is per-second for RPUs consumed. Always encrypted with KMS.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-349.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-349.png" alt="Redshift Serverless: no cluster management, on-demand scaling, pay as you go." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 349</span>Serverless suits spiky workloads, dev/test, and "least operational overhead" exam answers.</figcaption>
+          </figure>
+
+          <div class="slide-row">
+            <figure class="slide-fig">
+              <a href="assets/slides/slide-350.png" target="_blank" rel="noopener">
+                <img src="assets/slides/slide-350.png" alt="Serverless vs provisioned comparison on nodes and WLM concurrency scaling." loading="lazy">
+              </a>
+              <figcaption><span class="slide-no">Slide 350</span>Serverless auto-manages WLM and scaling within cost controls; provisioned requires explicit concurrency scaling enablement.</figcaption>
+            </figure>
+            <figure class="slide-fig">
+              <a href="assets/slides/slide-351.png" target="_blank" rel="noopener">
+                <img src="assets/slides/slide-351.png" alt="Serverless vs provisioned on port ranges encryption and resizing." loading="lazy">
+              </a>
+              <figcaption><span class="slide-no">Slide 351</span>Serverless ports restricted to 5431–5455 or 8191–8215; always encrypted; no manual resize.</figcaption>
+            </figure>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Dimension</th><th>Redshift Serverless</th><th>Redshift provisioned</th></tr></thead>
+              <tbody>
+                <tr><td>Capacity unit</td><td>RPU (Redshift Processing Unit), billed per second</td><td>Node type × node count, billed per hour</td></tr>
+                <tr><td>Base capacity</td><td>Minimum RPUs always warm (e.g. 8–512 RPU range)</td><td>Fixed cluster size until resized</td></tr>
+                <tr><td>Scaling</td><td>Automatic within max RPU cap</td><td>Elastic/classic resize or concurrency scaling</td></tr>
+                <tr><td>WLM</td><td>Fully managed</td><td>Automatic or manual WLM configuration</td></tr>
+                <tr><td>Encryption</td><td>Always KMS (AWS or customer key)</td><td>Optional KMS or unencrypted (not recommended)</td></tr>
+                <tr><td>Port</td><td>5431–5455 or 8191–8215 only</td><td>Any port</td></tr>
+                <tr><td>When to choose</td><td>Variable/spiky SQL, labs, new projects, least ops overhead</td><td>Predictable 24/7 heavy load at lowest sustained cost</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout exam"><strong>Serverless vs provisioned.</strong> "Unpredictable query volume, minimize administration" → Serverless. "Steady high concurrency 24/7, cost-optimised at scale" → RA3 provisioned with concurrency scaling reserved for peaks.</div>
+
+          <h3>Exam decision quick reference</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Scenario phrase</th><th>First choice</th><th>Why not the distractor</th></tr></thead>
+              <tbody>
+                <tr><td>Bulk load 100 GB from S3 nightly</td><td><code>COPY</code> Parquet, sliced files</td><td>INSERT is serial; Glue writes files, COPY loads them</td></tr>
+                <tr><td>Join lake + warehouse in one SQL</td><td>Spectrum external tables</td><td>Athena cannot see local Redshift tables</td></tr>
+                <tr><td>Aurora OLTP → analytics in seconds</td><td>Zero-ETL integration</td><td>Federated query scans remote DB repeatedly</td></tr>
+                <tr><td>Share live data to another account</td><td>Datashare (RA3/Serverless)</td><td>Snapshot is point-in-time, not live</td></tr>
+                <tr><td>Lambda runs SQL, no connection pool</td><td>Redshift Data API</td><td>JDBC holds connections; Lambda scales out</td></tr>
+                <tr><td>Spiky BI, minimal ops</td><td>Redshift Serverless</td><td>Idle provisioned cluster still bills hourly</td></tr>
+                <tr><td>Column mask for HR role</td><td>Masking policy + ATTACH TO ROLE</td><td>Views leak if user has base table GRANT</td></tr>
+                <tr><td>Near-real-time stream → SQL aggregates</td><td>Streaming MV from Kinesis/MSK</td><td>Firehose to S3 adds latency vs MV path</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="section" id="redshift-ml">
+          <h2>Redshift ML</h2>
+          <p class="lead"><strong>Redshift ML</strong> trains and deploys models with SQL — no SageMaker console required for basic flows. <code>CREATE MODEL</code> exports training data to S3, invokes SageMaker Autopilot or a BYOM template, and registers an inference function you call from SELECT.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-353.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-353.png" alt="Redshift ML creates trains and applies ML models with SQL CREATE MODEL." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 353</span>One SQL statement kicks off Autopilot training on Redshift data without exporting to a notebook.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-354.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-354.png" alt="Redshift ML predictions in-database without moving data out." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 354</span>Data never leaves the warehouse for inference — only training snapshots go to SageMaker.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-355.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-355.png" alt="Redshift ML supports classification regression via SageMaker Autopilot and MPP." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 355</span>Tasks: binary/multiclass classification, regression. BYOM accepts custom SageMaker models.</figcaption>
+          </figure>
+
+          <pre data-lang="sql" data-title="Redshift ML — CREATE MODEL" data-explain="Autopilot finds the best algorithm; inference function name matches model name."><code>CREATE MODEL customer_churn_model
+FROM (
+  SELECT tenure, monthly_charges, total_charges, churned
+  FROM curated.customers_training
+)
+TARGET churned
+FUNCTION churn_predict
+IAM_ROLE 'arn:aws:iam::123456789012:role/RedshiftMLRole'
+AUTO ON;
+
+-- Inference in SQL
+SELECT customer_id, churn_predict(tenure, monthly_charges, total_charges) AS prediction
+FROM curated.customers_scoring;</code></pre>
+        </section>
+
+        <section class="section" id="security">
+          <h2>Security</h2>
+          <p class="lead">Redshift security layers: network isolation in a VPC, encryption at rest and in transit, IAM roles for S3/Glue access, database users/roles for object permissions, and optional audit logging to S3.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-357.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-357.png" alt="Redshift security: credentials IAM VPC cluster encryption." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 357</span>Defence in depth: who can reach the cluster (VPC/SG), who can authenticate (IAM/DB user), who can read which columns/rows (RBAC/FGAC).</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-358.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-358.png" alt="Cluster locked by default; security groups control inbound; SSL in transit; load encryption." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 358</span>New clusters deny all inbound until you attach a VPC security group. Require SSL for compliance workloads.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-359.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-359.png" alt="Security includes encryption in transit column-level access and row-level security." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 359</span>Column-level grants and RLS/masking are covered in <a href="#fgac">Fine-grained access control</a>.</figcaption>
+          </figure>
+
+          <h3>Encryption and VPC</h3>
+          <ul>
+            <li><strong>At rest:</strong> AES-256 via AWS KMS (SSE-KMS) or CloudHSM; Serverless always encrypted.</li>
+            <li><strong>In transit:</strong> SSL/TLS to clients; enhanced VPC routing for COPY/UNLOAD through private subnets.</li>
+            <li><strong>IAM roles on cluster:</strong> Authorize COPY/UNLOAD/Spectrum/Glue without embedding keys in SQL.</li>
+            <li><strong>Audit logging:</strong> Connection, user, and activity logs to S3 — not enabled by default. Use <code>STL_CONNECTION_LOG</code> for connection attempts.</li>
+          </ul>
+
+          <h3>Encryption and audit in production</h3>
+          <p>Enable <strong>audit logging</strong> to S3 for connection log, user log, and activity log — required for many compliance frameworks and forensics after a suspected data exfiltration. Logs land in a bucket you own; lifecycle them to Glacier. <strong>Enhanced VPC routing</strong> forces COPY/UNLOAD through the VPC endpoint path. Rotate KMS keys on a schedule when using customer-managed keys; Redshift re-encrypts asynchronously. HSM-backed keys via CloudHSM satisfy stricter regulatory controls than default SSE-KMS.</p>
+
+          <div class="analogy"><strong>Everyday analogy —</strong> A Redshift cluster with default security is a bank vault with the door welded shut: nobody gets in until you attach a security group (who may knock) and create users (who have keys). FGAC then controls which deposit boxes each key opens and whether numbers on the slips are redacted.</div>
+        </section>
+
+        <section class="section" id="access-control">
+          <h2>Access control</h2>
+          <p class="lead">Redshift supports native database users/groups, IAM-based federation, and RBAC roles. Privileges are granted with <code>GRANT</code>/<code>REVOKE</code>; default privileges auto-apply to future objects. Cross-database queries let users with permissions read objects in other databases on the same cluster.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-361.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-361.png" alt="Manage users in Redshift or via IAM; privileges tied to DB engine." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 361</span>Two auth paths: native DB users with passwords, or IAM users/roles via <code>GetClusterCredentials</code> / IdP federation.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-362.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-362.png" alt="Diagram of users assigned to groups for privilege management." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 362</span>Classic model: users → groups → schema/table privileges.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-363.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-363.png" alt="SQL examples CREATE USER and ALTER GROUP ADD USER." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 363</span>Create users, add to groups — groups simplify bulk GRANT.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-364.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-364.png" alt="SQL CREATE GROUP SCHEMA GRANT USAGE and SELECT on schema to group." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 364</span><code>GRANT USAGE ON SCHEMA</code> before table-level SELECT/INSERT.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-365.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-365.png" alt="Important rule: a group cannot contain another group." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 365</span>Gotcha: nested groups are not supported — flat group membership only.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-366.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-366.png" alt="RBAC model: users granted roles which hold permissions; roles can nest." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 366</span>RBAC: roles can grant to other roles — unlike groups. Prefer roles for new deployments.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-367.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-367.png" alt="SQL CREATE ROLE GRANT ROLE GRANT schema permissions to role." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 367</span>Role hierarchy: <code>GRANT ROLE finance TO ROLE humanresource;</code> inherits finance privileges.</figcaption>
+          </figure>
+
+          <pre data-lang="sql" data-title="Redshift — RBAC role setup" data-explain="Roles replace groups for new designs; supports nesting and default privileges."><code>CREATE ROLE analyst;
+CREATE ROLE etl_admin;
+
+GRANT USAGE ON SCHEMA curated TO ROLE analyst;
+GRANT SELECT ON ALL TABLES IN SCHEMA curated TO ROLE analyst;
+
+GRANT ALL ON SCHEMA staging TO ROLE etl_admin;
+GRANT ALL ON ALL TABLES IN SCHEMA staging TO ROLE etl_admin;
+
+GRANT ROLE analyst TO USER bi_user_1;
+GRANT ROLE etl_admin TO USER pipeline_svc;
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA curated
+  GRANT SELECT ON TABLES TO ROLE analyst;</code></pre>
+
+          <p><strong>Cross-database queries</strong> on the same cluster let authorised users <code>SELECT</code> from tables in another database without a datashare — useful for dev/prod separation within one cluster. Grant <code>USAGE ON DATABASE</code> and schema/table privileges explicitly; datashares remain the pattern for cross-cluster or cross-account access.</p>
+
+          <p><strong>IAM authentication:</strong> Call <code>GetClusterCredentials</code> (or <code>GetClusterCredentialsWithIAM</code>) to mint a temporary DB user/password mapped to an IAM identity. Integrate with SAML/IdP for SSO. See <a href="s16-management.html#iam">Section 16</a> for IAM fundamentals.</p>
+        </section>
+
+        <section class="section" id="fgac">
+          <h2>Fine-grained access control</h2>
+          <p class="lead">Beyond schema/table GRANTs, Redshift supports <strong>column-level privileges</strong>, <strong>row-level security (RLS) policies</strong>, and <strong>dynamic data masking</strong>. Policies attach to roles — the same RBAC model as above. Section 1 links here for exam revision on governance.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-368.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-368.png" alt="Fine-grained access control manages detailed permissions with policies." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 368</span>FGAC stack: column GRANT → RLS filter rows → masking obfuscates values.</figcaption>
+          </figure>
+
+          <h3>Column-level access control</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-369.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-369.png" alt="Column-level GRANT SELECT on specific columns only." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 369</span>Grant SELECT on subset of columns — other columns invisible to EXPLAIN and SELECT *.</figcaption>
+          </figure>
+
+          <pre data-lang="sql" data-title="Redshift — column-level GRANT" data-explain="Analyst sees name and city but not email or salary columns."><code>GRANT SELECT (customer_id, name, city)
+ON curated.customers
+TO ROLE analyst;</code></pre>
+
+          <h3>Row-level security</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-370.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-370.png" alt="RLS policy filters inventory rows by warehouse_id matching manager mapping table." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 370</span>RLS policy uses <code>current_user</code> and a mapping table — each manager sees only their warehouse rows.</figcaption>
+          </figure>
+
+          <pre data-lang="sql" data-title="Redshift — row-level security policy" data-explain="Create policy, attach to role, enable RLS on table — three steps required."><code>CREATE RLS POLICY view_own_warehouse_inventory
+WITH (warehouse_id INTEGER)
+USING (
+  warehouse_id IN (
+    SELECT managed_warehouse_id
+    FROM warehouse_managers
+    WHERE manager_username = CURRENT_USER
+  )
+);
+
+ATTACH RLS POLICY view_own_warehouse_inventory
+ON inventory
+TO ROLE warehouse_managers;
+
+ALTER TABLE inventory ROW LEVEL SECURITY ON;</code></pre>
+
+          <h3>Dynamic data masking</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-371.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-371.png" alt="Masking policy replaces email with asterisks for masked roles." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 371</span>Masking applies at query time — underlying storage unchanged; privileged roles can see cleartext.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-372.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-372.png" alt="CREATE ATTACH and DETACH MASKING POLICY with PRIORITY on role role_hr." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 372</span><code>PRIORITY</code> resolves conflicts when multiple policies target the same column.</figcaption>
+          </figure>
+
+          <pre data-lang="sql" data-title="Redshift — masking policy" data-explain="HR role sees masked emails; detach removes masking without dropping the policy."><code>CREATE MASKING POLICY mask_email
+WITH (email VARCHAR(256))
+USING ('***'::VARCHAR);
+
+ATTACH MASKING POLICY mask_email
+ON employee_data (email)
+TO ROLE role_hr
+PRIORITY 20;
+
+DETACH MASKING POLICY mask_email
+FROM ROLE role_hr
+ON employee_data (email);</code></pre>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-373.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-373.png" alt="RLS limits row access; STL_CONNECTION_LOG logs access attempts; audit logs not default." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 373</span>Enable audit logging to S3 for compliance; <code>STL_CONNECTION_LOG</code> records successful and failed connections.</figcaption>
+          </figure>
+        </section>
+
+        <section class="section" id="deeper">
+          <h2>Deeper detail and exam edge cases</h2>
+          <p class="lead">Node quotas, billing meters that sit outside hourly cluster cost, and system-table diagnostics the deck mentions but does not operationalise.</p>
+
+          <h3>Limits and quotas that decide answers</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Limit</th><th>Value</th><th>Adjustable?</th><th>Why it matters</th></tr></thead>
+              <tbody>
+                <tr><td>Concurrent queries (main cluster WLM)</td><td>50 per cluster (default automatic WLM)</td><td>Soft (queue tuning)</td><td>Query 51 waits or routes to concurrency scaling — not unlimited on the base cluster</td></tr>
+                <tr><td>Concurrency scaling free credits</td><td>1 scaling hour per 24 hours of main cluster runtime (RA3/DC2)</td><td>Hard (promo tier)</td><td>Beyond free credits, scaling clusters bill per-second — enable only on queues that need burst</td></tr>
+                <tr><td>DC2 local SSD per node</td><td>Fixed by node size (e.g. <code>dc2.large</code> 160 GB, <code>dc2.8xlarge</code> 2.56 TB)</td><td>Hard</td><td>Storage scales only by adding nodes — no RMS overflow like RA3</td></tr>
+                <tr><td>RA3 RMS storage</td><td>Scales to petabytes; billed per GB-month on managed storage</td><td>Hard (pricing)</td><td>Compute resize does not require data move — but RMS GB-month continues regardless of node count</td></tr>
+                <tr><td>RA3 nodes per cluster</td><td>Varies by node type (quota; e.g. up to 128 <code>ra3.4xlarge</code>)</td><td>Soft</td><td>Large MPP clusters need quota increase request</td></tr>
+                <tr><td>Redshift Serverless RPU range</td><td>Base capacity to max RPU cap (e.g. 8–512 RPU per workgroup)</td><td>Hard (config)</td><td>Workgroup cannot burst above max RPU — queries queue or fail at cap</td></tr>
+                <tr><td>Serverless minimum billable duration</td><td>60 seconds per scaling event</td><td>Hard</td><td>Very short queries still incur at least one minute of RPU billing per burst</td></tr>
+                <tr><td>Spectrum scan pricing</td><td>USD 5.00 per TB scanned (us-east-1, rounded up per MB)</td><td>Hard</td><td>External table on huge unpartitioned S3 prefix can dwarf cluster cost</td></tr>
+                <tr><td>Data API result size</td><td>100 KB per <code>GetStatementResult</code> page; 100 KB max SQL statement length</td><td>Hard</td><td>Large result sets need pagination loop in Lambda — not one JSON blob</td></tr>
+                <tr><td>COPY parallelism</td><td>One slice per input file per compute node</td><td>Hard (design)</td><td>Single large file loads on one slice — split to at least total slice count files</td></tr>
+                <tr><td>Elastic resize jump</td><td>Typically double or halve node count per operation (varies by type)</td><td>Hard</td><td>Large jumps need classic resize or chained elastic operations</td></tr>
+                <tr><td>Data sharing</td><td>Requires RA3 or Serverless producer</td><td>Hard</td><td>DC2 clusters cannot publish datashares — migration prerequisite</td></tr>
+                <tr><td>Zero-ETL integrations</td><td>Supported sources limited (Aurora, RDS PostgreSQL/MySQL, DynamoDB, etc.)</td><td>Hard (product)</td><td>Unsupported source needs DMS, Glue, or custom CDC — exam tests knowing when zero-ETL applies</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>What you actually pay for</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Billed dimension</th><th>Unit</th><th>How to spend less</th></tr></thead>
+              <tbody>
+                <tr><td>Provisioned compute nodes</td><td>Per node-hour by type</td><td>Right-size RA3; delete dev clusters; Serverless for spiky BI</td></tr>
+                <tr><td>RA3 managed storage (RMS)</td><td>GB-month</td><td>VACUUM dead rows; archive cold history to S3 + Spectrum; UNLOAD then DELETE</td></tr>
+                <tr><td>Concurrency scaling (beyond free credits)</td><td>Per-second scaling cluster usage</td><td>Enable on BI queues only; schedule ETL off-peak; tune WLM slots first</td></tr>
+                <tr><td>Redshift Serverless</td><td>RPU-second (60 s minimum per burst)</td><td>Lower max RPU cap; set base capacity to minimum acceptable warm level</td></tr>
+                <tr><td>Spectrum</td><td>Per TB data scanned from S3</td><td>Partition external tables; use Parquet; predicate pushdown via partition columns</td></tr>
+                <tr><td>Snapshot storage beyond free</td><td>GB-month (free = cluster storage size for automated snapshots)</td><td>Shorten retention; delete manual snapshots after restore test</td></tr>
+                <tr><td>Cross-Region snapshot copy</td><td>Cross-Region data transfer + snapshot GB-month in target Region</td><td>Copy only DR-required snapshots; use datashares within Region where possible</td></tr>
+                <tr><td>Redshift ML</td><td>SageMaker training + inference behind CREATE MODEL</td><td>Train on sample; drop unused models; BYOM only when Autopilot insufficient</td></tr>
+                <tr><td>Data transfer</td><td>Cross-AZ, UNLOAD/COPY to other Regions</td><td>Keep S3 bucket same Region as cluster; compress Parquet</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout cost"><strong>Biggest money leak.</strong> Concurrency scaling left on all queues 24/7 after free credits exhaust — a steady ETL queue that always exceeds 50 slots burns scaling hours continuously. Split ETL to off-peak or resize the base cluster.</div>
+          <div class="callout danger"><strong>Surprise bill.</strong> Spectrum query over a year of raw JSON logs with no partition filter — 50 TB scanned at USD 5/TB is USD 250 per query. Partition external tables and use columnar Parquet.</div>
+
+          <h3>Traps that catch people</h3>
+          <ul>
+            <li><strong>DISTSTYLE ALL multiplication —</strong> A 500 MB dimension on ALL is copied to every slice on every node — 8 nodes × 16 slices can mean gigabytes of redundant storage. Use ALL only for small, slow-changing dimensions under ~2 GB compressed.</li>
+            <li><strong>Interleaved sort maintenance —</strong> Interleaved keys need <code>VACUUM REINDEX</code> — expensive on large tables. AWS recommends compound keys or SORTKEY AUTO unless filters are evenly split across columns.</li>
+            <li><strong>Single COPY file —</strong> One multi-GB CSV loads through a single slice while others idle. Split into N files where N is a multiple of total cluster slices.</li>
+            <li><strong>MAXERROR without monitoring —</strong> COPY with <code>MAXERROR 100</code> silently skips bad rows. Check <code>STL_LOAD_ERRORS</code> after every load — partial loads look successful in job logs.</li>
+            <li><strong>Materialized view refresh scope —</strong> AUTO REFRESH is incremental only when the defining query supports it. Complex joins may full-refresh — schedule during maintenance windows.</li>
+            <li><strong>Auto-vacuum sort skip —</strong> Auto-vacuum skips sort when table is &gt;95% sorted — but after massive DELETE, <code>unsorted</code> in <code>SVV_TABLE_INFO</code> may still hurt range filters until manual <code>VACUUM FULL</code>.</li>
+            <li><strong>Disk-based query spill —</strong> When WLM memory limits are exceeded, sorts and hashes spill to disk — orders of magnitude slower. <code>SVL_QUERY_SUMMARY</code> shows <code>is_disk_based</code> true.</li>
+            <li><strong>Missing ANALYZE —</strong> <code>STL_ALERT_EVENT_LOG</code> warns on nested loops and missing statistics. Planner chooses bad joins until <code>ANALYZE</code> runs after large COPY.</li>
+            <li><strong>IAM role chaining on COPY —</strong> Cluster IAM role must trust S3 and KMS; chained roles (role A assumes role B for cross-account bucket) need explicit trust on both sides — COPY failures with "Access Denied" often trace here.</li>
+            <li><strong>Data API in Lambda —</strong> 100 KB statement limit and paginated results — not a replacement for JDBC bulk export. Large SELECTs need UNLOAD to S3.</li>
+            <li><strong>Classic vs elastic resize —</strong> DC2 → RA3 family change cannot elastic-resize in place — needs classic resize hours or snapshot restore to new cluster.</li>
+          </ul>
+
+          <h3>Troubleshooting playbook</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Symptom</th><th>Most likely cause</th><th>What to check / fix</th></tr></thead>
+              <tbody>
+                <tr><td>Queries queue indefinitely</td><td>WLM slots full (50 concurrent)</td><td><code>STV_WLM_QUERY_STATE</code>; enable concurrency scaling on BI queue; reduce ETL concurrency</td></tr>
+                <tr><td>Query suddenly 10× slower</td><td>Disk-based spill or stats regression</td><td><code>SVL_QUERY_SUMMARY</code> for <code>is_disk_based</code>; <code>STL_ALERT_EVENT_LOG</code> for nested loop; run <code>ANALYZE</code></td></tr>
+                <tr><td>High <code>skew_rows</code> in SVV_TABLE_INFO</td><td>Bad DISTKEY — NULL or dominant value</td><td>Redistribute with new DISTKEY; use EVEN staging then INSERT SELECT</td></tr>
+                <tr><td>COPY loaded fewer rows than S3 files</td><td>Rows rejected over MAXERROR</td><td><code>SELECT * FROM stl_load_errors ORDER BY starttime DESC LIMIT 50;</code></td></tr>
+                <tr><td>Spectrum query expensive/slow</td><td>Full prefix scan, JSON not Parquet</td><td>Check <code>SVL_S3QUERY_SUMMARY</code>; add partition columns; convert to Parquet</td></tr>
+                <tr><td>UNLOAD/COPY slower after resize</td><td>File count not aligned to new slice count</td><td>Re-split S3 files to multiple of post-resize total slices</td></tr>
+                <tr><td>MV stale for dashboards</td><td>Full refresh running or AUTO REFRESH disabled</td><td><code>SVV_MV_INFO</code>; simplify MV definition for incremental eligibility</td></tr>
+                <tr><td>Data API Lambda truncates results</td><td>100 KB page limit</td><td>Loop <code>NextToken</code> on <code>GetStatementResult</code> or UNLOAD to S3 instead</td></tr>
+                <tr><td>Zero-ETL lag growing</td><td>Source write spike or integration limit</td><td>CloudWatch metrics on integration; check source binlog/WAL retention</td></tr>
+                <tr><td>Concurrency scaling charges spike</td><td>Free hour exhausted; ETL queue has scaling enabled</td><td>Billing console; disable scaling on batch queues; resize base cluster</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Production patterns</h3>
+          <p>A production RA3 cluster separates BI and ETL with automatic WLM: BI queue with concurrency scaling and SQA enabled; ETL queue with higher memory per slot, scaling disabled, scheduled during off-peak. Facts on DISTKEY of the primary join key; small dimensions on ALL. Nightly COPY from curated S3 Parquet with one file per slice minimum. Spectrum for cold history older than 13 months on partitioned S3.</p>
+          <div class="diagram">
+            <p class="diagram-title">Post-load maintenance loop</p>
+            <div class="flow">
+              <div class="node is-source"><b>COPY from S3</b><small>Parquet · manifest</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-compute pulse"><b>ANALYZE</b><small>refresh stats</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-store"><b>SVV_TABLE_INFO</b><small>skew · unsorted</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-serve"><b>VACUUM if needed</b><small>FULL or DELETE ONLY</small></div>
+            </div>
+          </div>
+<pre data-lang="sql" data-title="Diagnose slow query — disk spill and alerts" data-explain="Run after a regression; is_disk_based true means WLM memory or sort key work needed."><code>SELECT query, elapsed_time, is_disk_based, rows
+FROM svl_query_summary
+WHERE query = pg_last_query_id();
+
+SELECT event, solution
+FROM stl_alert_event_log
+WHERE query = pg_last_query_id();</code></pre>
+          <p><strong>Anti-pattern:</strong> DISTSTYLE ALL on a 20 GB "dimension" that grows monthly — storage and broadcast cost explode. Switch to KEY distribution on the join column once the table exceeds ~2 GB compressed.</p>
+
+          <h3>Where this fits with the rest of the exam</h3>
+          <p>Redshift is the analytical hub connecting lake storage in <a href="s07-s3.html">Section 7</a>, SQL-on-lake in <a href="s03-athena.html">Section 3 (Athena)</a>, and operational sources in <a href="s11-other-databases.html">Section 11</a> via zero-ETL or DMS.</p>
+          <ul>
+            <li><a href="s03-athena.html">Section 3 (Athena)</a> — ad-hoc SQL on S3 without loading; Redshift wins on repeated concurrent BI over modelled tables.</li>
+            <li><a href="s07-s3.html#partitioning">Section 7 (S3 partitioning)</a> — same partition discipline reduces Spectrum and UNLOAD/COPY cost.</li>
+            <li><a href="s11-other-databases.html#aurora">Aurora zero-ETL</a> — when OLTP stays in Aurora and analytics need near-real-time Redshift tables.</li>
+            <li><a href="s04-glue.html">Section 4 (Glue)</a> — ETL into curated S3 before COPY when zero-ETL source is unsupported.</li>
+            <li><a href="s09-dynamodb.html">Section 9 (DynamoDB)</a> — zero-ETL or Streams → S3 → COPY alternatives for NoSQL sources.</li>
+          </ul>
+          <div class="callout exam"><strong>How the exam frames the choice.</strong> "Complex SQL, many concurrent BI users, modelled star schema" → Redshift provisioned or Serverless. "Ad-hoc query raw files once" → Athena. "Query S3 without loading but FROM Redshift SQL" → Spectrum. "Near-real-time Aurora → warehouse" → zero-ETL, not Glue + nightly batch. Do not pick Redshift for millisecond key-value lookups or JSON document APIs.</div>
+        </section>
+
+        <section class="section" id="interview">
+          <h2>Interview questions</h2>
+          <p class="muted">Answer each one out loud before opening it. Redshift carries more exam weight than any other single service in Domain 2.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+            <details class="qa">
+              <summary>How do you choose a distribution style for a fact table and its dimension tables?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>Put the <strong>fact table on KEY</strong> with DISTKEY set to the foreign key you join most often (e.g. <code>customer_id</code>). Co-locate matching keys on the same slice so joins are local without a redistribution step. Put <strong>small dimensions on ALL</strong> so every slice has the full dimension locally — ideal under ~2 GB compressed and slow-changing. Use <strong>EVEN</strong> for staging tables that are loaded and transformed before joining. Use <strong>AUTO</strong> when unsure and let automatic table optimisation adjust, but in an interview state the explicit KEY + ALL pattern.</p>
+                <p>Add <strong>SORTKEY</strong> on the column you filter most (often a date). DISTKEY for joins, SORTKEY for filters — frequently the same column works for both on fact tables.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>A Redshift query that used to take 30 seconds now takes 20 minutes. What do you check?<span class="qa-tag">Troubleshooting</span></summary>
+              <div class="qa-body">
+                <p>Work through this order: <strong>WLM queueing</strong> — <code>STL_WLM_QUERY</code> / <code>STV_WLM_QUERY_STATE</code> for wait time. <strong>Query plan regression</strong> — <code>SVL_QUERY_REPORT</code> for distribution steps, nested loops, large broadcasts. <strong>Table health</strong> — <code>SVV_TABLE_INFO</code> for high <code>unsorted</code> or <code>skew_rows</code>. <strong>Stale statistics</strong> — run <code>ANALYZE</code>; check <code>STL_ALERT_EVENT_LOG</code> for missing stats warnings. <strong>Data growth</strong> — did a table switch from ALL to too-large for ALL? <strong>Concurrency scaling</strong> — are bursts queueing because scaling is disabled?</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>When do you run VACUUM FULL versus relying on auto-vacuum?<span class="qa-tag">Performance</span></summary>
+              <div class="qa-body">
+                <p>Auto-vacuum handles routine DELETE ONLY and sort when tables fall below the 95% sorted threshold. Run <strong>VACUUM FULL</strong> (or SORT ONLY) manually after large DELETE/UPDATE batches, failed loads, or when <code>SVV_TABLE_INFO.unsorted</code> exceeds ~5% on a heavily filtered table. Use <strong>REINDEX</strong> after interleaved sort keys degrade. Use <strong>BOOST</strong> in a maintenance window when you need faster completion. Auto-vacuum is sufficient for steady-state ELT; manual VACUUM is for post-migration cleanup or incident recovery.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Redshift Spectrum versus Athena — when is each the right tool?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p><strong>Athena</strong> when you need standalone serverless SQL on S3 with no warehouse, minimal ops, and pay-per-scan pricing — ad-hoc analysts, lightweight dashboards, no Redshift cluster in the architecture.</p>
+                <p><strong>Spectrum</strong> when you already have Redshift and need to join lake data (S3/Glue) with loaded warehouse tables in one SQL statement, or BI tools already point at Redshift. You pay cluster compute plus Spectrum scan charges. Spectrum inherits Redshift WLM and security; Athena uses IAM and Lake Formation directly.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Redshift Serverless versus a provisioned RA3 cluster — how do you decide?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p><strong>Serverless</strong> for variable or unknown workload, dev/test, spiky BI, and any "least operational overhead" requirement. Pay per RPU-second; set base capacity for warm start and max RPU cap for cost control. Always encrypted.</p>
+                <p><strong>Provisioned RA3</strong> for predictable 24/7 heavy query load where sustained node hours are cheaper than Serverless RPUs, fine-grained WLM tuning matters, or you need features with specific node sizing. Add concurrency scaling for peaks rather than oversizing the base cluster.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What causes WLM queueing and how do you fix it?<span class="qa-tag">Troubleshooting</span></summary>
+              <div class="qa-body">
+                <p>Queueing happens when active queries exceed a queue's concurrency slots — common when long ETL jobs fill the default queue while BI users wait. Fixes: enable <strong>automatic WLM</strong> or split ETL and BI into separate queues with user/query group routing; enable <strong>concurrency scaling</strong>; turn on <strong>SQA</strong> for short SELECTs; use <strong>QMR</strong> to kill runaway queries; schedule heavy ETL off-peak; right-size the cluster or Serverless max RPUs.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What is Aurora zero-ETL integration and when would you choose it over Glue?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>Zero-ETL replicates Aurora (and RDS/DynamoDB) changes into Redshift within seconds through a managed integration — no S3 staging, no Glue job, no CDC code. Choose it when transactional data must be analysable in Redshift near-real-time with minimal pipeline ops. Choose Glue when you need complex transforms before load, multiple non-Aurora sources, or landing curated Parquet in S3 for the whole lake.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Datashare versus snapshot copy — when do you use each?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p><strong>Datashare</strong> for live, read-only access across clusters/accounts/Regions without duplication — analytics on current data, data mesh patterns, separating compute (consumer) from storage (producer). Consumer pays query compute; producer pays storage.</p>
+                <p><strong>Snapshot copy/restore</strong> for point-in-time backup, DR, migrating to a new Region/account, or when consumers need a mutable copy isolated from production. Snapshots are static until restored; restore creates a new cluster.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Explain row-level security in Redshift and how it differs from a WHERE clause in a view.<span class="qa-tag">Security</span></summary>
+              <div class="qa-body">
+                <p>RLS policies attach to a table and filter rows transparently for every query — users cannot bypass by writing their own SQL. A secured view with a WHERE on <code>current_user</code> can be bypassed if the user has direct table access. RLS requires <code>CREATE RLS POLICY</code>, <code>ATTACH RLS POLICY … TO ROLE</code>, and <code>ALTER TABLE … ROW LEVEL SECURITY ON</code>. Policies can reference mapping tables, making them dynamic as assignments change.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Why is COPY preferred over INSERT for loading a 500 GB file from S3?<span class="qa-tag">Performance</span></summary>
+              <div class="qa-body">
+                <p>COPY parallelises across all slices — each slice reads and loads its portion simultaneously using MPP. INSERT sends rows through the leader sequentially (or in small batches), bottlenecking on one node. COPY also applies optimal column encodings (<code>COMPUPDATE</code>), handles compressed formats, and supports manifest-based multi-file loads. Split files to a multiple of total slice count for even distribution.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What is the leader node's role and does it store user data?<span class="qa-tag">Architecture</span></summary>
+              <div class="qa-body">
+                <p>The leader parses SQL, builds the distributed plan, assigns work to slices, coordinates shuffles, and aggregates results. In a <strong>multi-node</strong> cluster it does not store user table data — only metadata. In a <strong>single-node</strong> cluster the one node is both leader and compute. Client connections always terminate on the leader.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How does enhanced VPC routing affect COPY and UNLOAD?<span class="qa-tag">Security</span></summary>
+              <div class="qa-body">
+                <p>Without enhanced VPC routing, COPY/UNLOAD traffic between Redshift and S3 may traverse the public internet (still encrypted). With it enabled, traffic routes through the VPC using VPC endpoints or your network path — required by many compliance policies. Note: Spectrum on provisioned clusters does not support enhanced VPC routing — an exam gotcha when a scenario demands both Spectrum and private-only S3 access.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What are RA3 nodes and why did AWS introduce Redshift Managed Storage?<span class="qa-tag">Architecture</span></summary>
+              <div class="qa-body">
+                <p>RA3 separates compute from storage. Hot blocks sit on local SSD; cold blocks migrate to S3 durably under RMS. Scale compute nodes without moving data; store petabytes without proportional compute growth. DC2 couples storage to nodes — adding capacity means adding nodes even if you only need disk. RA3 also enables multi-AZ, datashares at scale, and is the migration target from legacy DS2.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How do you invoke Redshift from Lambda without managing JDBC connection pools?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>Use the <strong>Redshift Data API</strong>: call <code>ExecuteStatement</code> with cluster/workgroup identifier and IAM auth, poll <code>DescribeStatement</code>, fetch results with <code>GetStatementResult</code>. No persistent TCP connection — fits Lambda timeout and concurrency model. Attach <code>AmazonRedshiftDataFullAccess</code> or a scoped policy. Mind limits: 100 MB result size, 200 active queries, 24-hour result retention.</p>
+              </div>
+            </details>
+          </div>
+        </section>
+
+        <section class="section" id="practice">
+          <h2>Hands-on practice</h2>
+          <p class="muted">Redshift is <strong>not</strong> free tier. Prefer Serverless with low base capacity, or delete provisioned clusters within the hour.</p>
+
+          <div class="callout danger"><strong>Delete clusters and namespaces immediately.</strong> A forgotten <code>dc2.large</code> cluster bills ~0.25 USD/hour (~6 USD/day). Serverless base capacity also accrues per-second charges when queries run. Always delete the namespace/workgroup or cluster before closing the console tab.</div>
+
+          <ol class="practice-list">
+            <li class="practice">
+              <p class="practice-task">Create a Redshift Serverless namespace and workgroup in <code>us-east-1</code> with base capacity 8 RPUs. Open query editor v2, create schema <code>lab</code>, run the distribution-key DDL from the notes, and confirm tables exist.</p>
+              <span class="console-path">Redshift → Serverless dashboard → Create namespace and workgroup</span>
+              <p class="practice-expect"><code>SELECT tablename FROM svv_tables WHERE schemaname = 'lab';</code> lists <code>dim_customer</code>, <code>fact_sales</code>, and <code>staging_sales</code>.</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">Console + SQL</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Set a <a href="s04-glue.html#budgets">5 USD budget</a> alert first.</li>
+                    <li><strong>Amazon Redshift → Serverless → Create namespace</strong> — name <code>dea-lab-ns</code>, KMS encrypt on.</li>
+                    <li>Create workgroup <code>dea-lab-wg</code>, base capacity <strong>8 RPUs</strong>, max 32 RPUs.</li>
+                    <li>Open <strong>Query editor v2</strong>, connect to <code>dea-lab-wg</code>, database <code>dev</code>.</li>
+                    <li>Paste and run the CREATE TABLE block from the <a href="#distribution">distribution section</a> (adjust schema to <code>lab</code>).</li>
+                  </ol>
+                  <p class="muted">Cleanup: Serverless dashboard → select workgroup → Delete. Then delete namespace. Confirm zero workgroups remain.</p>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Upload <code>data/customers.csv</code> to <code>s3://dea-lab-&lt;initials&gt;-&lt;random&gt;/staging/customers/</code>, attach an IAM role to Redshift with S3 read access, and COPY into <code>staging.customers</code>.</p>
+              <span class="console-path">S3 → Upload · IAM → Role · Redshift → Manage IAM roles</span>
+              <p class="practice-expect"><code>SELECT COUNT(*) FROM staging.customers;</code> returns 11 (including the duplicate row).</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">Console + SQL</span></summary>
+                <div class="qa-body">
+<pre data-lang="shell"><code>BUCKET=dea-lab-ab-4821
+aws s3 cp data/customers.csv s3://$BUCKET/staging/customers/customers.csv</code></pre>
+                  <ol>
+                    <li>Create IAM role <code>RedshiftLoadRole</code> trusted by Redshift with <code>s3:GetObject</code> on your bucket.</li>
+                    <li>Attach role to cluster/workgroup under <strong>Properties → IAM roles</strong>.</li>
+                    <li>Create staging table matching CSV columns, then COPY (see <a href="#integrations">integrations section</a>).</li>
+                  </ol>
+                  <p class="muted">Cleanup: drop staging table; detach IAM role if deleting cluster.</p>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Query <code>SVV_TABLE_INFO</code> after the load and identify the <code>unsorted</code> and <code>skew_rows</code> columns. Run <code>ANALYZE</code> and optionally <code>VACUUM</code> on the staging table.</p>
+              <span class="console-path">Query editor v2</span>
+              <p class="practice-expect"><code>SVV_TABLE_INFO</code> shows statistics refreshed; <code>unsorted</code> near 0 after VACUUM if sort key defined.</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">SQL</span></summary>
+                <div class="qa-body">
+<pre data-lang="sql"><code>SELECT "table", size, tbl_rows, skew_rows, unsorted, vacuum_sort_benefit
+FROM svv_table_info
+WHERE schema = 'staging';
+
+ANALYZE staging.customers;
+VACUUM staging.customers;</code></pre>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">From the CLI, submit a query through the Redshift Data API against your workgroup and retrieve the row count result.</p>
+              <span class="console-path">Terminal → AWS CLI</span>
+              <p class="practice-expect"><code>describe-statement</code> status <code>FINISHED</code>; result Records show count 11.</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">CLI</span></summary>
+                <div class="qa-body">
+<pre data-lang="shell"><code>aws redshift-data execute-statement \
+  --workgroup-name dea-lab-wg \
+  --database dev \
+  --secret-arn arn:aws:secretsmanager:us-east-1:ACCOUNT:secret:redshift-admin \
+  --sql "SELECT COUNT(*) FROM staging.customers;"</code></pre>
+                  <p>Poll with <code>describe-statement --id &lt;id&gt;</code>, then <code>get-statement-result</code>.</p>
+                  <p class="muted">Cleanup: delete Serverless workgroup and namespace; delete Secrets Manager secret if created for the lab.</p>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">If you used a provisioned <code>dc2.large</code> cluster instead of Serverless: pause it after the lab, then delete it. Verify no clusters remain in the Region.</p>
+              <span class="console-path">Redshift → Clusters → Pause → Delete</span>
+              <p class="practice-expect"><code>aws redshift describe-clusters --query 'Clusters[].ClusterIdentifier'</code> returns <code>[]</code>.</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">Console + CLI</span></summary>
+                <div class="qa-body">
+<pre data-lang="shell"><code>aws redshift describe-clusters --region us-east-1 \
+  --query 'Clusters[].{Id:ClusterIdentifier,Status:ClusterStatus}'
+
+aws redshift delete-cluster --cluster-identifier dea-lab-cluster \
+  --skip-final-cluster-snapshot --region us-east-1</code></pre>
+                  <p class="muted">Paused clusters still bill for storage on DC2. Delete, do not just pause, when the lab ends.</p>
+                </div>
+              </details>
+            </li>
+          </ol>
+        </section>
+
+        <section class="section" id="recap">
+          <h2>Recap</h2>
+          <div class="recap">
+            <ul class="checklist">
+              <li>Redshift = columnar MPP warehouse; leader plans, compute slices execute. RA3 + RMS separates compute from S3-backed storage.</li>
+              <li>Distribution: KEY on join column (facts), ALL on small dims, EVEN on staging, AUTO default. SORTKEY (or AUTO) on filter columns; zone maps skip blocks.</li>
+              <li>COPY parallel load beats INSERT; split files to slice multiple; UNLOAD exports parallel to S3. Zero-ETL for Aurora/RDS/DynamoDB near-real-time.</li>
+              <li>VACUUM recycles dead rows and re-sorts; ANALYZE refreshes stats. Check SVV_TABLE_INFO for unsorted/skew.</li>
+              <li>Spectrum queries S3 via Glue catalog — same Region required; pay per TB scanned plus cluster. Join lake + warehouse in one SQL.</li>
+              <li>Datashares = live cross-cluster/account/Region access on RA3/Serverless; snapshots = point-in-time DR/migration.</li>
+              <li>WLM queues + concurrency scaling (400+ with scaling) + SQA for short queries. Serverless auto-manages WLM.</li>
+              <li>Serverless = RPUs per second, always encrypted; provisioned = node hours, resize elastic/classic/snapshot.</li>
+              <li>Data API for Lambda — no JDBC pool; 200 active queries, 100 MB results.</li>
+              <li>FGAC: column GRANT, RLS policies (CREATE + ATTACH + ALTER TABLE RLS ON), masking policies with PRIORITY.</li>
+              <li>Groups cannot nest; roles can. IAM GetClusterCredentials for federated DB auth.</li>
+              <li>dc2.large ≈ 0.25 USD/hour — not free tier. Delete Serverless namespace/workgroup or cluster same day.</li>
+            </ul>
+            <p style="margin-top:1rem;">
+              <button type="button" data-complete="section-10">Mark complete</button>
+            </p>
+          </div>
+        </section>
+
+
+      </div>
+
+      <aside class="toc" aria-label="On this page">
+        <strong>On this page</strong>
+        <ol>
+          <li><a href="#lectures">Lectures</a></li>
+          <li><a href="#overview">Overview</a></li>
+          <li><a href="#cluster-architecture">Architecture</a></li>
+          <li><a href="#rms">Managed Storage</a></li>
+          <li><a href="#node-types">Node types</a></li>
+          <li><a href="#resizing">Resizing</a></li>
+          <li><a href="#snapshots">Snapshots</a></li>
+          <li><a href="#cross-region-sharing">Cross-Region sharing</a></li>
+          <li><a href="#distribution">Distribution &amp; sort keys</a></li>
+          <li><a href="#vacuum">VACUUM &amp; maintenance</a></li>
+          <li><a href="#integrations">Integrations &amp; loading</a></li>
+          <li><a href="#transformation">ETL vs ELT</a></li>
+          <li><a href="#federated">Federated queries</a></li>
+          <li><a href="#materialized-views">Materialized views</a></li>
+          <li><a href="#spectrum">Spectrum</a></li>
+          <li><a href="#system-tables">System tables</a></li>
+          <li><a href="#data-api">Data API</a></li>
+          <li><a href="#data-sharing">Data sharing</a></li>
+          <li><a href="#wlm">WLM</a></li>
+          <li><a href="#serverless">Serverless</a></li>
+          <li><a href="#redshift-ml">Redshift ML</a></li>
+          <li><a href="#security">Security</a></li>
+          <li><a href="#access-control">Access control</a></li>
+          <li><a href="#fgac">Fine-grained access</a></li>
+          <li><a href="#deeper">Deeper detail</a></li>
+          <li><a href="#interview">Interview questions</a></li>
+          <li><a href="#practice">Hands-on practice</a></li>
+          <li><a href="#recap">Recap</a></li>
+        </ol>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<footer class="footer">AWS Certified Data Engineer Associate (DEA-C01) · Section 10 · Offline study edition</footer>
+</body>
+</html>

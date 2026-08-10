@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="SnowPro Core COF-C03 Section 7: storage integrations, AWS IAM trust, external stages, loading from S3, and unloading to cloud storage.">
+<title>Section 7 — Connect to Cloud | Snowflake COF-C03 Course Notes</title>
+<link rel="stylesheet" href="assets/snowflake.css">
+<script defer src="assets/search-index.js"></script>
+<script defer src="assets/sql-glossary.js"></script>
+<script defer src="assets/sql-highlight.js"></script>
+<script defer src="assets/snowflake.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">Course section 7 of 17 · SnowPro Core (COF-C03)</p>
+    <h1>Connect To Cloud</h1>
+    <p class="subtitle">Secure storage integrations, external stages pointing at S3, IAM trust policies, loading MOCK.csv from your bucket, and unloading table data back to cloud storage — without embedding credentials in SQL.</p>
+    <div class="hero-meta">
+      <span class="chip">4 lectures · 18min</span>
+      <span class="chip">Exam domain: Data Loading, Unloading &amp; Connectivity</span>
+      <span class="chip">Last verified: 28 Jul 2026</span>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <nav class="pager" aria-label="Section navigation">
+    <a href="s06-semi-unstructured.html">← Semi-structured Data</a>
+    <a href="../index.html">Course contents</a>
+    <a href="s08-more-features.html">Next: More Features →</a>
+  </nav>
+
+  <main id="main">
+    <div class="layout">
+      <div class="content">
+
+        <section class="section" id="lectures">
+          <h2>Lectures in this section</h2>
+          <p class="muted">Every lecture below links to the notes that cover it. Sample data: <code>data/MOCK.csv</code>. IAM template: <code>data/AWS_POLICY.txt</code>.</p>
+          <ol class="lecture-list">
+            <li class="lecture">
+              <a class="lec-title" href="#cloud-concept">Connect To Cloud Concept</a>
+              <span class="lec-time">1:59</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#aws-account">Demo : Create AWS Account</a>
+              <span class="lec-time">1:50</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#storage-integration">Demo : Connection AWS to Snowflake</a>
+              <span class="lec-time">11:00</span>
+              <span class="lec-src">Connect To Cloud/Cloud connect.txt · data/AWS_POLICY.txt</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#cloud-unload">Demo : Unload to Cloud</a>
+              <span class="lec-time">3:38</span>
+              <span class="lec-src">Connect To Cloud/Cloud Unload.txt</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#cloud-unload">Connect to cloud Quiz</a>
+            </li>
+          </ol>
+        </section>
+
+        <section class="section" id="cloud-concept">
+          <h2>Connect To Cloud Concept</h2>
+          <p class="lead"><a href="s04-data-loading-unloading.html">Section 4</a> covered files inside Snowflake internal stages. This section covers files in <strong>your</strong> cloud storage (S3, Azure Blob, GCS). Snowflake reads and writes them through <strong>external stages</strong> backed by <strong>storage integrations</strong> — no long-lived credentials stored in Snowflake.</p>
+
+          <div class="analogy">
+            <strong>Everyday analogy — library card vs buying the book:</strong> Loading into a native table is like Snowflake buying and shelving every book. External stages are like a library card — Snowflake keeps a catalog but the books stay in the publisher's warehouse (your S3 bucket).
+          </div>
+
+          <div class="diagram" role="img" aria-label="Trust relationship between Snowflake and cloud storage">
+            <div class="stack">
+              <div class="layer pulse">Snowflake account — storage integration + external stage</div>
+              <div class="layer">IAM role trust (AWS) / service principal (Azure) / SA (GCP)</div>
+              <div class="layer">Your bucket — s3://your-bucket/prefix/</div>
+            </div>
+          </div>
+
+          <div class="callout exam">
+            <strong>COF-C03 exam tip:</strong> <strong>Storage integrations</strong> are the secure, recommended way to connect external stages. Avoid embedding <code>AWS_KEY_ID</code> / <code>AWS_SECRET_KEY</code> in SQL. External tables and Iceberg are covered in <a href="s15-cof-c03-exclusive.html">Section 15</a>.
+          </div>
+        </section>
+
+        <section class="section" id="aws-account">
+          <h2>Demo : Create AWS Account</h2>
+          <p>The course demo walks through creating a free-tier AWS account, an S3 bucket, and uploading MOCK.csv. At a high level:</p>
+          <ol>
+            <li>Sign up at AWS and open the S3 console.</li>
+            <li>Create a bucket in a region compatible with your Snowflake account.</li>
+            <li>Upload <code>MOCK.csv</code> from the course <code>data/</code> folder to a prefix such as <code>s3://your-bucket/lab/</code>.</li>
+            <li>Create an IAM policy and role — use the template in <code>data/AWS_POLICY.txt</code> with your bucket and prefix placeholders.</li>
+          </ol>
+
+          <div class="callout tip">
+            <strong>Cost note:</strong> S3 storage and cross-region egress are billed by AWS. Keep lab buckets small and delete test objects after the exercise.
+          </div>
+        </section>
+
+        <section class="section" id="storage-integration">
+          <h2>Demo : Connection AWS to Snowflake</h2>
+          <p class="muted">Course file: <code>Connect To Cloud/Cloud connect.txt</code> · IAM template: <code>data/AWS_POLICY.txt</code></p>
+
+          <h3>Setup workflow (AWS)</h3>
+          <p>The course teaches a seven-step sequence to wire Snowflake to S3. Order matters — especially steps 4 and 5, where the storage integration must exist before you can learn the IAM user and external ID Snowflake generated.</p>
+          <ol>
+            <li><strong>Create the S3 bucket and upload the file.</strong> Place <code>MOCK.csv</code> under a prefix such as <code>s3://your-bucket/lab/</code> in a region compatible with your Snowflake account.</li>
+            <li><strong>Create an IAM policy.</strong> Grant <code>s3:GetObject</code>, <code>s3:PutObject</code>, <code>s3:ListBucket</code>, and related actions on the bucket prefix — use <code>data/AWS_POLICY.txt</code> as a template.</li>
+            <li><strong>Create an IAM role in AWS.</strong> Attach the S3 policy. The trust policy is incomplete at this point — you do not yet have Snowflake's IAM user ARN or external ID.</li>
+            <li><strong>Create a storage integration in Snowflake.</strong> Reference the IAM role ARN and set <code>STORAGE_ALLOWED_LOCATIONS</code> to the bucket prefix. Snowflake registers the trust relationship and generates credentials on its side.</li>
+            <li><strong>Update the AWS role trust policy</strong> with <code>STORAGE_AWS_IAM_USER_ARN</code> and <code>STORAGE_AWS_EXTERNAL_ID</code> from <code>DESC INTEGRATION</code>. This step comes after the integration exists because Snowflake only reveals those values once the integration object is created — a chicken-and-egg problem if you try to finish the trust policy first.</li>
+            <li><strong>Create an external stage</strong> pointing at the integration and S3 URL; verify with <code>LIST @stage</code>.</li>
+            <li><strong>Run <code>COPY INTO</code></strong> to load the table from the external stage.</li>
+          </ol>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-144-cloud-steps.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-144-cloud-steps.png" alt="Seven-step workflow: create S3 bucket and upload file, create IAM policy, create IAM role, create storage integration, update role with Snowflake IAM user and external ID, create external stage, COPY INTO" loading="lazy" width="1920" height="1080">
+            </a>
+            <figcaption><span class="slide-no">Slide 144</span>The course's ordered walkthrough from S3 bucket to <code>COPY INTO</code> — trust policy update follows integration creation.</figcaption>
+          </figure>
+
+          <div class="callout tip">
+            <strong>Why step 5 cannot come first:</strong> Snowflake generates a unique IAM user and external ID when you create the storage integration. Until that object exists, <code>DESC INTEGRATION</code> has nothing to return and the AWS role cannot trust Snowflake. Create the integration, read the two values, then patch the trust policy.
+          </div>
+
+          <h3>IAM policy template</h3>
+          <pre data-lang="json" data-title="AWS IAM policy attached to the Snowflake role" data-explain="Two statements: object-level rights on the prefix Snowflake will read and write, and bucket-level ListBucket plus GetBucketLocation so it can enumerate files. Drop the four write actions if the stage is only ever used for loading."><code>{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:PutObject", "s3:GetObject", "s3:GetObjectVersion",
+        "s3:DeleteObject", "s3:DeleteObjectVersion"
+      ],
+      "Resource": "arn:aws:s3:::your-bucket/your-prefix/*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": ["s3:ListBucket", "s3:GetBucketLocation"],
+      "Resource": "arn:aws:s3:::your-bucket",
+      "Condition": {
+        "StringLike": { "s3:prefix": ["your-prefix/*"] }
+      }
+    }
+  ]
+}</code></pre>
+
+          <pre><code>USE ROLE ACCOUNTADMIN;
+USE WAREHOUSE COMPUTE_WH;
+USE DATABASE la_db;
+USE SCHEMA la_schema;
+
+CREATE OR REPLACE STORAGE INTEGRATION sample_int
+  TYPE = EXTERNAL_STAGE
+  STORAGE_PROVIDER = 'S3'
+  ENABLED = TRUE
+  STORAGE_AWS_ROLE_ARN = 'arn:aws:iam::&lt;aws_account_id&gt;:role/&lt;sf_role_name&gt;'
+  STORAGE_ALLOWED_LOCATIONS = ('s3://your-bucket/lab/');
+
+DESC INTEGRATION sample_int;
+-- Copy STORAGE_AWS_IAM_USER_ARN and STORAGE_AWS_EXTERNAL_ID into AWS trust policy
+
+CREATE OR REPLACE FILE FORMAT mycsvformat
+  TYPE = CSV FIELD_DELIMITER = ',' SKIP_HEADER = 1;
+
+CREATE OR REPLACE STAGE my_s3_stage
+  STORAGE_INTEGRATION = sample_int
+  URL = 's3://your-bucket/lab/'
+  FILE_FORMAT = mycsvformat;
+
+DESC STAGE my_s3_stage;
+LIST @my_s3_stage;
+
+CREATE OR REPLACE TABLE new_table_cloud (
+  customer VARCHAR, first_name VARCHAR, last_name VARCHAR,
+  region VARCHAR, email VARCHAR, gender VARCHAR, "ORDER" INTEGER
+);
+
+COPY INTO new_table_cloud
+FROM @my_s3_stage
+PATTERN = '.*MOCK.*\\.csv';
+
+SELECT COUNT(*) FROM new_table_cloud;</code></pre>
+
+          <div class="callout danger">
+            <strong>Never use inline credentials in production.</strong> Course <code>Cloud connect.txt</code> demonstrates a deprecated <code>COPY INTO 's3://…' credentials=(AWS_KEY_ID=… AWS_SECRET_KEY=…)</code> pattern with real keys. Replace with storage integrations for exams and real deployments.
+          </div>
+
+          <div class="callout warn">
+            <strong>Source correction:</strong> Course file sets <code>STORAGE_ALLOWED_LOCATIONS</code> to a single file path (<code>…/MOCK.csv</code>). Use a <strong>prefix</strong> (folder path ending in <code>/</code>) so the stage can list and load multiple files.
+          </div>
+        </section>
+
+        <section class="section" id="cloud-unload">
+          <h2>Demo : Unload to Cloud</h2>
+          <p class="muted">Course file: <code>Connect To Cloud/Cloud Unload.txt</code></p>
+          <p>Unloading reverses the flow: <code>COPY INTO @external_stage FROM table</code> writes table data to files in your bucket. Internal-stage unloads (then GET locally) are in <a href="s04-data-loading-unloading.html">Section 4</a>.</p>
+
+          <div class="diagram" role="img" aria-label="Unload flow from table to S3 bucket">
+            <div class="flow">
+              <div class="node pulse">Table</div>
+              <span class="arrow" aria-hidden="true">→</span>
+              <div class="node">External stage<br><small class="muted">s3://your-bucket/</small></div>
+              <span class="arrow" aria-hidden="true">→</span>
+              <div class="node">S3 objects<br><small class="muted">CSV files</small></div>
+            </div>
+          </div>
+
+          <pre><code>ALTER STORAGE INTEGRATION sample_int
+  SET STORAGE_ALLOWED_LOCATIONS = ('s3://your-bucket/');
+
+DESC INTEGRATION sample_int;
+
+CREATE OR REPLACE STAGE my_s3_unload
+  STORAGE_INTEGRATION = sample_int
+  URL = 's3://your-bucket/unload/'
+  FILE_FORMAT = mycsvformat;
+
+-- Unload via stage
+COPY INTO @my_s3_unload
+FROM new_table_cloud
+FILE_FORMAT = (FORMAT_NAME = mycsvformat, COMPRESSION = NONE)
+OVERWRITE = TRUE
+HEADER = TRUE;
+
+-- Or unload directly to path (still uses integration — no inline keys)
+COPY INTO 's3://your-bucket/unload/'
+FROM new_table_cloud
+STORAGE_INTEGRATION = sample_int
+FILE_FORMAT = (FORMAT_NAME = mycsvformat, COMPRESSION = NONE)
+OVERWRITE = TRUE;</code></pre>
+
+          <div class="callout warn">
+            <strong>Cost note:</strong> Unloading consumes warehouse credits plus AWS egress if Snowflake and the bucket are in different regions.
+          </div>
+        </section>
+
+        <section class="section" id="lab">
+          <div class="lab">
+            <h3>Practical Lab — External Stage Load</h3>
+            <div class="lab-meta">
+              <span>Prerequisites: AWS account, MOCK.csv in S3, IAM trust configured</span>
+              <span>Role: ACCOUNTADMIN (integration) or SYSADMIN</span>
+              <span>Warehouse: COMPUTE_WH</span>
+              <span>Cost: Low; watch egress</span>
+            </div>
+            <pre><code>CREATE OR REPLACE STORAGE INTEGRATION lab_s3_int
+  TYPE = EXTERNAL_STAGE STORAGE_PROVIDER = 'S3' ENABLED = TRUE
+  STORAGE_AWS_ROLE_ARN = 'arn:aws:iam::&lt;aws_account_id&gt;:role/&lt;role&gt;'
+  STORAGE_ALLOWED_LOCATIONS = ('s3://your-bucket/lab/');
+
+CREATE OR REPLACE STAGE lab_s3_stage
+  STORAGE_INTEGRATION = lab_s3_int
+  URL = 's3://your-bucket/lab/'
+  FILE_FORMAT = (TYPE = CSV SKIP_HEADER = 1);
+
+LIST @lab_s3_stage;
+
+COPY INTO new_table_cloud FROM @lab_s3_stage
+PATTERN = '.*MOCK.*\\.csv'
+FILE_FORMAT = (TYPE = CSV SKIP_HEADER = 1);
+
+SELECT COUNT(*) FROM new_table_cloud;  -- Expected: ~1000</code></pre>
+            <h4>Cleanup</h4>
+            <pre><code>DROP STAGE IF EXISTS lab_s3_stage;
+DROP INTEGRATION IF EXISTS lab_s3_int;
+-- Remove test objects from S3 via AWS console</code></pre>
+          </div>
+        </section>
+
+        <section class="section" id="interview">
+          <h2>Interview questions</h2>
+          <p class="muted">Try to answer each one before opening it.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+            <details class="qa">
+              <summary>Why do storage integrations exist, and what is wrong with inline credentials in stage definitions?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>Storage integrations establish a trust relationship between Snowflake and your cloud IAM — Snowflake assumes a role to read and write objects without storing long-lived keys in SQL. Inline <code>AWS_KEY_ID</code> / <code>AWS_SECRET_KEY</code> embed secrets in object definitions, rotation is painful, and credentials appear in query history and logs. Integrations are the recommended pattern for exams and production.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Explain the trust relationship between Snowflake's IAM user and your cloud role, and why <code>DESC INTEGRATION</code> is a required step.<span class="qa-tag">Scenario</span></summary>
+              <div class="qa-body">
+                <p>When you create a storage integration, Snowflake generates an IAM user ARN and external ID. You paste those into your cloud role's trust policy so Snowflake can assume the role. <code>DESC INTEGRATION</code> reveals <code>STORAGE_AWS_IAM_USER_ARN</code> and <code>STORAGE_AWS_EXTERNAL_ID</code> — without updating the trust policy, <code>LIST @stage</code> fails even if the S3 bucket policy looks correct.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What do <code>STORAGE_ALLOWED_LOCATIONS</code> and <code>STORAGE_BLOCKED_LOCATIONS</code> control?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p><code>STORAGE_ALLOWED_LOCATIONS</code> is an allow-list of cloud URL prefixes the integration may access — stages must point inside those prefixes. <code>STORAGE_BLOCKED_LOCATIONS</code> explicitly denies sensitive subpaths within the allowed set, for example a confidential folder under an otherwise permitted bucket. Together they constrain which S3/Azure/GCS paths any stage using that integration can reach.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What is the difference between internal and external stages, and who pays for storage in each case?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p>Internal stages store files inside Snowflake's managed storage — you pay Snowflake storage charges and use PUT/GET or server-side copy. External stages are pointers to your cloud bucket; files stay in S3/Azure/GCS and you pay the cloud provider for storage. Snowflake reads and writes through the storage integration without copying data into internal storage unless you load it into a table.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>When can unloading or loading through an external stage incur egress charges?<span class="qa-tag">Cost</span></summary>
+              <div class="qa-body">
+                <p>Egress applies when data crosses regions or leaves the cloud provider's network — for example Snowflake in <code>us-east-1</code> writing to a bucket in <code>eu-west-1</code>. You also pay warehouse credits for the COPY operation itself. Keep the bucket in the same region as your Snowflake account for lab work, and monitor cross-region paths in production.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What happens to an external stage when the underlying bucket permissions or trust policy change?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p>The stage object in Snowflake still exists, but operations fail at runtime — <code>LIST</code>, <code>COPY INTO</code>, and unload commands return authorization errors. Snowflake does not cache bucket credentials; it assumes the role on each access. Fixing the IAM trust policy, bucket policy, or allowed locations restores access without recreating the stage definition.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Why should <code>STORAGE_ALLOWED_LOCATIONS</code> use a folder prefix rather than a single file path?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p>A stage needs to list and load multiple files under a prefix — setting allowed locations or the stage URL to one file (as the course demo sometimes shows) prevents listing other objects and breaks pattern-based loads. Use a folder path ending in <code>/</code>, such as <code>s3://your-bucket/lab/</code>, so <code>LIST</code> and <code>PATTERN</code> work correctly.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How do you unload table data to cloud storage safely without embedding credentials?<span class="qa-tag">SQL</span></summary>
+              <div class="qa-body">
+                <p>Create a storage integration with write permissions on the target prefix, then either <code>COPY INTO @external_stage FROM table</code> or <code>COPY INTO 's3://…' FROM table STORAGE_INTEGRATION = …</code>. Set <code>OVERWRITE = TRUE</code> and a file format explicitly. Ensure the integration's allowed locations cover the unload path — you may need to <code>ALTER STORAGE INTEGRATION … SET STORAGE_ALLOWED_LOCATIONS</code> before writing to a new prefix.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Why must you update the AWS IAM role trust policy <em>after</em> creating the storage integration?<span class="qa-tag">Scenario</span></summary>
+              <div class="qa-body">
+                <p>Snowflake generates <code>STORAGE_AWS_IAM_USER_ARN</code> and <code>STORAGE_AWS_EXTERNAL_ID</code> only when the integration object is created. You cannot complete the trust relationship beforehand because those values do not exist yet. The course sequence is: create role and integration in Snowflake, run <code>DESC INTEGRATION</code>, then patch the AWS trust policy so Snowflake can assume the role.</p>
+              </div>
+            </details>
+          </div>
+        </section>
+
+        <section class="section" id="practice">
+          <h2>Hands-on practice</h2>
+          <p class="muted">Run these in a trial account on an X-Small warehouse with <code>AUTO_SUSPEND = 60</code>. Clean up when you finish.</p>
+          <ol class="practice-list">
+            <li class="practice">
+              <p class="practice-task">With MOCK.csv already in <code>s3://your-bucket/lab/</code> and IAM trust configured, create storage integration <code>practice_s3_int</code>, run <code>DESC INTEGRATION</code>, create external stage <code>practice_s3_stage</code>, and verify with <code>LIST</code>. Requires your own AWS bucket and role — replace placeholders.</p>
+              <p class="practice-expect"><code>LIST @practice_s3_stage</code> shows MOCK.csv (or matching files). <code>DESC INTEGRATION</code> returns <code>STORAGE_AWS_IAM_USER_ARN</code> and <code>STORAGE_AWS_EXTERNAL_ID</code> for the trust policy.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">SQL</span></summary>
+                <div class="qa-body">
+<pre><code>USE ROLE ACCOUNTADMIN;
+USE WAREHOUSE COMPUTE_WH;
+USE DATABASE la_db;
+USE SCHEMA la_schema;
+
+CREATE OR REPLACE STORAGE INTEGRATION practice_s3_int
+  TYPE = EXTERNAL_STAGE
+  STORAGE_PROVIDER = 'S3'
+  ENABLED = TRUE
+  STORAGE_AWS_ROLE_ARN = 'arn:aws:iam::&lt;aws_account_id&gt;:role/&lt;sf_role_name&gt;'
+  STORAGE_ALLOWED_LOCATIONS = ('s3://your-bucket/lab/');
+
+DESC INTEGRATION practice_s3_int;
+-- Update AWS role trust policy with IAM user ARN and external ID from DESC
+
+CREATE OR REPLACE FILE FORMAT practice_csv_ff
+  TYPE = CSV FIELD_DELIMITER = ',' SKIP_HEADER = 1;
+
+CREATE OR REPLACE STAGE practice_s3_stage
+  STORAGE_INTEGRATION = practice_s3_int
+  URL = 's3://your-bucket/lab/'
+  FILE_FORMAT = practice_csv_ff;
+
+LIST @practice_s3_stage;</code></pre>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Load MOCK.csv from <code>@practice_s3_stage</code> into <code>new_table_cloud</code> using a pattern match. Unloading to S3 also consumes warehouse credits and may incur AWS egress if cross-region.</p>
+              <p class="practice-expect"><code>SELECT COUNT(*) FROM new_table_cloud</code> returns approximately 1000 rows.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">SQL</span></summary>
+                <div class="qa-body">
+<pre><code>CREATE OR REPLACE TABLE new_table_cloud (
+  customer VARCHAR, first_name VARCHAR, last_name VARCHAR,
+  region VARCHAR, email VARCHAR, gender VARCHAR, "ORDER" INTEGER
+);
+
+COPY INTO new_table_cloud
+FROM @practice_s3_stage
+PATTERN = '.*MOCK.*\\.csv'
+FILE_FORMAT = practice_csv_ff;
+
+SELECT COUNT(*) FROM new_table_cloud;</code></pre>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Unload <code>new_table_cloud</code> to <code>s3://your-bucket/unload/</code> via stage <code>practice_s3_unload</code>, then drop all practice objects and remove test files from S3 via the AWS console.</p>
+              <p class="practice-expect"><code>LIST @practice_s3_unload</code> shows unloaded CSV files. Integration, stages, and table are dropped cleanly.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">SQL</span></summary>
+                <div class="qa-body">
+<pre><code>ALTER STORAGE INTEGRATION practice_s3_int
+  SET STORAGE_ALLOWED_LOCATIONS = ('s3://your-bucket/');
+
+CREATE OR REPLACE STAGE practice_s3_unload
+  STORAGE_INTEGRATION = practice_s3_int
+  URL = 's3://your-bucket/unload/'
+  FILE_FORMAT = practice_csv_ff;
+
+COPY INTO @practice_s3_unload
+FROM new_table_cloud
+FILE_FORMAT = (FORMAT_NAME = practice_csv_ff, COMPRESSION = NONE)
+OVERWRITE = TRUE
+HEADER = TRUE;
+
+LIST @practice_s3_unload;
+
+DROP TABLE IF EXISTS new_table_cloud;
+DROP STAGE IF EXISTS practice_s3_unload;
+DROP STAGE IF EXISTS practice_s3_stage;
+DROP INTEGRATION IF EXISTS practice_s3_int;
+DROP FILE FORMAT IF EXISTS practice_csv_ff;
+-- Remove test objects from S3 via AWS console</code></pre>
+                </div>
+              </details>
+            </li>
+          </ol>
+        </section>
+
+        <section class="section" id="recap">
+          <h2>Recap</h2>
+          <div class="recap">
+            <ul class="checklist">
+              <li>Storage integrations = secure trust between Snowflake and cloud IAM; no embedded keys.</li>
+              <li>Seven-step AWS workflow: bucket → policy → role → integration → update trust (IAM user + external ID) → stage → <code>COPY INTO</code>.</li>
+              <li>Trust policy update comes <em>after</em> integration creation — Snowflake generates the external ID at that point.</li>
+              <li>External stages point to S3/Azure/GCS URLs; support LIST and COPY.</li>
+              <li>Load from cloud: <code>COPY INTO table FROM @external_stage</code> with optional <code>PATTERN</code>.</li>
+              <li>Unload to cloud: <code>COPY INTO @external_stage FROM table</code> or direct path with <code>STORAGE_INTEGRATION</code>.</li>
+              <li>External tables, directory auto-refresh on S3, and Iceberg — see <a href="s15-cof-c03-exclusive.html">Section 15</a>.</li>
+            </ul>
+            <p style="margin-top:1rem;">
+              <button type="button" data-complete="section-07">Mark complete</button>
+            </p>
+          </div>
+        </section>
+
+      </div>
+
+      <aside class="toc" aria-label="On this page">
+        <strong>On this page</strong>
+        <ol>
+          <li><a href="#lectures">Lectures</a></li>
+          <li><a href="#cloud-concept">Cloud concept</a></li>
+          <li><a href="#aws-account">AWS account</a></li>
+          <li><a href="#storage-integration">Storage integration</a></li>
+          <li><a href="#cloud-unload">Cloud unload</a></li>
+          <li><a href="#lab">Practical lab</a></li>
+          <li><a href="#interview">Interview questions</a></li>
+          <li><a href="#practice">Hands-on practice</a></li>
+          <li><a href="#recap">Recap</a></li>
+        </ol>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<footer class="footer">Snowflake COF-C03 Course Notes · Section 7 · Offline study edition</footer>
+</body>
+</html>

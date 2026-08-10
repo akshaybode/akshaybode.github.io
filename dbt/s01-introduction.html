@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="dbt bootcamp Section 1: what dbt is, what analytics engineering means, how dbt compiles and runs your SQL, and the Airbnb project the course builds.">
+<title>Section 1 — Introduction | The Complete dbt Bootcamp Notes</title>
+<link rel="stylesheet" href="assets/dbt.css">
+<script defer src="assets/search-index.js"></script>
+<script defer src="assets/code-highlight.js"></script>
+<script defer src="assets/dbt.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">Course section 1 of 22 · The Complete dbt Bootcamp: Zero to Hero</p>
+    <h1>Introduction</h1>
+    <p class="subtitle">What dbt actually is, and what it deliberately is not. The job title that grew up around it, the mechanics of turning a folder of SQL files into a dependency-ordered pipeline, and a tour of the Airbnb project you will have built by Section&nbsp;20.</p>
+    <div class="hero-meta">
+      <span class="chip">3 lectures · ~8min</span>
+      <span class="chip">Orientation</span>
+      <span class="chip">dbt fundamentals</span>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <nav class="pager" aria-label="Section navigation">
+    <a href="index.html">← Course contents</a>
+    <a href="index.html">Course contents</a>
+    <a href="s02-data-maturity.html">Next: The Data Maturity Model →</a>
+  </nav>
+
+  <main id="main">
+    <div class="layout">
+      <div class="content">
+
+        <section class="section" id="lectures">
+          <h2>Lectures in this section</h2>
+          <ol class="lecture-list">
+            <li class="lecture">
+              <a class="lec-title" href="#what-is-dbt">What dbt is and what it does not do</a>
+              <span class="lec-time">~3:00</span>
+              <span class="lec-src">Course introduction</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#analytics-engineering">Analytics engineering as a job</a>
+              <span class="lec-time">~3:00</span>
+              <span class="lec-src">Course introduction</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#course-shape">How the course is structured and what you build</a>
+              <span class="lec-time">~2:00</span>
+              <span class="lec-src">README.md · course repo</span>
+            </li>
+          </ol>
+          <p class="muted">The course opens short. Sections 2&ndash;5 are theory, Section 6 gets you running, and from Section 7 onwards every lecture adds something real to the Airbnb project.</p>
+        </section>
+
+        <section class="section" id="what-is-dbt">
+          <h2>What dbt is</h2>
+          <p class="lead">dbt is a build tool for SQL. You write <code>SELECT</code> statements in files; dbt works out what depends on what, wraps each one in the right <code>CREATE</code> statement, runs them against your warehouse in the correct order, and tests the results.</p>
+
+          <p>That is the whole idea. Everything else in this course &mdash; materializations, tests, snapshots, macros, documentation, deployment &mdash; is built on top of two facts: a model is a <code>SELECT</code>, and dbt knows the order to run them in.</p>
+
+          <p>The name is short for <em>data build tool</em>, and the comparison is deliberate. Make takes a folder of C files and a description of what depends on what, and produces a binary. dbt takes a folder of SQL files, infers what depends on what by reading the code, and produces a set of tables and views in your warehouse. In both cases you describe the <em>what</em>, and the tool handles the ordering, the rebuilds and the failure handling.</p>
+
+          <h3>What dbt does not do</h3>
+          <p>This trips people up more than anything else in the first week. dbt does not move data. It has no connectors, no extractors, no loaders. It never sees your rows &mdash; it sends SQL to your warehouse and reads back status, nothing more. If the data is not already in the warehouse, dbt cannot help you get it there.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>dbt does</th><th>dbt does not</th></tr></thead>
+              <tbody>
+                <tr><td>Compile Jinja and SQL into warehouse-native SQL</td><td>Extract data from APIs, databases or files</td></tr>
+                <tr><td>Work out build order from your <code>ref()</code> calls</td><td>Load data into the warehouse</td></tr>
+                <tr><td>Create and refresh tables, views and incremental models</td><td>Process data itself &mdash; the warehouse does all the compute</td></tr>
+                <tr><td>Run tests and stop dependent models when they fail</td><td>Schedule itself &mdash; you need cron, an orchestrator or dbt Cloud</td></tr>
+                <tr><td>Generate documentation and a lineage graph</td><td>Provide dashboards or a BI layer</td></tr>
+                <tr><td>Snapshot how a mutable table changed over time</td><td>Stream, or do anything sub-minute</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout info"><strong>The compute lives in your warehouse.</strong> dbt is a Python program that generates SQL strings and sends them over a connection. When a model takes four minutes, those four minutes are Snowflake, BigQuery or Databricks doing work and billing you for it. Making dbt faster almost always means making the SQL cheaper, not making dbt cleverer.</div>
+
+          <h3>Where dbt sits in a pipeline</h3>
+          <p>Extract and load are somebody else's problem &mdash; Fivetran, Airbyte, a Python script, a Snowpipe. Once the raw data has landed, dbt owns everything from there to the tables your dashboards read.</p>
+
+          <div class="diagram">
+            <p class="diagram-title">dbt owns the T in ELT, and nothing else</p>
+            <div class="flow">
+              <div class="node is-source"><b>Sources</b><small>APIs · app databases · files</small></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-compute"><b>Extract &amp; Load</b><small>Fivetran · Airbyte · scripts</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-store"><b>Raw schema</b><small>untouched, append-only</small></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-model pulse"><b>dbt</b><small>transform · test · document</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-serve"><b>BI &amp; ML</b><small>dashboards · models · reverse ETL</small></div>
+            </div>
+          </div>
+
+          <h3>What a model looks like</h3>
+          <p>Here is a real model from the project you will build. It is a <code>SELECT</code> and nothing else &mdash; no <code>CREATE TABLE</code>, no <code>DROP</code>, no transaction handling.</p>
+
+<pre data-lang="sql" data-title="models/src/src_listings.sql" data-explain="A staging model: read the raw table, rename columns to the names the rest of the project will use, change nothing else."><code>WITH raw_listings AS (
+    SELECT
+        *
+    FROM
+        AIRBNB.RAW.RAW_LISTINGS
+)
+SELECT
+    id AS listing_id,
+    name AS listing_name,
+    listing_url,
+    room_type,
+    minimum_nights,
+    host_id,
+    price AS price_str,
+    created_at,
+    updated_at
+FROM
+    raw_listings</code></pre>
+
+          <p>And here is the model downstream of it. The only difference that matters is <code>{{ ref('src_listings') }}</code> where a table name would normally go.</p>
+
+<pre data-lang="sql" data-title="models/dim/dim_listings_cleansed.sql" data-explain="ref() is the whole trick: it tells dbt this model depends on src_listings, and resolves to the right schema for whichever environment you are running in."><code>WITH src_listings AS (
+  SELECT
+    *
+  FROM
+    {{ ref('src_listings') }}
+)
+SELECT
+  listing_id,
+  listing_name,
+  room_type,
+  CASE
+    WHEN minimum_nights = 0 THEN 1
+    ELSE minimum_nights
+  END AS minimum_nights,
+  host_id,
+  REPLACE(
+    price_str,
+    '$'
+  ) :: NUMBER(
+    10,
+    2
+  ) AS price,
+  created_at,
+  updated_at
+FROM
+  src_listings</code></pre>
+
+          <p>That one function call does three jobs at once. It records a dependency, so dbt knows to build <code>src_listings</code> first. It resolves to a real, fully-qualified relation name at compile time, which differs between your development schema and production. And it feeds the lineage graph, so anyone can see what breaks if this model changes.</p>
+
+          <div class="callout tip"><strong>Never hard-code a table name for something dbt builds.</strong> Writing <code>FROM AIRBNB.DEV.SRC_LISTINGS</code> instead of <code>{{ ref('src_listings') }}</code> compiles and runs perfectly well &mdash; and quietly removes the model from the DAG. dbt will happily build them in the wrong order, and your dev run will read production data. This is the single most common beginner mistake.</div>
+        </section>
+
+        <section class="section" id="analytics-engineering">
+          <h2>Analytics engineering</h2>
+          <p class="lead">The job title appeared because a gap opened up. Data engineers know how to test, version and deploy software but do not know the business. Analysts know the business but were never given the tools to build anything maintainable. Analytics engineering is the middle: people who model data for a living, using software engineering practice to do it.</p>
+
+          <div class="grid-3">
+            <div class="mini-card">
+              <h4>Data engineer</h4>
+              <p>Moves and stores data reliably. Owns ingestion, infrastructure, orchestration and the warehouse itself. Thinks in pipelines and uptime.</p>
+            </div>
+            <div class="mini-card">
+              <h4>Analytics engineer</h4>
+              <p>Turns raw tables into trustworthy, documented, tested datasets that mean something to the business. Thinks in models and definitions.</p>
+            </div>
+            <div class="mini-card">
+              <h4>Data analyst</h4>
+              <p>Answers questions with those datasets. Builds dashboards, runs analyses, works with stakeholders. Thinks in questions and decisions.</p>
+            </div>
+          </div>
+
+          <h3>What the practice actually means</h3>
+          <p>Before dbt, the transformation layer was typically a folder of <code>.sql</code> files that someone ran by hand, a set of stored procedures nobody dared change, or a chain of scheduled queries in the warehouse UI. None of it was version controlled, none of it was tested, and the only documentation was whoever had been there longest.</p>
+
+          <p>Analytics engineering applies the practices software teams settled on decades ago:</p>
+
+          <ul>
+            <li><strong>Version control</strong> &mdash; the transformation logic is code in git, reviewed in pull requests, with a history you can bisect when a number changes.</li>
+            <li><strong>Modularity</strong> &mdash; a piece of logic is defined once and referenced everywhere, instead of the same <code>CASE</code> statement being copy-pasted into eleven dashboards with three variations.</li>
+            <li><strong>Testing</strong> &mdash; assumptions about the data are written down and checked on every run, so a broken upstream feed fails loudly instead of silently changing a KPI.</li>
+            <li><strong>Environments</strong> &mdash; you develop against your own schema, and the same code deploys to production without editing it.</li>
+            <li><strong>Documentation</strong> &mdash; descriptions live next to the code and are published automatically, so they are wrong less often.</li>
+            <li><strong>Continuous integration</strong> &mdash; a pull request builds and tests only what it changed before anyone approves it.</li>
+          </ul>
+
+          <div class="analogy"><strong>Everyday analogy &mdash;</strong> the difference is a shared kitchen where everyone cooks their own version of the same sauce, versus a kitchen with one recipe on the wall that everyone follows and improves. The food is not the point; the fact that it tastes the same every time is.</div>
+
+          <h3>DRY, and why <code>ref()</code> makes it possible</h3>
+          <p>&ldquo;Don't repeat yourself&rdquo; is easy to say and hard to do in SQL, because SQL has no import statement. A CTE is scoped to one query. A view is shared but opaque and unversioned. dbt's answer is that every model is importable by every other model, which means the definition of <em>a cleansed listing</em> can exist exactly once and be reused by everything downstream.</p>
+
+          <p>That is why the course spends so long on the staging layer. <code>src_listings</code> does almost nothing &mdash; it renames a few columns. But it means that if the raw table's <code>name</code> column is ever renamed upstream, exactly one file changes.</p>
+        </section>
+
+        <section class="section" id="how-it-works">
+          <h2>How dbt actually runs</h2>
+          <p class="lead">Understanding the two phases &mdash; parse then execute &mdash; explains most of dbt's behaviour, including several things that look like bugs when you first meet them.</p>
+
+          <div class="diagram">
+            <p class="diagram-title">What happens between dbt run and your warehouse</p>
+            <div class="flow">
+              <div class="node is-source"><b>Your project</b><small>.sql · .yml · .py</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-compute"><b>Parse</b><small>read every file<br>build the DAG</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-store"><b>manifest.json</b><small>the whole graph</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-compute pulse"><b>Compile</b><small>Jinja → plain SQL<br>into target/</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-serve"><b>Execute</b><small>send SQL<br>in DAG order</small></div>
+            </div>
+          </div>
+
+          <h3>Phase one: parse</h3>
+          <p>dbt reads every file in the project and renders just enough Jinja to find the <code>ref()</code>, <code>source()</code> and <code>config()</code> calls. From those it builds the dependency graph and writes it to <code>target/manifest.json</code>. Nothing has touched the warehouse yet.</p>
+
+          <p>This is why a typo in a <code>ref()</code> fails instantly with <em>Model depends on a node named X which was not found</em>, before any SQL runs. It is also why macros that query the warehouse need an <code>{% if execute %}</code> guard &mdash; during parsing there is no connection to query, so the macro has to do nothing on the first pass. That guard confuses everyone the first time they hit it, and it falls straight out of the two-phase design.</p>
+
+          <h3>Phase two: compile and execute</h3>
+          <p>dbt now renders each model's Jinja fully, producing plain SQL, and writes it to <code>target/compiled/</code>. It wraps that SQL in the DDL its materialization calls for, writes <em>that</em> to <code>target/run/</code>, and sends it to the warehouse. Independent models go in parallel, up to your <code>threads</code> setting; anything downstream waits for its parents.</p>
+
+          <div class="callout tip"><strong><code>target/compiled/</code> is the first place to look when a model misbehaves.</strong> It holds the exact SQL dbt produced, with every macro expanded and every <code>ref()</code> resolved. You can paste it straight into a warehouse worksheet and debug it as ordinary SQL. Most &ldquo;dbt problems&rdquo; turn out to be ordinary SQL problems the moment you read the compiled file.</div>
+
+          <p>Here is what the second model above compiles down to. Notice that <code>ref()</code> has become a real relation name, and that the environment is baked in:</p>
+
+<pre data-lang="sql" data-title="target/compiled/airbnb/models/dim/dim_listings_cleansed.sql" data-explain="The same model after compilation. This is what the warehouse receives — no Jinja left."><code>WITH src_listings AS (
+  SELECT
+    *
+  FROM
+    AIRBNB.DEV.src_listings
+)
+SELECT
+  listing_id,
+  listing_name,
+  room_type,
+  CASE
+    WHEN minimum_nights = 0 THEN 1
+    ELSE minimum_nights
+  END AS minimum_nights,
+  host_id,
+  REPLACE(price_str, '$') :: NUMBER(10, 2) AS price,
+  created_at,
+  updated_at
+FROM
+  src_listings</code></pre>
+
+          <h3>What a run looks like</h3>
+          <p>You will see this output several hundred times over the course, so it is worth reading properly once. Each model gets a START line and a finishing line carrying its status, its row count or size where the warehouse reports one, and its duration.</p>
+
+          <div class="terminal">
+            <p class="term-head">dbt run</p>
+            <pre class="term-body"><span class="tt-cmd">dbt run</span>
+<span class="tt-dim">14:22:01  Running with dbt=1.11.12</span>
+<span class="tt-dim">14:22:01  Registered adapter: snowflake=1.11.6</span>
+<span class="tt-dim">14:22:02  Found 6 models, 3 sources, 2 snapshots, 12 data tests, 1 seed</span>
+<span class="tt-dim">14:22:02  Concurrency: 4 threads (target='dev')</span>
+<span class="tt-dim">14:22:03  1 of 4 START sql view model DEV.dim_listings_cleansed ......... [RUN]</span>
+<span class="tt-dim">14:22:03  2 of 4 START sql table model DEV.dim_hosts_cleansed .......... [RUN]</span>
+<span class="tt-ok">14:22:05  1 of 4 OK created sql view model DEV.dim_listings_cleansed .... [SUCCESS 1 in 1.84s]</span>
+<span class="tt-ok">14:22:07  2 of 4 OK created sql table model DEV.dim_hosts_cleansed ..... [SUCCESS 1 in 3.42s]</span>
+<span class="tt-dim">14:22:07  3 of 4 START sql incremental model DEV.fct_reviews ........... [RUN]</span>
+<span class="tt-ok">14:22:12  3 of 4 OK created sql incremental model DEV.fct_reviews ...... [SUCCESS 1 in 5.11s]</span>
+<span class="tt-dim">14:22:12  4 of 4 START sql table model DEV.dim_listings_w_hosts ........ [RUN]</span>
+<span class="tt-ok">14:22:16  4 of 4 OK created sql table model DEV.dim_listings_w_hosts ... [SUCCESS 1 in 3.98s]</span>
+<span class="tt-ok">14:22:16  Finished running 3 table models, 1 view model in 14.32s.</span>
+<span class="tt-ok">14:22:16  Completed successfully</span>
+<span class="tt-ok">14:22:16  Done. PASS=4 WARN=0 ERROR=0 SKIP=0 TOTAL=4</span></pre>
+          </div>
+
+          <p>Two details in there matter later. <code>Concurrency: 4 threads</code> is how many models dbt will build at once, set in <code>profiles.yml</code>. And the numbering &mdash; <code>1 of 4</code>, <code>2 of 4</code> &mdash; counts only the nodes selected for this run, which is why the count changes when you add <code>--select</code>.</p>
+        </section>
+
+        <section class="section" id="editions">
+          <h2>dbt Core, dbt Cloud and Fusion</h2>
+          <p class="lead">The course uses dbt Core, driven from the command line, because that is the version that teaches you what is happening. It is worth knowing what the alternatives are before you meet them in a job advert.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th></th><th>dbt Core</th><th>dbt Cloud</th><th>Fusion engine</th></tr></thead>
+              <tbody>
+                <tr><td>What it is</td><td>Open-source Python CLI</td><td>Hosted platform around Core</td><td>A rewritten engine in Rust</td></tr>
+                <tr><td>Cost</td><td>Free</td><td>Free tier, then per developer seat</td><td>Free for smaller teams, licensed above that</td></tr>
+                <tr><td>Runs your project</td><td>On your machine or your infrastructure</td><td>On dbt Labs' infrastructure</td><td>Either &mdash; it replaces the engine, not the workflow</td></tr>
+                <tr><td>Scheduling</td><td>Bring your own: cron, Airflow, Dagster</td><td>Built in, with alerting and logs</td><td>Unchanged</td></tr>
+                <tr><td>Development</td><td>Your editor, plus an extension</td><td>Browser IDE, or your editor</td><td>Your editor, with a much better language server</td></tr>
+                <tr><td>Notable extras</td><td>Everything in this course</td><td>Semantic Layer, job orchestration, CI, access control</td><td>Understands SQL properly: catches column-level errors before the warehouse does</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>Fusion is the interesting one for the next few years. dbt Core parses Jinja and treats the SQL inside as an opaque string &mdash; it has no idea whether <code>SELECT customre_id</code> is valid until the warehouse rejects it. Fusion actually parses the SQL for your dialect, which means it can tell you a column does not exist, work out column-level lineage, and compile large projects in a fraction of the time. <a href="s20-poweruser-fusion-ai.html">Section&nbsp;20</a> covers installing and using it.</p>
+
+          <div class="callout info"><strong>Everything in these notes runs on dbt Core.</strong> Where a feature is Cloud-only &mdash; the Semantic Layer's hosted API, job scheduling, the browser IDE &mdash; it is called out. The project, the models, the tests and the deployment pattern all work with the free CLI.</div>
+        </section>
+
+        <section class="section" id="course-shape">
+          <h2>How the course is structured</h2>
+          <p class="lead">Top-down: the theory that makes the design decisions make sense, then a single real project that every feature gets attached to, then the craft of running it in a company.</p>
+
+          <div class="stack">
+            <div class="layer"><strong>Sections 2&ndash;5 &mdash; Theory.</strong> The data maturity model, warehouses versus lakes versus lakehouses, the modern data stack and ELT, dimensional modelling and slowly changing dimensions.</div>
+            <div class="layer"><strong>Sections 6&ndash;10 &mdash; Building.</strong> Environment setup, then models, materializations, seeds, sources and snapshots.</div>
+            <div class="layer"><strong>Sections 11&ndash;15 &mdash; Trusting.</strong> Tests, advanced testing, Jinja and macros, documentation, and the analyses, hooks and exposures that connect the project to its consumers.</div>
+            <div class="layer"><strong>Sections 16&ndash;20 &mdash; Operating.</strong> Debugging, selectors and commands, orchestration, production deployment, and the tooling that speeds development up.</div>
+            <div class="layer"><strong>Sections 21&ndash;22 &mdash; Craft.</strong> Introducing dbt to a real company, and the certification.</div>
+          </div>
+
+          <h3>The Airbnb use case</h3>
+          <p>One dataset carries the whole course. Three CSV files are loaded into a Snowflake database called <code>AIRBNB</code>, in a schema called <code>RAW</code>:</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Raw table</th><th>Holds</th><th>Interesting because</th></tr></thead>
+              <tbody>
+                <tr><td><code>raw_listings</code></td><td>Properties: id, name, room type, minimum nights, host id, price, timestamps</td><td>Price arrives as a string with a <code>$</code> in it, and some listings claim a minimum of 0 nights. Both need cleaning, which is what gives the staging layer a job.</td></tr>
+                <tr><td><code>raw_hosts</code></td><td>Hosts: id, name, superhost flag, timestamps</td><td>Some hosts have no name, so you meet <code>NVL</code> and the question of what a sensible default is.</td></tr>
+                <tr><td><code>raw_reviews</code></td><td>Reviews: listing id, date, reviewer name, comment text, sentiment</td><td>The big one, and append-only, which makes it the natural candidate for an incremental model.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <figure class="slide-fig">
+            <a href="assets/input_schema.png" target="_blank" rel="noopener">
+              <img src="assets/input_schema.png" alt="Entity relationship diagram of the three raw Airbnb tables: raw_listings joined to raw_hosts by host_id, and raw_reviews joined to raw_listings by listing_id." loading="lazy">
+            </a>
+            <figcaption>The three raw tables and how they join. <code>raw_listings.host_id</code> points at <code>raw_hosts.id</code>, and <code>raw_reviews.listing_id</code> points at <code>raw_listings.id</code>. This diagram is also the project's documentation homepage, added in <a href="s14-documentation.html">Section&nbsp;14</a>.</figcaption>
+          </figure>
+
+          <p>The running joke of the project is the analysis it builds towards: do people write angrier Airbnb reviews the day after a full moon? It is deliberately silly, but it forces a genuinely useful pattern &mdash; joining a fact table to a small reference dataset that arrives as a CSV rather than from the source system, which is exactly what seeds are for.</p>
+
+          <h3>What the finished project contains</h3>
+          <div class="filetree">
+            <ul>
+              <li><span class="dir">airbnb/</span>
+                <ul>
+                  <li><span class="file">dbt_project.yml</span> <span class="note">project config, folder defaults, hooks, grants</span></li>
+                  <li><span class="file">packages.yml</span> <span class="note">dbt_utils, dbt_expectations</span></li>
+                  <li><span class="file">selectors.yml</span> <span class="note">named selection rules</span></li>
+                  <li><span class="dir">models/</span>
+                    <ul>
+                      <li><span class="dir">src/</span> <span class="note">3 ephemeral staging models</span></li>
+                      <li><span class="dir">dim/</span> <span class="note">dimensions, including 2 versions and 3 Python models</span></li>
+                      <li><span class="dir">fct/</span> <span class="note">the incremental reviews fact</span></li>
+                      <li><span class="dir">mart/</span> <span class="note">the full-moon mart and its unit test</span></li>
+                      <li><span class="file">schema.yml</span> <span class="note">tests, descriptions, contracts, versions</span></li>
+                      <li><span class="file">sources.yml</span> <span class="note">the three raw tables plus freshness</span></li>
+                      <li><span class="file">docs.md</span> <span class="file">overview.md</span> <span class="file">dashboards.yml</span></li>
+                    </ul>
+                  </li>
+                  <li><span class="dir">macros/</span> <span class="note">logging, variables, schema naming, cleanup</span></li>
+                  <li><span class="dir">tests/</span> <span class="note">singular tests and 2 custom generic tests</span></li>
+                  <li><span class="dir">snapshots/</span> <span class="note">2 YAML snapshots over the raw sources</span></li>
+                  <li><span class="dir">seeds/</span> <span class="note">273 full moon dates, 2009 to 2030</span></li>
+                  <li><span class="dir">analyses/</span> <span class="note">the full-moon analysis query</span></li>
+                </ul>
+              </li>
+              <li><span class="dir">dbt_dagster_project/</span> <span class="note">orchestration, Section 18</span></li>
+            </ul>
+          </div>
+
+          <div class="callout tip"><strong>Get the course repository now.</strong> Every snippet in these notes is quoted from it, and having the finished project to compare against is the fastest way to unstick yourself. <code>git clone https://github.com/nordquant/complete-dbt-bootcamp-zero-to-hero.git</code> &mdash; the <code>main</code> branch is the completed project, and <code>_course_resources/course-resources.md</code> is the instructor's own command-by-command script.</div>
+        </section>
+
+        <section class="section" id="deeper">
+          <h2>Deeper detail and edge cases</h2>
+          <p class="lead">Orientation material the course does not stop for: which dbt version introduced what, where the money goes, and the misconceptions that make the first fortnight harder than it needs to be.</p>
+
+          <h3>Version notes</h3>
+          <p>dbt moves quickly, and you will meet older projects. These notes teach dbt Core 1.11; here is what changed recently enough that a tutorial written two years ago will mislead you.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Behaviour</th><th>Before</th><th>Now</th><th>Version</th></tr></thead>
+              <tbody>
+                <tr><td>Snapshot definitions</td><td><code>{% snapshot %}</code> blocks in <code>.sql</code> files</td><td>YAML files with <code>relation:</code> and <code>config:</code></td><td>1.9</td></tr>
+                <tr><td>Deleted rows in snapshots</td><td><code>invalidate_hard_deletes: True</code></td><td><code>hard_deletes: invalidate</code> (or <code>new_record</code>)</td><td>1.9</td></tr>
+                <tr><td>Tests in YAML</td><td><code>tests:</code></td><td><code>data_tests:</code> (<code>tests:</code> still parses)</td><td>1.8</td></tr>
+                <tr><td>Generic test parameters</td><td>Passed as direct keys</td><td>Nested under an <code>arguments:</code> key</td><td>1.10</td></tr>
+                <tr><td>Unit tests</td><td>Not available</td><td><code>unit_tests:</code> in YAML</td><td>1.8</td></tr>
+                <tr><td>Microbatch incremental strategy</td><td>Hand-rolled with variables</td><td><code>incremental_strategy='microbatch'</code></td><td>1.9</td></tr>
+                <tr><td>Dry runs</td><td>No equivalent</td><td><code>--empty</code></td><td>1.8</td></tr>
+                <tr><td>Sampling recent data</td><td>No equivalent</td><td><code>--sample</code>, using <code>event_time</code></td><td>1.10</td></tr>
+                <tr><td>Running a named selector</td><td><code>dbt run --selector name</code></td><td><code>dbt run -s selector:name</code></td><td>1.12</td></tr>
+                <tr><td>Model versions and deprecation</td><td>Convention only</td><td><code>versions:</code>, <code>latest_version:</code>, <code>deprecation_date:</code></td><td>1.5</td></tr>
+                <tr><td>Contracts and constraints</td><td>Not available</td><td><code>contract: {enforced: true}</code></td><td>1.5</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout info"><strong>Check what you are running before you debug anything.</strong> <code>dbt --version</code> prints the Core version and every installed adapter. A surprising share of &ldquo;this does not work like the tutorial says&rdquo; is a version gap, and dbt's own error messages rarely mention it.</div>
+
+          <h3>What it costs to run</h3>
+          <p>dbt Core is free. The bill arrives from the warehouse, and it arrives in places that surprise people.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>What runs</th><th>Where the cost lands</th><th>How to spend less</th></tr></thead>
+              <tbody>
+                <tr><td>A <code>table</code> model</td><td>Full scan of its inputs plus a full write, every single run</td><td>Move to <code>incremental</code> once the rebuild is slow enough to notice</td></tr>
+                <tr><td>A <code>view</code> model</td><td>Nothing at build time; the full query cost is paid by every consumer, every query</td><td>Materialise as a table anything a dashboard hits repeatedly</td></tr>
+                <tr><td>Tests</td><td>One query each. A <code>unique</code> test is a <code>GROUP BY</code> over the whole column</td><td>Test the grain on big tables, not every column; use <code>where:</code> to scope</td></tr>
+                <tr><td>Snapshots</td><td>A full scan of the source on every run to detect changes</td><td>Snapshot only what genuinely mutates, and run them less often than models</td></tr>
+                <tr><td><code>--full-refresh</code></td><td>Rebuilds every incremental model from the beginning of time</td><td>Set <code>full_refresh: false</code> on models that must never be rebuilt casually</td></tr>
+                <tr><td><code>dbt docs generate</code></td><td>Queries the information schema for every relation</td><td>Generate in CI, not in a loop while developing</td></tr>
+                <tr><td>Idle warehouse time</td><td>Snowflake bills a 60-second minimum each time a warehouse resumes</td><td>Set a short auto-suspend, and avoid trickles of tiny runs</td></tr>
+                <tr><td>High <code>threads</code></td><td>More concurrency can force a bigger warehouse or queue everything</td><td>Start at 4 and raise it only while watching the warehouse</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout cost"><strong>The biggest waste in a young dbt project is table models that did not need to be tables.</strong> A staging layer materialised as tables doubles your storage and rebuilds every row on every run, to serve models that would have been just as fast reading views. Start everything as a view, and promote to table or incremental only when something is measurably slow.</div>
+
+          <h3>Traps that catch people</h3>
+          <ul>
+            <li><strong>Hard-coding a relation name &mdash;</strong> writing <code>FROM AIRBNB.DEV.SRC_LISTINGS</code> works, so nothing complains. But the model drops out of the DAG, gets built in the wrong order, and reads whatever schema you typed regardless of which target you are running. Always <code>ref()</code> or <code>source()</code>.</li>
+            <li><strong>Assuming dbt moves data &mdash;</strong> people arrive expecting connectors. dbt cannot read an API or a CSV on your laptop. Seeds are the only thing it loads, and they are for small static reference data, not ingestion.</li>
+            <li><strong>Editing the compiled SQL &mdash;</strong> files in <code>target/</code> are output. Editing them changes nothing and is overwritten on the next run. Read them; never write them.</li>
+            <li><strong>Expecting <code>dbt run</code> to run tests &mdash;</strong> it does not. <code>dbt run</code> builds models only. <code>dbt build</code> is the one that runs seeds, models, snapshots and tests together in dependency order, and stops a model's children when its tests fail.</li>
+            <li><strong>Running dbt from the wrong directory &mdash;</strong> almost every dbt command must run from the folder containing <code>dbt_project.yml</code>. In this course that means <code>cd airbnb</code> first. The error you get otherwise &mdash; <em>Could not run dbt: fatal: Not a dbt project</em> &mdash; is clear, but it catches everyone at least once.</li>
+            <li><strong>Committing <code>profiles.yml</code> &mdash;</strong> it holds credentials and lives outside the project by default, in <code>~/.dbt/</code>, for exactly that reason. If you move it into the repo for convenience, it will end up on GitHub eventually.</li>
+            <li><strong>Treating a view as free &mdash;</strong> views cost nothing to build, so people materialise everything as views and then wonder why the dashboard takes ninety seconds. The work did not disappear; it moved to whoever runs the query.</li>
+            <li><strong>Believing the DAG picture is the schedule &mdash;</strong> the lineage graph shows dependencies, not timing. dbt has no scheduler. Something outside dbt has to invoke it, which is what <a href="s18-orchestration.html">Section&nbsp;18</a> is for.</li>
+            <li><strong>Assuming case-insensitivity &mdash;</strong> Snowflake folds unquoted identifiers to upper case, other warehouses do not, and dbt passes your text through. A model that works on Snowflake can break on BigQuery purely on capitalisation.</li>
+          </ul>
+
+          <h3>Troubleshooting playbook</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Symptom</th><th>Most likely cause</th><th>What to check / fix</th></tr></thead>
+              <tbody>
+                <tr><td><em>Could not run dbt: fatal: Not a dbt project</em></td><td>Wrong working directory</td><td><code>cd</code> to the folder holding <code>dbt_project.yml</code></td></tr>
+                <tr><td><em>Model depends on a node named X which was not found</em></td><td>Typo in a <code>ref()</code>, or the model file is not under <code>model-paths</code></td><td><code>dbt ls</code> to list what dbt can actually see</td></tr>
+                <tr><td><em>Credentials in profile "airbnb", target "dev" invalid</em></td><td>Bad account identifier, key or role</td><td><code>dbt debug</code>, which tests each part of the connection separately</td></tr>
+                <tr><td><em>Compilation Error ... unexpected end of template</em></td><td>An unclosed Jinja tag &mdash; usually a missing <code>{% endif %}</code></td><td>The error names the file; check every block tag has its <code>end</code></td></tr>
+                <tr><td>Model builds but has zero rows</td><td>A filter that is always false, or an incremental model whose watermark is ahead of the data</td><td>Run the file in <code>target/compiled/</code> by hand in a worksheet</td></tr>
+                <tr><td>Changes to a model have no effect</td><td>Editing the compiled output, or a stale <code>target/</code></td><td>Confirm you are editing under <code>models/</code>; <code>dbt clean</code></td></tr>
+                <tr><td>Runs are slow but the SQL is simple</td><td><code>threads: 1</code>, or the warehouse resuming from suspended</td><td>Raise <code>threads</code> in <code>profiles.yml</code>; check warehouse auto-suspend</td></tr>
+                <tr><td><em>404 Not Found</em> from <code>dbt deps</code></td><td>Package name or version does not exist</td><td>Check the exact version on the package hub; run <code>dbt deps</code> again</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Production patterns</h3>
+          <p>Teams that get value from dbt quickly tend to make the same three decisions early. First, one project per warehouse rather than one per team &mdash; splitting too early means duplicating the staging layer and losing the lineage that made dbt worth adopting. <a href="extras.html">dbt Mesh</a> exists for when a single project genuinely outgrows one team, and that is much later than people expect.</p>
+
+          <p>Second, a naming convention applied from day one: <code>src_</code> or <code>stg_</code> for staging, <code>dim_</code> and <code>fct_</code> for the modelled layer, <code>mart_</code> for what the business reads. The course uses exactly this, and it means the folder structure, the schema names and the DAG all tell the same story. <a href="s21-best-practices.html">Section&nbsp;21</a> covers the full convention.</p>
+
+          <p>Third, production is a separate target from the beginning, not something bolted on later. Even a solo project benefits from developing into <code>DBT_YOURNAME</code> and deploying into <code>PROD</code>, because the alternative &mdash; everyone building into the same schema &mdash; is the failure mode that pushes teams back off dbt within a quarter.</p>
+
+          <p>The anti-pattern worth naming: a project where every model is a table and the whole thing is rebuilt nightly with <code>dbt run --full-refresh</code>. It works at ten models and falls over at two hundred, by which point the nightly job runs for six hours and nobody remembers which models actually needed rebuilding.</p>
+
+          <h3>Certification pointers</h3>
+          <p>Section 1 material appears on the exam as framing rather than as questions of its own, but two distinctions from here do get tested directly: what dbt does versus what the warehouse does, and the difference between <code>dbt run</code> and <code>dbt build</code>. Expect at least one question that hinges on <code>build</code> running tests and stopping downstream models on failure.</p>
+
+          <ul>
+            <li><a href="s07-models.html">Section 7</a> &mdash; because <code>ref()</code>, the DAG and compiled SQL are the foundation every other exam topic builds on.</li>
+            <li><a href="s08-materializations.html">Section 8</a> &mdash; the four materializations and their trade-offs are the single most-tested subject in the exam.</li>
+            <li><a href="s22-certification.html">Section 22</a> &mdash; the eight topic areas, the question formats, and a full practice exam.</li>
+          </ul>
+
+          <div class="callout exam"><strong>Certification:</strong> the exam tests recall of exact syntax, not just concepts &mdash; fill-in-the-blank and build-list questions mean you have to be able to <em>write</em> <code>{{ ref('model_name') }}</code> and the config keys, not merely recognise them. Type the code as you work through these notes rather than reading it.</div>
+        </section>
+
+        <section class="section" id="interview">
+          <h2>Interview questions</h2>
+          <p class="muted">Answer each one out loud before opening it.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+
+            <details class="qa">
+              <summary>What does dbt actually do, and what does it leave to something else?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>dbt owns the transformation layer inside a warehouse that already has the data. It compiles Jinja-templated SQL into warehouse-native SQL, infers a dependency graph from <code>ref()</code> and <code>source()</code> calls, wraps each model in the DDL its materialization requires, and executes them in order with configurable parallelism. It also runs tests, builds documentation and takes snapshots.</p>
+                <p>It leaves extraction and loading entirely to other tools, does no compute of its own, and has no scheduler. Every byte of processing happens in the warehouse, and something external &mdash; cron, Airflow, Dagster, dbt Cloud &mdash; has to invoke it.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Why is <code>ref()</code> better than writing the table name?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>Three reasons, and the first is the one that matters. <code>ref()</code> is how dbt discovers dependencies, so a hard-coded name silently removes the model from the DAG: dbt no longer knows it has a parent and may build it before the table it reads exists.</p>
+                <p>Second, it resolves per environment. The same code compiles to <code>AIRBNB.DBT_ZOLTAN.src_listings</code> in development and <code>AIRBNB.PROD.src_listings</code> in production, with no branching in the model. Third, it feeds the lineage graph, so impact analysis and state-based selection both work.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Explain the difference between <code>dbt run</code> and <code>dbt build</code>.<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p><code>dbt run</code> builds models and nothing else. <code>dbt build</code> runs seeds, models, snapshots and tests interleaved in DAG order &mdash; so a model is built, then its tests run, and only if they pass do its children build.</p>
+                <p>That interleaving is the point. With <code>dbt run</code> followed by <code>dbt test</code>, a bad row propagates through the entire DAG before any test notices. With <code>dbt build</code>, the failure is contained at the first model whose test fails and everything downstream is skipped rather than silently poisoned. Production should use <code>build</code>.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Walk me through what happens between typing <code>dbt run</code> and a table appearing.<span class="qa-tag">Architecture</span></summary>
+              <div class="qa-body">
+                <p>dbt parses every file in the project, rendering enough Jinja to find <code>ref()</code>, <code>source()</code> and <code>config()</code> calls, and builds the dependency graph. It writes that graph to <code>target/manifest.json</code>. Nothing has touched the warehouse yet, which is why a missing <code>ref()</code> fails immediately.</p>
+                <p>It then applies the selection criteria to pick the nodes to build, fully renders each one's Jinja into plain SQL in <code>target/compiled/</code>, wraps that in the DDL the materialization calls for and writes it to <code>target/run/</code>, and sends it over the connection. Independent models go in parallel up to the <code>threads</code> setting; children wait for parents. Results are written to <code>target/run_results.json</code>, which is what <code>dbt retry</code> later reads.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Someone says a dbt model is slow. Where do you start?<span class="qa-tag">Performance</span></summary>
+              <div class="qa-body">
+                <p>Start by establishing that it is the SQL, because it almost always is &mdash; dbt itself contributes milliseconds. Open <code>target/compiled/</code> for that model, run the SQL directly in a warehouse worksheet, and look at the query profile there.</p>
+                <p>From there the usual causes are: a <code>table</code> materialization rebuilding data that has not changed, in which case incremental is the answer; an accidental cross join or a join on a low-cardinality key; an ephemeral model being inlined into several children so the same work happens repeatedly; or the warehouse simply being undersized. Check whether the run is actually parallel too &mdash; <code>threads: 1</code> in <code>profiles.yml</code> serialises everything and is an easy thing to miss.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What is analytics engineering, and how is it different from data engineering?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>Data engineering owns getting data into the warehouse reliably: ingestion, infrastructure, orchestration, uptime. Analytics engineering owns what happens to it afterwards &mdash; turning raw tables into modelled, tested, documented datasets that carry agreed business definitions.</p>
+                <p>The distinguishing practice is that analytics engineers apply software discipline to work that used to be done ad hoc: the transformation logic is version controlled, reviewed, tested and deployed rather than pasted into a query editor. The role exists because that middle ground was previously owned by nobody, which is why so many organisations ended up with the same metric defined five different ways.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Your colleague says dbt gives you version control for data. Is that right?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p>No &mdash; it gives version control for the <em>transformation logic</em>. Git holds the SQL that produces a table, not the table's contents. Checking out last month's commit and running it does not recreate last month's numbers, because the sources have moved on since.</p>
+                <p>The closest thing dbt offers to versioned data is a snapshot, which records how specific rows changed over time as a Type 2 slowly changing dimension. If you need the whole warehouse as of a point in time, that is a warehouse feature &mdash; Snowflake Time Travel, BigQuery time decorators, Delta or Iceberg table history &mdash; not a dbt one.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>When would you not use dbt?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>When the work is not set-based SQL transformation inside a warehouse. Streaming and anything with sub-minute latency requirements is the clearest case &mdash; dbt runs in batches and has no concept of a continuously updating result. Row-by-row procedural logic, or transformations that need a library the warehouse cannot run, fit badly too, although Python models close some of that gap.</p>
+                <p>It is also the wrong tool for ingestion, for reverse ETL, and for a team with no warehouse at all. And on a genuinely tiny project &mdash; three queries that one person runs monthly &mdash; the setup cost outweighs the benefit, though that situation tends not to stay tiny.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What is in the <code>target/</code> directory and why does it matter?<span class="qa-tag">Troubleshooting</span></summary>
+              <div class="qa-body">
+                <p><code>target/compiled/</code> holds each model's SQL with all Jinja rendered &mdash; the debugging tool you will reach for most. <code>target/run/</code> holds the same SQL wrapped in its materialization's DDL, which is literally what was sent to the warehouse.</p>
+                <p><code>manifest.json</code> is the full compiled graph: every node, its config, its dependencies and its documentation. It powers the docs site, <code>state:modified</code> comparisons and most dbt metadata tooling. <code>run_results.json</code> records the outcome and timing of every node in the last invocation, and is what <code>dbt retry</code> reads to know where to resume. <code>catalog.json</code>, written by <code>dbt docs generate</code>, holds column-level metadata queried from the warehouse.</p>
+                <p>The whole directory is generated output. It belongs in <code>.gitignore</code>, with one exception: production artifacts are deliberately published so that CI can compare against them, which is how Slim CI works.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Why do some macros need <code>{% if execute %}</code>?<span class="qa-tag">Jinja</span></summary>
+              <div class="qa-body">
+                <p>Because dbt renders your project twice. During parsing it needs to find <code>ref()</code> and <code>config()</code> calls to build the graph, and at that point there is no guarantee of a usable warehouse connection or a complete graph. <code>execute</code> is <code>False</code> during that pass and <code>True</code> during the real run.</p>
+                <p>A macro that calls <code>run_query()</code> or reads <code>graph.nodes</code> without that guard will either error or return nothing useful at parse time. Wrapping the warehouse-touching part in <code>{% if execute %}</code> makes it a no-op on the first pass and do the real work on the second.</p>
+              </div>
+            </details>
+
+          </div>
+        </section>
+
+        <section class="section" id="practice">
+          <h2>Hands-on practice</h2>
+          <p class="muted">Nothing is installed yet, so this section is about getting oriented. <a href="s06-setup.html">Section&nbsp;6</a> does the real setup.</p>
+          <ol class="practice-list">
+
+            <li class="practice">
+              <p class="practice-task">Clone the course repository and find the three models shown on this page. Confirm for yourself that a dbt model really is just a <code>SELECT</code>.</p>
+              <span class="console-path">complete-dbt-bootcamp-zero-to-hero/airbnb/models/</span>
+              <p class="practice-expect">You can open <code>src_listings.sql</code>, <code>dim_listings_cleansed.sql</code> and <code>fct_reviews.sql</code>, and none of them contains a <code>CREATE</code> statement.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Clone the repo and look at the model folders.</li>
+                    <li>Note that <code>fct_reviews.sql</code> does have a <code>config()</code> block &mdash; configuration is allowed, DDL is not.</li>
+                  </ol>
+<pre data-lang="shell" data-title="Clone and explore"><code>git clone https://github.com/nordquant/complete-dbt-bootcamp-zero-to-hero.git
+cd complete-dbt-bootcamp-zero-to-hero/airbnb
+ls models/src models/dim models/fct
+grep -ri "create table" models/   # returns nothing</code></pre>
+                  <p class="muted">Undo: nothing to undo &mdash; keep the clone, you will use it throughout.</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">Read the instructor's own lesson script end to end, skimming. It is the single most useful file in the repository and most students never open it.</p>
+              <span class="console-path">_course_resources/course-resources.md</span>
+              <p class="practice-expect">You can name three things the course builds that you had not expected &mdash; for example the Preset dashboard exposure, the Dagster orchestration, or the three Python models.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Orientation</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Open the file and read only the headings first, to get the shape.</li>
+                    <li>It runs from Snowflake setup through to the Power User and AI lessons, and every command the instructor types is in it.</li>
+                    <li>Keep it open in a tab while you work through the course; it is faster than scrubbing a video to find a command.</li>
+                  </ol>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">Draw the DAG for the three raw tables by hand, before the course tells you the answer. Decide which raw table you would make incremental and why.</p>
+              <span class="console-path">Pen and paper</span>
+              <p class="practice-expect">A sketch with three sources, a staging model each, and a join. Your incremental candidate should be <code>raw_reviews</code>.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Modelling</span></summary>
+                <div class="qa-body">
+                  <p>Reviews is the right answer for three reasons: it is by far the largest table, it is append-only in normal operation, and it carries a natural event timestamp in <code>review_date</code> to filter on. Those three properties together are the standard test for whether a table should be incremental.</p>
+                  <p>Listings and hosts are both small and mutable &mdash; a listing's price changes in place. Small and mutable is the profile for a full rebuild, and if you need the history of those changes, that is what a snapshot is for rather than an incremental model. <a href="s10-snapshots.html">Section&nbsp;10</a> does exactly that to both of them.</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">Find a transformation that already exists at your own workplace &mdash; a scheduled query, a stored procedure, a spreadsheet everyone depends on &mdash; and write down what would have to be true to express it as dbt models.</p>
+              <span class="console-path">Your own stack</span>
+              <p class="practice-expect">A short list: where the raw data lands, what the intermediate steps are, and which assumptions in it nobody currently checks.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Design</span></summary>
+                <div class="qa-body">
+                  <p>The useful part of this exercise is the last item. Almost every existing transformation depends on unwritten assumptions &mdash; this column is never null, these are the only five statuses, one row per order. Those assumptions are exactly what become <code>not_null</code>, <code>accepted_values</code> and <code>unique</code> tests in <a href="s11-tests.html">Section&nbsp;11</a>, and writing them down is usually the moment people discover one of them has been false for months.</p>
+                </div>
+              </details>
+            </li>
+
+          </ol>
+        </section>
+
+        <section class="section" id="recap">
+          <h2>Recap</h2>
+          <div class="recap">
+            <ul class="checklist">
+              <li>dbt is a build tool for SQL: you write <code>SELECT</code> statements, it works out the order and wraps them in the right DDL.</li>
+              <li>It owns the T in ELT. It does not extract, does not load, does no compute of its own, and has no scheduler.</li>
+              <li>All processing happens in your warehouse, and all cost lands there too.</li>
+              <li><code>ref()</code> builds the DAG, resolves per environment, and feeds the lineage graph. Hard-coded table names silently break all three.</li>
+              <li>dbt runs in two phases: parse (build the graph, write <code>manifest.json</code>) then compile and execute. <code>{% if execute %}</code> exists because of that split.</li>
+              <li><code>target/compiled/</code> holds the real SQL and is the first place to look when a model misbehaves.</li>
+              <li><code>dbt run</code> builds models; <code>dbt build</code> runs seeds, models, snapshots and tests in DAG order and skips children when tests fail.</li>
+              <li>Analytics engineering is the practice of applying version control, testing, documentation and CI to the transformation layer.</li>
+              <li>dbt Core is the free CLI; dbt Cloud is the hosted platform around it; Fusion is a Rust rewrite of the engine that understands SQL rather than treating it as text.</li>
+              <li>The course builds one Airbnb project on Snowflake: three raw tables into staging, dimensions, an incremental fact, a seed, snapshots, a mart and a dashboard exposure.</li>
+              <li>Every dbt command runs from the directory containing <code>dbt_project.yml</code>.</li>
+              <li>These notes assume dbt Core 1.11; snapshots are YAML, tests live under <code>data_tests:</code>, and generic test parameters nest under <code>arguments:</code>.</li>
+            </ul>
+            <p style="margin-top:1rem;">
+              <button type="button" data-complete="section-01">Mark complete</button>
+            </p>
+          </div>
+        </section>
+
+      </div>
+
+      <aside class="toc" aria-label="On this page">
+        <strong>On this page</strong>
+        <ol>
+          <li><a href="#lectures">Lectures</a></li>
+          <li><a href="#what-is-dbt">What dbt is</a></li>
+          <li><a href="#analytics-engineering">Analytics engineering</a></li>
+          <li><a href="#how-it-works">How dbt runs</a></li>
+          <li><a href="#editions">Core, Cloud and Fusion</a></li>
+          <li><a href="#course-shape">Course structure</a></li>
+          <li><a href="#deeper">Deeper detail</a></li>
+          <li><a href="#interview">Interview questions</a></li>
+          <li><a href="#practice">Hands-on practice</a></li>
+          <li><a href="#recap">Recap</a></li>
+        </ol>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<footer class="footer">The Complete dbt Bootcamp: Zero to Hero &middot; Section 1 &middot; Offline study edition</footer>
+</body>
+</html>

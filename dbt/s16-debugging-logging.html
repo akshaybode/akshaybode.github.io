@@ -1,0 +1,1171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="dbt bootcamp Section 16: dbt_expectations package tests, selective test runs, the --debug flag, log() and macros/logging.sql, reading compilation errors and target/compiled output, and --empty and --sample for fast iteration.">
+<title>Section 16 — Debugging and Logging | The Complete dbt Bootcamp Notes</title>
+<link rel="stylesheet" href="assets/dbt.css">
+<script defer src="assets/search-index.js"></script>
+<script defer src="assets/code-highlight.js"></script>
+<script defer src="assets/dbt.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">Course section 16 of 22 · The Complete dbt Bootcamp: Zero to Hero</p>
+    <h1>Debugging and Logging</h1>
+    <p class="subtitle">When something breaks in a dbt project, you need a repeatable workflow: run one test or one model in isolation, read the compiled SQL instead of guessing, add structured logging where Jinja is opaque, and use <code>--empty</code> and <code>--sample</code> to iterate without scanning full tables. This section adds <code>dbt_expectations</code> tests to the Airbnb project and teaches the tooling that turns cryptic errors into fixable problems.</p>
+    <div class="hero-meta">
+      <span class="chip">8 lectures · ~40min</span>
+      <span class="chip">dbt-expectations</span>
+      <span class="chip">--empty and --sample</span>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <nav class="pager" aria-label="Section navigation">
+    <a href="s15-analyses-hooks-exposures.html">← Analyses, Hooks and Exposures</a>
+    <a href="index.html">Course contents</a>
+    <a href="s17-selectors-commands.html">Next: Selectors and Commands →</a>
+  </nav>
+
+  <main id="main">
+    <div class="layout">
+      <div class="content">
+
+        <section class="section" id="lectures">
+          <h2>Lectures in this section</h2>
+          <p class="muted">Eight lectures over roughly 40 minutes. They assume you installed <code>dbt_expectations</code> in <a href="s13-jinja-macros-packages.html">Section 13</a> and already know how generic tests compile from <a href="s11-tests.html">Section 11</a>. The focus shifts from declaring tests to running them surgically and reading the artifacts dbt leaves behind.</p>
+          <ol class="lecture-list">
+            <li class="lecture">
+              <a class="lec-title" href="#dbt-expectations">Debugging tests and dbt-expectations</a>
+              <span class="lec-time">~6:00</span>
+              <span class="lec-src">course-resources.md · Great Expectations</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#selective-testing">Testing a single model with --select</a>
+              <span class="lec-time">~4:00</span>
+              <span class="lec-src">course-resources.md · Testing a single model</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#selective-testing">Testing individual sources</a>
+              <span class="lec-time">~3:00</span>
+              <span class="lec-src">course-resources.md · source: selector</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#debug-flag">The --debug flag and what it prints</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">course-resources.md · --debug</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#logging">Logging with log() and learn_logging</a>
+              <span class="lec-time">~6:00</span>
+              <span class="lec-src">macros/logging.sql</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#debugging-errors">Reading compilation errors and compiled output</a>
+              <span class="lec-time">~7:00</span>
+              <span class="lec-src">target/compiled/ · target/run/</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#empty-sample">--empty and --sample for fast iteration</a>
+              <span class="lec-time">~6:00</span>
+              <span class="lec-src">course-resources.md · event_time</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#global-flags">Global flags and behaviour changes (behavior change flags)</a>
+              <span class="lec-time">~3:00</span>
+              <span class="lec-src">course-resources.md · Flags</span>
+            </li>
+          </ol>
+          <p class="muted">By the end of this section, <code>models/sources.yml</code> and <code>models/schema.yml</code> carry <code>dbt_expectations</code> tests alongside the built-in generics from earlier sections, and you have a troubleshooting playbook for the three failure modes you will see daily: YAML parse errors, Jinja compilation errors, and warehouse SQL errors.</p>
+        </section>
+
+        <section class="section" id="dbt-expectations">
+          <h2>dbt_expectations package tests</h2>
+          <p class="lead"><code>dbt_expectations</code> brings Great Expectations-style data quality checks into dbt as generic tests. Instead of writing custom SQL for regex matches, quantile bounds, or row-count comparisons against another table, you declare them in YAML and let the package macros generate the test queries.</p>
+
+          <p>The original <a href="https://github.com/great-expectations/great_expectations">Great Expectations</a> project is a Python library for validating datasets in notebooks and pipelines. The dbt port wraps similar logic as Jinja macros so tests run inside your normal <code>dbt test</code> workflow, appear in lineage, and respect selectors.</p>
+
+          <div class="callout info"><strong>Pin the metaplane fork at 0.10.10.</strong> The course and repo use <code>metaplane/dbt_expectations</code>, not the deprecated <code>calogica/dbt_expectations</code> package. Install details and <code>dbt deps</code> workflow are in <a href="s13-jinja-macros-packages.html#packages">Section 13</a>. After deps, tests are namespaced in YAML as <code>dbt_expectations.expect_*</code>.</div>
+
+<pre data-lang="yaml" data-title="packages.yml (course repo)" data-explain="Both community packages the course relies on — dbt_utils for surrogate keys and dbt_expectations for richer tests."><code>packages:
+  - package: dbt-labs/dbt_utils
+    version: 1.3.3
+  - package: metaplane/dbt_expectations
+    version: 0.10.10 # Check https://github.com/metaplane/dbt-expectations/releases for the latest release</code></pre>
+
+          <h3>Source-level expectations</h3>
+          <p>The instructor adds expectations directly on raw source columns in <code>models/sources.yml</code>. Source tests run against the loaded relation in the <code>raw</code> schema — before any model SQL transforms the data. That catches upstream feed problems at the boundary.</p>
+
+<pre data-lang="yaml" data-title="models/sources.yml" data-explain="Two dbt_expectations tests on raw listings: room_type must have exactly four distinct values, and price must match a dollar-sign regex."><code>sources:
+  - name: airbnb
+    schema: raw
+    tables:
+      - name: listings
+        identifier: raw_listings
+        columns:
+          - name: room_type
+            data_tests:
+              - dbt_expectations.expect_column_distinct_count_to_equal:
+                  arguments:
+                    value: 4
+          - name: price
+            data_tests:
+              - dbt_expectations.expect_column_values_to_match_regex:
+                  arguments:
+                    regex: "^\\\\$[0-9][0-9\\\\.]+$"
+      - name: hosts
+        identifier: raw_hosts
+
+      - name: reviews
+        identifier: raw_reviews
+        config:
+          loaded_at_field: date
+          freshness:
+            warn_after: {count: 1, period: hour}
+            # error_after: {count: 24, period: hour}</code></pre>
+
+          <p><code>expect_column_distinct_count_to_equal</code> scans the column and counts distinct values — a quick sanity check that the categorical domain has not changed (for example, Airbnb adding a fifth room type). <code>expect_column_values_to_match_regex</code> returns failing rows where the pattern does not match; the regex uses doubled backslashes because YAML and Jinja both consume escape characters.</p>
+
+          <h3>Model-level expectations</h3>
+          <p>On cleansed and mart models, expectations validate transforms preserved business rules: row counts match upstream, types cast correctly, and distribution bounds hold.</p>
+
+<pre data-lang="yaml" data-title="models/schema.yml — dim_listings_w_hosts" data-explain="Table-level row count parity with raw listings, plus column tests for type, quantile bounds, and max price with warn severity."><code>  - name: dim_listings_w_hosts
+    data_tests:
+      - dbt_expectations.expect_table_row_count_to_equal_other_table:
+          arguments:
+            compare_model: source('airbnb', 'listings')
+    columns:
+      - name: price
+        data_tests:
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              arguments:
+                column_type: number
+          - dbt_expectations.expect_column_quantile_values_to_be_between:
+              arguments:
+                quantile: .99
+                min_value: 50
+                max_value: 500
+          - dbt_expectations.expect_column_max_to_be_between:
+              arguments:
+                max_value: 5000
+              config:
+                severity: warn</code></pre>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Test</th><th>What it checks</th><th>Why here</th></tr></thead>
+              <tbody>
+                <tr><td><code>expect_table_row_count_to_equal_other_table</code></td><td>Row count equals <code>source('airbnb', 'listings')</code></td><td>Join model did not drop or duplicate listings silently</td></tr>
+                <tr><td><code>expect_column_values_to_be_of_type</code></td><td>Column is NUMBER after cast</td><td>Confirms <code>REPLACE(price_str, '$')::NUMBER</code> worked</td></tr>
+                <tr><td><code>expect_column_quantile_values_to_be_between</code></td><td>99th percentile between 50 and 500</td><td>Catches extreme outliers without failing on every luxury listing</td></tr>
+                <tr><td><code>expect_column_max_to_be_between</code></td><td>Max price &lt;= 5000</td><td>Warn severity — flag suspicious max without blocking CI</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout warn"><strong>Package tests compile to heavy queries.</strong> Quantile and distinct-count tests scan full columns. Use selectors during development (<code>dbt test --select dim_listings_w_hosts</code>) rather than running the entire project after every YAML edit. On BigQuery and Databricks the SQL pattern is similar; adapter-specific type names in <code>expect_column_values_to_be_of_type</code> may differ — check the package macro for your warehouse.</div>
+
+          <h3>Running expectations tests</h3>
+          <div class="terminal">
+            <p class="term-head">dbt test — expectations on one model</p>
+            <pre class="term-body"><span class="tt-cmd">dbt test --select dim_listings_w_hosts</span>
+<span class="tt-dim">16:02:01  Running with dbt=1.11.12</span>
+<span class="tt-dim">16:02:04  1 of 4 START test expect_table_row_count_to_equal_other_table_dim_listings_w_hosts__... [RUN]</span>
+<span class="tt-ok">16:02:06  1 of 4 PASS expect_table_row_count_to_equal_other_table_dim_listings_w_hosts__... [PASS in 1.84s]</span>
+<span class="tt-dim">16:02:06  2 of 4 START test expect_column_values_to_be_of_type_dim_listings_w_hosts_price__number [RUN]</span>
+<span class="tt-ok">16:02:07  2 of 4 PASS expect_column_values_to_be_of_type_dim_listings_w_hosts_price__number [PASS in 0.62s]</span>
+<span class="tt-dim">16:02:07  3 of 4 START test expect_column_quantile_values_to_be_between_dim_listings_w_hosts_price__0_99__500__50 [RUN]</span>
+<span class="tt-ok">16:02:09  3 of 4 PASS expect_column_quantile_values_to_be_between_dim_listings_w_hosts_price__... [PASS in 1.41s]</span>
+<span class="tt-dim">16:02:09  4 of 4 START test expect_column_max_to_be_between_dim_listings_w_hosts_price__5000 [RUN]</span>
+<span class="tt-warn">16:02:10  4 of 4 WARN 1 expect_column_max_to_be_between_dim_listings_w_hosts_price__5000 [WARN 1 in 0.88s]</span>
+<span class="tt-ok">16:02:10  Completed with 1 warning</span></pre>
+          </div>
+
+          <p>When a quantile or regex test fails, open the compiled SQL under <code>target/compiled/airbnb/models/schema.yml/</code> — the file name encodes model, column, and test parameters. Copy that query into a worksheet to see the exact rows that violated the expectation.</p>
+
+          <h3>Compiled expectations SQL (what to look for)</h3>
+          <p>Package tests are macros like your custom generics from Section 12. After <code>dbt test</code>, the compiled file contains plain SQL your warehouse runs. A row-count parity test compiles roughly to two counts compared:</p>
+
+<pre data-lang="sql" data-title="target/compiled/.../expect_table_row_count_to_equal_other_table_dim_listings_w_hosts.sql" data-explain="Illustrative shape — open your compiled file after running the test for exact SQL." data-partial="true"><code>WITH a AS (
+    SELECT COUNT(*) AS n FROM DEV.dim_listings_w_hosts
+),
+b AS (
+    SELECT COUNT(*) AS n FROM AIRBNB.RAW.RAW_LISTINGS
+)
+SELECT *
+FROM a
+CROSS JOIN b
+WHERE a.n != b.n</code></pre>
+
+          <p>A regex test on raw price returns rows that fail the pattern — each row is one violation dbt counts in the <code>FAIL N</code> summary:</p>
+
+<pre data-lang="sql" data-title="Compiled expect_column_values_to_match_regex (conceptual)" data-explain="Search target/compiled for match_regex and listings price after testing the source."><code>SELECT *
+FROM AIRBNB.RAW.RAW_LISTINGS
+WHERE NOT REGEXP_LIKE(price, '^\\$[0-9][0-9\\.]+$')</code></pre>
+
+          <h3>Expectations vs built-ins vs custom generics</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Approach</th><th>Example</th><th>When to use</th><th>Debug path</th></tr></thead>
+              <tbody>
+                <tr><td>Built-in generic</td><td><code>unique</code>, <code>relationships</code></td><td>Standard integrity checks</td><td><code>target/compiled/.../schema.yml/</code></td></tr>
+                <tr><td>Custom generic (Section 12)</td><td><code>positive_values</code>, <code>minimum_row_count</code></td><td>Domain rules not in dbt core</td><td>Same; macro source in <code>tests/generic/</code></td></tr>
+                <tr><td><code>dbt_expectations</code></td><td><code>expect_column_quantile_values_to_be_between</code></td><td>Distribution, regex, type, parity</td><td>Compiled file + package macro in <code>dbt_packages/</code></td></tr>
+                <tr><td>Singular test</td><td><code>tests/dim_listings_minimum_nights.sql</code></td><td>One-off cross-model rule</td><td><code>target/compiled/.../tests/</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>You can combine all four on one model. <code>dim_listings_w_hosts</code> may simultaneously carry built-in tests from Section 11, custom generics from Section 12, and expectations from this section. Use <code>dbt ls --resource-type test --select dim_listings_w_hosts</code> to see the full list before paying warehouse cost.</p>
+
+          <div class="callout exam"><strong>Certification:</strong> package tests are invoked in YAML with the package prefix (<code>dbt_expectations.expect_*</code>), require <code>dbt deps</code>, and compile to ordinary SELECT queries that return failing rows.</div>
+
+          <div class="diagram">
+            <p class="diagram-title">Where dbt_expectations tests run in the DAG</p>
+            <div class="dag">
+              <div class="dag-col">
+                <p class="dag-label">Sources (raw)</p>
+                <div class="node is-source"><b>airbnb.listings</b><small>regex + distinct count</small></div>
+              </div>
+              <div class="dag-col">
+                <p class="dag-label">Dimensions</p>
+                <div class="node is-model"><b>dim_listings_cleansed</b></div>
+                <div class="node is-model"><b>dim_hosts_cleansed</b></div>
+              </div>
+              <div class="dag-col">
+                <p class="dag-label">Mart + tests</p>
+                <div class="node is-mart pulse"><b>dim_listings_w_hosts</b><small>row count + quantile</small></div>
+                <div class="node is-test"><b>expect_*</b><small>compiled SQL scans</small></div>
+              </div>
+            </div>
+          </div>
+
+          <h3>Package install verification</h3>
+          <p>Before debugging a missing macro error on expectations tests, confirm the package installed correctly after <code>dbt deps</code>:</p>
+
+<div class="terminal">
+  <p class="term-head">dbt deps</p>
+  <pre class="term-body"><span class="tt-cmd">dbt deps</span>
+<span class="tt-dim">16:00:01  Running with dbt=1.11.12</span>
+<span class="tt-dim">16:00:02  Installing dbt-labs/dbt_utils</span>
+<span class="tt-ok">16:00:03  Installed from version 1.3.3</span>
+<span class="tt-dim">16:00:03  Installing metaplane/dbt_expectations</span>
+<span class="tt-ok">16:00:05  Installed from version 0.10.10</span>
+<span class="tt-ok">16:00:05  Completed successfully</span></pre>
+</div>
+
+          <p>If <code>dbt_expectations.expect_column_distinct_count_to_equal</code> is "not found" at parse time, the package directory is missing or the YAML prefix is wrong. Grep <code>dbt_packages/dbt_expectations/macros/</code> for the exact test macro name before copying from documentation — names are long and must match exactly.</p>
+
+          <div class="analogy"><strong>Everyday analogy —</strong> compiled SQL is the receipt for what dbt ordered from the warehouse. <code>--debug</code> is the kitchen cam livestream. When the wrong dish arrives, read the receipt; do not watch forty minutes of prep unless the stove itself is broken.</div>
+        </section>
+
+        <section class="section" id="selective-testing">
+          <h2>Testing a single model or source</h2>
+          <p class="lead">A full-project <code>dbt test</code> on a mature DAG can take minutes and scan terabytes. During development you almost always want one model or one source table. The same <code>--select</code> syntax from <code>dbt run</code> applies to tests.</p>
+
+          <h3>One model and its column tests</h3>
+<pre data-lang="shell" data-title="Test one model"><code>dbt test --select dim_listings_w_hosts</code></pre>
+
+          <p>This selects every test node attached to <code>dim_listings_w_hosts</code> in <code>schema.yml</code> — built-in generics, custom generics from Section 12, and <code>dbt_expectations</code> tests added in this section. It does not automatically build the model; the relation must already exist from a prior <code>dbt run</code> or <code>dbt build</code>.</p>
+
+          <h3>One source table</h3>
+<pre data-lang="shell" data-title="Test one source"><code>dbt test --select source:airbnb.listings</code></pre>
+
+          <p>The <code>source:name.table</code> selector syntax runs freshness checks (if configured) and every column test declared under that source table in <code>sources.yml</code>. Use this when debugging raw feed quality before touching model SQL.</p>
+
+          <h3>Narrower selectors during debugging</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Goal</th><th>Command</th><th>Scope</th></tr></thead>
+              <tbody>
+                <tr><td>All tests on one model</td><td><code>dbt test -s dim_listings_w_hosts</code></td><td>Every test referencing that model</td></tr>
+                <tr><td>One source table</td><td><code>dbt test -s source:airbnb.listings</code></td><td>Freshness + column tests on raw listings</td></tr>
+                <tr><td>One test by name fragment</td><td><code>dbt test -s expect_column_max</code></td><td>Any test node whose name contains the string</td></tr>
+                <tr><td>Model + upstream build</td><td><code>dbt build -s +dim_listings_w_hosts</code></td><td>Runs parents, model, then tests — use on fresh dev schema</td></tr>
+                <tr><td>Tests only, one tag</td><td><code>dbt test -s tag:critical</code></td><td>Requires tags on test config (<a href="s17-selectors-commands.html">Section 17</a>)</td></tr>
+                <tr><td>Package test type</td><td><code>dbt test -s test_name:expect_table_row_count</code></td><td>All row-count parity tests project-wide</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout tip"><strong>Build before test on a clean schema.</strong> Tests query warehouse relations, not SQL files. If you dropped your dev schema overnight, run <code>dbt build --select +dim_listings_w_hosts</code> once, then iterate with <code>dbt test --select dim_listings_w_hosts</code> as you edit YAML.</div>
+
+          <h3>Listing what will run</h3>
+          <p>Before executing, confirm selection with <code>dbt ls</code>:</p>
+<pre data-lang="shell" data-title="Preview selected test nodes"><code>dbt ls --resource-type test --select dim_listings_w_hosts</code></pre>
+
+          <p>Each line is a test node name. If the list is empty, your selector typo'd or the model has no tests declared. If the list is unexpectedly long, you used a broad fragment match.</p>
+
+          <h3>Worked example: isolate one failing expectations test</h3>
+          <p>Suppose the quantile test fails after a price cast change:</p>
+          <ol>
+            <li>Note the full test name from the FAIL line: <code>expect_column_quantile_values_to_be_between_dim_listings_w_hosts_price__...</code></li>
+            <li>Re-run only that node: <code>dbt test -s expect_column_quantile_values_to_be_between_dim_listings_w_hosts</code></li>
+            <li>Open compiled SQL; confirm the 99th percentile calculation uses the NUMBER column, not the old VARCHAR</li>
+            <li>Run <code>SELECT APPROX_PERCENTILE(price, 0.99) FROM DEV.dim_listings_w_hosts</code> in a worksheet to see the actual value</li>
+            <li>Adjust <code>min_value</code>/<code>max_value</code> in YAML if the business bound was wrong, or fix the model cast if the data is wrong</li>
+          </ol>
+
+          <div class="terminal">
+            <p class="term-head">Isolated re-run after fix</p>
+            <pre class="term-body"><span class="tt-cmd">dbt test -s expect_column_quantile_values_to_be_between_dim_listings_w_hosts</span>
+<span class="tt-dim">16:08:01  Running with dbt=1.11.12</span>
+<span class="tt-dim">16:08:03  1 of 1 START test expect_column_quantile_values_to_be_between_dim_listings_w_hosts_price__... [RUN]</span>
+<span class="tt-ok">16:08:05  1 of 1 PASS expect_column_quantile_values_to_be_between_dim_listings_w_hosts_price__... [PASS in 1.38s]</span>
+<span class="tt-ok">16:08:05  Completed successfully</span></pre>
+          </div>
+
+          <p>This loop — narrow selector, compiled SQL, worksheet validation, YAML or model fix — is the same for built-in and package tests. The only difference is package test names are longer and the compiled SQL is more complex.</p>
+
+          <div class="diagram">
+            <p class="diagram-title">Debug loop for a failing test</p>
+            <div class="flow">
+              <div class="node is-test"><b>FAIL line</b><small>terminal</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-compute"><b>dbt test -s test_name</b><small>reproduce</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-store pulse"><b>target/compiled</b><small>copy SQL</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-source"><b>worksheet</b><small>inspect rows</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-model"><b>fix YAML/SQL</b><small>re-test</small></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="section" id="debug-flag">
+          <h2>The --debug flag</h2>
+          <p class="lead"><code>--debug</code> is a global flag that raises dbt's internal log level to DEBUG for the entire invocation. It belongs before the subcommand: <code>dbt --debug test</code>, not <code>dbt test --debug</code> (though dbt often accepts the latter via argparse forwarding).</p>
+
+<pre data-lang="shell" data-title="Debug-level test run"><code>dbt --debug test --select dim_listings_w_hosts</code></pre>
+
+          <h3>What extra output appears</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Normal run</th><th>With --debug</th></tr></thead>
+              <tbody>
+                <tr><td>INFO lines per model/test</td><td>DEBUG lines for parsing, compilation, adapter calls</td></tr>
+                <tr><td>Summary PASS/FAIL only</td><td>Full SQL strings sent to the warehouse (can be very long)</td></tr>
+                <tr><td>Connection success/fail</td><td>Connection parameters, retries, session IDs (watch for secrets in shared logs)</td></tr>
+                <tr><td>Minimal Jinja context</td><td>Macro expansion steps, graph construction detail</td></tr>
+                <tr><td>Errors with message</td><td>Full stack traces including internal dbt frames</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="terminal">
+            <p class="term-head">dbt --debug test (excerpt)</p>
+            <pre class="term-body"><span class="tt-cmd">dbt --debug test --select dim_listings_w_hosts</span>
+<span class="tt-dim">16:15:01  Running with dbt=1.11.12</span>
+<span class="tt-dim">16:15:01  debug:  Sending event: {'category': 'dbt', 'action': 'invocation', ...}</span>
+<span class="tt-dim">16:15:02  debug:  Acquiring new snowflake connection 'test.airbnb.expect_table_row_count...'</span>
+<span class="tt-dim">16:15:02  debug:  On test.airbnb.expect_table_row_count...: /* {"app": "dbt", "dbt_version": "1.11.12"} */
+SELECT COUNT(*) AS row_count FROM DEV.dim_listings_w_hosts ...</span>
+<span class="tt-ok">16:15:04  1 of 4 PASS expect_table_row_count_to_equal_other_table_dim_listings_w_hosts__... [PASS in 1.92s]</span></pre>
+          </div>
+
+          <div class="callout tip"><strong>Prefer target/compiled over --debug.</strong> The course instructor starts with <code>--debug</code>, then switches to opening compiled SQL files because they are stable, searchable, and safe to paste into a PR. <code>--debug</code> floods the terminal and may print credentials-adjacent metadata. Use it when you need adapter-level detail; use <code>target/compiled/</code> for test logic.</div>
+
+          <p>Everything logged at DEBUG also lands in <code>logs/dbt.log</code> regardless of whether you passed <code>--debug</code> on the CLI. The flag mainly controls what prints to stdout during the run.</p>
+
+          <h3>When --debug helps vs hurts</h3>
+          <ul>
+            <li><strong>Helps</strong> — adapter connection failures, obscure macro recursion errors, verifying which exact SQL dbt sent when the warehouse error message truncates the query.</li>
+            <li><strong>Hurts</strong> — reading test failure logic (use compiled files), sharing output in Slack (too verbose, may leak config), CI logs (noise hides the actual FAIL line).</li>
+          </ul>
+
+          <p>For compilation errors specifically, <code>dbt compile --select model_name</code> without <code>--debug</code> is usually enough; the error message points at file and line number in your project.</p>
+
+          <h3>Reading logs/dbt.log after --debug</h3>
+          <p>Even without <code>--debug</code>, dbt writes to <code>logs/dbt.log</code> continuously. After a failed run, search the log for <code>ERROR</code>, the test node name, or the model name. The log file includes timestamps and full SQL at DEBUG level when the global log level allows it.</p>
+
+          <div class="filetree">
+            <ul>
+              <li><span class="dir">airbnb/</span>
+                <ul>
+                  <li><span class="dir">target/</span>
+                    <ul>
+                      <li><span class="dir">compiled/</span> <span class="note">Jinja rendered — preferred for test SQL</span></li>
+                      <li><span class="dir">run/</span> <span class="note">Full DDL/DML executed</span></li>
+                    </ul>
+                  </li>
+                  <li><span class="dir">logs/</span>
+                    <ul>
+                      <li><span class="file">dbt.log</span> <span class="note">--debug increases verbosity here and on stdout</span></li>
+                    </ul>
+                  </li>
+                </ul>
+              </li>
+            </ul>
+          </div>
+
+          <p>In shared environments, rotate or truncate <code>dbt.log</code> periodically — it grows across sessions and may contain connection metadata you do not want in long-lived files.</p>
+        </section>
+
+        <section class="section" id="logging">
+          <h2>Logging with log() and macros</h2>
+          <p class="lead">dbt exposes a Jinja <code>log()</code> function for printf-style debugging inside macros and models. Messages always write to <code>logs/dbt.log</code>; passing <code>info=True</code> also prints them to the console during the run.</p>
+
+          <h3>The learn_logging macro</h3>
+          <p>The course adds a teaching macro in <code>macros/logging.sql</code> that demonstrates three logging behaviours and the difference between SQL comments and Jinja comments:</p>
+
+<pre data-lang="sql" data-title="macros/logging.sql" data-explain="The macro exactly as it ships in the course repo: a debug-level log, an info-level log that reaches the screen, and two commented variants that demonstrate SQL versus Jinja commenting."><code>{% macro learn_logging() %}
+    {{ log("Call your mom!") }}
+    {{ log("Call your dad!", info=True) }} --&gt; Logs to the screen, too
+--  {{ log("Call your dad!", info=True) }} --&gt; This will be put to the screen
+    {# log("Call your dad!", info=True) #} --&gt; This won't be executed
+{% endmacro %}</code></pre>
+
+          <p>The two comment styles behave very differently, and the macro is written to make that visible. A SQL line comment (<code>--</code>) is just text as far as Jinja is concerned: Jinja renders the line first and only then does the warehouse ignore it, so a <code>{{ log(...) }}</code> hidden behind <code>--</code> still executes and still prints. A Jinja comment (<code>{# ... #}</code>) is removed at parse time, so the call inside it never runs at all. That is why line 4 still logs when you call the macro while line 5 does not.</p>
+
+          <div class="callout warn"><strong>The trailing <code>--&gt;</code> is a SQL comment, not an arrow.</strong> Because <code>--</code> opens a line comment, everything after it on that line is ignored by the warehouse. The course author uses it as an inline annotation. It is harmless here, but do not copy the habit into a model where the same line also carries SQL you actually need.</div>
+
+          <h3>Running the macro</h3>
+          <p>Macros that do not belong to a model run via <code>dbt run-operation</code>:</p>
+
+<div class="terminal">
+  <p class="term-head">dbt run-operation</p>
+  <pre class="term-body"><span class="tt-cmd">dbt run-operation learn_logging</span>
+<span class="tt-dim">16:22:01  Running with dbt=1.11.12</span>
+<span class="tt-dim">16:22:02  Call your dad!</span>
+<span class="tt-ok">16:22:02  Completed successfully</span></pre>
+</div>
+
+          <p>Only the <code>info=True</code> line appears on screen. <code>Call your mom!</code> went to <code>logs/dbt.log</code> at DEBUG level only. Open that file and search for <code>Call your mom</code> to confirm.</p>
+
+          <h3>info=True vs default (debug level)</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Call</th><th>Console</th><th>logs/dbt.log</th><th>Typical use</th></tr></thead>
+              <tbody>
+                <tr><td><code>log("msg")</code></td><td>Hidden</td><td>DEBUG</td><td>Verbose tracing inside macros</td></tr>
+                <tr><td><code>log("msg", info=True)</code></td><td>Printed</td><td>INFO</td><td>Branch taken, row counts, incremental watermark</td></tr>
+                <tr><td><code>log("msg", info=True)</code> in CI</td><td>Captured in job log</td><td>INFO</td><td>Prove which code path ran without --debug</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>Section 13's <code>fct_reviews</code> uses <code>log()</code> to record which incremental branch executed — the same pattern at production scale. Remove or downgrade noisy <code>info=True</code> logs before merging; they clutter shared CI output.</p>
+
+          <h3>Where logs land</h3>
+          <div class="filetree">
+            <ul>
+              <li><span class="dir">airbnb/</span>
+                <ul>
+                  <li><span class="dir">logs/</span>
+                    <ul>
+                      <li><span class="file">dbt.log</span> <span class="note">append-only; rotate manually on long sessions</span></li>
+                    </ul>
+                  </li>
+                  <li><span class="dir">macros/</span>
+                    <ul>
+                      <li><span class="file">logging.sql</span> <span class="new">← learn_logging macro</span></li>
+                    </ul>
+                  </li>
+                </ul>
+              </li>
+            </ul>
+          </div>
+
+          <div class="callout warn"><strong>log() is not for secrets.</strong> Values you pass to <code>log()</code> are written in plain text to disk. Never log passwords, tokens, or PII. Use static labels like <code>log("incremental branch: date filter", info=True)</code> instead of dumping row contents.</div>
+
+          <h3>Logging in models (fct_reviews pattern)</h3>
+          <p>Section 13 adds logging inside the incremental model to show which branch ran. That is the production use case for <code>log(..., info=True)</code> — not the teaching macro, but real pipeline observability:</p>
+
+<pre data-lang="sql" data-title="models/fct/fct_reviews.sql (incremental branch logging)" data-explain="When is_incremental() is true, the log line appears in CI output so you know the filter ran." data-partial="true"><code>{% if is_incremental() %}
+    {{ log("fct_reviews: incremental run — filtering on review_date", info=True) }}
+    WHERE review_date &gt; (SELECT MAX(review_date) FROM {{ this }})
+{% else %}
+    {{ log("fct_reviews: full refresh — no date filter", info=True) }}
+{% endif %}</code></pre>
+
+          <p>During a failed nightly incremental run, search the orchestrator log for that string before opening compiled SQL. If you see "full refresh" when you expected incremental, the model was rebuilt from scratch — check for accidental <code>--full-refresh</code> or a config change.</p>
+
+          <h3>Jinja comment vs SQL comment (learn_logging recap)</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Syntax</th><th>Effect on log() call</th><th>Appears in compiled SQL?</th></tr></thead>
+              <tbody>
+                <tr><td>Active <code>{{ log(...) }}</code></td><td>Executes at compile/run time</td><td>No — log side effect only</td></tr>
+                <tr><td><code>-- {{ log(...) }}</code></td><td>SQL comment hides Jinja from execution</td><td>Comment line may appear in compiled SQL</td></tr>
+                <tr><td><code>{# log(...) #}</code></td><td>Stripped at Jinja parse — never runs</td><td>No</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>The course uses all three to show that commenting out Jinja is not the same as commenting out SQL. When debugging macros, if your <code>log()</code> never fires, check whether the line is inside <code>{# #}</code> or prefixed with <code>--</code>.</p>
+        </section>
+
+        <section class="section" id="debugging-errors">
+          <h2>Debugging YAML, SQL and model errors</h2>
+          <p class="lead">dbt failures fall into three buckets: YAML or project config parse errors (before compilation), Jinja compilation errors (macro/syntax in your SQL files), and warehouse execution errors (compiled SQL is valid but the database rejects it). Each bucket has a different first file to open.</p>
+
+          <h3>Reading a compilation error</h3>
+          <p>Compilation errors include the project file path and often the Jinja line. Example when a macro name is misspelled:</p>
+
+<div class="terminal">
+  <p class="term-head">Compilation error</p>
+  <pre class="term-body"><span class="tt-cmd">dbt run --select dim_listings_cleansed</span>
+<span class="tt-err">16:30:04  Compilation Error in model dim_listings_cleansed (models/dim/dim_listings_cleansed.sql)</span>
+<span class="tt-err">  'unknown_macro' is undefined. This can happen when calling a macro that does not exist.</span>
+<span class="tt-dim">  &gt; in macro some_wrapper (macros/broken.sql)</span>
+<span class="tt-dim">  &gt; called by model dim_listings_cleansed (models/dim/dim_listings_cleansed.sql)</span></pre>
+</div>
+
+          <p>Read from the bottom up: the model file called a macro; the macro file has the undefined reference. Fix <code>macros/broken.sql</code>, not the model. When the stack is deep, reproduce with <code>dbt compile --select dim_listings_cleansed</code> for a fast loop.</p>
+
+          <h3>Common YAML indentation mistakes</h3>
+          <p>YAML errors surface at parse time with a line number in the YAML file. Typical mistakes when adding <code>dbt_expectations</code> tests:</p>
+
+          <ul>
+            <li><strong><code>arguments:</code> at wrong indent</strong> — must nest under the test name, not at column level sibling to <code>data_tests:</code>.</li>
+            <li><strong>Tabs instead of spaces</strong> — YAML forbids tabs; some editors insert them silently.</li>
+            <li><strong>Missing colon after test name</strong> — <code>- dbt_expectations.expect_column_max_to_be_between</code> needs a trailing colon before <code>arguments:</code>.</li>
+            <li><strong>Regex backslashes under-escaped</strong> — JSON-style regex in YAML often needs <code>\\\\</code> for one literal backslash in the compiled pattern.</li>
+            <li><strong><code>config:</code> sibling to <code>arguments:</code></strong> — severity and tags belong under the test item, not under <code>columns:</code> root.</li>
+          </ul>
+
+<pre data-lang="yaml" data-title="Wrong — arguments at column level" data-partial="true" data-explain="arguments must be indented under the test name, not directly under columns."><code>columns:
+  - name: price
+    arguments:          # WRONG — not a valid schema.yml key here
+      max_value: 5000
+    data_tests:
+      - dbt_expectations.expect_column_max_to_be_between</code></pre>
+
+<pre data-lang="yaml" data-title="Correct — arguments nested under test" data-explain="Course pattern from schema.yml: test name, then arguments, then optional config."><code>columns:
+  - name: price
+    data_tests:
+      - dbt_expectations.expect_column_max_to_be_between:
+          arguments:
+            max_value: 5000
+          config:
+            severity: warn</code></pre>
+
+          <h3>target/compiled vs target/run</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Directory</th><th>Contents</th><th>When to open</th></tr></thead>
+              <tbody>
+                <tr><td><code>target/compiled/&lt;project&gt;/models/...</code></td><td>SQL after Jinja, before wrapping in CREATE</td><td>Debug model logic, read test queries</td></tr>
+                <tr><td><code>target/compiled/&lt;project&gt;/tests/...</code></td><td>Compiled singular tests</td><td>Debug custom test SQL</td></tr>
+                <tr><td><code>target/compiled/&lt;project&gt;/models/schema.yml/</code></td><td>One file per generic test node</td><td>Debug built-in and package tests</td></tr>
+                <tr><td><code>target/run/&lt;project&gt;/models/...</code></td><td>Full DDL/DML dbt executed (CREATE TABLE AS, etc.)</td><td>Verify materialization SQL, incremental merge</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>Workflow from <a href="s11-tests.html#compiled-sql">Section 11</a>, applied here to expectations failures:</p>
+          <ol>
+            <li>Run the failing test with a narrow selector.</li>
+            <li>Find the compiled file under <code>target/compiled/airbnb/models/schema.yml/</code> (search for <code>expect_column</code> and the model name).</li>
+            <li>Copy SQL into a worksheet; run it directly against the warehouse.</li>
+            <li>Inspect failing rows; trace back to model or source logic.</li>
+            <li>Fix, <code>dbt run --select upstream_model+</code>, re-test.</li>
+          </ol>
+
+          <h3>Model SQL errors vs test errors</h3>
+          <p>When <code>dbt run</code> fails with a warehouse error, open <code>target/run/airbnb/models/&lt;path&gt;/&lt;model&gt;.sql</code> for the exact statement Snowflake executed. The error line number refers to compiled SQL, not your model file — map back manually or diff against <code>target/compiled</code>.</p>
+
+          <div class="callout danger"><strong>Do not edit files under target/.</strong> They are regenerated every run. Fix the source <code>.sql</code> or <code>.yml</code> in your project; dbt overwrites <code>target/</code> on the next compile.</div>
+
+          <h3>Parse errors vs compilation errors vs runtime errors</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Phase</th><th>Typical message</th><th>First file to open</th><th>Command to retry</th></tr></thead>
+              <tbody>
+                <tr><td>Parse</td><td><code>Parsing Error in schema.yml</code></td><td>The YAML file cited in the error</td><td><code>dbt parse</code></td></tr>
+                <tr><td>Compile</td><td><code>Compilation Error in model ...</code></td><td>Model or macro in stack trace</td><td><code>dbt compile --select model</code></td></tr>
+                <tr><td>Run (warehouse)</td><td><code>Database Error in model ...</code></td><td><code>target/run/.../model.sql</code></td><td><code>dbt run --select model</code></td></tr>
+                <tr><td>Test (warehouse)</td><td><code>FAIL N test_name</code></td><td><code>target/compiled/.../schema.yml/</code></td><td><code>dbt test --select test_name</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>YAML mistake: tests key renamed</h3>
+          <p>On dbt 1.8+ the key is <code>data_tests:</code>, not <code>tests:</code>. A file copied from an old tutorial may parse but dbt ignores the block or errors depending on version flags:</p>
+
+<pre data-lang="yaml" data-title="Outdated — tests: key" data-partial="true" data-explain="Modern projects use data_tests: — see Section 11 for the current form."><code>columns:
+  - name: listing_id
+    tests:           # outdated on dbt 1.11
+      - unique</code></pre>
+
+<pre data-lang="yaml" data-title="Current — data_tests: with arguments:" data-explain="Course repo pattern for dbt 1.11."><code>columns:
+  - name: listing_id
+    data_tests:
+      - unique
+      - not_null</code></pre>
+
+          <h3>Finding compiled test files quickly</h3>
+          <p>Generic test filenames are auto-generated and long. Use ripgrep from the project root instead of clicking through folders:</p>
+
+<pre data-lang="shell" data-title="Search compiled tests (PowerShell from airbnb/)"><code>Get-ChildItem -Recurse target/compiled -Filter "*expect_column_max*"
+# or: rg -l "expect_column_max" target/compiled/</code></pre>
+
+          <p>On Unix shells: <code>rg -l "quantile" target/compiled/airbnb/models/schema.yml/</code>. The search term should be a unique fragment of the test node name from the terminal FAIL line.</p>
+
+          <h3>Debugging a Database Error in dim_listings_w_hosts</h3>
+          <p>When the warehouse rejects model SQL (not a test), the stack trace points at the model file but the line numbers refer to compiled SQL. Example: join to a versioned ref typo:</p>
+
+<div class="terminal">
+  <p class="term-head">Runtime error</p>
+  <pre class="term-body"><span class="tt-cmd">dbt run --select dim_listings_w_hosts</span>
+<span class="tt-err">16:45:02  Database Error in model dim_listings_w_hosts (models/dim/dim_listings_w_hosts.sql)</span>
+<span class="tt-err">  000904 (42000): SQL compilation error: error line 12 at position 8</span>
+<span class="tt-err">  invalid identifier 'HOST_NAME_V2'</span></pre>
+</div>
+
+          <ol>
+            <li>Open <code>target/run/airbnb/models/dim/dim_listings_w_hosts.sql</code> line 12.</li>
+            <li>See which <code>ref()</code> or column alias the warehouse rejected.</li>
+            <li>Fix the model SQL or the upstream version ref (<code>ref('dim_hosts_cleansed', v=2)</code> from later sections).</li>
+            <li>Re-run with the same selector — no need for full project rebuild.</li>
+          </ol>
+
+          <h3>Parse error anatomy (YAML)</h3>
+          <p>When indentation is wrong, dbt fails before any model compiles. The message names the file and often the line where the parser lost track of nesting:</p>
+
+<div class="terminal">
+  <p class="term-head">dbt parse — YAML error</p>
+  <pre class="term-body"><span class="tt-cmd">dbt parse</span>
+<span class="tt-err">16:48:01  Parsing Error</span>
+<span class="tt-err">  Invalid models.config.test entry in models/schema.yml:</span>
+<span class="tt-err">  at path: ['columns', 0, 'data_tests', 0]:</span>
+<span class="tt-err">  'arguments' is not a valid property</span>
+<span class="tt-dim">  Raw Error:</span>
+<span class="tt-dim">  while parsing a block mapping in "models/schema.yml", line 94, column 11</span></pre>
+</div>
+
+          <p>The <code>at path:</code> line is the fastest fix hint — it tells you which YAML key dbt did not expect at that depth. Compare the failing block character-for-character with a working test from the same file. Online YAML validators help for bracket matching, but dbt's own error path is usually enough.</p>
+
+          <h3>Compilation error anatomy (Jinja in SQL)</h3>
+          <p>When YAML parses but Jinja fails, the error cites the model file and the undefined symbol:</p>
+
+<div class="terminal">
+  <p class="term-head">dbt compile — undefined ref</p>
+  <pre class="term-body"><span class="tt-cmd">dbt compile --select dim_listings_w_hosts</span>
+<span class="tt-err">16:49:12  Compilation Error in model dim_listings_w_hosts (models/dim/dim_listings_w_hosts.sql)</span>
+<span class="tt-err">  Model 'dim_listings_w_hosts' depends on a node named 'dim_hosts_cleansed' which was not found</span></pre>
+</div>
+
+          <p>This usually means the upstream model was renamed, excluded by a selector, or lives in a disabled package path — not that the SQL syntax is wrong. Run <code>dbt ls --select +dim_listings_w_hosts</code> to see whether the parent node exists in the current graph. For package tests, a similar message appears when <code>dbt deps</code> was skipped and the macro namespace is missing entirely.</p>
+
+          <div class="callout tip"><strong>Fast compile loop.</strong> Keep a second terminal on <code>dbt compile --select model_name</code> while editing. Compilation is free on the warehouse and catches most Jinja and YAML reference errors before you pay for a full run.</div>
+        </section>
+
+        <section class="section" id="empty-sample">
+          <h2>--empty and --sample for fast iteration</h2>
+          <p class="lead">Running the full DAG against production-sized tables on every save is slow and expensive. dbt 1.8+ adds flags to build models with zero rows or a time-bounded sample so you can validate SQL shape and compilation quickly in dev.</p>
+
+          <h3>--empty</h3>
+          <p><code>dbt run --empty</code> executes models but replaces the body with a query that returns no rows while preserving the column schema. The warehouse still creates or replaces the relation — useful for checking DDL, grants, and hooks without scanning data.</p>
+
+<pre data-lang="shell" data-title="Run all models empty"><code>dbt run --empty
+# Verify in worksheet: SELECT COUNT(*) FROM AIRBNB.DEV.DIM_LISTINGS_W_HOSTS;</code></pre>
+
+          <p>Expect <code>COUNT(*) = 0</code> for every model built. Downstream tests that require row counts will fail — run without <code>--empty</code> before testing data quality.</p>
+
+          <h3>--sample and event_time</h3>
+          <p><code>--sample</code> filters models that declare an <code>event_time</code> column in config. The course adds it to <code>dim_listings_cleansed</code>:</p>
+
+<pre data-lang="sql" data-title="models/dim/dim_listings_cleansed.sql" data-explain="event_time tells dbt which column to use for time-window sampling."><code>{{
+  config(
+    materialized = 'view',
+    event_time='created_at'
+  )
+}} 
+WITH src_listings AS (
+    SELECT * FROM {{ ref('src_listings') }}
+)
+SELECT 
+  listing_id,
+  listing_name,
+  room_type,
+  CASE
+    WHEN minimum_nights = 0 THEN 1
+    ELSE minimum_nights
+  END AS minimum_nights,
+  host_id,
+  REPLACE(
+    price_str,
+    '$'
+  ) :: NUMBER(
+    10,
+    2
+  ) AS price,
+  created_at,
+  updated_at
+FROM
+  src_listings</code></pre>
+
+          <p>Then sample a downstream model for three days of event time:</p>
+
+<pre data-lang="shell" data-title="Sample run on one model"><code>dbt run -s dim_listings_w_hosts --sample "3 days"</code></pre>
+
+          <div class="callout warn"><strong>Sample may return zero rows.</strong> The course dataset's <code>created_at</code> values are historical — nothing falls in "the past 3 days" relative to today. The table builds successfully but is empty. That is expected; check the executed SQL in <code>target/run/airbnb/models/dim/dim_listings_w_hosts.sql</code> to confirm the sample predicate was applied.</div>
+
+          <h3>Inspecting sampled SQL</h3>
+          <p>Open the run artifact to see the time filter dbt injected:</p>
+
+<pre data-lang="sql" data-title="target/run/airbnb/models/dim/dim_listings_w_hosts.sql" data-explain="Illustrative — exact sample wrapper depends on adapter and dbt version; search for event_time filter in your file." data-partial="true"><code>CREATE OR REPLACE VIEW DEV.dim_listings_w_hosts AS
+SELECT ...
+FROM ...
+WHERE created_at &gt;= DATEADD('day', -3, CURRENT_TIMESTAMP())
+  AND created_at &lt; CURRENT_TIMESTAMP()</code></pre>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Flag</th><th>Data scanned</th><th>Best for</th><th>Tests afterwards</th></tr></thead>
+              <tbody>
+                <tr><td><code>--empty</code></td><td>None (zero rows)</td><td>Schema/DDL validation, hook debugging</td><td>Row-count tests will fail</td></tr>
+                <tr><td><code>--sample "N days"</code></td><td>Subset by <code>event_time</code></td><td>Logic debugging on recent data</td><td>May fail if sample empty or too small</td></tr>
+                <tr><td>Neither (normal run)</td><td>Full table</td><td>Accurate tests and prod-like dev</td><td>All tests meaningful</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="diagram">
+            <p class="diagram-title">Fast iteration loop with --sample</p>
+            <div class="flow">
+              <div class="node is-compute"><b>Edit model SQL</b><small>local file</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-model pulse"><b>dbt run -s model --sample</b><small>subset scan</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-store"><b>target/run/</b><small>verify filter</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-compute"><b>Full run + test</b><small>before PR</small></div>
+            </div>
+          </div>
+
+          <p>On BigQuery, sampling behaviour uses partition filters when <code>event_time</code> aligns with partition columns — cost savings can be larger than on Snowflake. On Postgres, treat sample as a convenience filter, not a guarantee of index use.</p>
+
+          <h3>--empty on a single model</h3>
+          <p>You can combine <code>--empty</code> with selectors — you do not have to empty the entire project:</p>
+
+<pre data-lang="shell" data-title="Empty run for one subgraph"><code>dbt run --select dim_listings_w_hosts+ --empty</code></pre>
+
+          <p>This builds <code>dim_listings_w_hosts</code> and downstream dependents with zero rows. Useful when validating a new mart's DDL and downstream exposure without waiting for a full refresh. Remember to run a normal <code>dbt run</code> before <code>dbt test</code> on data-dependent expectations.</p>
+
+          <h3>Combining flags in a dev loop</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Command</th><th>What you learn</th><th>What still breaks</th></tr></thead>
+              <tbody>
+                <tr><td><code>dbt compile -s model</code></td><td>Jinja resolves; no warehouse cost</td><td>Does not catch warehouse syntax errors</td></tr>
+                <tr><td><code>dbt run -s model --empty</code></td><td>DDL and hooks fire</td><td>No real data; tests on counts fail</td></tr>
+                <tr><td><code>dbt run -s model --sample "7 days"</code></td><td>Real transform logic on subset</td><td>Empty if no recent <code>event_time</code> values</td></tr>
+                <tr><td><code>dbt build -s model</code></td><td>Full data + tests in dependency order</td><td>Slowest; use before merge</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout tip"><strong>Compile first, sample second, full build last.</strong> The cheapest debug loop is <code>dbt compile</code> for Jinja errors, <code>dbt run --sample</code> for logic on a slice, then <code>dbt build</code> when you are ready to validate tests including <code>dbt_expectations</code> row-count parity.</div>
+        </section>
+
+        <section class="section" id="global-flags">
+          <h2>Global flags and behaviour changes</h2>
+          <p class="lead">Beyond <code>--debug</code>, <code>--empty</code>, and <code>--sample</code>, dbt exposes global flags in <code>dbt_project.yml</code> under a top-level <code>flags:</code> key and via environment variables. They toggle behaviour changes between major versions without breaking existing projects immediately.</p>
+
+          <p>Reference docs:</p>
+          <ul>
+            <li><a href="https://docs.getdbt.com/reference/global-configs/about-global-configs">Supported global configs</a></li>
+            <li><a href="https://docs.getdbt.com/reference/global-configs/behavior-changes">Managing behaviour changes with flags</a></li>
+          </ul>
+
+          <p>When upgrading dbt Core (the course pins 1.11.x), read the behaviour-change flags for your version before a blanket upgrade. A flag might switch default test severity, YAML validation strictness, or how microbatch incremental models schedule batches — topics touched in <a href="s08-materializations.html">Section 8</a> and <a href="s19-production.html">Section 19</a>.</p>
+
+          <div class="callout info"><strong>flags in dbt_project.yml vs CLI.</strong> Project-level flags apply to every invocation in that directory. CLI flags like <code>--empty</code> are per-command overrides. Do not confuse them with model <code>config()</code> blocks — those are node-level.</div>
+
+          <h3>Flags relevant to debugging</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Flag / config</th><th>Effect on debugging</th></tr></thead>
+              <tbody>
+                <tr><td><code>--debug</code> (CLI)</td><td>Maximum verbosity for one invocation</td></tr>
+                <tr><td><code>--log-level debug</code></td><td>Alternative log level control on some dbt versions</td></tr>
+                <tr><td><code>--empty</code></td><td>Skip data scan; validate compilation and DDL</td></tr>
+                <tr><td><code>--sample</code></td><td>Limit data window for faster run/debug cycles</td></tr>
+                <tr><td><code>warn_error</code> (project flag)</td><td>Turn WARN test results into failures — useful in prod CI, noisy in early dev</td></tr>
+                <tr><td><code>require_explicit_package_overrides_for_builtin_materializations</code></td><td>Behaviour-change flag; errors if materialization overrides are ambiguous</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>When a project upgrades from dbt 1.7 to 1.11, behaviour-change flags let you opt in gradually. Read the migration guide for your jump, enable flags in dev, run the full test suite, then enable in CI. Debugging "it worked last month" often starts with a flag that changed default YAML validation or test severity.</p>
+
+          <h3>dbt debug vs dbt --debug</h3>
+          <p>Do not confuse <code>dbt debug</code> (connection and configuration sanity check) with <code>dbt --debug &lt;subcommand&gt;</code> (verbose logging for that run). Run <code>dbt debug</code> once when setting up a machine or after rotating credentials. Run <code>dbt --debug test</code> when a specific invocation fails and you need adapter-level detail. Section 6 covers <code>dbt debug</code> output in the setup context.</p>
+        </section>
+
+        <section class="section" id="deeper">
+          <h2>Deeper detail and edge cases</h2>
+          <p class="lead">Operational detail for when tests fail in CI at 2 a.m.: how logging levels interact with orchestrators, why expectations tests pass on empty tables, and a troubleshooting playbook centred on compiled artifacts rather than guesswork.</p>
+
+          <h3>Version notes</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Behaviour</th><th>Before</th><th>Now</th><th>Version</th></tr></thead>
+              <tbody>
+                <tr><td><code>--empty</code> flag</td><td>Not available</td><td>Zero-row builds preserving schema</td><td>1.8+</td></tr>
+                <tr><td><code>--sample</code> flag</td><td>Not available</td><td>Time-window subset via <code>event_time</code></td><td>1.8+</td></tr>
+                <tr><td><code>event_time</code> config</td><td>N/A</td><td>Enables sample and microbatch patterns</td><td>1.8+</td></tr>
+                <tr><td>dbt_expectations package</td><td><code>calogica/dbt_expectations</code></td><td><code>metaplane/dbt_expectations</code> 0.10.10</td><td>2024+ fork</td></tr>
+                <tr><td>Test YAML key</td><td><code>tests:</code></td><td><code>data_tests:</code></td><td>1.8+</td></tr>
+                <tr><td>Generic test arguments</td><td>Top-level keys</td><td>Under <code>arguments:</code></td><td>1.8+</td></tr>
+                <tr><td><code>dbt --debug</code></td><td>Same</td><td>Still global; prefer artifacts over terminal flood</td><td>1.x</td></tr>
+                <tr><td><code>log()</code> in macros</td><td>Same</td><td>Writes to <code>logs/dbt.log</code>; <code>info=True</code> for stdout</td><td>1.x</td></tr>
+                <tr><td>Compiled test path</td><td>Under <code>target/compiled/.../schema.yml/</code></td><td>Same pattern; long auto-generated filenames</td><td>1.x</td></tr>
+                <tr><td>Selector for sources</td><td><code>source:name.table</code></td><td>Unchanged</td><td>1.x</td></tr>
+                <tr><td>Behaviour-change flags</td><td>Ad hoc env vars</td><td>Central <code>flags:</code> in project yaml</td><td>1.5+ evolving</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>What it costs to run</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>What runs</th><th>Where the cost lands</th><th>How to spend less</th></tr></thead>
+              <tbody>
+                <tr><td><code>dbt test</code> full project</td><td>Every test scans its target relation</td><td><code>--select</code> one model; slim CI in Section 19</td></tr>
+                <tr><td><code>expect_column_quantile_*</code></td><td>Full column sort/aggregate</td><td>Run only on marts; warn severity for exploratory bounds</td></tr>
+                <tr><td><code>expect_table_row_count_to_equal_other_table</code></td><td>Two full-table counts</td><td>Run nightly, not on every PR</td></tr>
+                <tr><td><code>dbt --debug test</code></td><td>Same warehouse cost; larger log I/O</td><td>Use compiled SQL instead for logic debugging</td></tr>
+                <tr><td><code>dbt run --empty</code></td><td>Minimal scan; DDL still runs</td><td>Use for hook/grant validation only</td></tr>
+                <tr><td><code>dbt run --sample</code></td><td>Proportional to window and partition pruning</td><td>Align <code>event_time</code> with physical partition column</td></tr>
+                <tr><td><code>dbt run-operation</code> with logging macro</td><td>Negligible</td><td>Remove verbose <code>info=True</code> logs before merge</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout cost"><strong>The biggest waste is running quantile and row-count parity tests on every commit.</strong> Expectations tests are powerful and expensive. Tag them <code>nightly</code> or scope CI to <code>state:modified+</code> while keeping fast built-in tests on PR.</div>
+
+          <h3>Traps that catch people</h3>
+          <ul>
+            <li><strong>Testing before building —</strong> tests query the warehouse relation. Fresh dev schema + <code>dbt test</code> yields "relation does not exist". Run <code>dbt build --select +model</code> first.</li>
+            <li><strong>Expectations on empty sample —</strong> <code>--sample "3 days"</code> with stale <code>created_at</code> builds zero-row tables; quantile tests may pass vacuously or fail oddly. Know your data timeline.</li>
+            <li><strong>Wrong expectations fork —</strong> <code>calogica/dbt_expectations</code> from old tutorials breaks on dbt 1.11. Pin metaplane 0.10.10 per Section 13.</li>
+            <li><strong>Regex escaping in YAML —</strong> under-escaped <code>\\</code> causes tests that never match or match everything. Copy patterns from working project files.</li>
+            <li><strong>--debug before subcommand —</strong> <code>dbt test --debug</code> often works but the documented form is <code>dbt --debug test</code>. In scripts, use the global form consistently.</li>
+            <li><strong>Editing target/compiled —</strong> changes disappear on next run and never fix the source. Always edit project files.</li>
+            <li><strong>log() with info=True in hot macros —</strong> a macro called per row or per column floods CI. Log once per model execution.</li>
+            <li><strong>Assuming DEBUG logs appear on screen —</strong> only <code>info=True</code> prints by default. Read <code>logs/dbt.log</code> for debug-level messages.</li>
+            <li><strong>source: selector typo —</strong> <code>source:airbnb.listing</code> (missing s) selects nothing silently with an empty success message from <code>dbt ls</code>.</li>
+            <li><strong>event_time without sample support —</strong> models without <code>event_time</code> config ignore <code>--sample</code> and run full data — surprise bill.</li>
+            <li><strong>WARN treated as green CI —</strong> <code>expect_column_max_to_be_between</code> with warn severity exits 0; monitor warnings explicitly in orchestration.</li>
+            <li><strong>Compiled test file hunt —</strong> generic test filenames are extremely long. Grep <code>target/compiled</code> for the column name instead of browsing manually.</li>
+          </ul>
+
+          <h3>Troubleshooting playbook</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Symptom</th><th>Most likely cause</th><th>What to check / fix</th></tr></thead>
+              <tbody>
+                <tr><td><code>Compilation Error</code> in schema.yml</td><td>YAML indent or missing colon on test</td><td>Validate with <code>dbt parse</code>; compare to working test block in repo</td></tr>
+                <tr><td><code>'dbt_expectations' is not a package</code></td><td><code>dbt deps</code> not run</td><td>Run <code>dbt deps</code>; confirm <code>dbt_packages/dbt_expectations</code> exists</td></tr>
+                <tr><td>Test PASS but clearly wrong data</td><td>Empty table or sample with zero rows</td><td><code>SELECT COUNT(*) FROM relation</code>; re-run without <code>--empty</code>/<code>--sample</code></td></tr>
+                <tr><td><code>expect_column_values_to_match_regex</code> FAIL all rows</td><td>Regex escaping wrong for YAML</td><td>Compare to <code>sources.yml</code> listing price pattern; test regex in worksheet</td></tr>
+                <tr><td><code>relation does not exist</code> on test</td><td>Model not built in target schema</td><td><code>dbt run --select model</code> or check <code>target/schema</code> in manifest</td></tr>
+                <tr><td>Macro <code>learn_logging</code> not found</td><td>File not in <code>macro-paths</code> or typo</td><td>Confirm <code>macros/logging.sql</code>; run <code>dbt parse</code></td></tr>
+                <tr><td>No console output from log()</td><td>Missing <code>info=True</code></td><td>Read <code>logs/dbt.log</code> at DEBUG level</td></tr>
+                <tr><td><code>--sample</code> still scans full table</td><td>No <code>event_time</code> on model or parent</td><td>Add <code>event_time</code> to sampled model config chain</td></tr>
+                <tr><td>Terminal unusable after test run</td><td>Used <code>--debug</code> on large project</td><td>Switch to <code>target/compiled/.../schema.yml/</code> for test SQL</td></tr>
+                <tr><td>Row count parity test FAIL</td><td>Join dropped rows or incremental lag</td><td>Compiled SQL for both sides; compare keys in worksheet</td></tr>
+                <tr><td>Warehouse syntax error in compiled SQL</td><td>Package test not adapter-compatible</td><td>Check dbt_expectations docs for Snowflake vs BigQuery type names</td></tr>
+                <tr><td><code>dbt ls --select source:...</code> empty</td><td>Wrong source or table name</td><td>Match names in <code>sources.yml</code> exactly (logical name, not identifier)</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Production patterns</h3>
+          <p>Mature teams treat debugging as artifact-first: every failed CI job attaches the compiled test SQL from <code>target/compiled</code> (or uses <code>store_failures</code> from Section 11) rather than re-running with <code>--debug</code>. Logging uses <code>info=True</code> sparingly at model boundaries — incremental watermark, batch ID, rows affected — and ships logs to the orchestrator's sink (Airflow/Dagster task logs in Section 18).</p>
+          <p>Expectations tests split into tiers: cheap built-ins on every PR, expensive distribution and parity tests nightly. Source regex tests run on ingestion completion; mart quantile tests run after full build.</p>
+
+          <div class="grid-2">
+            <div class="mini-card">
+              <h4>Pattern: artifact-driven debug</h4>
+              <p>CI uploads <code>target/compiled</code> and <code>logs/dbt.log</code> as job artifacts on failure. Engineers reproduce by copying one SELECT, not replaying the whole DAG with debug logging.</p>
+            </div>
+            <div class="mini-card">
+              <h4>Anti-pattern: permanent --debug in CI</h4>
+              <p>Log volume explodes, secrets risk increases, and the signal-to-noise ratio hides the one FAIL line that matters. Use structured <code>log(..., info=True)</code> at known points instead.</p>
+            </div>
+          </div>
+
+<pre data-lang="sql" data-title="macros/debug_helpers.sql — reusable pattern" data-explain="Log model name and target schema once at the top of a macro used during incident response."><code>{% macro log_context(model_name) %}
+  {% if execute %}
+    {{ log("model=" ~ model_name ~ " target=" ~ target.schema, info=True) }}
+  {% endif %}
+{% endmacro %}</code></pre>
+
+          <h3>Certification pointers</h3>
+          <p>The exam expects you to know that tests run against warehouse relations, that <code>--select</code> limits scope for both run and test, that compiled SQL lives under <code>target/compiled</code>, and that packages extend tests via macros in <code>dbt_packages/</code>. It may ask when to use packages versus custom generics, or what happens if you test before building.</p>
+          <ul>
+            <li><a href="s11-tests.html">Section 11</a> — compiled SQL workflow and test output tokens you apply when expectations fail.</li>
+            <li><a href="s13-jinja-macros-packages.html">Section 13</a> — installing metaplane dbt_expectations 0.10.10 and running <code>dbt deps</code>.</li>
+            <li><a href="s12-advanced-testing.html">Section 12</a> — custom generics versus package tests; severity and warn behaviour.</li>
+            <li><a href="s17-selectors-commands.html">Section 17</a> — advanced selectors and <code>dbt ls</code> for previewing graph subsets.</li>
+            <li><a href="s19-production.html">Section 19</a> — slim CI that avoids running every expectations test on each push.</li>
+          </ul>
+          <div class="callout exam"><strong>Certification:</strong> know that <code>dbt test --select model_name</code> runs tests on that model, <code>source:name.table</code> selects source tests, <code>log()</code> writes to <code>logs/dbt.log</code>, <code>info=True</code> prints to console, and compiled artifacts are the preferred debugging path over <code>--debug</code> for test SQL.</div>
+
+          <h3>store_failures and expectations together</h3>
+          <p>When an expectations test fails with <code>FAIL 47</code>, you only know the count from the terminal. Enable <code>store_failures: true</code> in project or test config (Section 11) to persist those rows to a side table in the warehouse. Query that table instead of re-running the quantile scan during investigation.</p>
+
+<pre data-lang="yaml" data-title="schema.yml — store failures on one expectations test" data-explain="Optional config on a single test — merges with project-level data_tests defaults."><code>      - dbt_expectations.expect_column_values_to_match_regex:
+          arguments:
+            regex: "^\\\\$[0-9][0-9\\\\.]+$"
+          config:
+            store_failures: true</code></pre>
+
+          <p>Failure tables land in a schema derived from your target — typically <code>&lt;target_schema&gt;_dbt_test__audit</code> on Snowflake. The table name encodes the test node. Drop failure tables after triage or they accumulate across runs.</p>
+        </section>
+
+        <section class="section" id="interview">
+          <h2>Interview questions</h2>
+          <p class="muted">Answer each one out loud before opening it.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+
+            <details class="qa">
+              <summary>How do you debug a failing dbt test without re-running the entire project?<span class="qa-tag">Troubleshooting</span></summary>
+              <div class="qa-body">
+                <p>Run the test in isolation with <code>dbt test --select model_name</code> or a fragment of the test node name. Open the compiled SQL under <code>target/compiled/&lt;project&gt;/models/schema.yml/</code>, copy it into a warehouse worksheet, and execute it to see failing rows.</p>
+                <p>If the relation is missing, build upstream first with <code>dbt build --select +model_name</code>. Avoid <code>--debug</code> unless you need adapter connection detail — compiled SQL is faster to read for test logic.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What is the difference between target/compiled and target/run?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p><code>target/compiled</code> holds SQL after Jinja rendering — the SELECT body for models and the full SELECT for tests. It is what you read to debug logic.</p>
+                <p><code>target/run</code> holds the statement dbt actually executed, including CREATE VIEW/TABLE wrappers, merge logic for incremental models, and sample/empty modifiers. Use it when the warehouse error references DDL or when verifying what <code>--sample</code> injected.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What does dbt --debug add to a test run?<span class="qa-tag">Troubleshooting</span></summary>
+              <div class="qa-body">
+                <p>It sets internal logging to DEBUG for the whole invocation. You see adapter connection details, macro expansion steps, and full SQL strings in the terminal and in <code>logs/dbt.log</code>.</p>
+                <p>It does not change test logic or warehouse cost materially. For test failures, compiled files are usually clearer than scrolling debug output. Use <code>--debug</code> for connection issues or when the warehouse truncates error messages.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How does log() behave with and without info=True?<span class="qa-tag">Jinja</span></summary>
+              <div class="qa-body">
+                <p><code>log("message")</code> writes at DEBUG level to <code>logs/dbt.log</code> only — nothing on stdout during a normal run.</p>
+                <p><code>log("message", info=True)</code> also prints to the console at INFO level, which is why <code>learn_logging</code> shows "Call your dad!" but not "Call your mom!" when run via <code>dbt run-operation</code>.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Why pin metaplane/dbt_expectations instead of calogica?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p>The original calogica package lagged behind dbt Core releases and is unmaintained. Metaplane maintains a fork compatible with modern dbt; the course pins version 0.10.10 in <code>packages.yml</code>.</p>
+                <p>Installing the wrong package name yields missing macros at parse time or tests that fail to compile. Always run <code>dbt deps</code> after changing <code>packages.yml</code>.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>When would you use dbt run --empty versus --sample?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p><code>--empty</code> builds relations with zero rows but correct schema — ideal for validating DDL, hooks, and grants without scanning data. Data tests that need rows will fail.</p>
+                <p><code>--sample "N days"</code> requires <code>event_time</code> config and filters to a recent window — ideal for debugging transform logic cheaply when recent data exists. The course dataset may yield empty samples because dates are historical.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How do you test only the raw listings source?<span class="qa-tag">Testing</span></summary>
+              <div class="qa-body">
+                <p><code>dbt test --select source:airbnb.listings</code> runs freshness (if configured) and all column tests under that source table in <code>sources.yml</code>, including <code>dbt_expectations</code> regex and distinct-count tests.</p>
+                <p>Preview with <code>dbt ls --resource-type test --select source:airbnb.listings</code>. The selector uses logical source and table names from YAML, not warehouse identifiers like <code>raw_listings</code>.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What causes a dbt_expectations regex test to fail every row?<span class="qa-tag">Testing</span></summary>
+              <div class="qa-body">
+                <p>Usually incorrect escaping in YAML — the pattern that reaches Snowflake is not the pattern you intended. The course uses <code>"^\\\\$[0-9][0-9\\\\.]+$"</code> for dollar-prefixed prices.</p>
+                <p>Debug by opening the compiled test SQL, inspecting the literal regex applied in the WHERE clause, and testing that regex against sample values in a worksheet. Also confirm you are testing the right column (<code>price</code> on raw listings is still a string).</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Why might expect_table_row_count_to_equal_other_table fail after a model change?<span class="qa-tag">Modelling</span></summary>
+              <div class="qa-body">
+                <p>The model query now filters, deduplicates, or joins in a way that changes row count versus the raw source — for example an INNER JOIN to hosts dropping listings without matching hosts, or a WHERE clause excluding inactive listings.</p>
+                <p>Compiled SQL for both sides shows the counting logic. Decide whether the mismatch is a bug (unintended drop) or the test is wrong (mart should not match raw 1:1). Update the test or fix the model accordingly.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How do you run a macro purely for logging demonstration?<span class="qa-tag">Jinja</span></summary>
+              <div class="qa-body">
+                <p><code>dbt run-operation learn_logging</code> executes the macro without building models. Macros in <code>macros/logging.sql</code> must be discovered via <code>dbt parse</code> and live under configured macro paths.</p>
+                <p>This is the same mechanism used for operational macros like grant runners and cleanup jobs — <code>run-operation</code> is the entry point for side-effect-only Jinja.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Your CI passes but local dbt test fails on the same commit — what do you check first?<span class="qa-tag">Troubleshooting</span></summary>
+              <div class="qa-body">
+                <p>Compare targets: schema name, warehouse size, and whether CI ran <code>--empty</code> or slim selectors while you ran full tests locally. Different row counts between dev and CI schemas cause expectations parity tests to diverge.</p>
+                <p>Check <code>dbt debug</code> for connection differences, confirm both environments ran <code>dbt run</code> on parents before test, and diff compiled SQL from each target's <code>target/compiled</code> if schemas differ.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What does FAIL 0 versus ERROR mean on a test node?<span class="qa-tag">Testing</span></summary>
+              <div class="qa-body">
+                <p><code>FAIL N</code> means the test query ran and returned N violating rows. <code>ERROR</code> means the test query never completed — missing relation, syntax error, permission denied, or timeout.</p>
+                <p>For ERROR, open <code>logs/dbt.log</code> for the warehouse message and <code>target/compiled</code> for the SQL. For FAIL N, open compiled SQL and run it — the rows returned are your violations.</p>
+              </div>
+            </details>
+
+          </div>
+        </section>
+
+        <section class="section" id="practice">
+          <h2>Hands-on practice</h2>
+          <p class="muted">Run these from the <code>airbnb</code> folder with your virtualenv active.</p>
+          <ol class="practice-list">
+
+            <li class="practice">
+              <p class="practice-task">Add the <code>dbt_expectations</code> tests from the course repo to <code>models/sources.yml</code> and <code>models/schema.yml</code> on <code>dim_listings_w_hosts</code>, run <code>dbt deps</code> if needed, then test only that model.</p>
+              <span class="console-path">airbnb/models/schema.yml · models/sources.yml</span>
+              <p class="practice-expect">Terminal shows four PASS/WARN lines for expectations tests on <code>dim_listings_w_hosts</code>; source tests pass on <code>source:airbnb.listings</code>.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Confirm <code>packages.yml</code> pins metaplane <code>dbt_expectations</code> 0.10.10.</li>
+                    <li>Run <code>dbt deps</code>.</li>
+                    <li>Copy the YAML blocks from this section into <code>sources.yml</code> and <code>schema.yml</code>.</li>
+                    <li>Run <code>dbt build --select +dim_listings_w_hosts</code> on a fresh schema.</li>
+                    <li>Run <code>dbt test --select dim_listings_w_hosts</code>.</li>
+                  </ol>
+                  <p class="muted">Undo: remove the <code>dbt_expectations</code> test blocks from both YAML files and run <code>dbt parse</code>.</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">Create <code>macros/logging.sql</code> with <code>learn_logging</code>, run it, and locate both log messages in <code>logs/dbt.log</code>.</p>
+              <span class="console-path">airbnb/macros/logging.sql · logs/dbt.log</span>
+              <p class="practice-expect">Console prints "Call your dad!"; <code>dbt.log</code> contains both "Call your mom!" and "Call your dad!".</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Add the macro from this section to <code>macros/logging.sql</code>.</li>
+                    <li>Run <code>dbt run-operation learn_logging</code>.</li>
+                    <li>Open <code>logs/dbt.log</code> and search for both strings.</li>
+                    <li>Comment out the active <code>info=True</code> line with <code>{# #}</code> and re-run — console output should stop.</li>
+                  </ol>
+<pre data-lang="sql" data-title="macros/logging.sql"><code>{% macro learn_logging() %}
+    {{ log("Call your mom!") }}
+    {{ log("Call your dad!", info=True) }}
+{% endmacro %}</code></pre>
+                  <p class="muted">Undo: delete <code>macros/logging.sql</code> or remove the macro.</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">Add <code>event_time='created_at'</code> to <code>dim_listings_cleansed</code>, run <code>dim_listings_w_hosts</code> with <code>--sample "3 days"</code>, and inspect the filter in <code>target/run/</code>.</p>
+              <span class="console-path">airbnb/models/dim/dim_listings_cleansed.sql · target/run/</span>
+              <p class="practice-expect">Run succeeds; <code>target/run/airbnb/models/dim/dim_listings_w_hosts.sql</code> contains a time predicate; row count may be zero.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Add <code>event_time='created_at'</code> inside the config block on <code>dim_listings_cleansed</code>.</li>
+                    <li>Run <code>dbt run -s dim_listings_w_hosts --sample "3 days"</code>.</li>
+                    <li>Open the run artifact and locate the WHERE clause on <code>created_at</code>.</li>
+                    <li>Run <code>SELECT COUNT(*) FROM &lt;your_schema&gt;.dim_listings_w_hosts</code> — expect 0 with historical data.</li>
+                    <li>Re-run without <code>--sample</code> before testing row counts.</li>
+                  </ol>
+                  <p class="muted">Undo: remove <code>event_time</code> from config and run <code>dbt run -s dim_listings_w_hosts</code> normally.</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">Deliberately break a YAML indent on an expectations test, run <code>dbt parse</code>, fix it, then debug a failing test using only <code>target/compiled</code> — no <code>--debug</code>.</p>
+              <span class="console-path">airbnb/models/schema.yml · target/compiled/</span>
+              <p class="practice-expect">Parse error points at schema.yml line; after fix, you can find and run compiled test SQL in a worksheet.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Move <code>arguments:</code> one indent level too far left on one test.</li>
+                    <li>Run <code>dbt parse</code> — read the YAML error line number.</li>
+                    <li>Fix indent to match the course repo.</li>
+                    <li>Run <code>dbt test --select expect_column_max_to_be_between</code>.</li>
+                    <li>Grep <code>target/compiled</code> for <code>expect_column_max</code> and open the file.</li>
+                  </ol>
+                  <p class="muted">Undo: restore original YAML from git.</p>
+                </div>
+              </details>
+            </li>
+
+          </ol>
+        </section>
+
+        <section class="section" id="recap">
+          <h2>Recap</h2>
+          <div class="recap">
+            <ul class="checklist">
+              <li><code>dbt_expectations</code> (metaplane 0.10.10) adds Great Expectations-style generic tests — install via <a href="s13-jinja-macros-packages.html">Section 13</a> <code>packages.yml</code>.</li>
+              <li>Source tests live in <code>sources.yml</code>; model tests in <code>schema.yml</code> — both use the <code>dbt_expectations.expect_*</code> namespace.</li>
+              <li><code>dbt test --select dim_listings_w_hosts</code> runs only that model's tests; <code>source:airbnb.listings</code> runs source tests.</li>
+              <li><code>dbt --debug test</code> floods DEBUG output — prefer <code>target/compiled/</code> for reading test SQL.</li>
+              <li><code>log()</code> writes to <code>logs/dbt.log</code>; <code>info=True</code> also prints to the console.</li>
+              <li><code>dbt run-operation learn_logging</code> executes a macro without building models.</li>
+              <li>Compilation errors stack from model to macro — read bottom-up and fix the deepest file first.</li>
+              <li>YAML test arguments nest under the test name inside <code>arguments:</code>, not at column root.</li>
+              <li><code>target/compiled</code> = Jinja-resolved SQL; <code>target/run</code> = full executed statement including DDL.</li>
+              <li><code>dbt run --empty</code> builds zero-row relations for schema validation.</li>
+              <li><code>dbt run --sample "N days"</code> needs <code>event_time</code> config — may return empty on historical course data.</li>
+              <li>Expensive expectations tests belong in nightly or slim CI, not every PR.</li>
+            </ul>
+            <p style="margin-top:1rem;">
+              <button type="button" data-complete="section-16">Mark complete</button>
+            </p>
+          </div>
+        </section>
+
+      </div>
+
+      <aside class="toc" aria-label="On this page">
+        <strong>On this page</strong>
+        <ol>
+          <li><a href="#lectures">Lectures</a></li>
+          <li><a href="#dbt-expectations">dbt_expectations</a></li>
+          <li><a href="#selective-testing">Selective testing</a></li>
+          <li><a href="#debug-flag">--debug flag</a></li>
+          <li><a href="#logging">Logging</a></li>
+          <li><a href="#debugging-errors">Debugging errors</a></li>
+          <li><a href="#empty-sample">--empty and --sample</a></li>
+          <li><a href="#global-flags">Global flags</a></li>
+          <li><a href="#deeper">Deeper detail</a></li>
+          <li><a href="#interview">Interview questions</a></li>
+          <li><a href="#practice">Hands-on practice</a></li>
+          <li><a href="#recap">Recap</a></li>
+        </ol>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<footer class="footer">The Complete dbt Bootcamp: Zero to Hero · Section 16 · Offline study edition</footer>
+</body>
+</html>

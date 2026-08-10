@@ -1,0 +1,1716 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="dbt bootcamp Section 19: microbatch incremental models, model versioning, dev and prod targets, env_var profiles, custom schemas, state comparison, defer, and Slim CI pipelines.">
+<title>Section 19 — dbt in Production | The Complete dbt Bootcamp Notes</title>
+<link rel="stylesheet" href="assets/dbt.css">
+<script defer src="assets/search-index.js"></script>
+<script defer src="assets/code-highlight.js"></script>
+<script defer src="assets/dbt.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">Course section 19 of 22 · The Complete dbt Bootcamp: Zero to Hero</p>
+    <h1>dbt in Production</h1>
+    <p class="subtitle">Everything after the tutorial project: microbatch incrementals that rebuild year-sized slices instead of full history, versioned models with deprecation dates, multi-target profiles driven by environment variables, custom schema macros that separate dev sandboxes from clean prod names, state-aware Slim CI that defers to production artifacts, and the GitHub Actions workflows that wire it together.</p>
+    <div class="hero-meta">
+      <span class="chip">12 lectures · ~65min</span>
+      <span class="chip">airbnb/_prod_profiles · CI workflows</span>
+      <span class="chip">dbt production deployment</span>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <nav class="pager" aria-label="Section navigation">
+    <a href="s18-orchestration.html">← Orchestration</a>
+    <a href="index.html">Course contents</a>
+    <a href="s20-poweruser-fusion-ai.html">Next: Power User, Fusion and AI →</a>
+  </nav>
+
+  <main id="main">
+    <div class="layout">
+      <div class="content">
+
+        <section class="section" id="lectures">
+          <h2>Lectures in this section</h2>
+          <ol class="lecture-list">
+            <li class="lecture">
+              <a class="lec-title" href="#microbatching">Microbatch incremental strategy</a>
+              <span class="lec-time">~6:00</span>
+              <span class="lec-src">course-resources.md · Microbatching</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#microbatching">event_time, batch_size, and upstream facts</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">models/mart/mart_fullmoon_reviews.sql · models/fct/fct_reviews.sql</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#microbatching">Event-time CLI flags and full-refresh windows</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">course-resources.md · Microbatching</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#microbatching">The threads:4 requirement</a>
+              <span class="lec-time">~4:00</span>
+              <span class="lec-src">_prod_profiles/profiles.yml</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#model-lifecycle">Model versioning with v=1 and v=2</a>
+              <span class="lec-time">~6:00</span>
+              <span class="lec-src">models/dim/dim_hosts_cleansed_v2.sql · models/schema.yml</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#model-lifecycle">Deprecating and disabling models</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">models/schema.yml · models/dim/dim_fullmoon.py</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#targets">Dev, staging, and prod targets</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">_prod_profiles/profiles.yml</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#env-vars">Environment variables and secrets</a>
+              <span class="lec-time">~6:00</span>
+              <span class="lec-src">_prod_profiles/profiles.yml · set-env scripts</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#custom-schemas">Custom schema naming with generate_schema_name</a>
+              <span class="lec-time">~6:00</span>
+              <span class="lec-src">macros/generate_schema_name.sql</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#schema-cleanup">Dropping dev schemas safely</a>
+              <span class="lec-time">~4:00</span>
+              <span class="lec-src">macros/drop_dev_schemas.sql</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#state">State comparison, dbt retry, and manifest artifacts</a>
+              <span class="lec-time">~7:00</span>
+              <span class="lec-src">course-resources.md · Working with State</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#ci-pipelines">Defer, Slim CI, and production pipelines</a>
+              <span class="lec-time">~10:00</span>
+              <span class="lec-src">.github/workflows/*.yml</span>
+            </li>
+          </ol>
+          <p class="muted">Sections 7&ndash;18 built the Airbnb DAG. This section teaches how a real team runs it: separate schemas per developer and branch, versioned breaking changes without renaming files, incremental strategies that scale with data volume, and CI that builds only what changed while reading unchanged upstream tables from production.</p>
+
+          <div class="grid-2">
+            <div class="mini-card">
+              <h4>What changes in this section</h4>
+              <p>Materialization strategy on the full-moon mart, multi-target profiles, schema macros, model versions, and GitHub Actions for deploy and Slim CI.</p>
+            </div>
+            <div class="mini-card">
+              <h4>What stays the same</h4>
+              <p>SQL business logic, seed join predicate, star-schema shape, and test definitions from earlier sections.</p>
+            </div>
+          </div>
+
+          <div class="callout exam"><strong>Certification preview:</strong> this section pairs directly with the production and deployment questions on the Analytics Engineering exam. Read <a href="#deeper">Deeper detail</a> after the content sections for version drift and cost traps the exam assumes you know operationally.</div>
+
+          <p class="muted">Estimated study time for this section alone: 90&ndash;120 minutes including practice tasks and interview questions. It is the largest production block in the course and the reference page for microbatch, defer, and CI patterns used elsewhere in these notes.</p>
+        </section>
+
+        <section class="section" id="microbatching">
+          <h2>Microbatching</h2>
+          <p class="lead">Microbatch is an incremental strategy introduced in dbt 1.9 that processes time-bounded slices of a model instead of merging row-by-row or scanning the entire upstream table every run. dbt divides history along an <code>event_time</code> column, rebuilds each batch independently, and replaces only the affected partitions in the warehouse.</p>
+
+          <p>By the end of the course, <code>mart_fullmoon_reviews</code> &mdash; introduced as a plain table in <a href="s09-seeds-sources.html#mart-fullmoon">Section 9</a> &mdash; becomes a microbatch incremental model in a custom <code>mart</code> schema. The join logic to the full-moon seed is unchanged; only materialization and batching config change. Read Section 9 for the seed join predicate and sanity checks; this section covers the incremental mechanics.</p>
+
+          <h3>What microbatch replaces</h3>
+          <p>Classic incremental models append or merge new rows using <code>is_incremental()</code> filters. That works when late-arriving data is rare and the merge key is stable. It struggles when:</p>
+          <ul>
+            <li>Upstream facts can change inside historical windows (corrections, backfills).</li>
+            <li>A full recompute of a year is cheaper than row-level merge logic on Snowflake.</li>
+            <li>You want idempotent batch rebuilds aligned to calendar periods for audit.</li>
+          </ul>
+          <p>Microbatch answers by treating each time window as a mini full-refresh. Run Monday's job and only 2024's slice reprocesses; prior years stay untouched unless you widen the event-time window.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Incremental strategy</th><th>Unit of work</th><th>Best when</th></tr></thead>
+              <tbody>
+                <tr><td><code>delete+insert</code> / <code>merge</code></td><td>New/changed rows since last run</td><td>Append-mostly facts, stable keys</td></tr>
+                <tr><td><code>append</code></td><td>Insert-only new rows</td><td>Immutable event streams</td></tr>
+                <tr><td><code>microbatch</code></td><td>Time-bounded batches on <code>event_time</code></td><td>Periodic recompute of historical slices, large facts</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>event_time on upstream facts</h3>
+          <p>Microbatch requires every model in the chain to declare which column defines event time. The fact table must expose it first:</p>
+
+<pre data-lang="sql" data-title="models/fct/fct_reviews.sql" data-explain="event_time tells dbt which column partitions microbatch windows. on_schema_change fail protects prod from silent column drift."><code>{{
+  config(
+    materialized = 'incremental',
+    on_schema_change='fail',
+    event_time='review_date'
+    )
+}}
+
+WITH src_reviews AS (
+  SELECT * FROM {{ ref('src_reviews') }}
+)
+SELECT 
+  {{ dbt_utils.generate_surrogate_key(['listing_id', 'review_date', 'reviewer_name', 'review_text']) }} as review_id,
+  *
+FROM src_reviews
+WHERE review_text is not null
+{% if is_incremental() %}
+  {% if var("start_date", False) and var("end_date", False) %}
+    {{ log('Loading ' ~ this ~ ' incrementally (start_date: ' ~ var("start_date") ~ ', end_date: ' ~ var("end_date") ~ ')', info=True) }}
+    AND review_date &gt;= '{{ var("start_date") }}'
+    AND review_date &lt; '{{ var("end_date") }}'
+  {% else %}
+    AND review_date &gt; (select max(review_date) from {{ this }})
+    {{ log('Loading ' ~ this ~ ' incrementally (all missing dates)', info=True)}}
+  {% endif %}
+{% endif %}</code></pre>
+
+          <p>The mart inherits the same <code>event_time</code> so batches align with review dates flowing from <code>fct_reviews</code>. Without <code>event_time</code> on upstream nodes, dbt cannot compute batch boundaries and compilation fails.</p>
+
+          <h3>Microbatch config on mart_fullmoon_reviews</h3>
+          <p>The production model config:</p>
+
+<pre data-lang="sql" data-title="models/mart/mart_fullmoon_reviews.sql" data-explain="Microbatch incremental with year-sized batches from 2009-06-20. schema mart places the table outside the default target schema."><code>{{ config(
+  materialized = 'incremental',
+  incremental_strategy='microbatch',
+  event_time='review_date',
+  begin='2009-06-20',
+  batch_size='year',
+  full_refresh=false,
+  tags = ['fact'],
+  schema='mart'
+) }}
+
+WITH fct_reviews AS (
+    SELECT * FROM {{ ref('fct_reviews') }}
+),
+full_moon_dates AS (
+    SELECT * FROM {{ ref('seed_full_moon_dates') }}
+)
+
+SELECT
+  r.*,
+  CASE
+    WHEN fm.full_moon_date IS NULL THEN 'not full moon'
+    ELSE 'full moon'
+  END AS is_full_moon
+FROM
+  fct_reviews
+  r
+  LEFT JOIN full_moon_dates
+  fm
+  ON (TO_DATE(r.review_date) = DATEADD(DAY, 1, fm.full_moon_date))</code></pre>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Config key</th><th>Value in course</th><th>What it controls</th></tr></thead>
+              <tbody>
+                <tr><td><code>incremental_strategy</code></td><td><code>microbatch</code></td><td>Enables batch-oriented incremental runs</td></tr>
+                <tr><td><code>event_time</code></td><td><code>review_date</code></td><td>Column dbt uses to slice batches; must exist on model output</td></tr>
+                <tr><td><code>begin</code></td><td><code>2009-06-20</code></td><td>Earliest batch boundary when no prior state exists</td></tr>
+                <tr><td><code>batch_size</code></td><td><code>year</code></td><td>Granularity: <code>hour</code>, <code>day</code>, <code>month</code>, <code>year</code></td></tr>
+                <tr><td><code>full_refresh</code></td><td><code>false</code></td><td>When false, only missing or stale batches rebuild</td></tr>
+                <tr><td><code>schema</code></td><td><code>mart</code></td><td>Custom schema via <code>generate_schema_name</code> (see below)</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>Before your first microbatch run, confirm the fact table's date range matches expectations. The instructor queries the warehouse directly:</p>
+
+<pre data-lang="sql" data-title="Sanity-check review_date bounds" data-explain="Verify min and max review_date before choosing begin and batch windows."><code>SELECT min(review_date), max(review_date) FROM AIRBNB.DEV.FCT_REVIEWS</code></pre>
+
+          <h3>CLI event-time flags</h3>
+          <p>Microbatch runs accept optional window overrides:</p>
+          <ul>
+            <li><code>--event-time-start</code> &mdash; inclusive lower bound for batches to process.</li>
+            <li><code>--event-time-end</code> &mdash; exclusive upper bound.</li>
+            <li><code>--full-refresh</code> &mdash; rebuild selected batches even if dbt considers them current.</li>
+          </ul>
+          <p>Force a full refresh across a decade window:</p>
+
+<pre data-lang="shell" data-title="Microbatch full refresh with event-time window" data-explain="Rebuilds all year batches between 2020 and 2030 for mart_fullmoon_reviews only."><code>dbt run -s mart_fullmoon_reviews --full-refresh --event-time-start "2020-01-01" --event-time-end "2030-01-01"</code></pre>
+
+          <p>Use narrow windows when backfilling a single bad year after upstream corrections. Use wide windows cautiously on large facts &mdash; each year batch still scans upstream rows in that period.</p>
+
+          <div class="diagram">
+            <p class="diagram-title">Microbatch splits review history into year-sized rebuild units</p>
+            <div class="flow">
+              <div class="node is-source"><b>fct_reviews</b><small>event_time=review_date</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-compute"><b>Batch 2009</b><small>year slice</small></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-compute"><b>Batch 2010</b><small>year slice</small></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-compute pulse"><b>Batch 2024</b><small>current run</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-mart"><b>mart.mart_fullmoon_reviews</b><small>incremental table</small></div>
+            </div>
+          </div>
+
+          <h3>The threads:4 requirement</h3>
+
+          <div class="callout warn"><strong>Microbatch can hang without <code>threads: 4</code>.</strong> A dbt bug present since version 1.9 causes microbatch runs to stall when thread count is too low. Set <code>threads: 4</code> (or higher) on every output in <code>profiles.yml</code> before running microbatch models. This is not documented as prominently as it should be; if your run appears frozen with no SQL activity, check threads first.</div>
+
+          <p>The production profile sets four threads on dev, staging, and prod:</p>
+
+<pre data-lang="yaml" data-title="_prod_profiles/profiles.yml (threads excerpt)" data-explain="threads: 4 on all outputs avoids the microbatch hang bug."><code>    dev:
+      type: snowflake
+      ...
+      threads: 4
+      warehouse: COMPUTE_WH
+    prod:
+      type: snowflake
+      ...
+      threads: 4
+      warehouse: COMPUTE_WH</code></pre>
+
+          <p>On BigQuery and Databricks the same config key applies; adapter parallelism differs internally but the course recommendation stands until the upstream bug is fixed.</p>
+
+          <h3>How dbt chooses batches on each run</h3>
+          <p>On the first microbatch run, dbt walks forward from <code>begin</code> in steps of <code>batch_size</code> until it reaches the latest <code>event_time</code> present in upstream data. Each batch compiles the model SQL with an implicit filter on <code>event_time</code> so the warehouse only scans rows in that window. Subsequent runs compare batch metadata against the existing incremental table and skip batches dbt considers unchanged unless you pass <code>--full-refresh</code> or widen the CLI event-time window.</p>
+          <p>Setting <code>full_refresh=false</code> in config does not mean "never rebuild" — it means "respect batch staleness logic instead of dropping the whole table every run." When upstream facts backfill 2018 rows, the 2018 batch becomes eligible again even if 2019–2024 were already current.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>batch_size value</th><th>Typical use</th><th>Trade-off</th></tr></thead>
+              <tbody>
+                <tr><td><code>hour</code></td><td>Near-real-time pipelines, small daily volume</td><td>Many batches; higher orchestration overhead</td></tr>
+                <tr><td><code>day</code></td><td>Daily ELT with moderate history</td><td>Balance between parallelism and batch count</td></tr>
+                <tr><td><code>month</code></td><td>Monthly reporting marts</td><td>Fewer batches; larger per-batch scan</td></tr>
+                <tr><td><code>year</code></td><td>Course demo on review history since 2009</td><td>~15 batches total; each year scan is bounded</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Upstream event_time on dim_listings_cleansed</h3>
+          <p>The course also sets <code>event_time='created_at'</code> on <code>dim_listings_cleansed</code> (a view overriding the dim folder table default — see <a href="s08-materializations.html">Section 8</a>). Any model in a microbatch chain must expose a consistent event-time column. Facts use <code>review_date</code>; dimensions may use <code>created_at</code> when they participate in batch downstream paths.</p>
+
+          <h3>Contrasting microbatch with timestamp incremental</h3>
+          <p><code>fct_reviews</code> still uses classic timestamp incremental with <code>is_incremental()</code> and <code>max(review_date)</code> when vars are absent. The mart layers microbatch on top of that fact output. The fact appends new review dates incrementally; the mart recomputes year batches of enriched rows (including the full-moon label) without scanning the entire fact history every time. Two strategies coexist in one DAG — strategy is per-model, not per-project.</p>
+
+          <div class="analogy"><strong>Everyday analogy —</strong> timestamp incremental is a diary where you only append today's page. Microbatch is a photo album where you reprint one year's section when someone sends corrected pictures from that year, without reprinting the whole album.</div>
+
+          <h3>Project layout at production maturity</h3>
+          <div class="filetree">
+            <ul>
+              <li><span class="dir">airbnb/</span>
+                <ul>
+                  <li><span class="dir">_prod_profiles/</span>
+                    <ul>
+                      <li><span class="file">profiles.yml</span> <span class="new">← dev / staging / prod targets</span></li>
+                    </ul>
+                  </li>
+                  <li><span class="dir">macros/</span>
+                    <ul>
+                      <li><span class="file">generate_schema_name.sql</span> <span class="new">← custom schema rules</span></li>
+                      <li><span class="file">drop_dev_schemas.sql</span> <span class="new">← PR cleanup macro</span></li>
+                    </ul>
+                  </li>
+                  <li><span class="dir">models/</span>
+                    <ul>
+                      <li><span class="dir">dim/</span>
+                        <ul>
+                          <li><span class="file">dim_hosts_cleansed_v2.sql</span> <span class="new">← version 2</span></li>
+                        </ul>
+                      </li>
+                      <li><span class="dir">mart/</span>
+                        <ul>
+                          <li><span class="file">mart_fullmoon_reviews.sql</span> <span class="note">microbatch + schema mart</span></li>
+                        </ul>
+                      </li>
+                      <li><span class="file">schema.yml</span> <span class="note">versions block for dim_hosts_cleansed</span></li>
+                    </ul>
+                  </li>
+                </ul>
+              </li>
+              <li><span class="dir">.github/workflows/</span>
+                <ul>
+                  <li><span class="file">prod-build.yml</span></li>
+                  <li><span class="file">pr-slim-ci.yml</span></li>
+                  <li><span class="file">pr-cleanup.yml</span></li>
+                </ul>
+              </li>
+            </ul>
+          </div>
+
+          <p>Cross-link: seed join logic and the Section 9 table materialization live in <a href="s09-seeds-sources.html#mart-fullmoon">Section 9</a>. This section only changes how the mart is built and where it lands in the warehouse.</p>
+
+          <div class="terminal">
+            <p class="term-head">Microbatch run (success)</p>
+            <pre class="term-body"><span class="tt-cmd">dbt run -s mart_fullmoon_reviews --profiles-dir _prod_profiles</span>
+<span class="tt-dim">11:04:12  Running with dbt=1.11.12</span>
+<span class="tt-dim">11:04:15  1 of 1 START sql incremental model DBT_MYDEV_MART.mart_fullmoon_reviews .. [RUN]</span>
+<span class="tt-dim">11:04:15  Batch 2024 of 2024 START</span>
+<span class="tt-ok">11:04:22  1 of 1 OK created sql incremental model DBT_MYDEV_MART.mart_fullmoon_reviews [SUCCESS 1842 in 7.1s]</span>
+<span class="tt-ok">11:04:22  Completed successfully</span></pre>
+          </div>
+
+          <div class="callout exam"><strong>Certification:</strong> know that <code>incremental_strategy='microbatch'</code> requires <code>event_time</code>, that <code>batch_size</code> accepts time units, and that CLI flags <code>--event-time-start</code> and <code>--event-time-end</code> bound batch processing.</div>
+
+          <h3>Debugging microbatch runs</h3>
+          <p>When batches behave unexpectedly, work through this sequence:</p>
+          <ol>
+            <li>Confirm <code>threads: 4</code> in the active profile output.</li>
+            <li>Query min/max <code>event_time</code> in the warehouse fact table — batch range cannot exceed data.</li>
+            <li>Run <code>dbt compile -s mart_fullmoon_reviews</code> and inspect <code>target/compiled/</code> for batch filters injected into SQL.</li>
+            <li>Check <code>logs/dbt.log</code> for batch start/end log lines and skipped batch messages.</li>
+            <li>Retry with an explicit narrow window: <code>--event-time-start</code> / <code>--event-time-end</code>.</li>
+          </ol>
+          <p>On BigQuery, batch replacement may use partition decorators; on Databricks, delta replaceWhere patterns differ — the dbt adapter abstracts this, but warehouse query history still shows one statement per batch.</p>
+
+          <h3>full_refresh=false versus CLI --full-refresh</h3>
+          <p>These interact but are not the same knob. Model config <code>full_refresh=false</code> is the default steady-state: respect batch staleness, skip unchanged batches. Passing <code>--full-refresh</code> on the CLI overrides for that invocation and forces selected batches to rebuild even if dbt would skip them. Operators use CLI full refresh after logic bugs in the mart SQL; they use config <code>full_refresh=false</code> day-to-day to keep incremental behaviour.</p>
+
+          <div class="grid-3">
+            <div class="mini-card">
+              <h4>Steady scheduled run</h4>
+              <p><code>dbt run -s mart_fullmoon_reviews</code> — processes new/stale year batches only.</p>
+            </div>
+            <div class="mini-card">
+              <h4>Backfill one bad year</h4>
+              <p><code>--full-refresh --event-time-start 2019-01-01 --event-time-end 2020-01-01</code></p>
+            </div>
+            <div class="mini-card">
+              <h4>Initial historical load</h4>
+              <p>Wide window or first run from <code>begin</code> through max review_date.</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="section" id="model-lifecycle">
+          <h2>Model lifecycle: versioning, deprecation, disabling</h2>
+          <p class="lead">Production teams ship breaking column changes without renaming every downstream <code>ref()</code>. dbt model versions let you keep one logical model name (<code>dim_hosts_cleansed</code>) while v1 and v2 SQL live in separate files. Deprecation dates warn consumers before removal; <code>enabled: false</code> removes nodes from the DAG entirely.</p>
+
+          <h3>Creating version 2 SQL</h3>
+          <p>Version 1 remains in <code>dim_hosts_cleansed.sql</code> (a view in earlier sections, promoted to table when contracts arrive). Version 2 lives in a separate file with stricter null handling on <code>host_name</code>:</p>
+
+<pre data-lang="sql" data-title="models/dim/dim_hosts_cleansed_v2.sql" data-explain="v2 replaces NULL host_name with N/A and materializes as table for contract enforcement."><code>{#
+  You might have `view` as the materialization as we only 
+  replace `materialized` with `table` when we implement constraints. 
+#}
+{{
+  config(
+    materialized = 'table' 
+    )
+}} 
+WITH src_hosts AS (
+    SELECT
+        *
+    FROM
+        {{ ref('src_hosts') }}
+)
+SELECT
+    host_id,
+    NVL(
+        host_name,
+        'N/A'
+    ) AS host_name,
+    is_superhost,
+    created_at,
+    updated_at
+FROM
+    src_hosts</code></pre>
+
+          <p>The behavioural change is subtle but real: v1 passes through null names; v2 guarantees a string. Downstream joins and not-null constraints depend on v2 semantics.</p>
+
+          <h3>Declaring versions in schema.yml</h3>
+          <p>YAML ties file names to version numbers and marks v1 deprecated:</p>
+
+<pre data-lang="yaml" data-title="models/schema.yml (dim_hosts_cleansed versions)" data-explain="v1 points at dim_hosts_cleansed.sql; v2 column contract overrides host_name; latest_version pins default ref()."><code>  - name: dim_hosts_cleansed
+    versions:
+      - v: 1
+        defined_in: dim_hosts_cleansed
+        deprecation_date: 2030-01-01
+      - v: 2
+        columns:
+          - include: '*'
+            exclude: [host_name]
+          - name: host_name
+            description: The name of the host (N/A if not available)
+            data_type: string
+            constraints:
+              - type: not_null
+    latest_version: 2
+    description: Cleansed table for the Airbnb hosts
+    config:
+      contract:
+        enforced: true</code></pre>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>YAML key</th><th>Purpose</th></tr></thead>
+              <tbody>
+                <tr><td><code>defined_in</code></td><td>SQL file for v1 (filename without <code>.sql</code>)</td></tr>
+                <tr><td><code>v: 2</code> without <code>defined_in</code></td><td>dbt expects <code>dim_hosts_cleansed_v2.sql</code> by convention</td></tr>
+                <tr><td><code>latest_version</code></td><td>Default when <code>ref('dim_hosts_cleansed')</code> has no version argument</td></tr>
+                <tr><td><code>deprecation_date</code></td><td>ISO date; dbt logs warnings when v1 is referenced after this date approaches</td></tr>
+                <tr><td><code>include: '*'</code> / <code>exclude:</code></td><td>Inherit v1 column docs then override specific columns for v2</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Pinning a downstream ref to v=2</h3>
+          <p><code>dim_listings_w_hosts</code> joins listings to hosts. After the versioning lesson, it explicitly requests v2:</p>
+
+<pre data-lang="sql" data-title="models/dim/dim_listings_w_hosts.sql (hosts CTE)" data-explain="v=2 pins the join to the NVL host_name semantics and not-null contract."><code>h AS (
+    SELECT * 
+    FROM {{ ref('dim_hosts_cleansed', v=2) }}
+    -- We are only adding the `, v=2` part at the Model Versioning section
+)</code></pre>
+
+          <p>Unversioned <code>ref('dim_hosts_cleansed')</code> resolves to <code>latest_version: 2</code> after the YAML change. Explicit <code>v=2</code> documents intent and protects against future v3 surprises during migration windows.</p>
+
+          <div class="diagram">
+            <p class="diagram-title">Two SQL files, one logical model name in the DAG</p>
+            <div class="dag">
+              <div class="dag-col">
+                <p class="dag-label">Version files</p>
+                <div class="node is-model"><b>dim_hosts_cleansed</b><small>v1 · deprecated</small></div>
+                <div class="node is-model pulse"><b>dim_hosts_cleansed_v2</b><small>v2 · latest</small></div>
+              </div>
+              <div class="dag-col">
+                <p class="dag-label">Downstream</p>
+                <div class="node is-mart"><b>dim_listings_w_hosts</b><small>ref(..., v=2)</small></div>
+              </div>
+            </div>
+          </div>
+
+          <h3>Deprecating models</h3>
+          <p><code>deprecation_date</code> on a version (or model) tells dbt to emit warnings when the node is built or referenced. It does not auto-disable the model &mdash; consumers still compile until you remove the version or set a past date and delete the SQL. Pair deprecation warnings with comms and a sunset ticket.</p>
+          <p>For whole-model deprecation (not versioning), add <code>deprecation_date</code> at the model level in YAML. Docs and <code>dbt ls --resource-type model</code> show deprecated nodes; CI can fail on warnings with <code>--warn-error</code>.</p>
+
+          <h3>Disabling models</h3>
+          <p>When a model should not run at all &mdash; experimental Python transforms, demo-only dimensions &mdash; set <code>enabled: false</code>. Disabled nodes disappear from <code>dbt run</code>, <code>dbt build</code>, and lineage for execution (they still parse unless you remove the file).</p>
+          <p>The course disables two Python models added in <a href="s17-selectors-commands.html#python-models">Section 17</a>:</p>
+
+<pre data-lang="python" data-title="models/dim/dim_fullmoon.py" data-explain="enabled=False keeps holidays package install off the critical path for every developer run."><code>def model(dbt, session):
+    dbt.config(
+        materialized = "table",
+        packages = ["holidays"],
+        enabled=False # We add this line in the Model Lifecycle / Disabling Models section
+    )</code></pre>
+
+<pre data-lang="python" data-title="models/dim/dim_review_sentiment.py" data-explain="TextBlob sentiment scoring is expensive; disabled until explicitly needed."><code>def model(dbt, session):
+    dbt.config(
+        materialized = "table",
+        enabled= False, # We are disabling this Model later in the Model Lifecycle section
+        packages = ["textblob"]
+    )</code></pre>
+
+          <p>Override at runtime without editing files: temporarily flip <code>enabled=True</code> in the Python config to run a disabled model locally. For YAML models, equivalent is <code>config(enabled=false)</code> in the model file or folder-level YAML.</p>
+
+          <h3>Versioning and enforced contracts together</h3>
+          <p>Version 2 of <code>dim_hosts_cleansed</code> ships with <code>contract.enforced: true</code> at the model level (from <a href="s12-advanced-testing.html">Section 12</a>). The v2 YAML block redefines <code>host_name</code> with a <code>not_null</code> constraint matching the <code>NVL(..., 'N/A')</code> logic in SQL. Versioning lets you change contract shape without renaming the model; consumers opt into v2 explicitly or inherit via <code>latest_version</code>.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Lifecycle action</th><th>Config / YAML</th><th>Still in DAG?</th><th>Runs on dbt build?</th></tr></thead>
+              <tbody>
+                <tr><td>Active model</td><td>(default)</td><td>Yes</td><td>Yes</td></tr>
+                <tr><td>Deprecated version</td><td><code>deprecation_date</code></td><td>Yes</td><td>Yes, with warnings</td></tr>
+                <tr><td>Disabled model</td><td><code>enabled: false</code></td><td>Parses</td><td>No</td></tr>
+                <tr><td>Removed file</td><td>&mdash;</td><td>No</td><td>No</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout tip"><strong>Version before rename.</strong> Renaming <code>dim_hosts_cleansed</code> to <code>dim_hosts_cleansed_v2</code> breaks every <code>ref()</code>, exposure, and dashboard. Versions keep the public name stable while SQL files diverge.</div>
+
+          <h3>Migration playbook for breaking host changes</h3>
+          <p>When shipping v2 in a real team, the sequence looks like this:</p>
+          <ol>
+            <li>Merge v2 SQL file and YAML versions block with <code>latest_version: 2</code> but keep v1 <code>defined_in</code> active.</li>
+            <li>Update critical downstream models to <code>ref(..., v=2)</code> one PR at a time.</li>
+            <li>Run full prod build; verify v2 table matches contract tests.</li>
+            <li>Set <code>deprecation_date</code> on v1 far enough out for downstream consumers to migrate.</li>
+            <li>After sunset, remove v1 SQL and the v1 version stanza from YAML.</li>
+          </ol>
+          <p>The course compresses this into one lesson; production spreads it across sprints. The exam tests the YAML mechanics, not the project-management timeline.</p>
+
+          <h3>Relationships tests still reference logical model name</h3>
+          <p>In <code>schema.yml</code>, the listings host foreign key test still points at the versioned model without a version suffix:</p>
+
+<pre data-lang="yaml" data-title="models/schema.yml (relationships test excerpt)" data-explain="Generic relationships test uses ref('dim_hosts_cleansed') which resolves to latest_version."><code>          - relationships:
+              arguments:
+                to: ref('dim_hosts_cleansed')
+                field: host_id</code></pre>
+
+          <p>That resolves to v2 once <code>latest_version: 2</code>. If v1 and v2 coexist during migration, ensure tests target the version your consumers actually use.</p>
+        </section>
+
+        <section class="section" id="targets">
+          <h2>Working with targets</h2>
+          <p class="lead">A dbt profile can define multiple <code>outputs</code> &mdash; connection bundles keyed by name. The active output is the <code>target</code>. Switching targets moves every model to a different database schema without changing project code.</p>
+
+          <h3>The production profile layout</h3>
+          <p>The course adds <code>airbnb/_prod_profiles/profiles.yml</code> with three outputs plus a default target:</p>
+
+<pre data-lang="yaml" data-title="_prod_profiles/profiles.yml" data-explain="dev uses personal schema DBT_ENV_NAME; prod writes to PROD; staging is a pre-prod lane. env_var pulls secrets from the shell."><code>airbnb:
+  outputs:
+    staging:
+      type: snowflake
+      account: "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
+      user: "{{ env_var('DBT_USER') }}"
+
+      role: TRANSFORM
+      private_key: "{{ env_var('PRIVATE_KEY') }}"
+      private_key_passphrase: "{{ env_var('PRIVATE_KEY_PASSPHRASE') }}"
+
+      database: AIRBNB
+      schema: STAGING
+      threads: 4
+      warehouse: COMPUTE_WH
+    prod:
+      type: snowflake
+      account: "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
+      user: "{{ env_var('DBT_USER') }}"
+
+      role: TRANSFORM
+      private_key: "{{ env_var('PRIVATE_KEY') }}"
+      private_key_passphrase: "{{ env_var('PRIVATE_KEY_PASSPHRASE') }}"
+
+      database: AIRBNB
+      schema: PROD
+      threads: 4
+      warehouse: COMPUTE_WH
+    dev:
+      type: snowflake
+      account: "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
+      user: "{{ env_var('DBT_USER') }}"
+
+      role: TRANSFORM
+      private_key: "{{ env_var('PRIVATE_KEY') }}"
+      private_key_passphrase: "{{ env_var('PRIVATE_KEY_PASSPHRASE') }}"
+
+      database: AIRBNB
+      schema: "DBT_{{ env_var('DBT_ENV_NAME') | upper | trim }}"
+      threads: 4
+      warehouse: COMPUTE_WH
+
+  target: dev</code></pre>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Target</th><th>Schema pattern</th><th>Typical use</th></tr></thead>
+              <tbody>
+                <tr><td><code>dev</code></td><td><code>DBT_&lt;ENV_NAME&gt;</code></td><td>Developer laptop, PR CI builds</td></tr>
+                <tr><td><code>staging</code></td><td><code>STAGING</code></td><td>Pre-prod validation, integration tests</td></tr>
+                <tr><td><code>prod</code></td><td><code>PROD</code> (plus custom schema macro)</td><td>Scheduled production deploys</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Switching targets on the CLI</h3>
+          <p>Default is <code>target: dev</code>. Override per invocation:</p>
+
+<pre data-lang="shell" data-title="Run against prod target" data-explain="--target selects the prod output block; --profiles-dir points at _prod_profiles."><code>dbt build --target prod --profiles-dir _prod_profiles</code></pre>
+
+          <p>Validate custom schema behaviour without loading data using <code>--empty</code> (introduced in <a href="s17-selectors-commands.html">Section 17</a>):</p>
+
+<pre data-lang="shell" data-title="Zero-row prod build for schema smoke test" data-explain="--empty compiles and creates relations with no rows — cheap way to verify PROD vs DBT_MYDEV_MART naming."><code>dbt build --target prod --profiles-dir=_prod_profiles --empty</code></pre>
+
+          <p><code>dbt debug --profiles-dir _prod_profiles</code> confirms connectivity for whichever target is active. Always run debug after changing env vars or key paths.</p>
+
+          <div class="callout danger"><strong>Never point an experimental full-refresh at prod by habit.</strong> Muscle memory <code>dbt run --full-refresh</code> against <code>--target prod</code> rebuilds production facts. Use separate shell prompts, profile colours, or wrapper scripts that require typing the target name.</div>
+
+          <h3>When to use each target</h3>
+          <div class="grid-2">
+            <div class="mini-card">
+              <h4>dev</h4>
+              <p>Day-to-day development, PR Slim CI, schema-per-branch experiments. Writes to <code>DBT_&lt;identity&gt;</code>. Safe to drop with <code>drop_dev_schemas</code>.</p>
+            </div>
+            <div class="mini-card">
+              <h4>staging</h4>
+              <p>Fixed schema <code>STAGING</code> for integration testing before prod. Still not prod — but shared across the team unlike personal dev schemas.</p>
+            </div>
+            <div class="mini-card">
+              <h4>prod</h4>
+              <p>Scheduled deploys from main. Custom schemas resolve without dev prefix. No <code>drop_dev_schemas</code> — macro guard refuses.</p>
+            </div>
+            <div class="mini-card">
+              <h4>--profiles-dir</h4>
+              <p>Course keeps production profiles in <code>_prod_profiles/</code> separate from the tutorial profile in <code>~/.dbt/profiles.yml</code> from <a href="s06-setup.html">Section 6</a>.</p>
+            </div>
+          </div>
+
+          <div class="terminal">
+            <p class="term-head">dbt debug against prod profile</p>
+            <pre class="term-body"><span class="tt-cmd">dbt debug --profiles-dir _prod_profiles --target prod</span>
+<span class="tt-dim">09:12:01  Running with dbt=1.11.12</span>
+<span class="tt-ok">09:12:03  Connection test: OK connection ok</span>
+<span class="tt-dim">09:12:03  Registered adapter: snowflake=1.11.12</span>
+<span class="tt-ok">09:12:04  All checks passed!</span></pre>
+          </div>
+          <h3>Working with targets in dbt Cloud versus Core</h3>
+          <p>dbt Cloud maps environments to targets under the hood — a Development environment is your personal schema, Production is prod. In dbt Core, you replicate that with profile outputs and <code>DBT_ENV_NAME</code>. The course teaches Core explicitly so the profile YAML and env vars are visible; Cloud users should still understand what happens when they click "Run" in the IDE (it is <code>dbt build --target dev</code> with their user schema).</p>
+
+          <h3>profiles-dir and project-dir together</h3>
+          <p>CI always runs from <code>cd airbnb</code> with <code>--profiles-dir _prod_profiles</code>. The profile name <code>airbnb:</code> must match <code>profile:</code> in <code>dbt_project.yml</code>. A common mistake is copying profiles to the wrong directory or running dbt from the repo root instead of the project folder — symptoms include "profile not found" or wrong schema resolution.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Command fragment</th><th>What it controls</th></tr></thead>
+              <tbody>
+                <tr><td><code>--target dev</code></td><td>Which output block in profiles.yml</td></tr>
+                <tr><td><code>--profiles-dir _prod_profiles</code></td><td>Where profiles.yml lives</td></tr>
+                <tr><td><code>--target-path target-prod</code></td><td>Where manifest.json is written</td></tr>
+                <tr><td><code>target.name</code> in Jinja</td><td>Same string as --target; used in macros</td></tr>
+                <tr><td><code>target.schema</code> in Jinja</td><td>Resolved schema from active output block</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="section" id="env-vars">
+          <h2>Environment variables</h2>
+          <p class="lead"><code>env_var()</code> in <code>profiles.yml</code> keeps secrets and personal identifiers out of git. dbt reads them from the process environment at parse time; missing vars fail fast with a clear error.</p>
+
+          <h3>What the course externalises</h3>
+          <ul>
+            <li><code>SNOWFLAKE_ACCOUNT</code> &mdash; account locator.</li>
+            <li><code>DBT_USER</code> &mdash; Snowflake user for key-pair auth.</li>
+            <li><code>PRIVATE_KEY</code> &mdash; PEM private key body (multiline in CI secrets).</li>
+            <li><code>PRIVATE_KEY_PASSPHRASE</code> &mdash; key encryption passphrase if applicable.</li>
+            <li><code>DBT_ENV_NAME</code> &mdash; short name embedded in dev schema (<code>DBT_MYDEV</code>, <code>DBT_FEATURE_AUTH</code>).</li>
+          </ul>
+
+          <h3>Setting variables on Windows (PowerShell)</h3>
+          <p>Download helper scripts from <code>https://dbtsetup.nordquant.com</code>. Source the PowerShell script, then set the personal schema name:</p>
+
+<pre data-lang="shell" data-title="Windows PowerShell env setup" data-explain="Use PowerShell, not cmd. ExecutionPolicy may need Set-ExecutionPolicy RemoteSigned once."><code>. ..\set-env.ps1
+$env:DBT_ENV_NAME="MYDEV"</code></pre>
+
+          <p>Verify:</p>
+
+<pre data-lang="shell" data-title="Test profile connectivity"><code>dbt debug --profiles-dir _prod_profiles</code></pre>
+
+          <h3>Setting variables on Mac / Linux</h3>
+
+<pre data-lang="shell" data-title="Unix env setup" data-explain="export persists for the shell session; add to .zshrc for permanence."><code>. ../set-env.sh
+export DBT_ENV_NAME="MYDEV"</code></pre>
+
+          <h3>Secrets in CI</h3>
+          <p>GitHub Actions inject secrets as environment variables. The course workflows map repository secrets to the same names <code>profiles.yml</code> expects:</p>
+
+<pre data-lang="yaml" data-title=".github/workflows/prod-build.yml (env excerpt)" data-explain="Secrets never appear in logs when referenced via ${{ secrets.* }}."><code>    env:
+      SNOWFLAKE_ACCOUNT:      "${{ secrets.SNOWFLAKE_ACCOUNT }}"
+      DBT_USER:               "${{ secrets.DBT_USER }}"
+      PRIVATE_KEY: |
+        ${{ secrets.PRIVATE_KEY }}
+      PRIVATE_KEY_PASSPHRASE: "${{ secrets.PRIVATE_KEY_PASSPHRASE }}"</code></pre>
+
+          <p>PR CI derives <code>DBT_ENV_NAME</code> from the branch name (uppercase, slashes and hyphens become underscores) so each pull request builds into an isolated schema without manual setup.</p>
+
+          <div class="callout info"><strong>Never commit secrets.</strong> <code>profiles.yml</code> in the course repo contains only <code>env_var()</code> placeholders. Real keys live in shell exports locally and GitHub Secrets in CI.</div>
+
+          <h3>env_var() behaviour and defaults</h3>
+          <p><code>env_var('DBT_ENV_NAME')</code> with no second argument fails compilation if the variable is unset — intentional fail-fast. You can supply a default for local convenience: <code>env_var('DBT_ENV_NAME', 'LOCAL')</code>. The course omits defaults so missing setup is obvious.</p>
+          <p>Jinja filters on env vars are common in profiles: <code>| upper | trim</code> normalises schema names regardless of whether the developer typed <code>mydev</code> or <code>MYDEV</code>.</p>
+
+          <h3>Multiline private keys in CI</h3>
+          <p>Snowflake key-pair auth stores the PEM body in <code>PRIVATE_KEY</code>. In GitHub Actions, the pipe literal syntax preserves newlines:</p>
+
+<pre data-lang="yaml" data-title="Multiline secret in workflow env" data-explain="The | after PRIVATE_KEY: keeps PEM line breaks intact for Snowflake driver parsing."><code>PRIVATE_KEY: |
+  ${{ secrets.PRIVATE_KEY }}</code></pre>
+
+          <p>Locally, <code>set-env.ps1</code> and <code>set-env.sh</code> load the same variables from files outside git. Never paste keys into Slack or commit them to a branch — rotate immediately if leaked.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Platform</th><th>Set session variable</th><th>Persist across sessions</th></tr></thead>
+              <tbody>
+                <tr><td>Windows PowerShell</td><td><code>$env:DBT_ENV_NAME="MYDEV"</code></td><td>Profile script or System Properties</td></tr>
+                <tr><td>Mac / Linux bash</td><td><code>export DBT_ENV_NAME="MYDEV"</code></td><td>Add to <code>~/.zshrc</code> or <code>~/.bashrc</code></td></tr>
+                <tr><td>GitHub Actions</td><td><code>echo "DBT_ENV_NAME=..." &gt;&gt; $GITHUB_ENV</code></td><td>Job scope only</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Troubleshooting env_var failures</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Error symptom</th><th>Cause</th><th>Fix</th></tr></thead>
+              <tbody>
+                <tr><td><code>Env var required but not provided: 'DBT_ENV_NAME'</code></td><td>Variable not exported in shell</td><td>Run set-env script; set DBT_ENV_NAME</td></tr>
+                <tr><td><code>Could not connect to Snowflake</code> after env change</td><td>Wrong account or key in env</td><td><code>dbt debug</code>; verify PRIVATE_KEY newlines</td></tr>
+                <tr><td>Schema named <code>DBT_</code> with empty suffix</td><td>DBT_ENV_NAME set to empty string</td><td><code>trim</code> filter helps; never set blank</td></tr>
+                <tr><td>CI works locally fails</td><td>Different profiles-dir or target</td><td>Match <code>--profiles-dir _prod_profiles</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="section" id="custom-schemas">
+          <h2>Custom schemas</h2>
+          <p class="lead">By default dbt builds every model into <code>target.schema</code> from the active profile. Production teams split marts, snapshots, and staging into named schemas. The <code>schema</code> config on a model sets the custom name; <code>generate_schema_name</code> macro controls how custom and target schemas combine.</p>
+
+          <h3>schema config on the mart</h3>
+          <p><code>mart_fullmoon_reviews</code> sets <code>schema='mart'</code> alongside microbatch config. Resolution depends on target:</p>
+          <ul>
+            <li><strong>dev:</strong> <code>DBT_MYDEV_MART</code> &mdash; personal prefix plus custom suffix.</li>
+            <li><strong>prod:</strong> <code>MART</code> &mdash; clean custom name only.</li>
+          </ul>
+
+          <h3>The generate_schema_name macro</h3>
+          <p>Real project code:</p>
+
+<pre data-lang="sql" data-title="macros/generate_schema_name.sql" data-explain="Prod uses bare custom schema; dev/staging prefix with target.schema so developers never collide."><code>{% macro generate_schema_name(custom_schema_name, node) -%}
+
+  {% set custom_schema_name_cleansed = custom_schema_name | trim | upper %}
+  {% set target_schema_cleansed = target.schema | trim | upper %}
+
+  {%- if custom_schema_name is none -%}
+    {# No custom schema: always use target schema as-is (uppercased above) #}
+    {{ target_schema_cleansed }}
+  {%- else -%}
+    {%- if target.name == 'prod' -%}
+        {# Prod: use clean custom schema name only #}
+        {{ custom_schema_name_cleansed }}
+    {%- else -%}
+      {# Staging / Dev / feature branches: prefix with personal/branch schema. #}
+      {{ target_schema_cleansed }}_{{ custom_schema_name_cleansed }}
+    {%- endif -%}
+  {%- endif -%}
+{%- endmacro %}</code></pre>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Model</th><th>Custom schema</th><th>dev target resolves to</th><th>prod target resolves to</th></tr></thead>
+              <tbody>
+                <tr><td><code>dim_listings_cleansed</code></td><td>(none)</td><td><code>DBT_MYDEV</code></td><td><code>PROD</code></td></tr>
+                <tr><td><code>mart_fullmoon_reviews</code></td><td><code>mart</code></td><td><code>DBT_MYDEV_MART</code></td><td><code>MART</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>The macro checks <code>target.name == 'prod'</code>, not the schema string. Adding a <code>staging</code> target keeps the prefixed pattern so staging experiments do not write bare <code>MART</code> names that collide with production.</p>
+
+          <div class="callout exam"><strong>Certification:</strong> default dbt behaviour concatenates <code>target.schema</code> and custom schema with an underscore. Overriding <code>generate_schema_name</code> is the supported way to change that.</div>
+
+          <h3>Default dbt behaviour without the macro</h3>
+          <p>If you delete <code>generate_schema_name.sql</code>, dbt's built-in logic produces <code>&lt;target.schema&gt;_&lt;custom_schema&gt;</code> in all environments. That yields <code>PROD_MART</code> in production — often wrong when BI tools expect schema <code>MART</code>. The course macro is the standard pattern for "clean prod names, prefixed dev names."</p>
+
+          <p>Folder-level schema in <code>dbt_project.yml</code> still applies: a model inherits folder defaults unless overridden in its own <code>config()</code> block. <code>mart_fullmoon_reviews</code> sets schema inline because it is the teaching example for mart-layer separation.</p>
+
+          <div class="diagram">
+            <p class="diagram-title">Schema resolution for mart_fullmoon_reviews by target</p>
+            <div class="stack">
+              <div class="layer"><b>prod target</b> → database AIRBNB · schema MART · table mart_fullmoon_reviews</div>
+              <div class="layer"><b>dev target (DBT_MYDEV)</b> → database AIRBNB · schema DBT_MYDEV_MART · table mart_fullmoon_reviews</div>
+              <div class="layer"><b>no custom schema</b> → dim models land in DBT_MYDEV or PROD only</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="section" id="schema-cleanup">
+          <h2>Cleaning up dev schemas</h2>
+          <p class="lead">Every PR CI run that sets <code>DBT_ENV_NAME</code> from the branch name creates schemas like <code>DBT_FEATURE_LOGIN_MART</code>. Without cleanup, Snowflake accumulates orphaned objects. The course ships a macro that drops all schemas matching the dev prefix.</p>
+
+          <h3>drop_dev_schemas macro</h3>
+
+<pre data-lang="sql" data-title="macros/drop_dev_schemas.sql" data-explain="Safety guard refuses to run unless target.schema starts with DBT_. Queries information_schema then DROP SCHEMA CASCADE."><code>{% macro drop_dev_schemas() %}
+
+  {# Use the resolved target schema as the prefix (e.g. DBT_&lt;env_name&gt; on the dev target) #}
+  {% set prefix = target.schema | upper %}
+
+  {# Safety guard: only drop dev schemas (prefixed DBT_), never PROD/STAGING #}
+  {% if not prefix.startswith('DBT_') %}
+    {{ exceptions.raise_compiler_error("Refusing to drop schemas: target.schema (" ~ prefix ~ ") is not a dev schema (must start with DBT_)") }}
+  {% endif %}
+
+  {{ log(" * drop_dev_schemas: Looking for schemas with prefix:  " ~ prefix, info=True) }}
+
+  {# Find all schemas matching the prefix #}
+  {% set results = run_query(
+    "SELECT schema_name
+     FROM information_schema.schemata
+     WHERE schema_name ILIKE '" ~ prefix ~ "%'"
+  ) %}
+
+  {# Drop each matching schema #}
+  {% if execute %}
+    {% set schemas = results.columns[0].values() %}
+
+    {% if schemas | length == 0 %}
+      {{ log(" * drop_dev_schemas: No schemas found matching prefix: " ~ prefix, info=True) }}
+    {% else %}
+      {{ log(" * drop_dev_schemas: Found " ~ schemas | length ~ " schema(s) to drop:", info=True) }}
+      {% for schema in schemas %}
+        {{ log(" * drop_dev_schemas: Dropping: " ~ schema, info=True) }}
+        {% do run_query("DROP SCHEMA IF EXISTS " ~ schema ~ " CASCADE") %}
+      {% endfor %}
+    {% endif %}
+
+  {% endif %}
+
+{% endmacro %}</code></pre>
+
+          <p>Execute with <code>dbt run-operation</code>:</p>
+
+<pre data-lang="shell" data-title="Drop all dev schemas for current DBT_ENV_NAME" data-explain="Uses active dev target schema as prefix; drops DBT_MYDEV, DBT_MYDEV_MART, etc."><code>dbt run-operation drop_dev_schemas --profiles-dir _prod_profiles</code></pre>
+
+          <p>The macro runs a compiler error if you accidentally point it at <code>prod</code> or <code>staging</code> where <code>target.schema</code> does not start with <code>DBT_</code>. That guard is essential &mdash; without it, one wrong target flag becomes catastrophic.</p>
+
+          <h3>What CASCADE drops</h3>
+          <p><code>DROP SCHEMA ... CASCADE</code> removes every table, view, and staged object inside the schema. For dev prefixes this includes both the base schema (<code>DBT_MYDEV</code>) and suffixed custom schemas (<code>DBT_MYDEV_MART</code>) because the macro matches <code>ILIKE 'DBT_MYDEV%'</code>. Seeds loaded into the dev schema, incremental tables, and test failure tables all disappear together — which is what you want when a PR merges or you reset local experiments.</p>
+
+          <h3>When not to run drop_dev_schemas</h3>
+          <ul>
+            <li>Mid-PR when you still need the schema for debugging a failed Slim CI run.</li>
+            <li>When two developers share the same <code>DBT_ENV_NAME</code> — one person's cleanup drops another's work.</li>
+            <li>Against staging or prod targets — the macro refuses, but double-check <code>--target dev</code> before running.</li>
+          </ul>
+          <p>CI runs cleanup only on merged PR close, not on every push. Local developers run it manually when switching features or reclaiming warehouse storage.</p>
+
+          <div class="terminal">
+            <p class="term-head">drop_dev_schemas</p>
+            <pre class="term-body"><span class="tt-cmd">dbt run-operation drop_dev_schemas --profiles-dir _prod_profiles</span>
+<span class="tt-dim">15:22:01  Running with dbt=1.11.12</span>
+<span class="tt-dim">15:22:03   * drop_dev_schemas: Looking for schemas with prefix:  DBT_MYDEV</span>
+<span class="tt-dim">15:22:04   * drop_dev_schemas: Found 2 schema(s) to drop:</span>
+<span class="tt-dim">15:22:04   * drop_dev_schemas: Dropping: DBT_MYDEV</span>
+<span class="tt-dim">15:22:05   * drop_dev_schemas: Dropping: DBT_MYDEV_MART</span>
+<span class="tt-ok">15:22:06  Completed successfully</span></pre>
+          </div>
+        </section>
+
+        <section class="section" id="state">
+          <h2>Working with state</h2>
+          <p class="lead">dbt writes JSON artifacts after every parse, compile, or run. The <code>manifest.json</code> captures the full project graph: model SQL hashes, configs, dependencies. Comparing today's manifest against yesterday's powers Slim CI, change review, and selective rebuilds.</p>
+
+          <h3>Key artifacts</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>File</th><th>Location</th><th>Contains</th></tr></thead>
+              <tbody>
+                <tr><td><code>manifest.json</code></td><td><code>target/</code></td><td>Full DAG, configs, checksums, sources</td></tr>
+                <tr><td><code>run_results.json</code></td><td><code>target/</code></td><td>Last run outcomes, timing, rows affected</td></tr>
+                <tr><td><code>semantic_manifest.json</code></td><td><code>target/</code></td><td>Metric definitions when using Semantic Layer</td></tr>
+                <tr><td><code>sources.json</code></td><td><code>target/</code></td><td>Freshness results from last source check</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Compiling prod state to a separate directory</h3>
+          <p>Keep production's last-known graph without overwriting your dev <code>target/</code>:</p>
+
+<pre data-lang="shell" data-title="Save prod manifest to target-prod/" data-explain="--target-path writes artifacts to a folder you pass to --state later."><code>dbt compile --profiles-dir _prod_profiles --target prod --target-path target-prod</code></pre>
+
+          <p>After a real prod deploy, copy or upload the entire <code>target/</code> directory from CI. The course production workflow uploads it as the <code>prod-target</code> artifact (see Slim CI below).</p>
+
+          <h3>state:modified selector</h3>
+          <p>Compare current project against saved artifacts with <code>--state</code>:</p>
+
+<pre data-lang="shell" data-title="List models changed since prod deploy" data-explain="state:modified matches nodes whose body, config, or deps differ from target-prod/manifest.json."><code>dbt ls --profiles-dir _prod_profiles --target dev --state target-prod --select state:modified</code></pre>
+
+          <p>Append <code>+</code> for downstream dependents:</p>
+
+<pre data-lang="shell" data-title="Modified models plus downstream" data-explain="state:modified+ is the Slim CI default — rebuild what changed and anything that reads it."><code>dbt ls --profiles-dir _prod_profiles --target dev --state target-prod --select state:modified+</code></pre>
+
+          <div class="callout info"><strong>Named selector syntax changed at dbt 1.12.</strong> Inline state selectors use <code>--select state:modified</code> on all versions. Named selectors in <code>selectors.yml</code> switched from <code>--selector name</code> to <code>-s selector:name</code> at 1.12. The course pins dbt 1.11 — see <a href="s17-selectors-commands.html#selectors-yml">Section 17</a> for both forms.</div>
+
+          <p>Related selectors (see <a href="s17-selectors-commands.html#node-selection">Section 17</a>):</p>
+          <ul>
+            <li><code>state:new</code> &mdash; nodes that exist only in the current project.</li>
+            <li><code>state:modified.body</code> &mdash; SQL/Python body changed, ignoring config-only diffs.</li>
+            <li><code>state:modified.config</code> &mdash; config-only changes.</li>
+          </ul>
+
+          <h3>Selector syntax: dbt 1.11 versus 1.12</h3>
+          <p>State selectors themselves use the same <code>--select state:modified</code> syntax on all versions. What changed at 1.12 is only <em>named</em> selectors from <code>selectors.yml</code>:</p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Action</th><th>dbt 1.11 (course pin)</th><th>dbt 1.12+</th></tr></thead>
+              <tbody>
+                <tr><td>Inline state selector</td><td><code>dbt ls --select state:modified+ --state target-prod</code></td><td>Same</td></tr>
+                <tr><td>Named selector from YAML</td><td><code>dbt run --selector ci_slim</code></td><td><code>dbt run -s selector:ci_slim</code></td></tr>
+                <tr><td>Slim CI in course repo</td><td>Inline <code>--select state:modified+</code></td><td>Either form works for inline selectors</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>When upgrading CI from 1.11 to 1.12, audit workflow YAML for <code>--selector</code> flags; inline state selectors need no change.</p>
+
+          <h3>Building only modified models</h3>
+          <p>Workflow from the course script after fixing a syntax error in <code>dim_listings_cleansed</code>:</p>
+
+<pre data-lang="shell" data-title="State-aware dev build" data-explain="Drop stale dev objects first when schema names shift; then run only modified nodes."><code>dbt run-operation drop_dev_schemas --profiles-dir _prod_profiles
+dbt run --profiles-dir _prod_profiles --target dev --state target-prod --select state:modified</code></pre>
+
+          <h3>dbt retry</h3>
+          <p>When <code>dbt build</code> fails partway through, fix the error and resume without re-running successful nodes:</p>
+
+<pre data-lang="shell" data-title="Resume failed build" data-explain="dbt retry reads run_results.json and reruns only failed/skipped nodes from the last invocation."><code>dbt build --profiles-dir _prod_profiles
+# fix dim_listings_cleansed.sql
+dbt retry --profiles-dir _prod_profiles</code></pre>
+
+          <p><code>dbt retry</code> requires the prior command to have written <code>run_results.json</code> in the same <code>target/</code> directory. It does not replace state comparison — it only continues a interrupted run.</p>
+
+          <h3>What manifest.json stores for state diff</h3>
+          <p>Each node entry includes a <code>checksum</code> of compiled content, <code>config</code> hashes, <code>depends_on</code> lists, and database identifiers from the last run. <code>state:modified</code> compares current parse output against those fields. Changing a comment in SQL modifies the body checksum; changing <code>materialized='table'</code> to <code>view</code> triggers config modified; adding a <code>ref()</code> triggers dependency modified.</p>
+          <p>Open <code>target/manifest.json</code> in a JSON viewer when debugging unexpected selector results — search for the model <code>unique_id</code> (e.g. <code>model.airbnb.dim_listings_cleansed</code>) and compare <code>checksum</code> values between dev and prod artifact directories.</p>
+
+          <h3>Separate target-path for prod artifacts</h3>
+          <p>Using <code>--target-path target-prod</code> on compile keeps prod comparison artifacts separate from your daily dev <code>target/</code> folder. Slim CI downloads prod's artifact to <code>airbnb/prod-target/</code> — same idea at CI scale. Never commit either directory; both belong in <code>.gitignore</code>.</p>
+
+          <div class="terminal">
+            <p class="term-head">state:modified after a one-line SQL change</p>
+            <pre class="term-body"><span class="tt-cmd">dbt ls --profiles-dir _prod_profiles --target dev --state target-prod --select state:modified</span>
+<span class="tt-dim">10:15:01  Running with dbt=1.11.12</span>
+<span class="tt-ok">10:15:03  model.airbnb.dim_listings_cleansed</span></pre>
+          </div>
+
+          <div class="diagram">
+            <p class="diagram-title">State comparison diffs two manifest.json snapshots</p>
+            <div class="flow">
+              <div class="node is-store"><b>target-prod/manifest.json</b><small>last prod deploy</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-compute pulse"><b>dbt ls --state</b><small>checksum diff</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-model"><b>state:modified+</b><small>PR build list</small></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="section" id="defer">
+          <h2>Deferring state</h2>
+          <p class="lead"><code>--defer</code> tells dbt to resolve <code>ref()</code> and <code>source()</code> for unselected upstream models against relations recorded in the comparison manifest's environment &mdash; typically production &mdash; instead of building them in your dev schema.</p>
+
+          <h3>Defer in practice</h3>
+
+<pre data-lang="shell" data-title="Build modified models, defer upstream to prod" data-explain="Unselected parents resolve to prod relations from target-prod/manifest.json; only selected nodes execute in dev."><code>dbt run-operation drop_dev_schemas --profiles-dir _prod_profiles
+dbt run --profiles-dir _prod_profiles --target dev --state target-prod --select state:modified --defer</code></pre>
+
+          <p>Without defer, a one-line change to <code>mart_fullmoon_reviews</code> still requires rebuilding <code>fct_reviews</code>, <code>src_reviews</code>, seeds, and every upstream dimension in your personal schema. With defer, dbt reads prod's <code>fct_reviews</code> while writing the mart into <code>DBT_MYDEV_MART</code>.</p>
+
+          <h3>--favor-state</h3>
+          <p>When both a local dev relation and a deferred prod relation exist for the same node, dbt normally prefers the local build. <code>--favor-state</code> reverses that: the deferred relation from the comparison manifest wins. Use it when dev schemas contain stale partial builds that would shadow prod data during CI validation.</p>
+
+<pre data-lang="shell" data-title="Defer with favor-state" data-explain="Forces prod-backed refs even if dev copies exist — common in CI after partial local runs."><code>dbt build --profiles-dir _prod_profiles --target dev \
+  --select state:modified+ --defer --favor-state --state ./prod-target</code></pre>
+
+          <h3>Why defer saves warehouse cost</h3>
+          <p>A pull request touching one mart should not recompute multi-terabyte facts. Slim CI downloads the last prod <code>manifest.json</code> (and relies on prod relations still existing at the database locations recorded in that manifest), selects <code>state:modified+</code>, and defers everything else. You pay for the changed subgraph plus tests, not the entire Airbnb DAG.</p>
+
+          <div class="callout cost"><strong>Defer assumes prod relations still exist.</strong> If prod dropped a table but the artifact still references it, deferred runs fail at query time. Refresh prod artifacts after every deploy and align retention policies with defer expectations.</div>
+
+          <h3>Local defer workflow mirroring CI</h3>
+          <p>To reproduce Slim CI on a laptop before opening a PR:</p>
+          <ol>
+            <li>Obtain the latest prod artifact — download from GitHub Actions or compile prod locally if you have prod read access.</li>
+            <li>Place it in <code>airbnb/prod-target/</code> or <code>target-prod/</code>.</li>
+            <li>Set <code>DBT_ENV_NAME</code> to a personal value not shared with CI branch names.</li>
+            <li>Run <code>dbt ls --state ./prod-target --select state:modified+</code> and review the list.</li>
+            <li>Run <code>dbt build --state ./prod-target --select state:modified+ --defer</code>.</li>
+          </ol>
+          <p>This catches "modified+" blast radius surprises before CI spends warehouse credits.</p>
+
+          <p>Snapshots deserve special care: they are stateful history tables. <a href="s10-snapshots.html">Section 10</a> notes that deferring snapshot refs while running snapshots locally can desynchronise history. Many teams run snapshots only in prod and defer to prod snapshot outputs in PR CI.</p>
+
+          <h3>Defer resolution order</h3>
+          <ol>
+            <li>dbt parses the current project and applies <code>--select</code>.</li>
+            <li>For each upstream node not in the selection, dbt checks the comparison manifest for database/schema/identifier.</li>
+            <li>With <code>--defer</code>, compiled SQL references those prod locations instead of dev target schema names.</li>
+            <li>Selected nodes still build into the active target (<code>DBT_&lt;branch&gt;</code> in PR CI).</li>
+          </ol>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Flag</th><th>Without defer</th><th>With defer</th></tr></thead>
+              <tbody>
+                <tr><td>Upstream fact not selected</td><td>Built in dev schema first (or error if missing)</td><td>Read from prod relation in manifest</td></tr>
+                <tr><td>Selected mart</td><td>Built in dev schema</td><td>Built in dev schema (unchanged)</td></tr>
+                <tr><td>Warehouse cost on PR</td><td>Full upstream subgraph</td><td>Modified subgraph only</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="section" id="ci-pipelines">
+          <h2>Slim CI and production pipelines</h2>
+          <p class="lead">The course repo ships three GitHub Actions workflows under <code>.github/workflows/</code>. Together they implement the loop real teams use: merge to main deploys prod and uploads artifacts; every PR runs a deferred slim build; merged PRs drop the branch's dev schemas.</p>
+
+          <div class="callout info"><strong>These workflows are reference-only in the bootcamp repo.</strong> Each job carries <code>if: github.repository != 'nordquant/complete-dbt-bootcamp-zero-to-hero'</code> so forks do not fail on missing secrets. The maintained, runnable pattern lives in <a href="https://github.com/zoltanctoth/dbt-reference-production-repo">zoltanctoth/dbt-reference-production-repo</a>. Copy from there when wiring your own org.</div>
+
+          <h3>Production deploy: prod-build.yml</h3>
+          <p>Triggers on push to <code>main</code> or manual dispatch. Installs dependencies, runs full prod build, uploads <code>target/</code> as artifact for PR defer.</p>
+
+<pre data-lang="yaml" data-title=".github/workflows/prod-build.yml" data-explain="Full prod dbt build; artifact name prod-target feeds pr-slim-ci.yml defer step."><code># Reference only
+# Please go to https://github.com/zoltanctoth/dbt-reference-production-repo
+# for a latest working example of this file
+
+name: Prod deploy (on merge to main / manual)
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build:
+    name: Production deps and build
+    if: github.repository != 'nordquant/complete-dbt-bootcamp-zero-to-hero'
+    runs-on: ubuntu-latest
+    env:
+      SNOWFLAKE_ACCOUNT:      "${{ secrets.SNOWFLAKE_ACCOUNT }}"
+      DBT_USER:               "${{ secrets.DBT_USER }}"
+      PRIVATE_KEY: |
+        ${{ secrets.PRIVATE_KEY }}
+      PRIVATE_KEY_PASSPHRASE: "${{ secrets.PRIVATE_KEY_PASSPHRASE }}"
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: "pyproject.toml"
+      - run: uv python install 3.13
+      - run: uv sync
+      - run: cd airbnb && uv run dbt deps --profiles-dir _prod_profiles --target prod
+      - run: cd airbnb && uv run dbt build --profiles-dir _prod_profiles --target prod
+      - name: Upload prod target as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: prod-target
+          path: airbnb/target/
+          retention-days: 90</code></pre>
+
+          <h3>PR Slim CI: pr-slim-ci.yml</h3>
+          <p>On every pull request: set <code>DBT_ENV_NAME</code> from branch name, download prod artifact, run deferred modified build.</p>
+
+          <p>Key design decisions in this workflow:</p>
+          <ul>
+            <li><code>uv sync</code> installs locked dependencies from <code>pyproject.toml</code> — same pin as local dev.</li>
+            <li>Branch sanitisation prevents invalid Snowflake schema characters.</li>
+            <li><code>if_no_artifact_found: fail</code> prevents silent full builds that mask missing prod state.</li>
+            <li><code>state:modified+</code> includes downstream tests on changed subgraph — catches broken marts when a dim changes.</li>
+          </ul>
+
+          <p>The workflow uses <code>dawidd6/action-download-artifact</code> to pull the latest successful prod-build artifact from main — not the PR branch. That guarantees defer targets match what production actually deployed.</p>
+
+<pre data-lang="yaml" data-title=".github/workflows/pr-slim-ci.yml" data-explain="state:modified+ with --defer builds only PR changes against prod upstream relations."><code># Reference only
+# Please go to https://github.com/zoltanctoth/dbt-reference-production-repo
+# for a latest working example of this file
+
+name: PR slim CI (defer to prod artifact)
+
+on:
+  pull_request:
+    branches: [ "**" ]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  slim-ci:
+    name: Build modified with defer to prod artifact
+    if: github.repository != 'nordquant/complete-dbt-bootcamp-zero-to-hero'
+    runs-on: ubuntu-latest
+    env:
+      SNOWFLAKE_ACCOUNT:      "${{ secrets.SNOWFLAKE_ACCOUNT }}"
+      DBT_USER:               "${{ secrets.DBT_USER }}"
+      PRIVATE_KEY: |
+        ${{ secrets.PRIVATE_KEY }}
+      PRIVATE_KEY_PASSPHRASE: "${{ secrets.PRIVATE_KEY_PASSPHRASE }}"
+
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: "pyproject.toml"
+      - run: uv python install 3.13
+      - run: uv sync
+      - name: Set DBT_ENV_NAME from branch (uppercase, _ for / and -)
+        run: |
+          NAME="${{ github.head_ref }}"
+          SANITIZED=$(echo "$NAME" | tr '/' '_' | tr '-' '_' | tr '[:lower:]' '[:upper:]')
+          echo "DBT_ENV_NAME=$SANITIZED" >> "$GITHUB_ENV"
+          echo "PR will build into schema: DBT_$SANITIZED"
+      - run: cd airbnb && uv run dbt deps --profiles-dir _prod_profiles --target dev
+      - name: Download latest prod-target artifact from main
+        uses: dawidd6/action-download-artifact@v21
+        with:
+          workflow: prod-build.yml
+          branch: main
+          name: prod-target
+          path: airbnb/prod-target
+          if_no_artifact_found: fail
+      - name: dbt build (slim CI if manifest available, else full)
+        run: |
+          cd airbnb
+          uv run dbt build --profiles-dir _prod_profiles --target dev \
+            --select state:modified+ --defer --state ./prod-target</code></pre>
+
+          <h3>PR cleanup: pr-cleanup.yml</h3>
+          <p>When a PR merges to main, drop the branch's dev schemas so Snowflake stays tidy.</p>
+
+<pre data-lang="yaml" data-title=".github/workflows/pr-cleanup.yml" data-explain="Runs drop_dev_schemas with DBT_ENV_NAME from merged branch head ref."><code># Reference only
+# Please go to https://github.com/zoltanctoth/dbt-reference-production-repo
+# for a latest working example of this file
+
+name: PR cleanup (drop dev schema on merge)
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  drop-dev-schema:
+    name: Drop dev schemas for merged PR
+    if: >-
+      github.event.pull_request.merged == true &&
+      github.repository != 'nordquant/complete-dbt-bootcamp-zero-to-hero'
+    runs-on: ubuntu-latest
+    env:
+      SNOWFLAKE_ACCOUNT:      "${{ secrets.SNOWFLAKE_ACCOUNT }}"
+      DBT_USER:               "${{ secrets.DBT_USER }}"
+      PRIVATE_KEY: |
+        ${{ secrets.PRIVATE_KEY }}
+      PRIVATE_KEY_PASSPHRASE: "${{ secrets.PRIVATE_KEY_PASSPHRASE }}"
+
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: "pyproject.toml"
+      - run: uv python install 3.13
+      - run: uv sync
+      - name: Set DBT_ENV_NAME from merged branch (uppercase, _ for / and -)
+        run: |
+          NAME="${{ github.head_ref }}"
+          SANITIZED=$(echo "$NAME" | tr '/' '_' | tr '-' '_' | tr '[:lower:]' '[:upper:]')
+          echo "DBT_ENV_NAME=$SANITIZED" >> "$GITHUB_ENV"
+          echo "Will drop schemas matching prefix: DBT_$SANITIZED"
+      - run: cd airbnb && uv run dbt deps --profiles-dir _prod_profiles --target dev
+      - run: cd airbnb && uv run dbt run-operation drop_dev_schemas --profiles-dir _prod_profiles --target dev</code></pre>
+
+          <div class="diagram">
+            <p class="diagram-title">Three-workflow production loop for pull requests</p>
+            <div class="dag">
+              <div class="dag-col">
+                <p class="dag-label">PR open</p>
+                <div class="node is-compute pulse"><b>pr-slim-ci</b><small>state:modified+ defer</small></div>
+              </div>
+              <div class="dag-col">
+                <p class="dag-label">Merge main</p>
+                <div class="node is-compute"><b>prod-build</b><small>upload artifact</small></div>
+              </div>
+              <div class="dag-col">
+                <p class="dag-label">PR closed</p>
+                <div class="node is-store"><b>pr-cleanup</b><small>drop_dev_schemas</small></div>
+              </div>
+            </div>
+          </div>
+
+          <p>Orchestration tools from <a href="s18-orchestration.html">Section 18</a> (Dagster, Airflow) call the same dbt commands these workflows wrap. The CI YAML is the reference implementation for when GitHub Actions is the scheduler.</p>
+
+          <h3>Step-by-step PR lifecycle</h3>
+          <ol>
+            <li>Developer opens PR from branch <code>feature/login</code>.</li>
+            <li><code>pr-slim-ci.yml</code> sets <code>DBT_ENV_NAME=FEATURE_LOGIN</code>, downloads latest <code>prod-target</code> artifact from main.</li>
+            <li><code>dbt build --select state:modified+ --defer --state ./prod-target</code> builds changed models into <code>DBT_FEATURE_LOGIN</code> and <code>DBT_FEATURE_LOGIN_MART</code>, reading unchanged facts from prod.</li>
+            <li>Reviewers merge; <code>prod-build.yml</code> runs full prod build and uploads fresh manifest.</li>
+            <li><code>pr-cleanup.yml</code> fires on closed merged PR, runs <code>drop_dev_schemas</code> for <code>DBT_FEATURE_LOGIN*</code>.</li>
+          </ol>
+
+          <h3>Secrets and permissions checklist</h3>
+          <ul>
+            <li>Repository secrets: <code>SNOWFLAKE_ACCOUNT</code>, <code>DBT_USER</code>, <code>PRIVATE_KEY</code>, <code>PRIVATE_KEY_PASSPHRASE</code>.</li>
+            <li><code>permissions: contents: read</code> on prod-build — upload artifact needs default <code>actions: write</code> for <code>upload-artifact</code> (implicit on GITHUB_TOKEN in same repo).</li>
+            <li>PR workflow needs <code>actions: read</code> to download artifacts from prod-build via <code>dawidd6/action-download-artifact</code>.</li>
+            <li>Snowflake role <code>TRANSFORM</code> must create/drop schemas matching <code>DBT_*</code> prefix in dev and write to <code>PROD</code> / <code>MART</code> in prod.</li>
+          </ul>
+
+          <div class="callout tip"><strong>First-time setup.</strong> Run <code>prod-build.yml</code> manually via workflow_dispatch once so <code>prod-target</code> artifact exists before any PR can pass Slim CI.</div>
+
+          <h3>End-to-end instructor demonstration sequence</h3>
+          <p>The course script walks through production topics in this order — mirror it when studying:</p>
+          <ol>
+            <li>Convert <code>mart_fullmoon_reviews</code> to microbatch; add <code>event_time</code> to <code>fct_reviews</code>; confirm <code>threads: 4</code>.</li>
+            <li>Add versioning files; pin <code>dim_listings_w_hosts</code> to v2; disable Python demo models.</li>
+            <li>Introduce <code>_prod_profiles/profiles.yml</code>; practice <code>dbt debug</code> with env vars on Windows and Mac.</li>
+            <li>Add <code>generate_schema_name</code>; test with <code>--empty</code> prod build.</li>
+            <li>Run <code>drop_dev_schemas</code> locally.</li>
+            <li>Introduce syntax error + <code>dbt retry</code>.</li>
+            <li>Compile prod to <code>target-prod</code>; list and build <code>state:modified</code>; add <code>--defer</code>.</li>
+            <li>Review GitHub workflow YAML (reference repo for live runs).</li>
+          </ol>
+
+          <div class="terminal">
+            <p class="term-head">Slim CI build (conceptual output)</p>
+            <pre class="term-body"><span class="tt-cmd">dbt build --profiles-dir _prod_profiles --target dev --select state:modified+ --defer --state ./prod-target</span>
+<span class="tt-dim">14:30:01  Running with dbt=1.11.12</span>
+<span class="tt-dim">14:30:04  Found 3 models matching state:modified+</span>
+<span class="tt-dim">14:30:04  Deferring to manifest from prod-target/manifest.json</span>
+<span class="tt-dim">14:30:05  1 of 3 START sql table model DBT_FEATURE_X.dim_listings_w_hosts .... [RUN]</span>
+<span class="tt-ok">14:30:08  1 of 3 OK created sql table model DBT_FEATURE_X.dim_listings_w_hosts [SUCCESS 4821 in 3.2s]</span>
+<span class="tt-ok">14:30:12  Completed successfully</span></pre>
+          </div>
+
+          <h3>Mapping course commands to workflow steps</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Local command (course script)</th><th>CI workflow step</th></tr></thead>
+              <tbody>
+                <tr><td><code>dbt compile --target prod --target-path target-prod</code></td><td>Implicit in prod <code>dbt build</code> artifact upload</td></tr>
+                <tr><td><code>dbt ls --state target-prod --select state:modified</code></td><td>Same flags in pr-slim-ci before build (optional dry-run)</td></tr>
+                <tr><td><code>dbt run ... --defer --state target-prod</code></td><td><code>dbt build ... --defer --state ./prod-target</code></td></tr>
+                <tr><td><code>dbt run-operation drop_dev_schemas</code></td><td>pr-cleanup.yml final step</td></tr>
+                <tr><td><code>dbt build --target prod</code></td><td>prod-build.yml main step</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="section" id="deeper">
+          <h2>Deeper detail and edge cases</h2>
+          <p class="lead">Production deployment is where certification questions cluster: targets, defer, state selectors, schema macros, and incremental strategies intersect. These notes extend the lecture material with version drift, cost traps, and team patterns a bootcamp video cannot cover.</p>
+
+          <h3>Version notes</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Behaviour</th><th>Before</th><th>Now</th><th>Version</th></tr></thead>
+              <tbody>
+                <tr><td>Microbatch incremental</td><td>Not available</td><td><code>incremental_strategy='microbatch'</code></td><td>1.9+</td></tr>
+                <tr><td>Model versions</td><td>Rename files manually</td><td><code>versions:</code> in YAML, <code>ref(..., v=N)</code></td><td>1.5+</td></tr>
+                <tr><td><code>dbt retry</code></td><td>Re-run entire selection</td><td>Resume failed nodes only</td><td>1.6+</td></tr>
+                <tr><td>State selectors</td><td>N/A</td><td><code>state:modified</code>, <code>state:new</code></td><td>0.18+</td></tr>
+                <tr><td><code>--defer</code></td><td>Manual prod schema refs</td><td>Manifest-driven upstream resolution</td><td>0.18+</td></tr>
+                <tr><td><code>--favor-state</code></td><td>N/A</td><td>Prefer deferred refs over local dev copies</td><td>1.5+</td></tr>
+                <tr><td><code>--empty</code> runs</td><td>N/A</td><td>Zero-row validation builds</td><td>1.8+</td></tr>
+                <tr><td>Named selector CLI</td><td><code>--selector name</code></td><td><code>-s selector:name</code></td><td>1.12</td></tr>
+                <tr><td>Generic test YAML key</td><td><code>tests:</code></td><td><code>data_tests:</code></td><td>1.8+</td></tr>
+                <tr><td>Contract enforcement</td><td>Advisory</td><td><code>contract.enforced: true</code> fails mismatches</td><td>1.5+</td></tr>
+                <tr><td>Microbatch threads bug</td><td>N/A</td><td>Hang when <code>threads &lt; 4</code></td><td>1.9+ (open)</td></tr>
+                <tr><td>Course dbt pin</td><td>&mdash;</td><td><code>dbt-core~=1.11.0</code></td><td>pyproject.toml</td></tr>
+                <tr><td>CI artifact defer</td><td>Manual manifest copy</td><td>GitHub Actions upload/download</td><td>Pattern</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>What it costs to run</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>What runs</th><th>Where the cost lands</th><th>How to spend less</th></tr></thead>
+              <tbody>
+                <tr><td>Full prod <code>dbt build</code> on every commit</td><td>Entire DAG in Snowflake</td><td>Slim CI with <code>state:modified+</code></td></tr>
+                <tr><td>PR without <code>--defer</code></td><td>Rebuild all upstream facts in dev schema</td><td>Download prod manifest; defer unselected refs</td></tr>
+                <tr><td>Microbatch wide event window</td><td>One batch per year in range scans facts</td><td>Narrow <code>--event-time-start/end</code></td></tr>
+                <tr><td>Microbatch with <code>threads: 1</code></td><td>Warehouse idle while dbt hangs</td><td>Set <code>threads: 4</code> minimum</td></tr>
+                <tr><td><code>drop_dev_schemas</code> on huge schemas</td><td>CASCADE drops many tables</td><td>Run on merge only; not every local experiment</td></tr>
+                <tr><td>Version v1 + v2 both enabled</td><td>Double host dimension builds</td><td>Deprecate v1; pin refs to v2</td></tr>
+                <tr><td><code>dbt build --target prod --empty</code></td><td>Metadata DDL only</td><td>Cheap schema validation vs full load</td></tr>
+                <tr><td>Stale prod artifact in CI</td><td>Wrong defer targets fail and retry</td><td>Upload artifact on every main merge</td></tr>
+                <tr><td>Python models left enabled</td><td>Snowpark package install + Pandas export</td><td>Keep <code>enabled=False</code> until needed</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout cost"><strong>The biggest waste is PR CI without defer.</strong> Rebuilding <code>fct_reviews</code> and every staging model for a one-line mart change duplicates production-scale scans in a throwaway schema. Always pair <code>state:modified+</code> with <code>--defer</code> and a fresh prod manifest.</div>
+
+          <h3>Traps that catch people</h3>
+          <ul>
+            <li><strong>Microbatch without event_time upstream —</strong> compilation fails or batches misalign. Add <code>event_time</code> to every model in the microbatch chain, not just the mart.</li>
+            <li><strong>threads: 1 hang —</strong> run appears stuck with no SQL. Set <code>threads: 4</code> in every profile output before debugging SQL.</li>
+            <li><strong>Defer without prod artifact —</strong> <code>--state</code> path missing <code>manifest.json</code> makes <code>state:modified</code> unreliable and defer resolution fails.</li>
+            <li><strong>Local dev shadowing defer —</strong> partial local builds of upstream models make dbt prefer dev tables unless you pass <code>--favor-state</code>.</li>
+            <li><strong>drop_dev_schemas on prod target —</strong> macro guard prevents this, but never remove the <code>DBT_</code> prefix check when customizing.</li>
+            <li><strong>Custom schema macro ignores target.name —</strong> dev writes bare <code>MART</code> and collides with production naming conventions.</li>
+            <li><strong>ref() without version during migration —</strong> silently picks <code>latest_version</code>; explicit <code>v=2</code> documents intent during breaking changes.</li>
+            <li><strong>Missing DBT_ENV_NAME —</strong> profile compilation error or schema named <code>DBT_</code> with empty suffix. Set env var before every dev run.</li>
+            <li><strong>CI guard copied without secrets —</strong> bootcamp workflows skip on the official repo; your fork needs secrets and must remove or adjust the <code>if:</code> guard.</li>
+            <li><strong>Assuming defer replaces prod data —</strong> defer reads prod; it does not write to prod. PR builds still land in <code>DBT_&lt;branch&gt;</code>.</li>
+            <li><strong>full_refresh=false misunderstanding —</strong> microbatch still rebuilds batches deemed stale; it is not append-only.</li>
+            <li><strong>Enabled false still in selectors —</strong> disabled models are excluded automatically, but docs and parse still see the file unless removed.</li>
+            <li><strong>Prod-build artifact expiry —</strong> 90-day retention in course workflow; long-idle repos need manual prod rebuild before first PR after hiatus.</li>
+            <li><strong>Branch name sanitisation —</strong> CI replaces <code>/</code> and <code>-</code> with <code>_</code> in <code>DBT_ENV_NAME</code>; local env names should follow the same rules to match cleanup.</li>
+            <li><strong>Staging target without macro branch —</strong> staging uses prefixed custom schemas like dev; only prod gets bare <code>MART</code>.</li>
+          </ul>
+
+          <h3>Cross-warehouse notes</h3>
+          <p>Microbatch is supported on Snowflake, BigQuery, and Databricks adapters in dbt 1.9+. Postgres and Redshift do not offer microbatch — teams on those warehouses stay on merge or delete+insert incrementals. Defer and state selectors are adapter-agnostic; only artifact storage and CI runner OS differ. Key-pair auth in the course profile is Snowflake-specific; BigQuery uses service account JSON via env vars with the same <code>env_var()</code> pattern.</p>
+
+          <h3>Troubleshooting playbook</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Symptom</th><th>Most likely cause</th><th>What to check / fix</th></tr></thead>
+              <tbody>
+                <tr><td>Microbatch run hangs indefinitely</td><td><code>threads &lt; 4</code></td><td>Set <code>threads: 4</code> in <code>_prod_profiles/profiles.yml</code></td></tr>
+                <tr><td><code>Env var required but not provided</code></td><td>Missing <code>DBT_ENV_NAME</code> or key</td><td>Run <code>set-env.ps1</code>; verify with <code>dbt debug</code></td></tr>
+                <tr><td><code>Refusing to drop schemas</code></td><td>Wrong target (prod/staging)</td><td>Switch to <code>--target dev</code></td></tr>
+                <tr><td><code>state:modified</code> selects everything</td><td>Stale or missing comparison manifest</td><td>Refresh <code>target-prod/manifest.json</code> from prod CI artifact</td></tr>
+                <tr><td>Defer run: relation does not exist</td><td>Prod table dropped since artifact upload</td><td>Re-run prod-build; verify defer schema in manifest</td></tr>
+                <tr><td>Model built to wrong schema</td><td>Custom schema + macro logic</td><td>Inspect compiled SQL path; read <code>generate_schema_name</code></td></tr>
+                <tr><td>Version contract failure</td><td>v2 SQL output mismatch YAML</td><td>Align <code>dim_hosts_cleansed_v2.sql</code> columns with schema.yml</td></tr>
+                <tr><td><code>dbt retry</code> does nothing</td><td>No prior failed run in same target/</td><td>Re-run failed command first; check <code>run_results.json</code></td></tr>
+                <tr><td>CI artifact download fails</td><td>No prod-build on main yet</td><td>Run prod-build workflow once manually</td></tr>
+                <tr><td>Duplicate schema names across devs</td><td>Same <code>DBT_ENV_NAME</code></td><td>Use unique env names locally; CI uses branch name</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Production patterns</h3>
+          <p>Mature teams treat the prod manifest as a first-class artifact with the same retention policy as migration scripts. Main-branch merges upload <code>target/</code>; PR jobs download it before any warehouse spend. Developers set <code>DBT_ENV_NAME</code> to their initials locally and never share prod credentials on laptops without read-only roles.</p>
+          <p>Schema macro conventions split cleanly: prod gets semantic names (<code>MART</code>, <code>STAGING</code>, <code>CORE</code>); non-prod prefixes with <code>DBT_&lt;identity&gt;</code> so cleanup macros stay safe. Microbatch models tag with <code>fact</code> for selective nightly batch reruns using event-time windows.</p>
+          <div class="grid-2">
+            <div class="mini-card">
+              <h4>Pattern: artifact-driven Slim CI</h4>
+              <p>Prod upload &rarr; PR download &rarr; <code>dbt ls -s state:modified+ --state ...</code> logged to job output &rarr; defer build. Reviewers see blast radius before approve.</p>
+            </div>
+            <div class="mini-card">
+              <h4>Anti-pattern: shared dev schema</h4>
+              <p>One <code>DBT_DEV</code> schema for all engineers causes overwrite races and makes defer pointless. Personal or branch schemas fix isolation.</p>
+            </div>
+          </div>
+          <p>Some teams borrow a <strong>blue/green deployment</strong> pattern for the warehouse itself: a full production build lands in a parallel schema (green) while the current schema (blue) keeps serving BI traffic; a single view-swap or a change to <code>generate_schema_name</code>'s target promotes green to live once the build and its tests pass, and blue stays around as an instant rollback. This trades extra storage and a full rebuild for zero-downtime cutovers, which matters more for a microbatch model with strict freshness SLAs than for a nightly batch job that already runs before anyone reads the dashboard.</p>
+<pre data-lang="yaml" data-title="selectors.yml (ci_slim pattern)" data-explain="Reusable Slim CI selector combining state and downstream — invoke with --selector on dbt 1.11."><code>selectors:
+  - name: ci_slim
+    description: Modified nodes and downstream for PR builds
+    definition:
+      method: state
+      value: modified
+      children: true
+      children_depth: 1</code></pre>
+
+          <h3>Certification pointers</h3>
+          <p>The Analytics Engineering certification tests production mechanics heavily: difference between <code>target</code> and <code>schema</code> config, what <code>generate_schema_name</code> overrides, how <code>env_var()</code> works, when to use <code>--defer</code> and <code>--state</code>, and incremental strategy names including microbatch. Expect questions on model versions (<code>latest_version</code>, <code>deprecation_date</code>, <code>ref(..., v=N)</code>) and on disabling models with <code>enabled: false</code>.</p>
+          <ul>
+            <li><a href="s08-materializations.html">Section 8</a> — incremental foundations before microbatch; <code>is_incremental()</code> versus batch strategies.</li>
+            <li><a href="s09-seeds-sources.html#mart-fullmoon">Section 9</a> — original <code>mart_fullmoon_reviews</code> table version and seed join logic.</li>
+            <li><a href="s10-snapshots.html">Section 10</a> — stateful snapshots versus defer in CI.</li>
+            <li><a href="s12-advanced-testing.html">Section 12</a> — contracts and constraints paired with v2 host model.</li>
+            <li><a href="s17-selectors-commands.html">Section 17</a> — <code>state:modified</code> grammar and selector CLI version change.</li>
+            <li><a href="s18-orchestration.html">Section 18</a> — orchestrators invoking the same prod and slim commands.</li>
+            <li><a href="s22-certification.html">Section 22</a> — full certification review.</li>
+          </ul>
+          <div class="callout exam"><strong>Certification:</strong> memorise microbatch config keys (<code>event_time</code>, <code>batch_size</code>, <code>begin</code>), the purpose of <code>--defer</code> and <code>--state</code>, how custom schemas combine with targets, and that <code>dbt retry</code> resumes failed nodes from the prior invocation.</div>
+
+          <h3>Production readiness checklist (Airbnb project)</h3>
+          <p>Before claiming the course project is "production ready," verify each item:</p>
+          <ul class="checklist">
+            <li><code>_prod_profiles/profiles.yml</code> has dev, staging, prod with <code>threads: 4</code>.</li>
+            <li><code>DBT_ENV_NAME</code> set locally; CI derives it from branch names.</li>
+            <li><code>generate_schema_name.sql</code> and <code>drop_dev_schemas.sql</code> present in <code>macros/</code>.</li>
+            <li><code>mart_fullmoon_reviews</code> uses microbatch + <code>schema='mart'</code>.</li>
+            <li><code>fct_reviews</code> declares <code>event_time='review_date'</code>.</li>
+            <li><code>dim_hosts_cleansed</code> versions block with <code>latest_version: 2</code>.</li>
+            <li><code>dim_listings_w_hosts</code> references <code>ref('dim_hosts_cleansed', v=2)</code>.</li>
+            <li>Python demo models disabled with <code>enabled=False</code>.</li>
+            <li>GitHub workflows copied from reference repo with secrets configured.</li>
+            <li>Prod-build artifact exists for PR defer (at least one main merge).</li>
+          </ul>
+        </section>
+
+        <section class="section" id="interview">
+          <h2>Interview questions</h2>
+          <p class="muted">Answer each one out loud before opening it.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+            <details class="qa">
+              <summary>What is microbatch incremental and when would you choose it over merge?<span class="qa-tag">Production</span></summary>
+              <div class="qa-body">
+                <p>Microbatch rebuilds time-bounded slices of a model on an <code>event_time</code> column instead of merging row-by-row. Each batch (hour, day, month, year) is processed as a mini full-refresh of that window.</p>
+                <p>Choose it when historical slices may need recompute, when batch idempotency matters for audit, or when warehouse engines handle partition replacement cheaper than merge logic. Stick with merge/append when data is append-only and late-arriving rows are the main concern.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Why does microbatch require threads: 4 in profiles.yml?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p>A dbt bug since version 1.9 causes microbatch runs to hang when thread count is too low. The course sets <code>threads: 4</code> on dev, staging, and prod outputs as a workaround.</p>
+                <p>If a microbatch run shows no progress and no warehouse queries, check threads before rewriting SQL. This is operational knowledge teams learn after a stuck CI job.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What does event_time do and where must it be configured?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p><code>event_time</code> names the column dbt uses to partition microbatch windows. It must appear in the model config for every node in a microbatch chain — the fact (<code>fct_reviews</code>) and the downstream mart (<code>mart_fullmoon_reviews</code>).</p>
+                <p>CLI flags <code>--event-time-start</code> and <code>--event-time-end</code> optionally narrow which batches run in a given invocation.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How do dbt model versions work without renaming ref() everywhere?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>YAML declares <code>versions:</code> with <code>v: 1</code> pointing at <code>defined_in: dim_hosts_cleansed</code> and v2 living in <code>dim_hosts_cleansed_v2.sql</code>. <code>latest_version: 2</code> makes bare <code>ref('dim_hosts_cleansed')</code> resolve to v2.</p>
+                <p>Downstream models pin explicitly with <code>ref('dim_hosts_cleansed', v=2)</code> during migration. v1 carries <code>deprecation_date</code> to warn consumers before removal.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What is the difference between deprecating and disabling a model?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p>Deprecation (<code>deprecation_date</code>) keeps the model in the DAG but emits warnings when it is built or referenced. Consumers still compile until the model is removed.</p>
+                <p><code>enabled: false</code> removes the node from execution entirely — it will not run on <code>dbt build</code>. The course disables expensive Python models (<code>dim_fullmoon</code>, <code>dim_review_sentiment</code>) this way.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How do dev and prod targets differ in the course profiles.yml?<span class="qa-tag">Production</span></summary>
+              <div class="qa-body">
+                <p>Both share credentials via <code>env_var()</code>. Dev uses <code>schema: "DBT_{{ env_var('DBT_ENV_NAME') | upper | trim }}"</code> for personal isolation. Prod uses <code>schema: PROD</code> plus the custom schema macro for semantic names like <code>MART</code>.</p>
+                <p>Switch targets with <code>--target prod</code> or <code>--target dev</code>. Default is <code>target: dev</code> in the profile.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Explain generate_schema_name and why prod checks target.name.<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>The macro overrides dbt's default schema concatenation. When a model sets <code>schema='mart'</code>, prod returns <code>MART</code> only. Non-prod targets prefix with <code>target.schema</code> → <code>DBT_MYDEV_MART</code>.</p>
+                <p>Checking <code>target.name == 'prod'</code> keeps staging and dev on the prefixed pattern so experiments never write unprefixed production-like schema names.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What does --defer do and why does Slim CI use it?<span class="qa-tag">Cost</span></summary>
+              <div class="qa-body">
+                <p><code>--defer</code> resolves unselected upstream <code>ref()</code> and <code>source()</code> nodes against relations recorded in the comparison manifest — typically production — instead of building them in the dev schema.</p>
+                <p>Slim CI selects <code>state:modified+</code> and defers everything else so a one-line mart change does not rebuild multi-gigabyte facts in a throwaway PR schema. That is the primary warehouse cost savings.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What is --favor-state and when do you need it?<span class="qa-tag">Troubleshooting</span></summary>
+              <div class="qa-body">
+                <p>When both a local dev copy and a deferred prod relation exist, dbt normally prefers the local table. <code>--favor-state</code> forces the deferred relation from the comparison manifest to win.</p>
+                <p>Use it in CI when partial local runs left stale upstream tables that would shadow correct prod data during validation.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What is state:modified and what artifact does it require?<span class="qa-tag">Production</span></summary>
+              <div class="qa-body">
+                <p><code>state:modified</code> selects nodes whose SQL, config, or dependencies differ from a saved project state. Pass <code>--state path/to/artifacts</code> pointing at a directory containing <code>manifest.json</code> from a prior deploy.</p>
+                <p><code>state:modified+</code> adds downstream dependents. Prod CI uploads that manifest; PR CI downloads it before building.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How does drop_dev_schemas prevent catastrophic prod drops?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p>The macro reads <code>target.schema</code> and raises a compiler error unless the prefix starts with <code>DBT_</code>. Prod and staging schemas fail the guard before any <code>DROP SCHEMA</code> runs.</p>
+                <p>It then queries <code>information_schema.schemata</code> for all schemas matching the prefix and drops them with CASCADE — including custom suffix schemas like <code>DBT_MYDEV_MART</code>.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Why are the GitHub Actions workflows guarded with if: github.repository != ...?<span class="qa-tag">Production</span></summary>
+              <div class="qa-body">
+                <p>The bootcamp repo ships workflows as teaching references. The guard skips jobs on the official course repository where secrets are not configured, so student forks do not fail CI by default.</p>
+                <p>Production-ready copies live in <code>zoltanctoth/dbt-reference-production-repo</code>. Real deployments remove or adjust the guard and configure GitHub Secrets.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What does dbt retry do versus re-running dbt build?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p><code>dbt retry</code> reads <code>run_results.json</code> from the immediately prior invocation and reruns only failed or skipped nodes. Successful models are not repeated.</p>
+                <p>Re-running <code>dbt build</code> executes the full selection again. Retry is for fixing a mid-pipeline syntax error without paying twice for completed models.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What does the --empty flag do on dbt build --target prod?<span class="qa-tag">Certification</span></summary>
+              <div class="qa-body">
+                <p><code>--empty</code> creates relations with zero rows while still validating compilation, contracts, and DDL against the warehouse. The course uses it to smoke-test custom schema resolution on prod without loading data.</p>
+                <p>It is cheaper than a full prod build and catches schema macro mistakes before a real deploy.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How does Slim CI derive DBT_ENV_NAME from a branch name?<span class="qa-tag">Production</span></summary>
+              <div class="qa-body">
+                <p>The workflow reads <code>github.head_ref</code>, replaces <code>/</code> and <code>-</code> with underscores, uppercases the result, and writes it to <code>GITHUB_ENV</code>. Branch <code>feature/login</code> becomes <code>DBT_FEATURE_LOGIN</code> schema prefix.</p>
+                <p>The same sanitisation runs in pr-cleanup.yml so merged branch schemas are dropped with the matching prefix.</p>
+              </div>
+            </details>
+          </div>
+        </section>
+
+        <section class="section" id="practice">
+          <h2>Hands-on practice</h2>
+          <p class="muted">Run these from the <code>airbnb</code> folder with your virtualenv active and <code>_prod_profiles</code> configured.</p>
+          <ol class="practice-list">
+            <li class="practice">
+              <p class="practice-task">Set <code>DBT_ENV_NAME</code>, confirm connectivity with <code>dbt debug</code>, then run microbatch <code>mart_fullmoon_reviews</code> and verify it lands in <code>DBT_&lt;name&gt;_MART</code>.</p>
+              <span class="console-path">airbnb/_prod_profiles/profiles.yml · models/mart/mart_fullmoon_reviews.sql</span>
+              <p class="practice-expect"><code>dbt debug</code> passes; run completes; <code>SHOW SCHEMAS LIKE 'DBT_%MART'</code> in Snowflake shows the mart schema.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Ensure <code>threads: 4</code> in all profile outputs.</li>
+                    <li><code>. ..\set-env.ps1</code> then <code>$env:DBT_ENV_NAME="MYDEV"</code> (PowerShell).</li>
+                    <li><code>dbt debug --profiles-dir _prod_profiles</code></li>
+                    <li><code>dbt run -s mart_fullmoon_reviews --profiles-dir _prod_profiles</code></li>
+                  </ol>
+<pre data-lang="shell"><code>dbt debug --profiles-dir _prod_profiles
+dbt run -s mart_fullmoon_reviews --profiles-dir _prod_profiles</code></pre>
+                  <p class="muted">Undo: <code>dbt run-operation drop_dev_schemas --profiles-dir _prod_profiles</code></p>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Compile prod state to <code>target-prod/</code>, list modified models against dev, then run one modified model with defer.</p>
+              <span class="console-path">airbnb/ · terminal</span>
+              <p class="practice-expect"><code>dbt ls --state target-prod --select state:modified</code> lists at least your changed node; defer run succeeds without rebuilding entire upstream DAG.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li><code>dbt compile --profiles-dir _prod_profiles --target prod --target-path target-prod</code></li>
+                    <li>Make a trivial comment change to a model file.</li>
+                    <li><code>dbt ls --profiles-dir _prod_profiles --target dev --state target-prod --select state:modified</code></li>
+                    <li><code>dbt run --profiles-dir _prod_profiles --target dev --state target-prod --select state:modified --defer</code></li>
+                  </ol>
+                  <p class="muted">Undo: revert the comment; run <code>drop_dev_schemas</code> if needed.</p>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Add the versioning block to <code>schema.yml</code>, create <code>dim_hosts_cleansed_v2.sql</code>, and pin <code>dim_listings_w_hosts</code> to <code>ref('dim_hosts_cleansed', v=2)</code>.</p>
+              <span class="console-path">airbnb/models/schema.yml · models/dim/dim_hosts_cleansed_v2.sql</span>
+              <p class="practice-expect"><code>dbt build -s dim_listings_w_hosts+</code> succeeds; null host names show as <code>N/A</code> in output.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Copy v2 SQL and versions YAML from this section into the project.</li>
+                    <li>Update hosts CTE in <code>dim_listings_w_hosts.sql</code> with <code>v=2</code>.</li>
+                    <li><code>dbt build -s dim_hosts_cleansed dim_listings_w_hosts</code></li>
+                  </ol>
+<pre data-lang="sql"><code>FROM {{ ref('dim_hosts_cleansed', v=2) }}</code></pre>
+                  <p class="muted">Undo: revert files to pre-versioning state from git.</p>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Run a microbatch full refresh on a narrow event-time window and observe batch logging in the terminal.</p>
+              <span class="console-path">airbnb/models/mart/mart_fullmoon_reviews.sql</span>
+              <p class="practice-expect">Command completes; logs mention batch years between start and end dates only.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Run with explicit window flags from the course script.</li>
+                  </ol>
+<pre data-lang="shell"><code>dbt run -s mart_fullmoon_reviews --full-refresh \
+  --event-time-start "2020-01-01" --event-time-end "2023-01-01" \
+  --profiles-dir _prod_profiles</code></pre>
+                  <p class="muted">Undo: normal incremental run without <code>--full-refresh</code> restores steady-state behaviour.</p>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Simulate a failed build, fix the error, and resume with <code>dbt retry</code>.</p>
+              <span class="console-path">airbnb/models/dim/dim_listings_cleansed.sql</span>
+              <p class="practice-expect">First build fails; after fix, retry runs only the failed model, not the entire project.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Introduce a syntax error in <code>dim_listings_cleansed.sql</code>.</li>
+                    <li><code>dbt build --profiles-dir _prod_profiles -s dim_listings_cleansed</code> — observe failure.</li>
+                    <li>Fix the syntax error.</li>
+                    <li><code>dbt retry --profiles-dir _prod_profiles</code></li>
+                  </ol>
+                  <p class="muted">Undo: ensure file is valid; no warehouse cleanup needed for a failed run.</p>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Run <code>dbt build --target prod --profiles-dir _prod_profiles --empty</code> and confirm custom schemas resolve to bare names (MART) not PROD_MART.</p>
+              <span class="console-path">airbnb/macros/generate_schema_name.sql</span>
+              <p class="practice-expect">Build completes with zero rows; Snowflake shows schema MART under AIRBNB database when mart models are selected.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Ensure prod credentials and env vars are set.</li>
+                    <li><code>dbt build --target prod --profiles-dir _prod_profiles --empty -s mart_fullmoon_reviews</code></li>
+                    <li>In Snowflake: <code>SHOW TABLES IN SCHEMA AIRBNB.MART;</code></li>
+                  </ol>
+                  <p class="muted">Undo: drop empty test relations if this is a shared prod account; prefer staging target for first macro test.</p>
+                </div>
+              </details>
+            </li>
+          </ol>
+        </section>
+
+        <section class="section" id="recap">
+          <h2>Recap</h2>
+          <div class="recap">
+            <ul class="checklist">
+              <li>Microbatch uses <code>incremental_strategy='microbatch'</code>, <code>event_time</code>, <code>begin</code>, and <code>batch_size</code> to rebuild time slices instead of row merges.</li>
+              <li>Set <code>threads: 4</code> in profiles before microbatch runs — lower values can hang (dbt bug since 1.9).</li>
+              <li><code>mart_fullmoon_reviews</code> ends as microbatch incremental in schema <code>mart</code>; join logic unchanged from <a href="s09-seeds-sources.html#mart-fullmoon">Section 9</a>.</li>
+              <li>Model versions keep one logical name; v2 lives in <code>dim_hosts_cleansed_v2.sql</code>; <code>dim_listings_w_hosts</code> uses <code>ref('dim_hosts_cleansed', v=2)</code>.</li>
+              <li><code>deprecation_date</code> warns consumers; <code>enabled: false</code> removes nodes from execution.</li>
+              <li>Dev target schema is <code>DBT_{{ env_var('DBT_ENV_NAME') }}</code>; prod uses <code>PROD</code> plus clean custom schemas via macro.</li>
+              <li><code>generate_schema_name</code> prefixes custom schemas in non-prod; prod uses bare custom names when <code>target.name == 'prod'</code>.</li>
+              <li><code>drop_dev_schemas</code> drops only schemas starting with <code>DBT_</code>; refuses prod/staging targets.</li>
+              <li><code>--state</code> plus <code>state:modified+</code> selects changed nodes; prod manifest uploaded by <code>prod-build.yml</code>.</li>
+              <li><code>--defer</code> reads upstream from prod artifact; <code>--favor-state</code> prefers deferred refs over stale local tables.</li>
+              <li>Slim CI workflows are reference-only in the bootcamp repo; live pattern in zoltanctoth/dbt-reference-production-repo.</li>
+              <li><code>dbt retry</code> resumes failed nodes from the prior run without repeating successes.</li>
+            </ul>
+
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Topic</th><th>Key artifact or file</th><th>Key command</th></tr></thead>
+                <tbody>
+                  <tr><td>Microbatch</td><td><code>mart_fullmoon_reviews.sql</code></td><td><code>dbt run -s mart_fullmoon_reviews</code></td></tr>
+                  <tr><td>Versioning</td><td><code>schema.yml</code> versions block</td><td><code>ref('dim_hosts_cleansed', v=2)</code></td></tr>
+                  <tr><td>Profiles</td><td><code>_prod_profiles/profiles.yml</code></td><td><code>dbt debug --profiles-dir _prod_profiles</code></td></tr>
+                  <tr><td>Custom schema</td><td><code>generate_schema_name.sql</code></td><td><code>dbt build --target prod --empty</code></td></tr>
+                  <tr><td>Cleanup</td><td><code>drop_dev_schemas.sql</code></td><td><code>dbt run-operation drop_dev_schemas</code></td></tr>
+                  <tr><td>State / defer</td><td><code>manifest.json</code> in prod-target</td><td><code>dbt build --select state:modified+ --defer --state ./prod-target</code></td></tr>
+                  <tr><td>CI</td><td><code>.github/workflows/*.yml</code></td><td>See zoltanctoth/dbt-reference-production-repo</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <p style="margin-top:1rem;">
+              <button type="button" data-complete="section-19">Mark complete</button>
+            </p>
+          </div>
+        </section>
+
+
+      </div>
+
+      <aside class="toc" aria-label="On this page">
+        <strong>On this page</strong>
+        <ol>
+          <li><a href="#lectures">Lectures</a></li>
+          <li><a href="#microbatching">Microbatching</a></li>
+          <li><a href="#model-lifecycle">Model lifecycle</a></li>
+          <li><a href="#targets">Targets</a></li>
+          <li><a href="#env-vars">Environment variables</a></li>
+          <li><a href="#custom-schemas">Custom schemas</a></li>
+          <li><a href="#schema-cleanup">Schema cleanup</a></li>
+          <li><a href="#state">State comparison</a></li>
+          <li><a href="#defer">Deferring state</a></li>
+          <li><a href="#ci-pipelines">Slim CI pipelines</a></li>
+          <li><a href="#deeper">Deeper detail</a></li>
+          <li><a href="#interview">Interview questions</a></li>
+          <li><a href="#practice">Hands-on practice</a></li>
+          <li><a href="#recap">Recap</a></li>
+        </ol>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<footer class="footer">The Complete dbt Bootcamp: Zero to Hero · Section 19 · Offline study edition</footer>
+</body>
+</html>

@@ -1,0 +1,887 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="dbt bootcamp Section 3: data warehouses, OLTP versus OLAP, columnar storage, data lakes, lakehouses, and the Snowflake setup the Airbnb course uses.">
+<title>Section 3 — Warehouses, Lakes and Lakehouses | The Complete dbt Bootcamp Notes</title>
+<link rel="stylesheet" href="assets/dbt.css">
+<script defer src="assets/search-index.js"></script>
+<script defer src="assets/code-highlight.js"></script>
+<script defer src="assets/dbt.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">Course section 3 of 22 · The Complete dbt Bootcamp: Zero to Hero</p>
+    <h1>Warehouses, Lakes and Lakehouses</h1>
+    <p class="subtitle">Where dbt actually runs. The storage and compute layer underneath every model in this course is a Snowflake warehouse, and understanding why that layer is shaped the way it is explains half the performance and cost surprises you will meet later.</p>
+    <div class="hero-meta">
+      <span class="chip">6 lectures · ~30min</span>
+      <span class="chip">Theory foundation</span>
+      <span class="chip">dbt storage layer</span>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <nav class="pager" aria-label="Section navigation">
+    <a href="s02-data-maturity.html">← The Data Maturity Model</a>
+    <a href="index.html">Course contents</a>
+    <a href="s04-modern-data-stack.html">Next: The Modern Data Stack and ELT →</a>
+  </nav>
+
+  <main id="main">
+    <div class="layout">
+      <div class="content">
+
+        <section class="section" id="lectures">
+          <h2>Lectures in this section</h2>
+          <ol class="lecture-list">
+            <li class="lecture">
+              <a class="lec-title" href="#what-is-a-data-warehouse">What a data warehouse is</a>
+              <span class="lec-time">~5:30</span>
+              <span class="lec-src">Theory lecture</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#oltp-vs-olap">OLTP versus OLAP</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">Theory lecture</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#columnar-storage">Columnar storage and why analytics is fast on it</a>
+              <span class="lec-time">~6:00</span>
+              <span class="lec-src">Theory lecture</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#data-lakes">Data lakes and schema-on-read</a>
+              <span class="lec-time">~5:30</span>
+              <span class="lec-src">Theory lecture</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#lakehouse">The lakehouse and open table formats</a>
+              <span class="lec-time">~4:30</span>
+              <span class="lec-src">Theory lecture</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#choosing-between">Choosing between the three</a>
+              <span class="lec-time">~3:30</span>
+              <span class="lec-src">Theory lecture</span>
+            </li>
+          </ol>
+          <p class="muted">Pure theory, but every example ties back to Snowflake and the three raw Airbnb tables you load in <a href="s06-setup.html">Section 6</a>. When the course says &ldquo;the warehouse does the work&rdquo;, this section is what that means.</p>
+        </section>
+
+        <section class="section" id="what-is-a-data-warehouse">
+          <h2>What a data warehouse is</h2>
+          <p class="lead">A data warehouse is a central store optimised for analytical queries over integrated, historical data. It is not where your application writes orders in real time; it is where analysts and downstream pipelines read a consistent picture of the business after extract and load have finished.</p>
+
+          <p>Bill Inmon's definition still holds: a warehouse is <strong>subject-oriented</strong> (organised around business concepts like customers or listings rather than application screens), <strong>integrated</strong> (one agreed definition per entity, even when ten source systems disagree), <strong>time-variant</strong> (history is preserved or reconstructable), and <strong>non-volatile</strong> (data arrives on a schedule; you do not delete a row because someone cancelled an order in the app). Those four properties are what separate a warehouse from a copy of production tables dumped into a folder.</p>
+
+          <h3>Inmon versus Kimball</h3>
+          <p><strong>Inmon</strong> advocates a normalized enterprise data warehouse first: third-normal-form entities shared across the company, with departmental data marts built on top. The benefit is a single source of truth at the entity level; the cost is a long upfront modelling effort and many joins at query time unless you add marts anyway.</p>
+          <p><strong>Kimball</strong> starts from dimensional modelling: star schemas with conformed dimensions that different fact tables reuse. You ship business-facing marts faster because each mart is a wide, denormalized table tuned for a subject area. The course's Airbnb project is Kimball-flavoured &mdash; <code>dim_listings_cleansed</code>, <code>dim_hosts_cleansed</code>, <code>fct_reviews</code> &mdash; even though dbt does not force either methodology. <a href="s05-dimensional-modelling.html">Section 5</a> goes deep on the dimensional side.</p>
+
+          <h3>Cloud warehouse: separating storage and compute</h3>
+          <p>On-premise warehouses like early Oracle or Teradata bundles tied storage and compute to the same hardware purchase. Cloud warehouses &mdash; Snowflake, BigQuery, Redshift Serverless, Databricks SQL &mdash; decouple them. Your data sits in managed object storage (or a storage layer you never resize by hand); you spin up compute clusters only when something needs to run.</p>
+          <p>That separation changed cost economics entirely. You no longer leave a massive server running overnight because the storage is attached to it. You suspend compute when idle, scale warehouse size up for a heavy dbt run, and scale down for a dashboard that only scans a mart. dbt fits this model because every model run is a burst of compute against data that already lives in storage.</p>
+
+          <div class="diagram">
+            <p class="diagram-title">Sources through loader to warehouse to BI</p>
+            <div class="flow">
+              <div class="node is-source"><b>raw_listings</b><small>CSV · app DB · API</small></div>
+              <div class="node is-source"><b>raw_reviews</b><small>append-only feed</small></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-compute"><b>Load</b><small>Snowpipe · Fivetran · COPY</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-store pulse"><b>AIRBNB.RAW</b><small>integrated store</small></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-model"><b>dbt</b><small>transform in DEV</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-serve"><b>BI</b><small>Preset · Looker · SQL</small></div>
+            </div>
+          </div>
+
+          <div class="callout info"><strong>dbt assumes the warehouse already exists.</strong> These notes use Snowflake, but the same role applies on BigQuery datasets, Databricks Unity Catalog schemas, or Postgres if that is what you have. The adapter changes; the pattern does not.</div>
+
+          <h3>What lives in the warehouse for this course</h3>
+          <p>After setup, Snowflake holds an <code>AIRBNB</code> database with at least two schemas. <code>RAW</code> holds the untouched landing tables &mdash; <code>raw_listings</code>, <code>raw_hosts</code>, <code>raw_reviews</code> &mdash; that dbt reads through <code>source()</code>. <code>DEV</code> is where your transformed models land during development. Production teams add a <code>PROD</code> schema later; the course stays in dev until <a href="s19-production.html">Section 19</a>.</p>
+
+          <h3>Warehouse versus database versus schema</h3>
+          <p>Snowflake naming trips up beginners because everyday English uses &ldquo;database&rdquo; and &ldquo;warehouse&rdquo; loosely. In Snowflake specifically:</p>
+          <ul>
+            <li><strong>Virtual warehouse</strong> &mdash; compute cluster (<code>COMPUTE_WH</code>). No data stored here.</li>
+            <li><strong>Database</strong> &mdash; top-level container for schemas (<code>AIRBNB</code>).</li>
+            <li><strong>Schema</strong> &mdash; namespace for tables and views (<code>RAW</code>, <code>DEV</code>).</li>
+            <li><strong>Table</strong> &mdash; persisted rows (<code>raw_listings</code>).</li>
+          </ul>
+          <p>When dbt compiles <code>{{ source('airbnb', 'raw_listings') }}</code> it resolves to a three-part name like <code>AIRBNB.RAW.RAW_LISTINGS</code>. The warehouse is chosen separately in <code>profiles.yml</code> and can change without moving data.</p>
+
+          <h3>ETL versus ELT preview</h3>
+          <p>Classic ETL transformed data <em>before</em> loading into the warehouse, often on a separate server with limited scale. ELT loads raw data first, then transforms inside the warehouse using its columnar engine. dbt is the T in ELT: it assumes raw tables already exist and pushes all transformation SQL to Snowflake. That only makes economic sense because warehouses separated storage from compute and made large scans affordable. <a href="s04-modern-data-stack.html">Section 4</a> names the load tools that feed the raw layer.</p>
+        </section>
+
+        <section class="section" id="oltp-vs-olap">
+          <h2>OLTP versus OLAP</h2>
+          <p class="lead">OLTP (online transaction processing) systems record business events one row at a time with strict consistency. OLAP (online analytical processing) systems scan and aggregate large histories to answer questions nobody asked when the row was written. Running heavy OLAP on an OLTP database is one of the most expensive mistakes in data engineering.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Dimension</th>
+                  <th>OLTP</th>
+                  <th>OLAP / warehouse</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td>Primary workload</td><td>Insert, update, delete single rows or small batches</td><td>Scan, filter, aggregate millions of rows</td></tr>
+                <tr><td>Storage layout</td><td>Row-oriented (all columns of one row together)</td><td>Column-oriented (all values of one column together)</td></tr>
+                <tr><td>Typical query</td><td><code>SELECT * FROM orders WHERE id = 48291</code></td><td><code>SELECT room_type, COUNT(*) FROM listings GROUP BY 1</code></td></tr>
+                <tr><td>Indexes</td><td>B-tree on primary and foreign keys</td><td>Clustering keys, partition pruning, sometimes none</td></tr>
+                <tr><td>Normalisation</td><td>Highly normalized to avoid update anomalies</td><td>Denormalized stars and wide marts for read speed</td></tr>
+                <tr><td>Concurrency pattern</td><td>Thousands of short concurrent transactions</td><td>Fewer, longer queries; batch dbt runs</td></tr>
+                <tr><td>Latency target</td><td>Milliseconds</td><td>Seconds to minutes acceptable</td></tr>
+                <tr><td>Example systems</td><td>PostgreSQL, MySQL, SQL Server (app DB)</td><td>Snowflake, BigQuery, Redshift, Synapse</td></tr>
+                <tr><td>Wrong-tool symptom</td><td>Analytics timeouts; replica lag; app slowdown</td><td>Slow single-row lookups; expensive UPSERTs at scale</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Why a GROUP BY on production Postgres hurts the app</h3>
+          <p>Imagine pointing Metabase at the same Postgres instance that powers an Airbnb booking flow. A analyst runs:</p>
+
+<pre data-lang="sql" data-explain="An innocent analytics query that becomes expensive on a row store serving OLTP traffic."><code>SELECT
+  room_type,
+  AVG(minimum_nights),
+  COUNT(*)
+FROM listings
+GROUP BY room_type;</code></pre>
+
+          <p>On a row store, Postgres must read every column of every row even though only <code>room_type</code> and <code>minimum_nights</code> matter. The query holds buffers and CPU while bookings wait. Replication to a read replica still copies WAL traffic; heavy analytics on the replica can lag it minutes behind production. Locks and vacuum activity compound the pain.</p>
+          <p>The fix is architectural: replicate or export into a columnar warehouse, then point dbt and BI at that copy. The course's <code>raw_listings</code> table is exactly such a copy &mdash; loaded once from CSV via <code>COPY INTO</code>, never updated by a booking app.</p>
+
+          <div class="grid-2">
+            <div class="mini-card">
+              <h4>OLTP on Postgres</h4>
+              <p>Rows stored together. Index seek on <code>id</code> is instant. Full-table aggregation reads every byte of every row and competes with checkout traffic.</p>
+            </div>
+            <div class="mini-card">
+              <h4>OLAP on Snowflake</h4>
+              <p>Columns stored separately. The same <code>GROUP BY</code> reads two columns across micro-partitions, uses parallel workers, and never touches the app database.</p>
+            </div>
+          </div>
+
+          <div class="diagram">
+            <p class="diagram-title">OLTP application path versus OLAP analytics path</p>
+            <div class="dag">
+              <div class="dag-col">
+                <p class="dag-label">OLTP path</p>
+                <div class="node is-source"><b>Booking app</b></div>
+                <div class="node is-store"><b>Postgres</b><small>row store · ms latency</small></div>
+              </div>
+              <div class="dag-col">
+                <p class="dag-label">Correct analytics path</p>
+                <div class="node is-compute"><b>Load / replicate</b></div>
+                <div class="node is-store pulse"><b>Snowflake RAW</b></div>
+                <div class="node is-model"><b>dbt DEV</b></div>
+                <div class="node is-serve"><b>BI query</b></div>
+              </div>
+            </div>
+          </div>
+
+          <h3>Read replicas are not a warehouse</h3>
+          <p>Teams sometimes promote a Postgres read replica as &ldquo;the analytics database.&rdquo; It removes load from the primary but keeps row-oriented storage, OLTP indexing, and vacuum maintenance. Heavy scans still hurt; you still lack columnar compression and warehouse-scale parallelism. A replica is a stopgap; a warehouse is the destination.</p>
+
+          <div class="callout warn"><strong>Do not point dbt at production OLTP.</strong> Even read-only credentials do not protect you from scan cost and lock contention. Load into the warehouse first; transform there.</div>
+        </section>
+
+        <section class="section" id="columnar-storage">
+          <h2>Columnar storage</h2>
+          <p class="lead">Analytical warehouses are fast because they store columns separately, compress aggressively, and skip data that cannot match your filter. Every dbt model is a <code>SELECT</code>; how much data that <code>SELECT</code> touches is the main lever on runtime and bill.</p>
+
+          <h3>Row layout versus column layout</h3>
+          <p>In a row store, one listing record sits contiguously: <code>id, name, room_type, price, ...</code>. Fetching one row by primary key is cheap. Aggregating <code>price</code> across ten million listings reads ten million full rows.</p>
+          <p>In a column store, all <code>price</code> values sit together, then all <code>room_type</code> values, and so on. A query that needs three of forty columns reads roughly three fortieths of the bytes, before compression.</p>
+
+          <h3>Compression and encoding</h3>
+          <p>Columns compress well because adjacent values tend to repeat. <strong>Run-length encoding</strong> stores &ldquo;<code>Entire home/apt</code> repeated 40,000 times&rdquo; instead of 40,000 identical strings. <strong>Dictionary encoding</strong> maps low-cardinality strings to integer codes &mdash; every <code>sentiment</code> value in <code>raw_reviews</code> might become a one-byte code.</p>
+          <p>Predicate pushdown means the engine applies your <code>WHERE review_date &gt; '2024-01-01'</code> while reading compressed column chunks, skipping whole chunks that fail min/max metadata.</p>
+
+          <h3>Concrete scan example</h3>
+          <p>Suppose <code>raw_listings</code> has forty columns totalling 2 KB per row and one million rows (~2 GB logical). A narrow projection:</p>
+
+<pre data-lang="sql" data-explain="Only three columns needed for a room-type breakdown — the columnar engine should scan a fraction of total table bytes."><code>SELECT
+  room_type,
+  minimum_nights,
+  host_id
+FROM AIRBNB.RAW.raw_listings;</code></pre>
+
+          <p>On Snowflake, the query profile will show bytes scanned closer to 150 MB than 2 GB. Add a selective filter on <code>created_at</code> and partition pruning drops further chunks entirely.</p>
+
+          <h3>Snowflake micro-partitions and clustering</h3>
+          <p>Snowflake splits each table into immutable <strong>micro-partitions</strong> of roughly 50&ndash;500 MB of compressed data. Each micro-partition stores min/max metadata per column. A filter on <code>listing_id</code> or <code>date</code> lets the optimizer skip partitions that cannot contain matching values.</p>
+          <p><strong>Clustering</strong> (automatic or explicit on a key like <code>review_date</code>) co-locates related rows in the same micro-partitions so pruning works better over time. The course dataset is small enough that clustering barely matters; on <code>fct_reviews</code> at production scale, clustering on the incremental watermark column is standard practice.</p>
+
+          <h3>Why SELECT * is expensive</h3>
+          <p>Beginners write <code>SELECT *</code> in staging models because it is fast to type. In a columnar warehouse it is an anti-pattern: dbt still generates plain SQL, and the warehouse charges for every column you read. A staging model with <code>SELECT *</code> from <code>raw_reviews</code> pulls <code>comments</code> &mdash; large text &mdash; even when downstream models only need ids and dates.</p>
+          <p>The course's <code>src_listings</code> lists columns explicitly for a reason. When you add a column to a raw table, you add it once in staging; you do not silently widen every downstream scan.</p>
+
+          <div class="callout cost"><strong>Wide ephemeral chains multiply scans.</strong> An ephemeral model inlines into every child. If the inlined CTE uses <code>SELECT *</code>, each downstream model pays for the full width again. Explicit column lists in staging pay off immediately.</div>
+
+          <h3>Columnar engines compared briefly</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Platform</th><th>Storage unit</th><th>Pruning mechanism</th></tr></thead>
+              <tbody>
+                <tr><td>Snowflake</td><td>Micro-partitions (~16MB logical)</td><td>Min/max metadata per column per partition</td></tr>
+                <tr><td>BigQuery</td><td>Columnar blocks in Capacitor</td><td>Partition columns and clustering fields</td></tr>
+                <tr><td>Redshift</td><td>1 MB disk blocks per slice</td><td>Sort keys and zone maps</td></tr>
+                <tr><td>Databricks Delta</td><td>Parquet files</td><td>Data skipping stats in transaction log</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>The names differ; the idea is identical: skip IO on data that cannot match the query. dbt models that filter on partition or cluster keys early &mdash; especially incremental watermarks on <code>fct_reviews</code> &mdash; pay less on every platform.</p>
+
+          <h3>Partition pruning on raw_reviews</h3>
+          <p>Even without explicit partitioning, Snowflake pruning helps on <code>date</code> once tables grow. This pattern mirrors what you will use on the incremental fact:</p>
+
+<pre data-lang="sql" data-explain="Filter early on the event column so micro-partitions with no matching dates are skipped entirely."><code>SELECT
+  listing_id,
+  sentiment,
+  COUNT(*) AS review_count
+FROM AIRBNB.RAW.raw_reviews
+WHERE date BETWEEN '2024-06-01' AND '2024-06-30'
+GROUP BY 1, 2;</code></pre>
+        </section>
+
+        <section class="section" id="data-lakes">
+          <h2>Data lakes and schema-on-read</h2>
+          <p class="lead">A data lake stores files in cheap object storage (S3, ADLS, GCS) and applies structure when someone reads them. That flexibility lowered the bar to landing data but created &ldquo;data swamps&rdquo; when nobody enforced quality at write time.</p>
+
+          <h3>Object storage and open file formats</h3>
+          <p>Lakes put blobs in buckets with horizontal scale and pennies-per-gigabyte pricing. Common formats:</p>
+          <ul>
+            <li><strong>Parquet</strong> &mdash; columnar, splittable, the de facto analytics format.</li>
+            <li><strong>ORC</strong> &mdash; similar columnar design, common in Hive-era Hadoop stacks.</li>
+            <li><strong>Avro</strong> &mdash; row-oriented with embedded schema, popular for Kafka landing zones.</li>
+            <li><strong>JSON / CSV</strong> &mdash; human-readable, schema-light, expensive to query at scale.</li>
+          </ul>
+          <p>The Airbnb CSVs in the course (<code>s3://dbt-datasets/listings.csv</code> and siblings) are loaded into Snowflake tables, not left as lake files. In a lake-first architecture the same files would land as Parquet under a prefix like <code>s3://airbnb/raw/listings/</code> and be registered in a catalog.</p>
+
+          <h3>Why lakes were attractive</h3>
+          <p>Teams could dump everything first and model later. Data scientists could read the same S3 objects with Spark. Storage cost stayed low because object storage undercuts proprietary warehouse storage on paper. The downside arrived six months later: duplicate files, unknown schemas, no ACID guarantees, and queries that scanned entire buckets because nobody maintained partition columns.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Aspect</th>
+                  <th>Schema-on-write (warehouse table)</th>
+                  <th>Schema-on-read (lake files)</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td>When schema is enforced</td><td>At load time &mdash; bad rows fail the INSERT/COPY</td><td>At query time &mdash; each tool interprets the file</td></tr>
+                <tr><td>Cost of schema change</td><td><code>ALTER TABLE</code> or dbt model change plus rebuild</td><td>Rewrite files or maintain multiple versions in the prefix</td></tr>
+                <tr><td>Typical failure mode</td><td>Load job fails loudly; table unchanged</td><td>Load succeeds; silent type coercion or NULLs in reports</td></tr>
+                <tr><td>Who catches the error</td><td>Pipeline engineer at ingest</td><td>Analyst when a dashboard looks wrong</td></tr>
+                <tr><td>Course example</td><td><code>COPY INTO raw_listings</code> with explicit column list</td><td>Would be <code>spark.read.parquet</code> without a central catalog</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="analogy"><strong>Everyday analogy &mdash;</strong> schema-on-write is a library with a card catalogue: nothing gets shelved unless it matches a slot. Schema-on-read is a warehouse of unlabelled boxes: you can store anything, but finding a book means opening boxes until you get lucky.</div>
+
+          <h3>Data swamp symptoms</h3>
+          <p>A lake becomes a swamp when:</p>
+          <ul>
+            <li>Multiple teams write to the same prefix with incompatible folder conventions.</li>
+            <li>Nobody owns deduplication &mdash; the same export lands daily with overlapping files.</li>
+            <li>Schema drift is discovered in a notebook, not at ingest.</li>
+            <li>PII sits in plain CSV because access control is only at the bucket level.</li>
+          </ul>
+          <p>The course avoids this by loading typed tables in <code>RAW</code> immediately. dbt tests in <a href="s11-tests.html">Section 11</a> then guard the transformed layer.</p>
+
+          <h3>Medallion architecture on a lake</h3>
+          <div class="stack">
+            <div class="layer"><strong>Bronze</strong> &mdash; raw files exactly as landed (<code>s3://airbnb/bronze/reviews/</code>).</div>
+            <div class="layer"><strong>Silver</strong> &mdash; cleaned, typed, deduplicated Parquet (what <code>src_reviews</code> would be if it wrote files).</div>
+            <div class="layer"><strong>Gold</strong> &mdash; business marts (<code>mart_fullmoon_reviews</code>).</div>
+          </div>
+          <p>On Snowflake the same idea maps to schemas: <code>RAW</code> is bronze, dbt staging is silver logic, dimensions and facts are gold. The labels differ; the progression does not.</p>
+        </section>
+
+        <section class="section" id="lakehouse">
+          <h2>The lakehouse and open table formats</h2>
+          <p class="lead">A lakehouse adds warehouse-like guarantees &mdash; ACID transactions, metadata, time travel, schema evolution &mdash; on top of cheap object storage through an open <em>table format</em>. It is the industry's attempt to stop choosing between flexible lakes and trustworthy warehouses.</p>
+
+          <h3>Delta Lake, Iceberg and Hudi</h3>
+          <p>Three open table formats dominate:</p>
+          <ul>
+            <li><strong>Delta Lake</strong> (Databricks) &mdash; transaction log in <code>_delta_log</code>; tight Spark integration.</li>
+            <li><strong>Apache Iceberg</strong> &mdash; vendor-neutral manifest files; Snowflake external and managed Iceberg tables; engine support across Spark, Trino, Flink.</li>
+            <li><strong>Apache Hudi</strong> &mdash; strong incremental upsert and change-data-capture patterns.</li>
+          </ul>
+          <p>All three store data as Parquet (or similar) files plus a metadata layer that tracks which files belong to which snapshot.</p>
+
+          <h3>What a table format actually is</h3>
+          <p>A table format is not a new file type. It is a <strong>manifest over Parquet files</strong>: a snapshot id, schema version, partition statistics, and the list of file paths that constitute the table at a point in time. Queries read the manifest first, prune files, then scan Parquet column chunks &mdash; same columnar benefits as a native warehouse table, with storage on S3.</p>
+          <p>ACID means concurrent writers do not corrupt each other; time travel means you can <code>SELECT</code> yesterday's snapshot; schema evolution means adding a column does not require rewriting every historical file immediately.</p>
+
+          <h3>Databricks and Snowflake Iceberg support</h3>
+          <p>Databricks built the lakehouse narrative around Delta Lake and Unity Catalog for governance. Snowflake added Iceberg tables (managed and external) so the same Snowflake SQL and role model can sit over S3-stored Iceberg while still using virtual warehouses for compute. BigQuery has BigLake; Redshift supports external tables over open formats.</p>
+          <p>dbt has adapters for Snowflake, Databricks, BigQuery and others &mdash; you point <code>profiles.yml</code> at the platform and keep writing models. Platform choice moves to setup; the project structure stays familiar. <a href="s06-setup.html">Section 6</a> walks through Snowflake specifically.</p>
+
+          <div class="callout info"><strong>Iceberg does not change dbt's role.</strong> dbt still compiles <code>SELECT</code> statements and wraps them in DDL. Whether the underlying relation is a native Snowflake table or an Iceberg table changes adapter configuration and a few materialization details, not the modelling workflow.</div>
+
+          <h3>Time travel and snapshots</h3>
+          <p>Lakehouse formats expose snapshot ids or timestamps for historical reads. Snowflake native tables offer Time Travel for up to 90 days (edition-dependent). dbt snapshots are different: they build explicit Type 2 history tables you control in SQL. All three answer &ldquo;what did we know then?&rdquo; at different layers &mdash; storage engine versus transformation project.</p>
+
+          <div class="diagram">
+            <p class="diagram-title">Lakehouse metadata layer over Parquet files</p>
+            <div class="stack">
+              <div class="layer"><strong>Query engine</strong> &mdash; Snowflake, Spark, Trino reads manifest first.</div>
+              <div class="layer"><strong>Table format</strong> &mdash; Iceberg / Delta manifest: schema, snapshots, file list.</div>
+              <div class="layer"><strong>Object storage</strong> &mdash; Parquet files in S3 / ADLS / GCS.</div>
+            </div>
+          </div>
+
+          <h3>dbt adapters across platforms</h3>
+          <p>dbt Labs maintains adapters for the major warehouse and lakehouse targets. The course pins <code>dbt-snowflake~=1.11.0</code>. Switching to Databricks means <code>dbt-databricks</code> and a Unity Catalog host in <code>profiles.yml</code>; the project layout, <code>ref()</code> graph, and test syntax stay the same. That portability is why analytics engineering standardised on dbt rather than warehouse-specific stored procedures.</p>
+        </section>
+
+        <section class="section" id="choosing-between">
+          <h2>Choosing between the three</h2>
+          <p class="lead">Warehouse, lake and lakehouse are not moral choices; they are trade-offs on governance, cost model, and who needs to query the data. Most teams learning dbt should start with a cloud warehouse and only add lake or lakehouse patterns when a concrete requirement forces them.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Factor</th>
+                  <th>Warehouse (Snowflake)</th>
+                  <th>Data lake (S3 + files)</th>
+                  <th>Lakehouse (Iceberg / Delta)</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td>Data shape</td><td>Structured, modelled tables</td><td>Raw anything &mdash; logs, JSON, images</td><td>Structured over open files</td></tr>
+                <tr><td>Who queries it</td><td>Analysts, dbt, BI tools via SQL</td><td>Data scientists via Spark/Python</td><td>Both SQL and Spark engines</td></tr>
+                <tr><td>Cost model</td><td>Storage + compute credits (or slots)</td><td>Very cheap storage; compute separate</td><td>Storage cheap; metadata + compute vary</td></tr>
+                <tr><td>Governance</td><td>Roles, masking, row access policies</td><td>IAM policies; easy to over-share</td><td>Catalog layers (Unity, Polaris, Glue)</td></tr>
+                <tr><td>ML support</td><td>Export to notebooks; Snowpark</td><td>Native for training on files</td><td>Strong Spark / notebook path</td></tr>
+                <tr><td>dbt fit</td><td>First-class; this course</td><td>Needs external table or Spark dbt</td><td>Good with dbt-spark or warehouse Iceberg</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>Honest advice for this bootcamp: Snowflake (or BigQuery if that is your job) plus dbt covers analytics engineering end to end. Lakes shine when you must retain semi-structured telemetry indefinitely or feed ML feature stores. Lakehouses bridge that gap when SQL governance and open storage must coexist. Do not build a lake because a vendor slide said so; build it when unstructured volume or multi-engine access makes warehouse storage uneconomical.</p>
+        </section>
+
+        <section class="section" id="snowflake-course">
+          <h2>Snowflake specifics for this course</h2>
+          <p class="lead">Section 6 runs the setup; this section names every Snowflake object so the architecture diagram in your head matches what appears in the worksheet.</p>
+
+          <h3>Virtual warehouses versus databases</h3>
+          <p>A <strong>virtual warehouse</strong> is compute only &mdash; CPU and memory workers that execute queries. A <strong>database</strong> is storage plus namespace: schemas, tables, views. They scale independently. <code>COMPUTE_WH</code> runs your queries; <code>AIRBNB</code> holds your data. Suspending <code>COMPUTE_WH</code> stops billing for compute; storage in <code>AIRBNB</code> still accrues at the storage rate.</p>
+
+          <h3>AIRBNB.RAW and AIRBNB.DEV schemas</h3>
+          <p><code>AIRBNB.RAW</code> contains the three landing tables loaded from S3. dbt declares them in <code>sources.yml</code> and never writes to <code>RAW</code> in the default course flow. <code>AIRBNB.DEV</code> is created empty for transformed objects; when you run dbt with target <code>dev</code>, models land in a personal schema (often <code>DEV</code> or <code>DBT_&lt;username&gt;</code> depending on macro configuration).</p>
+
+          <h3>Warehouse sizing, auto-suspend and credits</h3>
+          <p><code>COMPUTE_WH</code> defaults to X-Small in the manual script. Scale up when queries queue or spill to remote storage; scale down for cost. <strong>Auto-suspend</strong> (commonly 60&ndash;300 seconds) stops the warehouse after idle time. Each resumed run bills a one-minute minimum on Snowflake. Credits map to warehouse size and run time; storage and cloud services are separate line items on the invoice.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Warehouse size</th><th>Typical use in this course</th><th>When to move up</th></tr></thead>
+              <tbody>
+                <tr><td>X-Small</td><td>Dev worksheets, first <code>dbt run</code>, COPY loads</td><td>Default for learning; sufficient for Airbnb dataset</td></tr>
+                <tr><td>Small</td><td>Heavier joins during full-refresh experiments</td><td>Query Profile shows spill to remote storage</td></tr>
+                <tr><td>Medium+</td><td>Not needed for course data volumes</td><td>Production fact tables with billions of rows</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Roles: TRANSFORM and the dbt user</h3>
+          <p>The course creates role <code>TRANSFORM</code> with rights on <code>COMPUTE_WH</code> and database <code>AIRBNB</code>. Service user <code>dbt</code> uses RSA key-pair auth, default role <code>TRANSFORM</code>, default warehouse <code>COMPUTE_WH</code>, default namespace <code>AIRBNB.RAW</code>. BI user <code>PRESET</code> gets read-only <code>REPORTER</code> on <code>AIRBNB.DEV</code> later.</p>
+
+          <p>Manual setup DDL from the course script (automated setup at dbtsetup.nordquant.com runs equivalent steps):</p>
+
+<pre data-lang="sql" data-title="course-resources.md · snowflake_import" data-explain="Creates AIRBNB database, RAW schema, three tables, and loads CSVs from the public S3 bucket."><code>CREATE WAREHOUSE IF NOT EXISTS COMPUTE_WH;
+USE WAREHOUSE COMPUTE_WH;
+
+DROP DATABASE IF EXISTS AIRBNB CASCADE;
+
+CREATE DATABASE AIRBNB;
+
+CREATE SCHEMA IF NOT EXISTS AIRBNB.RAW;
+CREATE SCHEMA IF NOT EXISTS AIRBNB.DEV;
+
+USE DATABASE AIRBNB;
+USE SCHEMA RAW;
+
+CREATE OR REPLACE TABLE raw_listings
+                    (id integer,
+                     listing_url string,
+                     name string,
+                     room_type string,
+                     minimum_nights integer,
+                     host_id integer,
+                     price string,
+                     created_at datetime,
+                     updated_at datetime);
+
+COPY INTO raw_listings (id,
+                        listing_url,
+                        name,
+                        room_type,
+                        minimum_nights,
+                        host_id,
+                        price,
+                        created_at,
+                        updated_at)
+                   from 's3://dbt-datasets/listings.csv'
+                    FILE_FORMAT = (type = 'CSV' skip_header = 1
+                    FIELD_OPTIONALLY_ENCLOSED_BY = '"');
+
+CREATE OR REPLACE TABLE raw_reviews
+                    (listing_id integer,
+                     date datetime,
+                     reviewer_name string,
+                     comments string,
+                     sentiment string);
+
+COPY INTO raw_reviews (listing_id, date, reviewer_name, comments, sentiment)
+                   from 's3://dbt-datasets/reviews.csv'
+                    FILE_FORMAT = (type = 'CSV' skip_header = 1
+                    FIELD_OPTIONALLY_ENCLOSED_BY = '"');
+
+CREATE OR REPLACE TABLE raw_hosts
+                    (id integer,
+                     name string,
+                     is_superhost string,
+                     created_at datetime,
+                     updated_at datetime);
+
+COPY INTO raw_hosts (id, name, is_superhost, created_at, updated_at)
+                   from 's3://dbt-datasets/hosts.csv'
+                    FILE_FORMAT = (type = 'CSV' skip_header = 1
+                    FIELD_OPTIONALLY_ENCLOSED_BY = '"');</code></pre>
+
+<pre data-lang="sql" data-title="course-resources.md · snowflake_setup" data-explain="Creates TRANSFORM role, dbt service user with key-pair auth, and grants on AIRBNB."><code>USE ROLE ACCOUNTADMIN;
+
+DROP ROLE IF EXISTS TRANSFORM;
+CREATE ROLE TRANSFORM;
+GRANT ROLE TRANSFORM TO ROLE ACCOUNTADMIN;
+
+GRANT OPERATE ON WAREHOUSE COMPUTE_WH TO ROLE TRANSFORM;
+
+DROP USER IF EXISTS dbt;
+CREATE USER IF NOT EXISTS dbt
+  LOGIN_NAME='dbt'
+  TYPE=SERVICE
+  RSA_PUBLIC_KEY="&lt;&lt;Add Your Public Key File's content here&gt;&gt;"
+  DEFAULT_ROLE=TRANSFORM
+  DEFAULT_WAREHOUSE='COMPUTE_WH'
+  DEFAULT_NAMESPACE='AIRBNB.RAW'
+  COMMENT='DBT user used for data transformation';
+
+GRANT ROLE TRANSFORM to USER dbt;
+
+GRANT ALL ON WAREHOUSE COMPUTE_WH TO ROLE TRANSFORM;
+GRANT ALL ON DATABASE AIRBNB to ROLE TRANSFORM;
+GRANT ALL ON ALL SCHEMAS IN DATABASE AIRBNB to ROLE TRANSFORM;
+GRANT ALL ON FUTURE SCHEMAS IN DATABASE AIRBNB to ROLE TRANSFORM;
+GRANT ALL ON ALL TABLES IN SCHEMA AIRBNB.RAW to ROLE TRANSFORM;
+GRANT ALL ON FUTURE TABLES IN SCHEMA AIRBNB.RAW to ROLE TRANSFORM;</code></pre>
+
+          <p>The course also creates a read-only BI path. User <code>PRESET</code> with role <code>REPORTER</code> gets <code>SELECT</code> on future tables in <code>AIRBNB.DEV</code> only &mdash; not write access to raw data:</p>
+
+<pre data-lang="sql" data-title="course-resources.md · snowflake_setup (REPORTER role)" data-explain="Separate role for BI tools: read transformed tables in DEV, no write on RAW."><code>DROP ROLE IF EXISTS REPORTER;
+CREATE ROLE REPORTER;
+
+DROP USER IF EXISTS PRESET;
+CREATE USER PRESET
+  LOGIN_NAME='preset'
+  TYPE=SERVICE
+  RSA_PUBLIC_KEY="&lt;&lt;Add Your Public Key File's content here&gt;&gt;"
+  DEFAULT_WAREHOUSE='COMPUTE_WH'
+  DEFAULT_ROLE=REPORTER
+  DEFAULT_NAMESPACE='AIRBNB.DEV'
+  COMMENT='Preset user for creating reports';
+
+GRANT ROLE REPORTER TO USER PRESET;
+GRANT USAGE ON DATABASE AIRBNB TO ROLE REPORTER;
+GRANT USAGE ON ALL SCHEMAS IN DATABASE AIRBNB to ROLE REPORTER;
+GRANT SELECT ON ALL TABLES IN SCHEMA AIRBNB.DEV to ROLE REPORTER;
+GRANT SELECT ON FUTURE TABLES IN SCHEMA AIRBNB.DEV to ROLE REPORTER;</code></pre>
+
+          <div class="terminal">
+            <p class="term-head">Verify raw row counts after COPY</p>
+            <pre class="term-body"><span class="tt-cmd">SELECT 'raw_listings' AS tbl, COUNT(*) FROM AIRBNB.RAW.raw_listings
+UNION ALL SELECT 'raw_reviews', COUNT(*) FROM AIRBNB.RAW.raw_reviews
+UNION ALL SELECT 'raw_hosts', COUNT(*) FROM AIRBNB.RAW.raw_hosts;</span>
+<span class="tt-ok">TBL           COUNT(*)
+raw_listings  27909
+raw_reviews   423087
+raw_hosts     14144</span></pre>
+          </div>
+
+          <div class="callout tip"><strong>Use automated setup if you can.</strong> The Streamlit app at dbtsetup.nordquant.com runs the same objects with fewer copy-paste errors. Manual SQL is here so you understand what exists, not because typing it is the best path.</div>
+        </section>
+
+        <section class="section" id="deeper">
+          <h2>Deeper detail and edge cases</h2>
+          <p class="lead">Platform convergence, billing meters, and the failure modes that show up in Snowflake worksheets long before dbt enters the picture.</p>
+
+          <h3>Version notes</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Behaviour</th><th>Before</th><th>Now</th><th>Version</th></tr></thead>
+              <tbody>
+                <tr><td>Snowflake managed Iceberg tables</td><td>Native tables only on internal storage</td><td>Full DML on Iceberg with Snowflake governance</td><td>2024 GA</td></tr>
+                <tr><td>Snowflake external Iceberg</td><td>External tables without full ACID</td><td>Catalog-linked Iceberg with Polaris option</td><td>2023&ndash;2024</td></tr>
+                <tr><td>Databricks Unity Catalog</td><td>Hive metastore per workspace</td><td>Cross-workspace governance and lineage</td><td>2023 UC GA</td></tr>
+                <tr><td>BigQuery BigLake</td><td>Separate external object tables</td><td>Unified BigLake tables over open files</td><td>2023+</td></tr>
+                <tr><td>Redshift Serverless</td><td>Provisioned clusters only</td><td>RPU-based auto-scaling warehouse</td><td>2022+</td></tr>
+                <tr><td>Warehouse / lakehouse marketing</td><td>Distinct product categories</td><td>Each vendor offers both native and open-table paths</td><td>2024&ndash;2026 convergence</td></tr>
+                <tr><td>dbt Snowflake adapter</td><td>Native tables primary</td><td>Iceberg materializations and dynamic tables awareness</td><td>dbt-snowflake 1.8+</td></tr>
+                <tr><td>dbt Databricks adapter</td><td>Hive delta paths</td><td>Unity Catalog as default metastore</td><td>dbt-databricks 1.7+</td></tr>
+                <tr><td>dbt BigQuery adapter</td><td>Tables and views</td><td>BigLake external models, partitions v2</td><td>dbt-bigquery 1.8+</td></tr>
+                <tr><td>Snowflake automatic clustering</td><td>Manual <code>CLUSTER BY</code> only</td><td>Automatic clustering service (extra credits)</td><td>2023+</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>What it costs to run</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>What runs</th><th>Where the cost lands</th><th>How to spend less</th></tr></thead>
+              <tbody>
+                <tr><td>Snowflake virtual warehouse</td><td>Credits per second while running; 60s minimum per resume</td><td>Auto-suspend; right-size X-Small for dev; batch dbt runs</td></tr>
+                <tr><td>Snowflake storage</td><td>Monthly $/TB for tables, Time Travel, Fail-safe</td><td>Drop dev schemas; shorten retention on non-prod</td></tr>
+                <tr><td>Snowflake cloud services</td><td>Up to ~10% of compute (often covered by free tier)</td><td>Usually negligible on trial; watch heavy metadata ops</td></tr>
+                <tr><td>Result cache</td><td>Free repeat of identical query within ~24h</td><td>Do not mistake cached speed for model efficiency</td></tr>
+                <tr><td>BigQuery on-demand</td><td>Bytes scanned per query</td><td>Partition filters; avoid <code>SELECT *</code>; slot reservations for steady load</td></tr>
+                <tr><td>BigQuery editions</td><td>Capacity slots per hour</td><td>Autoscaling cap; separate reservation for dbt CI</td></tr>
+                <tr><td>Databricks SQL warehouse</td><td>DBU per hour by warehouse size</td><td>Serverless autostop; job clusters for dbt batch</td></tr>
+                <tr><td>Redshift Serverless</td><td>RPU-hours</td><td>Workgroup base capacity tuning; pause schedules</td></tr>
+                <tr><td>S3 / ADLS storage (lake)</td><td>$/GB-month; egress if compute elsewhere</td><td>Lifecycle rules; compress Parquet; co-locate compute</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout cost"><strong>The fastest way to burn trial credits is an always-on warehouse with no auto-suspend.</strong> A forgotten Large warehouse idling overnight consumes more credits than the entire Airbnb dbt build. Set auto-suspend to 60 seconds in dev and verify suspension in Admin &rarr; Warehouses.</div>
+
+          <h3>Traps that catch people</h3>
+          <ul>
+            <li><strong>Treating warehouse and database as the same thing &mdash;</strong> suspending compute does not delete data, but beginners sometimes recreate databases thinking they cleared a bill. Know which object is storage versus compute.</li>
+            <li><strong>Running analytics on OLTP &mdash;</strong> read replicas are not warehouses. They inherit row-oriented layout and OLTP indexing assumptions.</li>
+            <li><strong>SELECT * in staging &mdash;</strong> widens every downstream scan. Explicit columns in <code>src_*</code> models are a performance and cost habit, not pedantry.</li>
+            <li><strong>Ignoring bytes scanned &mdash;</strong> Snowflake and BigQuery both expose this in query history. A model change that doubles scanned bytes doubles cost even if runtime looks similar due to cache.</li>
+            <li><strong>Lake without catalog &mdash;</strong> files multiply; nobody knows the canonical path. Always pair object storage with a metastore or table format manifest.</li>
+            <li><strong>Assuming Iceberg is free storage &mdash;</strong> open files on S3 are cheap; rewriting snapshots, vacuuming, and cross-cloud egress are not.</li>
+            <li><strong>One warehouse size for everything &mdash;</strong> BI dashboards and dbt full refreshes have different peak needs. Some teams use separate warehouses and resource monitors.</li>
+            <li><strong>Confusing Time Travel with dbt snapshots &mdash;</strong> Snowflake Time Travel is storage-level history for native tables; dbt snapshots are explicit SCD2 tables you model. They solve overlapping but not identical problems.</li>
+            <li><strong>Default role mismatch &mdash;</strong> the <code>dbt</code> user defaults to <code>TRANSFORM</code>; connecting as <code>ACCOUNTADMIN</code> in worksheets bypasses the least-privilege pattern the course teaches.</li>
+          </ul>
+
+          <h3>Troubleshooting playbook</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Symptom</th><th>Most likely cause</th><th>What to check / fix</th></tr></thead>
+              <tbody>
+                <tr><td>Query suddenly costs 10&times; more credits</td><td>Full table scan; clustering lost; stats stale; new <code>SELECT *</code></td><td>Query Profile &rarr; bytes scanned; compare to yesterday; check filters and column list</td></tr>
+                <tr><td>Warehouse never suspends</td><td>Auto-suspend disabled; constant connection (BI tool, IDE); periodic <code>SELECT 1</code> health checks</td><td>Admin &rarr; Warehouses &rarr; auto-suspend; close open worksheets; separate wh for BI</td></tr>
+                <tr><td>Spilled join / remote disk in profile</td><td>Warehouse too small for hash join in memory</td><td>Scale up for that run; reduce join width; pre-aggregate in dbt model</td></tr>
+                <tr><td>Same query fast then slow</td><td>First run used result cache; second run cold or data changed</td><td>Disable result cache in worksheet settings when benchmarking; use Query Profile</td></tr>
+                <tr><td>COPY INTO loads zero rows</td><td>Stage path wrong; file format mismatch; role lacks stage access</td><td><code>LIST @stage;</code> validate path; check <code>VALIDATION_MODE</code> and error file</td></tr>
+                <tr><td>dbt debug passes but CREATE fails</td><td>Role lacks CREATE SCHEMA on DEV target</td><td>Compare grants in setup script; <code>SHOW GRANTS TO ROLE TRANSFORM</code></td></tr>
+                <tr><td>Iceberg table metadata errors</td><td>Snapshot expired; concurrent writer conflict; catalog disconnect</td><td><code>DESCRIBE TABLE</code>; refresh Iceberg metadata; check external volume</td></tr>
+                <tr><td>Dashboard and dbt fight for warehouse</td><td>Single shared warehouse at max concurrency</td><td>Multi-cluster warehouse or separate <code>COMPUTE_BI</code> / <code>COMPUTE_DBT</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Production patterns</h3>
+          <p>Teams typically run dbt against a dedicated warehouse (or warehouse size) with auto-suspend and a resource monitor cap. BI tools get a separate, smaller warehouse so a rogue dashboard cannot queue a nightly dbt job. Storage stays in production databases; developers clone or build into isolated schemas rather than sharing one <code>DEV</code> namespace.</p>
+
+          <div class="grid-2">
+            <div class="mini-card">
+              <h4>Pattern: split warehouses</h4>
+              <p><code>COMPUTE_DBT</code> for scheduled builds, <code>COMPUTE_BI</code> for dashboards. Resource monitors cap each independently.</p>
+            </div>
+            <div class="mini-card">
+              <h4>Anti-pattern: shared admin</h4>
+              <p>Everyone connects as <code>ACCOUNTADMIN</code> on one always-on Large warehouse. Costs spike and grants become untraceable.</p>
+            </div>
+          </div>
+
+          <p>The anti-pattern worth naming at scale: giving every analyst direct write access to <code>RAW</code> &ldquo;for convenience.&rdquo; Raw layers should be append-only with pipeline-owned loads; dbt and analysts work downstream where tests apply.</p>
+
+<pre data-lang="sql" data-explain="Resource monitor pattern — cap monthly credits and notify before hard stop."><code>CREATE OR REPLACE RESOURCE MONITOR dbt_dev_limit
+  WITH CREDIT_QUOTA = 50
+  FREQUENCY = MONTHLY
+  START_TIMESTAMP = IMMEDIATELY
+  TRIGGERS
+    ON 75 PERCENT DO NOTIFY
+    ON 100 PERCENT DO SUSPEND;</code></pre>
+
+          <h3>Certification pointers</h3>
+          <p>The dbt Analytics Engineering certification assumes you know dbt runs in the warehouse, not that you are a Snowflake admin. Expect distinction questions between what dbt does versus what the platform stores, and between materializations that persist data versus views that defer cost to query time. Warehouse fundamentals explain <em>why</em> incremental models and narrow projections matter.</p>
+          <ul>
+            <li><a href="s04-modern-data-stack.html">Section 4</a> &mdash; places the warehouse in the ELT stack and names the load tools that feed <code>RAW</code>.</li>
+            <li><a href="s06-setup.html">Section 6</a> &mdash; connects <code>profiles.yml</code> to <code>COMPUTE_WH</code>, role <code>TRANSFORM</code>, and target schemas.</li>
+            <li><a href="s08-materializations.html">Section 8</a> &mdash; table versus view cost trade-offs make sense only once columnar scans are intuitive.</li>
+            <li><a href="s22-certification.html">Section 22</a> &mdash; full exam practice.</li>
+          </ul>
+          <div class="callout exam"><strong>Certification:</strong> know that dbt does not extract or load, that compute cost is warehouse-side, and that tests execute SQL scans in the warehouse. Those three facts appear repeatedly in scenario questions.</div>
+        </section>
+
+        <section class="section" id="interview">
+          <h2>Interview questions</h2>
+          <p class="muted">Answer each one out loud before opening it.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+
+            <details class="qa">
+              <summary>What is a data warehouse, in one sentence and four properties?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>A centralized analytical store integrated from many sources, optimized for read-heavy aggregations rather than transactional writes. Inmon's four properties: subject-oriented, integrated, time-variant, non-volatile.</p>
+                <p>Subject-oriented means organised by business entity (listings, hosts), not by source application screen. Integrated means one definition of host id across feeds. Time-variant means history matters. Non-volatile means loads are append-oriented; you do not mirror every OLTP delete unless you design for it.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Explain the difference between OLTP and OLAP with a concrete example.<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p>OLTP handles many short read/write transactions on current state &mdash; booking a listing, updating a password. OLAP scans historical data to compute aggregates &mdash; average review sentiment by room type last quarter.</p>
+                <p>Running the OLAP query on the OLTP database contends for I/O and CPU with checkout traffic. The warehouse copy (<code>raw_reviews</code> in Snowflake) exists precisely to isolate that workload.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Why is columnar storage faster for analytics?<span class="qa-tag">Performance</span></summary>
+              <div class="qa-body">
+                <p>Queries typically touch few columns across many rows. Column stores read only those columns, compress them better because values repeat, and skip micro-partitions using min/max metadata (predicate pushdown and partition pruning).</p>
+                <p>Row stores win on point lookups; column stores win on scans and aggregations &mdash; the shape of almost every dbt model and BI query.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What is schema-on-read versus schema-on-write?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>Schema-on-write enforces structure when data lands (Snowflake <code>COPY INTO</code> with a typed table). Schema-on-read applies structure at query time (reading JSON from S3 with inferred types).</p>
+                <p>Write-time enforcement fails bad data early at the pipeline; read-time enforcement is flexible but pushes quality failures to consumers, which is how data swamps form.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What is a lakehouse and how does it differ from a data lake?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>A data lake is files in object storage with loose governance. A lakehouse adds a table format layer (Delta, Iceberg, Hudi) with ACID transactions, snapshots, and schema evolution over those files.</p>
+                <p>You keep cheap storage and open formats while gaining warehouse-like reliability for SQL engines and catalogs.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>When would you choose a warehouse over a lakehouse?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>When the team primarily needs governed SQL analytics, BI, and dbt transformations on structured data without multi-engine Spark requirements. Cloud warehouses deliver that with less operational surface area.</p>
+                <p>Choose lakehouse when you must store massive semi-structured data, share files across Spark and SQL, or enforce open storage with catalog-level governance. Many orgs use both: lake for raw landing, warehouse or managed Iceberg for curated marts.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Why is SELECT * a bad habit in Snowflake and dbt staging models?<span class="qa-tag">Cost</span></summary>
+              <div class="qa-body">
+                <p>Columnar billing and I/O scale with columns read. <code>SELECT *</code> pulls large text columns like <code>comments</code> even when downstream models never use them, and ephemeral models inline that width into every child.</p>
+                <p>Explicit projections in staging document the contract and keep scans narrow through the DAG.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What is the difference between a Snowflake virtual warehouse and a database?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>A virtual warehouse is compute: workers that execute queries and bill credits while running. A database is a namespace for schemas and tables where data persists regardless of warehouse state.</p>
+                <p>Suspending <code>COMPUTE_WH</code> stops compute charges; tables in <code>AIRBNB</code> remain and continue to incur storage cost.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What does an open table format like Iceberg actually store?<span class="qa-tag">Architecture</span></summary>
+              <div class="qa-body">
+                <p>Parquet (or similar) data files plus a metadata layer: manifest lists, snapshot ids, partition stats, schema versions. Queries consult metadata to prune files, then read column chunks from Parquet.</p>
+                <p>It is not a replacement for Parquet; it is governance and atomicity over Parquet files in a bucket.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Your Snowflake bill doubled but dbt run count is unchanged. Where do you look first?<span class="qa-tag">Troubleshooting</span></summary>
+              <div class="qa-body">
+                <p>Query History sorted by total credits: look for bytes scanned spikes, new full-table scans, warehouses that stopped suspending, or BI tools hitting the same warehouse. Check warehouse size changes and whether result cache masked regression until data changed.</p>
+                <p>Compare Query Profile before and after for the top five expensive queries. dbt model changes that remove filters or widen joins are the usual culprit inside the transformation layer.</p>
+              </div>
+            </details>
+
+          </div>
+        </section>
+
+        <section class="section" id="practice">
+          <h2>Hands-on practice</h2>
+          <p class="muted">Run these in the Snowflake worksheet after <a href="s06-setup.html">Section 6</a> setup (or use automated setup now if you already have <code>AIRBNB.RAW</code> loaded).</p>
+          <ol class="practice-list">
+
+            <li class="practice">
+              <p class="practice-task">Run a narrow query on <code>raw_reviews</code> and open Snowflake's Query Profile. Record partitions scanned, bytes scanned, and percentage scanned from the table.</p>
+              <span class="console-path">Snowflake Worksheets · History · Query Profile</span>
+              <p class="practice-expect">Query Profile shows a small fraction of table bytes scanned when filtering on <code>date</code> and selecting three columns.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Ensure <code>USE WAREHOUSE COMPUTE_WH;</code> and <code>USE SCHEMA AIRBNB.RAW;</code></li>
+                    <li>Run the query below.</li>
+                    <li>Open History, click the query id, open Profile tab.</li>
+                    <li>Note TableScan bytes and Partitions scanned versus total.</li>
+                  </ol>
+<pre data-lang="sql"><code>SELECT
+  listing_id,
+  date,
+  sentiment
+FROM raw_reviews
+WHERE date &gt;= '2024-01-01';</code></pre>
+                  <p class="muted">Undo: nothing to undo — read-only query.</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">Run the same aggregation twice: once with <code>SELECT *</code> and once with explicit columns. Compare bytes scanned in Query History.</p>
+              <span class="console-path">Snowflake Worksheets · Query History · Bytes scanned column</span>
+              <p class="practice-expect">The <code>SELECT *</code> version scans noticeably more bytes because it includes the wide <code>comments</code> column.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>In worksheet settings, disable &ldquo;Use cached results&rdquo; for fair comparison.</li>
+                    <li>Run query A, then query B.</li>
+                    <li>Sort History by start time; compare BYTES_SCANNED.</li>
+                  </ol>
+<pre data-lang="sql"><code>-- A: wide scan
+SELECT COUNT(*) FROM (
+  SELECT * FROM raw_reviews WHERE date &gt;= '2023-01-01'
+);
+
+-- B: narrow scan
+SELECT COUNT(*) FROM (
+  SELECT listing_id, date, sentiment
+  FROM raw_reviews WHERE date &gt;= '2023-01-01'
+);</code></pre>
+                  <p class="muted">Undo: nothing to undo — read-only queries.</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">Size <code>COMPUTE_WH</code> for a full Airbnb dbt build: run with X-Small, note total time, then try Small if queries queue. Set auto-suspend to 60 seconds.</p>
+              <span class="console-path">Admin → Warehouses → COMPUTE_WH → Settings</span>
+              <p class="practice-expect">You can state which size finished the three-table scan plus a sample dbt model under five minutes without remote spill in Query Profile.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Admin &rarr; Warehouses &rarr; <code>COMPUTE_WH</code> &rarr; Size X-Small, Auto Suspend 60, Auto Resume ON.</li>
+                    <li>Run a representative workload (full scan of <code>raw_reviews</code> with a <code>GROUP BY sentiment</code>).</li>
+                    <li>If Profile shows spill to remote storage, bump to Small and rerun.</li>
+                    <li>Document credits used via <code>WAREHOUSE_METERING_HISTORY</code> or Account Usage.</li>
+                  </ol>
+<pre data-lang="sql"><code>ALTER WAREHOUSE COMPUTE_WH SET
+  WAREHOUSE_SIZE = 'X-SMALL'
+  AUTO_SUSPEND = 60
+  AUTO_RESUME = TRUE;
+
+SELECT sentiment, COUNT(*)
+FROM AIRBNB.RAW.raw_reviews
+GROUP BY 1;</code></pre>
+                  <p class="muted">Undo: leave auto-suspend at 60; revert size to X-Small if you changed it for the experiment.</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">Verify the three raw tables exist with correct column types after setup. Query one row from each and confirm <code>price</code> is still a string in <code>raw_listings</code>.</p>
+              <span class="console-path">Snowflake Worksheets · AIRBNB.RAW</span>
+              <p class="practice-expect">Three tables return rows; <code>price</code> shows values like <code>$225.00</code> as VARCHAR, which is why dbt cleanses it later.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li><code>USE DATABASE AIRBNB; USE SCHEMA RAW;</code></li>
+                    <li>Run <code>SHOW TABLES;</code> &mdash; expect <code>RAW_LISTINGS</code>, <code>RAW_REVIEWS</code>, <code>RAW_HOSTS</code>.</li>
+                    <li>Describe columns on listings and confirm <code>PRICE</code> is VARCHAR.</li>
+                  </ol>
+<pre data-lang="sql"><code>SELECT id, price, room_type FROM raw_listings LIMIT 5;
+DESCRIBE TABLE raw_listings;</code></pre>
+                  <p class="muted">Undo: nothing to undo — read-only inspection.</p>
+                </div>
+              </details>
+            </li>
+
+          </ol>
+        </section>
+
+        <section class="section" id="recap">
+          <h2>Recap</h2>
+          <div class="recap">
+            <ul class="checklist">
+              <li>A data warehouse is a central, integrated, subject-oriented, time-variant, non-volatile store for analytics.</li>
+              <li>Inmon builds a normalized enterprise hub; Kimball builds conformed dimensional marts &mdash; the course follows Kimball-shaped models.</li>
+              <li>Cloud warehouses separate storage (database) from compute (virtual warehouse); that separation enables suspend/resume cost control.</li>
+              <li>OLTP is row-oriented transactional traffic; OLAP is scan-heavy aggregation. Never run OLAP on production OLTP.</li>
+              <li>Columnar storage, compression, predicate pushdown and partition pruning make analytical scans cheap.</li>
+              <li><code>SELECT *</code> in dbt staging widens every downstream scan; list columns explicitly like <code>src_listings</code> does.</li>
+              <li>Data lakes store cheap files with schema-on-read flexibility; without governance they become swamps.</li>
+              <li>Lakehouses add ACID, time travel and catalogs over open files via Delta, Iceberg or Hudi.</li>
+              <li>For learning dbt, start with a cloud warehouse unless you have a concrete lake requirement.</li>
+              <li>This course uses Snowflake <code>AIRBNB</code> database, <code>RAW</code> landing schema, <code>COMPUTE_WH</code>, role <code>TRANSFORM</code>, user <code>dbt</code>.</li>
+              <li>Raw tables: <code>raw_listings</code>, <code>raw_hosts</code>, <code>raw_reviews</code> loaded from <code>s3://dbt-datasets/</code>.</li>
+              <li>dbt adapters exist for warehouse and lakehouse platforms; the modelling workflow stays the same.</li>
+            </ul>
+            <p style="margin-top:1rem;">
+              <button type="button" data-complete="section-03">Mark complete</button>
+            </p>
+          </div>
+        </section>
+
+      </div>
+
+      <aside class="toc" aria-label="On this page">
+        <strong>On this page</strong>
+        <ol>
+          <li><a href="#lectures">Lectures</a></li>
+          <li><a href="#what-is-a-data-warehouse">Data warehouse</a></li>
+          <li><a href="#oltp-vs-olap">OLTP vs OLAP</a></li>
+          <li><a href="#columnar-storage">Columnar storage</a></li>
+          <li><a href="#data-lakes">Data lakes</a></li>
+          <li><a href="#lakehouse">Lakehouse</a></li>
+          <li><a href="#choosing-between">Choosing</a></li>
+          <li><a href="#snowflake-course">Snowflake setup</a></li>
+          <li><a href="#deeper">Deeper detail</a></li>
+          <li><a href="#interview">Interview questions</a></li>
+          <li><a href="#practice">Hands-on practice</a></li>
+          <li><a href="#recap">Recap</a></li>
+        </ol>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<footer class="footer">The Complete dbt Bootcamp: Zero to Hero &middot; Section 3 &middot; Offline study edition</footer>
+</body>
+</html>

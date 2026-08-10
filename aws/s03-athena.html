@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="DEA-C01 Section 3: Amazon Athena serverless SQL over S3, federated queries, workgroups, cost and performance optimisation, partition projection, CTAS, and query result reuse.">
+<title>Section 3 — Querying with Athena | AWS Data Engineer DEA-C01 Notes</title>
+<link rel="stylesheet" href="assets/aws.css">
+<script defer src="assets/search-index.js"></script>
+<script defer src="assets/code-highlight.js"></script>
+<script defer src="assets/aws.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">Course section 3 of 21 · AWS Certified Data Engineer Associate</p>
+    <h1>Querying with Athena</h1>
+    <p class="subtitle">Serverless interactive SQL over data in S3 — how the catalog connects files to queries, what federated queries and workgroups do, how Athena bills per terabyte scanned, and the optimisation levers that actually move the cost needle.</p>
+    <div class="hero-meta">
+      <span class="chip">13 slides · ~40min</span>
+      <span class="chip">Exam domains: Data Operations · Data Ingestion</span>
+      <span class="chip">Deck slides 23–35</span>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <nav class="pager" aria-label="Section navigation">
+    <a href="s02-data-ingestion.html">← Data Ingestion</a>
+    <a href="index.html">Course contents</a>
+    <a href="s04-glue.html">Next: AWS Glue Deep Dive →</a>
+  </nav>
+
+  <main id="main">
+    <div class="layout">
+      <div class="content">
+
+        <section class="section" id="lectures">
+          <h2>Lectures in this section</h2>
+          <p class="muted">Assumes the lab bucket and Glue crawler from <a href="s02-data-ingestion.html#practice">Section 2</a>. Sample file: <code>data/customers.csv</code>.</p>
+          <ol class="lecture-list">
+            <li class="lecture">
+              <a class="lec-title" href="#athena-overview">Athena — serverless SQL on S3</a>
+              <span class="lec-time">~8:00</span>
+              <span class="lec-src">Slides 24–25</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#use-cases">Use cases — logs, ad hoc, lake analytics</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">Slide 26</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#federated-queries">Federated queries and data connectors</a>
+              <span class="lec-time">~7:00</span>
+              <span class="lec-src">Slides 27–28</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#workgroups">Workgroups — isolation and engines</a>
+              <span class="lec-time">~6:00</span>
+              <span class="lec-src">Slides 29–30</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#cost">Cost — per TB scanned and capacity options</a>
+              <span class="lec-time">~6:00</span>
+              <span class="lec-src">Slide 31</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#performance">Performance — partitions, formats, compression</a>
+              <span class="lec-time">~10:00</span>
+              <span class="lec-src">Slides 32, 35</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#query-result-reuse">Query result reuse</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">Slides 33–34</span>
+            </li>
+          </ol>
+        </section>
+
+        <section class="section" id="athena-overview">
+          <h2>Amazon Athena — serverless SQL on S3</h2>
+          <p class="lead">Amazon Athena is an <strong>interactive query service</strong> that runs standard SQL against data in Amazon S3. There is no cluster to provision — you pay per query based on data scanned, and results land in an S3 bucket you designate.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-025.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-025.png" alt="Course slide showing Athena as serverless SQL on S3, with a console screenshot and a flow diagram from S3 through Crawler, Data Catalog, Athena to QuickSight." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 25</span>The canonical lake query path: files in S3, metadata in the Glue Data Catalog (populated by a crawler), SQL in Athena, visualisation in QuickSight. Athena never ingests data — it reads S3 in place using catalog metadata.</figcaption>
+          </figure>
+
+          <div class="diagram">
+            <p class="diagram-title">S3 → Catalog → Athena → QuickSight</p>
+            <div class="flow">
+              <div class="node is-store"><b>S3 Bucket</b><small>raw/ · Parquet · logs</small></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-compute"><b>Glue Crawler</b><small>infer schema · partitions</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-store pulse"><b>Data Catalog</b><small>table · columns · location</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-compute"><b>Athena</b><small>Presto/Trino engine · SQL</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-serve"><b>QuickSight</b><small>dashboards · SPICE</small></div>
+            </div>
+          </div>
+
+          <h3>How Athena executes a query</h3>
+          <ol>
+            <li>You submit SQL in the console, API, or JDBC/ODBC driver.</li>
+            <li>Athena reads table metadata from the Glue Data Catalog (database, table, columns, partition list or projection rules, SerDe, input format).</li>
+            <li>The query engine (Athena engine version 3, based on Trino) plans the scan — partition pruning eliminates irrelevant S3 prefixes.</li>
+            <li>Workers read only the needed objects/ columns from S3, compute the result, and write output to the workgroup's query result location in S3.</li>
+            <li>You retrieve rows from the console or the <code>GetQueryResults</code> API.</li>
+          </ol>
+
+          <div class="callout info"><strong>Engine version 3.</strong> New workgroups default to <strong>Athena engine version 3</strong> (Trino-based). It supports more SQL (including improved geospatial and JSON functions), better performance on complex joins, and is the engine the exam assumes unless a question mentions legacy engine version 2 behaviour.</div>
+
+          <h3>External table DDL — pointing SQL at S3</h3>
+          <p>Every Athena table is an <strong>external table</strong>: metadata in the catalog, bytes in S3. Here is DDL for the lab CSV under <code>raw/customers/</code>:</p>
+
+<pre data-lang="sql" data-title="Athena — external table over CSV in S3" data-explain="Creates a Glue/Athena table whose LOCATION matches where the crawler or your upload put the file. ROW FORMAT and SerDe tell Athena how to parse CSV."><code>CREATE EXTERNAL TABLE IF NOT EXISTS dea_lab.customers_raw (
+  id         INT,
+  name       STRING,
+  age        INT,
+  address    STRING,
+  city       STRING,
+  state      STRING,
+  email      STRING
+)
+ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+WITH SERDEPROPERTIES ('serialization.format' = ',', 'field.delim' = ',')
+STORED AS TEXTFILE
+LOCATION 's3://dea-lab-ab-4821/raw/customers/'
+TBLPROPERTIES ('skip.header.line.count' = '1');</code></pre>
+
+          <p>Replace the bucket name with yours. If a crawler already created this table, compare its schema — crawlers often infer every column as <code>string</code>, which is fine for exploration but weak for aggregations.</p>
+        </section>
+
+        <section class="section" id="use-cases">
+          <h2>Athena use cases</h2>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-026.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-026.png" alt="Course slide listing Athena use cases: log analysis, ad hoc analysis on data lakes, data lake analytics, and real-time analytics with Kinesis." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 26</span>Four use-case buckets. Log analysis and ad hoc lake queries are the bread and butter; "real-time analytics with Kinesis" means Firehose or custom consumers land streaming data in S3, then Athena queries it — Athena itself is not a stream processor.</figcaption>
+          </figure>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Use case</th><th>What you query</th><th>Typical pattern</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Log analysis</strong></td><td>CloudTrail, VPC flow logs, ALB access logs, application logs in S3</td><td>Partition by date, use partition projection, query with SQL aggregations</td></tr>
+                <tr><td><strong>Ad hoc analysis</strong></td><td>CSV/JSON dumps, one-off investigations</td><td>Crawler or manual DDL, <code>SELECT … LIMIT</code>, discard when done</td></tr>
+                <tr><td><strong>Data lake analytics</strong></td><td>Curated Parquet in <code>staging/</code> or <code>curated/</code></td><td>Partitioned columnar tables, CTAS for transforms, QuickSight on top</td></tr>
+                <tr><td><strong>Near-real-time analytics</strong></td><td>Firehose-delivered JSON in S3</td><td>Small files arrive every minute; partition by hour; query recent prefixes</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>CloudTrail and VPC flow logs</h3>
+          <p>Athena ships ready-made queries for AWS service logs. CloudTrail logs land as gzipped JSON in S3; you create a table with the CloudTrail SerDe and partition by <code>region/year/month/day</code>. VPC flow logs can be delivered directly to S3 in Parquet or text — Athena queries them for security forensics ("which IPs talked to this instance on Tuesday?"). No cluster, no log forwarder agent — just S3 plus SQL.</p>
+
+<pre data-lang="sql" data-title="Athena — sample CloudTrail investigation" data-explain="After creating the CloudTrail table (AWS documents the DDL), filter by event time and user. Partition pruning on date columns keeps scan cost low."><code>SELECT eventtime, useridentity.arn, eventsource, eventname, sourceipaddress
+FROM cloudtrail_logs
+WHERE year = '2026' AND month = '08' AND day = '03'
+  AND eventname = 'GetObject'
+  AND useridentity.arn LIKE '%study-admin%'
+ORDER BY eventtime DESC
+LIMIT 100;</code></pre>
+        </section>
+
+        <section class="section" id="federated-queries">
+          <h2>Federated queries and data connectors</h2>
+          <p class="lead">By default Athena reads S3. <strong>Federated queries</strong> extend SQL to relational databases, NoSQL stores, and custom sources via <strong>data source connectors</strong> — Lambda functions Athena invokes at query time.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-028.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-028.png" alt="Course slide on Athena federated queries: query non-S3 sources via data connectors, built-in examples for CloudWatch Logs, DynamoDB, DocumentDB, RDS, and joining multiple sources." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 28</span>Federated query lets one SQL statement join an RDS products table, DocumentDB customer profiles, and DynamoDB user interactions — without ETLing everything to S3 first. Connectors handle push-down where possible.</figcaption>
+          </figure>
+
+          <h3>How Lambda connectors work</h3>
+          <ol>
+            <li>You deploy a <strong>connector</strong> from the Serverless Application Repository (or build a custom one) — e.g. <code>AthenaPostgreSQLConnector</code>.</li>
+            <li>The connector creates a Lambda in your VPC (for RDS) with Secrets Manager credentials.</li>
+            <li>In Athena you register a <strong>data source</strong> pointing at that Lambda.</li>
+            <li>When SQL references a federated table, Athena plans the query and invokes the Lambda to fetch rows (with predicate push-down when the connector supports it).</li>
+            <li>Results merge in the Athena engine — you can JOIN federated tables with native S3 tables in one query.</li>
+          </ol>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Connector type</th><th>Examples</th><th>When to use</th></tr></thead>
+              <tbody>
+                <tr><td>AWS built-in / SAR templates</td><td>CloudWatch Logs, DynamoDB, DocumentDB, RDS (MySQL, PostgreSQL, etc.)</td><td>Quick cross-source joins without a pipeline</td></tr>
+                <tr><td>Custom</td><td>Your own Lambda implementing the Athena Federation SDK</td><td>Proprietary APIs, SaaS endpoints</td></tr>
+                <tr><td>S3 (native)</td><td>Glue catalog tables</td><td>Default — no connector needed</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout warn"><strong>Federated query trade-offs.</strong> Connectors add Lambda cost and latency; heavy analytics belong in S3/Redshift, not repeated federated scans. Federated queries shine for operational lookups and small dimension joins, not petabyte aggregations.</div>
+
+<pre data-lang="sql" data-title="Athena — federated join (conceptual)" data-explain="Syntax uses a catalog name registered for the connector. Exact DDL depends on which SAR template you deployed."><code>SELECT p.product_name, c.profile_json, d.last_click
+FROM "postgres_catalog"."sales_db"."products" p
+JOIN "docdb_catalog"."crm"."customer_profiles" c ON p.customer_id = c.id
+JOIN "ddb_catalog"."default"."user_clicks" d ON c.id = d.user_id
+WHERE p.order_date &gt; DATE '2026-01-01';</code></pre>
+        </section>
+
+        <section class="section" id="workgroups">
+          <h2>Workgroups</h2>
+          <p class="lead">A <strong>workgroup</strong> isolates Athena settings, access, cost tracking, and engine choice within one AWS account. Every query runs inside exactly one workgroup.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-030.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-030.png" alt="Course slide on Athena workgroups: isolate teams and use cases, control settings access cost and engine type, up to 1000 per region, primary workgroup per account." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 30</span>Workgroups separate teams or applications — each can have its own results bucket, encryption, CloudWatch metrics, per-query data scan limit, and choice of Athena SQL versus Apache Spark engine.</figcaption>
+          </figure>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Setting</th><th>Why isolate per workgroup</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Query result location</strong></td><td>Required S3 path for output — separate prefixes per team for cleanup and access policies</td></tr>
+                <tr><td><strong>Encryption</strong></td><td>SSE-S3, SSE-KMS, or CSE-KMS on results</td></tr>
+                <tr><td><strong>CloudWatch metrics</strong></td><td>Per-workgroup dashboards for scanned bytes and query count</td></tr>
+                <tr><td><strong>Data scan limit</strong></td><td>Cap bytes scanned per query — prevents runaway <code>SELECT *</code></td></tr>
+                <tr><td><strong>Engine</strong></td><td>Athena SQL (Trino) or Apache Spark for notebook-style analytics</td></tr>
+                <tr><td><strong>IAM / Lake Formation</strong></td><td>Tag-based access control per team</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <ul>
+            <li>Up to <strong>1,000 workgroups per Region</strong>.</li>
+            <li>Each account has a <strong>primary workgroup</strong> (<code>primary</code>) used when none is specified.</li>
+            <li>Athena for Apache Spark runs interactive sessions in a workgroup — billed per DPU-hour of session time, not per TB scanned.</li>
+          </ul>
+
+          <div class="callout exam"><strong>Result location is mandatory.</strong> A workgroup must have an S3 query result location configured (e.g. <code>s3://aws-athena-query-results-ACCOUNT-us-east-1/</code>). Without it, queries fail. This bucket is also where reused results are read from.</div>
+        </section>
+
+        <section class="section" id="cost">
+          <h2>Cost — per terabyte scanned</h2>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-031.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-031.png" alt="Course slide stating Athena cost is pay per query based on data scanned, with savings possible via reserved capacity." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 31</span>Athena SQL billing is driven by data scanned, not cluster uptime. Optimisation (partitions, columnar formats, projection) directly reduces the bill — there is no "idle cluster" cost to worry about.</figcaption>
+          </figure>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Pricing element</th><th>Detail</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Standard SQL queries</strong></td><td><strong>~5 USD per TB</strong> of data scanned (check your Region on the pricing page). First 1 TB/month is often covered by the free tier for new accounts.</td></tr>
+                <tr><td><strong>Minimum charge</strong></td><td><strong>10 MB per query</strong> — even <code>SELECT 1</code> or a query that prunes to one row bills at least 10 MB scanned.</td></tr>
+                <tr><td><strong>Provisioned capacity</strong></td><td>Reserved capacity (Data Processing Units) for steady high volume — commit to a capacity level for a discount versus on-demand per-TB pricing.</td></tr>
+                <tr><td><strong>Apache Spark engine</strong></td><td>Billed per DPU-hour of session runtime, not per TB scanned — different model entirely.</td></tr>
+                <tr><td><strong>Federated queries</strong></td><td>Athena scan charges plus Lambda invocations and upstream database load.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout cost"><strong>The single biggest cost lever.</strong> <strong>Columnar formats (Parquet/ORC) plus partition pruning</strong> can reduce bytes scanned by 10×–100× versus raw CSV. A <code>SELECT name, city</code> on Parquet reads two columns; on CSV Athena reads every column in every row. Partitions let the engine skip entire S3 prefixes. This is the first thing to fix when "Athena is expensive".</div>
+
+          <div class="callout exam"><strong>Exam framing.</strong> "Most cost-effective way to reduce Athena spend" → convert to Parquet, compress, partition by filter columns, use partition projection or partition indexes — not "provision a bigger cluster" (there is no cluster).</div>
+        </section>
+
+        <section class="section" id="performance">
+          <h2>Performance optimisation</h2>
+          <p class="lead">Athena performance and cost are the same problem — both are dominated by <strong>how many bytes S3 reads</strong>. The deck groups the levers into partitions, projection, indexes, compression, and format conversion.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-032.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-032.png" alt="Course slide on Athena performance: use partitions for pruning, partition projection for automation, and Glue partition indexes to reduce metadata load." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 32</span>Three partition-related optimisations. Physical partitions in S3 paths, partition projection for high-cardinality keys without listing every partition in the catalog, and Glue partition indexes so Athena does not load thousands of partition objects at plan time.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-035.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-035.png" alt="Course slide on compression and converting data to Parquet or ORC columnar formats for faster Athena queries." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 35</span>Compression (Gzip, Snappy, ZSTD) shrinks I/O; columnar formats (Parquet, ORC) shrink it further by reading only the columns your SELECT references.</figcaption>
+          </figure>
+
+          <h3>Partitions and partition pruning</h3>
+          <p>Partition columns map to S3 path segments — e.g. <code>s3://bucket/orders/year=2026/month=08/day=03/</code>. When your WHERE clause filters on <code>year</code>, <code>month</code>, <code>day</code>, Athena skips all other prefixes. Without partitions, every query scans the entire dataset.</p>
+
+          <h3>MSCK REPAIR TABLE versus ALTER TABLE ADD PARTITION versus projection</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Method</th><th>When to use</th><th>Trade-off</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Glue crawler</strong></td><td>Initial discovery, occasional new partition folders</td><td>Automatic but slow on huge buckets; catalog can drift</td></tr>
+                <tr><td><strong>MSCK REPAIR TABLE</strong></td><td>Hive-style <code>key=value/</code> folders already in S3; sync catalog to paths</td><td>Scans all S3 paths — slow and can hit limits with millions of partitions</td></tr>
+                <tr><td><strong>ALTER TABLE ADD PARTITION</strong></td><td>You know exactly one new partition to register</td><td>Explicit, fast, good for daily ETL that adds one day at a time</td></tr>
+                <tr><td><strong>Partition projection</strong></td><td>High-cardinality, predictable ranges (dates, integers)</td><td>No catalog entries per partition — Athena generates paths from table properties</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>CTAS — CSV to partitioned Parquet</h3>
+          <p><strong>CREATE TABLE AS SELECT (CTAS)</strong> is the standard pattern to convert raw CSV to compressed, partitioned Parquet in one step. Athena writes new objects to S3 and registers a new table.</p>
+
+<pre data-lang="sql" data-title="Athena — CTAS to partitioned Parquet" data-explain="Reads the external CSV table, writes Snappy-compressed Parquet into a hive-partitioned prefix, and creates customers_parquet in the catalog. Subsequent queries scan far less data."><code>CREATE TABLE dea_lab.customers_parquet
+WITH (
+  format = 'PARQUET',
+  parquet_compression = 'SNAPPY',
+  external_location = 's3://dea-lab-ab-4821/staging/customers_parquet/',
+  partitioned_by = ARRAY['state']
+) AS
+SELECT id, name, age, address, city, state, email
+FROM dea_lab.customers_raw;</code></pre>
+
+          <p>After CTAS, filter on <code>state</code> to prune partitions:</p>
+
+<pre data-lang="sql" data-title="Athena — query with partition pruning"><code>SELECT city, COUNT(*) AS n
+FROM dea_lab.customers_parquet
+WHERE state = 'NY'
+GROUP BY city;</code></pre>
+
+          <h3>Partition projection TBLPROPERTIES</h3>
+          <p>For date-partitioned logs where you do not want thousands of catalog partitions, define projection in table properties:</p>
+
+<pre data-lang="sql" data-title="Athena — partition projection for date partitions" data-explain="Athena generates partition paths from the range instead of reading the Glue catalog. Ideal for CloudTrail-style year/month/day layouts."><code>CREATE EXTERNAL TABLE dea_lab.events (
+  event_id   STRING,
+  payload    STRING
+)
+PARTITIONED BY (
+  year  STRING,
+  month STRING,
+  day   STRING
+)
+STORED AS PARQUET
+LOCATION 's3://dea-lab-ab-4821/curated/events/'
+TBLPROPERTIES (
+  'projection.enabled'       = 'true',
+  'projection.year.type'     = 'integer',
+  'projection.year.range'    = '2024,2030',
+  'projection.month.type'      = 'integer',
+  'projection.month.range'     = '1,12',
+  'projection.month.digits'  = '2',
+  'projection.day.type'        = 'integer',
+  'projection.day.range'       = '1,31',
+  'projection.day.digits'    = '2',
+  'storage.location.template'  =
+    's3://dea-lab-ab-4821/curated/events/year=${year}/month=${month}/day=${day}/'
+);</code></pre>
+
+          <h3>CTAS bucketing and INSERT INTO</h3>
+          <p>For join-heavy workloads, CTAS and <code>INSERT INTO</code> support <strong>bucketed tables</strong> — hash-partition rows into a fixed number of files by column, improving join performance:</p>
+
+<pre data-lang="sql" data-title="Athena — CTAS with bucketing" data-explain="Buckets by customer id into 32 files per partition, useful when joining large fact tables on the same key."><code>CREATE TABLE dea_lab.orders_bucketed
+WITH (
+  format = 'PARQUET',
+  external_location = 's3://dea-lab-ab-4821/curated/orders/',
+  bucketed_by = ARRAY['customer_id'],
+  bucket_count = 32
+) AS
+SELECT order_id, customer_id, amount, order_date
+FROM dea_lab.orders_staging;</code></pre>
+
+          <p><code>INSERT INTO … SELECT</code> appends to an existing table — use for incremental daily loads where CTAS would rewrite everything.</p>
+
+          <h3>UNLOAD</h3>
+          <p><code>UNLOAD (SELECT …) TO 's3://…'</code> exports query results directly to S3 in Parquet, ORC, Avro, JSON, or text — without storing them in the query result bucket first. Use it for large exports to downstream systems.</p>
+
+<pre data-lang="sql" data-title="Athena — UNLOAD to Parquet" data-explain="Writes query output to a data prefix in Parquet format, separate from the workgroup query results location."><code>UNLOAD (SELECT * FROM dea_lab.customers_parquet WHERE state = 'CA')
+TO 's3://dea-lab-ab-4821/curated/exports/ca_customers/'
+WITH (format = 'PARQUET', compression = 'SNAPPY');</code></pre>
+
+          <h3>Glue partition indexes</h3>
+          <p>When a table has tens of thousands of partitions, listing them slows query planning. A <strong>partition index</strong> in Glue lets Athena fetch only partitions matching the filter predicate. Create them in the Glue console or API after you have many partitions — they complement physical partitioning, not replace it.</p>
+        </section>
+
+        <section class="section" id="query-result-reuse">
+          <h2>Query result reuse</h2>
+          <p class="lead">When enabled, Athena returns a previous result if the same SQL was run recently and the max-age window has not expired — skipping the S3 scan entirely.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-033.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-033.png" alt="Course slide explaining query result reuse: returns matching previous results within max age, with a console screenshot of the Reuse query results toggle." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 33</span>Result reuse matches identical query text and respects a maximum age (the console toggle shows "up to 60 minutes ago"). A cache hit charges no scan bytes — you pay only for retrieving the cached result from S3.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-034.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-034.png" alt="Course slide on when to use query result reuse: infrequently changing source data, repeated queries, large complex datasets." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 34</span>Use reuse when data is stable, dashboards re-run the same SQL, or complex aggregations over large datasets would otherwise rescan terabytes on every refresh.</figcaption>
+          </figure>
+
+          <h3>When to enable it</h3>
+          <ul>
+            <li>Source data in S3 has not changed since the last run (curated layer, historical reports).</li>
+            <li>The same query runs on a schedule — BI tools, Step Functions, Lambda checks.</li>
+            <li>Large scans with heavy aggregation where the result set is small but the scan is not.</li>
+          </ul>
+
+          <h3>When not to</h3>
+          <ul>
+            <li>Near-real-time dashboards over streaming landing zones where new files arrive every minute.</li>
+            <li>Queries that must reflect writes from the last few seconds.</li>
+            <li>During active ETL when underlying prefixes are being overwritten.</li>
+          </ul>
+
+<pre data-lang="sql" data-title="Athena — workgroup with result reuse (API/console equivalent)" data-explain="Configure at workgroup level: ResultConfiguration updates the results bucket; enable reuse with a max age in minutes. Identical SQL within the window returns cached results."><code>-- Console: Workgroups → your workgroup → Edit →
+--   Query result reuse: Enable, max age 60 minutes
+--
+-- Same query within 60 minutes:
+SELECT state, COUNT(*) AS customer_count
+FROM dea_lab.customers_parquet
+GROUP BY state
+ORDER BY customer_count DESC;
+
+-- Second identical run: Data scanned = 0 (cache hit)
+-- Check query execution details: "Reused previous result" = true</code></pre>
+
+          <div class="callout tip"><strong>Cache invalidation.</strong> Reuse keys on exact SQL text — whitespace and column order matter. Any change to underlying S3 data does not automatically invalidate the cache; lower max age or disable reuse for volatile tables.</div>
+        </section>
+
+        <section class="section" id="deeper">
+          <h2>Deeper detail and exam edge cases</h2>
+          <p class="lead">Athena billing edge cases, engine quotas, and optimisation trade-offs the deck summarises as "5 USD per TB" without the failure modes that show up in production and on scenario questions.</p>
+
+          <h3>Limits and quotas that decide answers</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Limit</th><th>Value</th><th>Adjustable?</th><th>Why it matters</th></tr></thead>
+              <tbody>
+                <tr><td>On-demand scan price (us-east-1)</td><td>~5 USD per TB scanned</td><td>No — optimise bytes scanned instead</td><td>Every exam "reduce Athena cost" answer should shrink data read, not "resize cluster".</td></tr>
+                <tr><td>Minimum data scanned per query</td><td>10 MB</td><td>No (hard)</td><td>Tiny queries and metadata-only checks still bill 10 MB — repeated health-check SQL adds up.</td></tr>
+                <tr><td>Interactive query timeout</td><td>30 minutes (default)</td><td>Yes — soft limit increase via Service Quotas</td><td>Long CTAS over huge tables fails at 30 minutes unless optimised or split.</td></tr>
+                <tr><td>DDL/DML statement timeout</td><td>Same engine limits as queries (30 min typical)</td><td>Yes — quota request for some workloads</td><td>Large <code>INSERT INTO</code> or CTAS jobs need partition pruning and right-sized input.</td></tr>
+                <tr><td>Concurrent active queries (account default)</td><td>20 soft quota per Region</td><td>Yes — Service Quotas increase</td><td>BI dashboards firing parallel queries can queue; provisioned capacity is the scale-out path.</td></tr>
+                <tr><td>Partitions per CTAS / INSERT INTO</td><td>100 partitions maximum per statement</td><td>No (hard) — split the job</td><td>Daily CTAS writing 365 partitions in one statement fails; batch by month or use Glue.</td></tr>
+                <tr><td>Workgroups per Region</td><td>1,000</td><td>No (hard) at practical scale</td><td>Team isolation and per-workgroup scan caps are exam answers for governance.</td></tr>
+                <tr><td>Query result reuse max age</td><td>Up to 7 days (API); console often shows 60 minutes</td><td>Yes — configure per workgroup</td><td>Reuse saves scan on identical SQL; stale results if S3 data changed underneath.</td></tr>
+                <tr><td>Athena engine version 3</td><td>Trino-based; default for new workgroups</td><td>Select v2/v3 per workgroup</td><td>v3 has improved join performance, geospatial, and Iceberg support — exam assumes v3 unless stated.</td></tr>
+                <tr><td>Federated connector Lambda</td><td>Per invocation + duration during query</td><td>Right-size connector memory</td><td>Cross-database joins bill Athena scan plus Lambda — not free beyond S3.</td></tr>
+                <tr><td>Iceberg / Lake Formation tables</td><td>Compaction and snapshot expiry are maintenance ops</td><td>Schedule OPTIMIZE / VACUUM patterns</td><td>Without maintenance, metadata files multiply and planning slows — small-file problem at metadata layer.</td></tr>
+                <tr><td>Apache Spark engine sessions</td><td>Billed per DPU-hour of session time</td><td>End sessions when idle</td><td>Different meter from SQL per-TB — do not mix pricing models on the exam.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>What you actually pay for</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Billed dimension</th><th>Unit</th><th>How to spend less</th></tr></thead>
+              <tbody>
+                <tr><td>SQL query data scanned</td><td>USD per TB (5 USD/TB us-east-1 on-demand)</td><td>Parquet/ORC, column projection, partition pruning, avoid <code>SELECT *</code>.</td></tr>
+                <tr><td>Minimum per query</td><td>10 MB floor per query</td><td>Combine small checks; do not poll Athena every minute with trivial SQL.</td></tr>
+                <tr><td>Query results in S3</td><td>GB-month storage + GET requests</td><td>Lifecycle expire <code>aws-athena-query-results-*</code> prefix; use UNLOAD for large exports to curated paths.</td></tr>
+                <tr><td>Provisioned capacity</td><td>DPU-hours reserved</td><td>Only when steady high concurrent query volume makes on-demand more expensive — rare on the exam.</td></tr>
+                <tr><td>Federated Lambda connectors</td><td>Lambda GB-seconds + invocations</td><td>Push filters to the source; federate for dimensions, not fact-table scans.</td></tr>
+                <tr><td>Glue crawler (alternative to projection)</td><td>DPU-hour with 10-min minimum</td><td>Partition projection for logs — zero crawl cost per new day.</td></tr>
+                <tr><td>Cross-Region S3 reads</td><td>Data transfer out per GB</td><td>Run Athena in the same Region as the bucket.</td></tr>
+                <tr><td>KMS decrypt on SSE-KMS objects</td><td>Per request</td><td>Expected on encrypted lakes; factor into high-query workloads.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout cost"><strong>Biggest Athena waste.</strong> Repeated <code>SELECT *</code> on wide CSV tables without partitions — every column of every row scans at CSV row width, often 10×–100× more bytes than a two-column Parquet query with a date filter.</div>
+          <div class="callout danger"><strong>Result reuse on volatile data.</strong> Identical SQL within the reuse window returns cached results even when new files landed in S3. Dashboards on streaming landing zones can show stale counts until reuse is disabled or max age lowered.</div>
+
+          <h3>Traps that catch people</h3>
+          <ul>
+            <li><strong><code>SELECT *</code> on wide tables —</strong> Athena charges for all columns stored in row-based formats. Parquet helps only if you list the columns you need — star-select defeats column pruning.</li>
+            <li><strong>Ignoring 10 MB minimum —</strong> A thousand automated <code>SELECT 1</code> health checks bill at least 10 GB of scan charges combined. Use CloudWatch canaries or the Athena workgroup metrics API instead.</li>
+            <li><strong>MSCK REPAIR at scale —</strong> Repair lists every S3 path to register partitions — slow, expensive in wall-clock time, and can hit catalog limits. Prefer projection or explicit ADD PARTITION from ETL.</li>
+            <li><strong>CTAS with 200 partition values —</strong> Athena limits CTAS/INSERT to 100 partitions per statement. The job fails late after scanning input — split output or use Glue for wide partition fan-out.</li>
+            <li><strong>Crawler vs projection cost trade-off —</strong> Daily crawler on a log bucket with 365 new folders/year is manageable; hourly logs with millions of paths is not. Projection trades catalog objects for template rules.</li>
+            <li><strong>Assuming federated is serverless-free —</strong> Joining a small RDS dimension is cheap; scanning a large RDS table through Lambda every day is not — replicate to S3 instead.</li>
+            <li><strong>Engine v2 vs v3 syntax —</strong> Some functions and Iceberg behaviour differ. Mixed workgroups in one account can confuse testers — standardise on v3.</li>
+            <li><strong>Workgroup scan limit unset —</strong> Analyst runs accidental cartesian join. Per-query data scan cap in the workgroup aborts before terabytes scan — set it in shared workgroups.</li>
+            <li><strong>Iceberg without compaction —</strong> Append-only Iceberg tables accumulate small manifest and data files; queries slow and scan metadata-heavy layouts. Schedule compaction jobs.</li>
+          </ul>
+
+          <h3>Troubleshooting playbook</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Symptom</th><th>Most likely cause</th><th>What to check / fix</th></tr></thead>
+              <tbody>
+                <tr><td>Query scans full table despite WHERE on date</td><td>Partition column not in DDL or wrong type (string vs int)</td><td><code>SHOW CREATE TABLE</code>; match <code>year=2026/</code> path to partition column types; fix projection template.</td></tr>
+                <tr><td>Data scanned = 0 on second run</td><td>Query result reuse hit</td><td>Execution details → "Reused previous result"; disable reuse or change SQL slightly if freshness required.</td></tr>
+                <tr><td><code>QUERY_TIMEOUT</code> on CTAS</td><td>Too much input; no partition filter</td><td>CloudWatch <code>EngineExecutionTime</code>; add WHERE on partition columns; run incremental INSERT INTO instead.</td></tr>
+                <tr><td><code>Too many partitions</code> error</td><td>CTAS/INSERT exceeds 100 partition limit</td><td>Reduce partition cardinality in one statement; use Glue for full reloads.</td></tr>
+                <tr><td>Federated query slow / times out</td><td>Full table pull from RDS; Lambda too small</td><td>Check connector CloudWatch logs; add predicate push-down; increase Lambda memory; move facts to S3.</td></tr>
+                <tr><td>Parquet query still expensive</td><td>No partition pruning; wide nested columns</td><td>Compare scan bytes in query stats; verify only needed columns; add <code>state</code> or date partitions.</td></tr>
+                <tr><td>Queued queries during peak</td><td>Concurrent query soft limit reached</td><td>Athena console → account capacity; request quota increase or provisioned capacity.</td></tr>
+                <tr><td>Iceberg time travel returns old rows</td><td>Expected behaviour — snapshots retained</td><td><code>SELECT * FOR SYSTEM_TIME AS OF …</code>; run snapshot expiry maintenance per retention policy.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Production patterns</h3>
+          <p>Teams treat Athena as the <strong>ad hoc and curated-layer query engine</strong>, not the primary ETL tool. Raw CSV/JSON lands in S3; a scheduled Glue or CTAS job converts to Snappy Parquet partitioned by filter columns (<code>date</code>, <code>region</code>); analysts query curated tables in team-specific workgroups with scan caps and result reuse enabled for dashboards. Federated connectors serve operational joins (RDS product catalog × lake facts) — not nightly warehouse loads.</p>
+          <div class="diagram">
+            <p class="diagram-title">Cost-aware query path</p>
+            <div class="flow">
+              <div class="node is-store"><b>CSV raw/</b><small>wide rows</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-compute pulse"><b>CTAS / Glue</b><small>Parquet · SNAPPY</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-store"><b>curated/</b><small>partitioned</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-serve"><b>Athena</b><small>column list · reuse</small></div>
+            </div>
+          </div>
+          <p>Anti-pattern: pointing BI tools at the raw CSV table because "it works in the lab". Production traffic multiplies the 5 USD/TB rate. Columnar curation once, query many times.</p>
+<pre data-lang="sql" data-title="Athena — column-pruned query (production habit)" data-explain="List only needed columns. On Parquet this reads two column chunks instead of the full row width."><code>SELECT state, city, COUNT(*) AS n
+FROM dea_lab.customers_parquet
+WHERE state IN ('NY', 'CA')
+  AND year = '2026' AND month = '08'
+GROUP BY state, city;</code></pre>
+
+          <h3>Where this fits with the rest of the exam</h3>
+          <p>Athena is the query face of the lake; it depends on catalog metadata from ingestion and often triggers transform decisions when scan cost is too high.</p>
+          <ul>
+            <li><a href="s02-data-ingestion.html">Section 2 (Data Ingestion)</a> — S3 layout and crawlers that create the tables Athena reads.</li>
+            <li><a href="s04-glue.html">Section 4 (Glue)</a> — production ETL when CTAS partition limits or row-level transforms exceed Athena SQL alone.</li>
+            <li><a href="s07-s3.html">Section 7 (S3)</a> — storage class and lifecycle for the query results bucket and lake tiers.</li>
+            <li><a href="s10-redshift.html">Section 10 (Redshift)</a> — when concurrency or performance needs a warehouse instead of per-TB scanning.</li>
+            <li><a href="s13-analytics.html">Section 13 (Lake Formation)</a> — fine-grained access on the same catalog tables Athena uses.</li>
+            <li><a href="s16-management.html">Section 16 (CloudWatch)</a> — per-workgroup Athena metrics for scan bytes and failed queries.</li>
+          </ul>
+          <div class="callout exam"><strong>Athena vs Redshift vs EMR on the exam.</strong> Ad hoc SQL on S3 with unpredictable volume → Athena. High concurrency, complex joins, sub-second dashboards on modelled data → Redshift. Custom Spark, long-running transforms, or libraries Athena cannot run → EMR or Glue. "Most cost-effective" on a terabyte lake almost always means Parquet + Athena, not a provisioned cluster — unless the scenario cites hundreds of concurrent users.</div>
+        </section>
+
+        <section class="section" id="interview">
+          <h2>Interview questions</h2>
+          <p class="muted">Answer each one out loud before opening it.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+            <details class="qa">
+              <summary>How does Athena query data in S3 without loading it into a database?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>Athena is a query engine, not a database. Table metadata (schema, location, format, partitions) lives in the Glue Data Catalog. When you run SQL, Athena's engine reads only the relevant S3 objects using that metadata — data stays in place. Results are written to the workgroup's query result bucket.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What is the pricing model for Athena SQL, and what is the minimum charge per query?<span class="qa-tag">Cost</span></summary>
+              <div class="qa-body">
+                <p>On-demand Athena SQL bills approximately <strong>5 USD per terabyte scanned</strong> (Region-dependent). Each query has a <strong>minimum charge of 10 MB scanned</strong> even if the actual data touched is smaller. There is no charge for idle time — only for bytes read from S3 plus any spill to the results bucket.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What is the single most effective way to cut Athena costs on a large CSV dataset?<span class="qa-tag">Performance</span></summary>
+              <div class="qa-body">
+                <p>Convert to <strong>Parquet or ORC</strong> (columnar) and <strong>partition</strong> by columns you filter on (date, region, tenant). Column pruning reads only SELECT columns; partition pruning skips whole S3 prefixes. Together they often reduce scan size by orders of magnitude versus a flat CSV. Use CTAS to convert in place.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Compare MSCK REPAIR TABLE, ALTER TABLE ADD PARTITION, and partition projection.<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p><strong>MSCK REPAIR</strong> discovers all hive-style partitions in S3 and registers missing ones — simple but slow at scale. <strong>ALTER TABLE ADD PARTITION</strong> registers one known partition explicitly — ideal for daily ETL adding <code>day=2026-08-03</code>. <strong>Partition projection</strong> stores rules in table properties so Athena generates partition paths without catalog entries — best for high-cardinality date ranges and log tables.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How do Athena federated queries work under the hood?<span class="qa-tag">Architecture</span></summary>
+              <div class="qa-body">
+                <p>You deploy a <strong>data source connector</strong> (usually a Lambda from AWS SAR) for each external system. Athena registers the connector as a data source. At query time the engine invokes Lambda to fetch rows from RDS, DynamoDB, DocumentDB, CloudWatch Logs, etc., with predicate push-down where supported. Results merge with native S3 table reads in one SQL statement.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What are Athena workgroups for, and what must every workgroup configure?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>Workgroups isolate teams, cost tracking, encryption, scan limits, and engine choice (SQL vs Spark). Every workgroup must specify an S3 <strong>query result location</strong> — without it queries fail. Up to 1,000 workgroups per Region; each account has a default <code>primary</code> workgroup.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>When should you enable query result reuse, and when should you avoid it?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>Enable when the same SQL runs repeatedly over data that changes rarely — scheduled reports, dashboards on curated tables, heavy aggregations. Avoid for near-real-time data, right-after-ETL validation, or any query that must reflect files landed in the last few minutes. Reuse matches exact SQL text and does not detect new S3 objects automatically.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Write the CTAS pattern to convert an external CSV table to Snappy Parquet partitioned by state.<span class="qa-tag">SQL</span></summary>
+              <div class="qa-body">
+                <p>Use <code>CREATE TABLE … WITH (format='PARQUET', parquet_compression='SNAPPY', external_location='s3://…/', partitioned_by=ARRAY['state']) AS SELECT … FROM csv_table</code>. Athena writes Parquet files under hive-style <code>state=NY/</code> prefixes and registers the new table. Future queries filtering on <code>state</code> scan only the matching prefix.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How would you analyse CloudTrail or VPC flow logs with Athena?<span class="qa-tag">Exam</span></summary>
+              <div class="qa-body">
+                <p>Both land in S3 — CloudTrail as JSON (often gzipped), VPC flow logs as text or Parquet. Create an external table with the appropriate SerDe and <strong>partition by date</strong> (and account/Region for CloudTrail). Use partition projection for high-volume logs. Query with SQL for IAM forensics, security group traffic analysis, or cost anomaly investigation — no dedicated log cluster required.</p>
+              </div>
+            </details>
+          </div>
+        </section>
+
+        <section class="section" id="practice">
+          <h2>Hands-on practice</h2>
+          <p class="muted">Uses the bucket and crawler from Section 2. Athena charges per scan — use <code>LIMIT</code> while exploring.</p>
+          <ol class="practice-list">
+            <li class="practice">
+              <p class="practice-task">Run your first Athena query: <code>SELECT * FROM dea_lab.customers_raw LIMIT 10</code> (or the crawler-created table name). Note the data scanned in the query statistics panel.</p>
+              <span class="console-path">Athena → Query editor → AwsDataCatalog → dea_lab</span>
+              <p class="practice-expect">Query succeeds; results show 10 rows including the duplicate Sarah Smith rows (rows 6 and 11).</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">Console</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li><strong>Athena → Query editor</strong>. If prompted, set a query result location: <code>s3://aws-athena-query-results-ACCOUNT-us-east-1/</code> (create the bucket if needed).</li>
+                    <li>Select data source <code>AwsDataCatalog</code>, database <code>dea_lab</code>.</li>
+                    <li>Run <code>SELECT * FROM customers_raw LIMIT 10;</code> (adjust table name to match crawler output).</li>
+                    <li>Open <em>Query stats</em> — note <strong>Data scanned</strong> (likely a few KB for this tiny CSV).</li>
+                  </ol>
+                  <p class="muted">No cleanup. Result files in the Athena results bucket can be lifecycle-expired later.</p>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">CTAS the customers table to Snappy Parquet partitioned by <code>state</code> under <code>staging/customers_parquet/</code>. Compare scan bytes: full table scan on CSV vs filtered query on Parquet.</p>
+              <span class="console-path">Athena → Query editor → New query</span>
+              <p class="practice-expect">Table <code>customers_parquet</code> exists; <code>WHERE state = 'NY'</code> scans less data than <code>SELECT *</code> on the CSV table.</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">SQL</span></summary>
+                <div class="qa-body">
+<pre data-lang="sql"><code>CREATE TABLE dea_lab.customers_parquet
+WITH (
+  format = 'PARQUET',
+  parquet_compression = 'SNAPPY',
+  external_location = 's3://dea-lab-ab-4821/staging/customers_parquet/',
+  partitioned_by = ARRAY['state']
+) AS
+SELECT * FROM dea_lab.customers_raw;
+
+SELECT * FROM dea_lab.customers_parquet WHERE state = 'NY';</code></pre>
+                  <p>Compare <em>Data scanned</em> on both queries versus the original CSV <code>SELECT *</code>.</p>
+                  <p class="muted">Keep Parquet data for later sections. To remove: <code>DROP TABLE customers_parquet</code> and delete the S3 prefix.</p>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Enable query result reuse on your workgroup (60-minute max age). Run the same aggregation twice and confirm the second run shows zero bytes scanned.</p>
+              <span class="console-path">Athena → Workgroups → primary → Edit</span>
+              <p class="practice-expect">Second identical query reports "Reused previous result" and Data scanned = 0 bytes.</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">Console</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li><strong>Workgroups → primary → Edit</strong> → enable <em>Query result reuse</em>, max age 60 minutes.</li>
+                    <li>Run: <code>SELECT state, COUNT(*) FROM dea_lab.customers_parquet GROUP BY state;</code></li>
+                    <li>Run the exact same SQL again. Check execution details for reuse.</li>
+                  </ol>
+                  <p class="muted">No cleanup required.</p>
+                </div>
+              </details>
+            </li>
+          </ol>
+        </section>
+
+        <section class="section" id="recap">
+          <h2>Recap</h2>
+          <div class="recap">
+            <ul class="checklist">
+              <li>Athena = serverless SQL over S3; metadata in Glue Data Catalog; no cluster to manage.</li>
+              <li>Flow: S3 → Crawler → Catalog → Athena → QuickSight. Athena reads in place, does not ingest.</li>
+              <li>Federated queries use Lambda connectors to join RDS, DynamoDB, DocumentDB, CloudWatch with S3 tables.</li>
+              <li>Workgroups isolate settings, cost, engines (SQL vs Spark); up to 1,000/Region; result location required.</li>
+              <li>Cost: ~5 USD/TB scanned, 10 MB minimum per query; provisioned capacity for steady high volume.</li>
+              <li>Biggest cost lever: Parquet/ORC + partition pruning; CTAS to convert CSV; INSERT INTO for incremental loads.</li>
+              <li>Partitions: MSCK REPAIR (discover), ALTER ADD PARTITION (one day), projection (high-cardinality dates).</li>
+              <li>Engine v3 (Trino); UNLOAD for large exports; bucketing in CTAS for join optimisation.</li>
+              <li>Query result reuse: identical SQL within max age skips scan — good for stable data and repeated dashboards.</li>
+              <li>CloudTrail/VPC flow logs: external table + date partitions + SQL forensics.</li>
+            </ul>
+            <p style="margin-top:1rem;">
+              <button type="button" data-complete="section-03">Mark complete</button>
+            </p>
+          </div>
+        </section>
+
+      </div>
+
+      <aside class="toc" aria-label="On this page">
+        <strong>On this page</strong>
+        <ol>
+          <li><a href="#lectures">Lectures</a></li>
+          <li><a href="#athena-overview">Athena overview</a></li>
+          <li><a href="#use-cases">Use cases</a></li>
+          <li><a href="#federated-queries">Federated queries</a></li>
+          <li><a href="#workgroups">Workgroups</a></li>
+          <li><a href="#cost">Cost</a></li>
+          <li><a href="#performance">Performance</a></li>
+          <li><a href="#query-result-reuse">Result reuse</a></li>
+          <li><a href="#deeper">Deeper detail</a></li>
+          <li><a href="#interview">Interview questions</a></li>
+          <li><a href="#practice">Hands-on practice</a></li>
+          <li><a href="#recap">Recap</a></li>
+        </ol>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<footer class="footer">AWS Certified Data Engineer Associate (DEA-C01) · Section 3 · Offline study edition</footer>
+</body>
+</html>

@@ -1,0 +1,1043 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="DEA-C01 Section 9: DynamoDB data model, keys and indexes, Streams, API operations, WCU/RCU capacity, DAX, TTL, global tables, and exam-focused Query vs Scan guidance.">
+<title>Section 9 — DynamoDB | AWS Data Engineer DEA-C01 Notes</title>
+<link rel="stylesheet" href="assets/aws.css">
+<script defer src="assets/search-index.js"></script>
+<script defer src="assets/code-highlight.js"></script>
+<script defer src="assets/aws.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">Course section 9 of 21 · AWS Certified Data Engineer Associate</p>
+    <h1>DynamoDB</h1>
+    <p class="subtitle">Amazon's serverless NoSQL database — partition keys, GSIs, Streams feeding Lambda, the API surface from PutItem to TransactWriteItems, WCU/RCU maths, DAX caching, and the design patterns the exam expects you to know cold.</p>
+    <div class="hero-meta">
+      <span class="chip">51 slides · ~45min</span>
+      <span class="chip">Exam domains: Data Store Management (26%) · Data Ingestion</span>
+      <span class="chip">Deck slides 203–253</span>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <nav class="pager" aria-label="Section navigation">
+    <a href="s08-other-storage.html">← Other Storage Services</a>
+    <a href="index.html">Course contents</a>
+    <a href="s10-redshift.html">Next: Redshift Datawarehouse →</a>
+  </nav>
+
+  <main id="main">
+    <div class="layout">
+      <div class="content">
+
+        <section class="section" id="lectures">
+          <h2>Lectures in this section</h2>
+          <p class="muted">DynamoDB appears in ingestion scenarios (Streams → Lambda) and as an operational store alongside the warehouse in <a href="s10-redshift.html">Section 10</a>.</p>
+          <ol class="lecture-list">
+            <li class="lecture">
+              <a class="lec-title" href="#overview">Overview and NoSQL vs relational</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">Slides 205–208</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#structure">Tables, items, keys and attributes</a>
+              <span class="lec-time">~8:00</span>
+              <span class="lec-src">Slides 209–216</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#secondary-indexes">Local and global secondary indexes</a>
+              <span class="lec-time">~6:00</span>
+              <span class="lec-src">Slides 217–219</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#streams">DynamoDB Streams</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">Slides 220–225</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#api">Control plane, data plane and transactions</a>
+              <span class="lec-time">~8:00</span>
+              <span class="lec-src">Slides 226–235</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#capacity">Capacity modes, WCU/RCU and throttling</a>
+              <span class="lec-time">~10:00</span>
+              <span class="lec-src">Slides 236–248</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#dax">DynamoDB Accelerator (DAX)</a>
+              <span class="lec-time">~4:00</span>
+              <span class="lec-src">Slides 249–252</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#ttl">Time to Live (TTL)</a>
+              <span class="lec-time">~3:00</span>
+              <span class="lec-src">Slide 253</span>
+            </li>
+          </ol>
+        </section>
+
+        <section class="section" id="overview">
+          <h2>Overview and NoSQL vs relational</h2>
+          <p class="lead"><strong>Amazon DynamoDB</strong> is a fully managed, serverless NoSQL database. <strong>NoSQL</strong> means "Not Only SQL" — it supports key-value and document models without fixed schemas, horizontal scale-out, and single-digit millisecond latency at any table size.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-205.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-205.png" alt="Slide introducing AWS DynamoDB as a serverless NoSQL database." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 205</span>DynamoDB is the default AWS answer for key-based access at scale — session stores, gaming leaderboards, IoT telemetry, and operational metadata for pipelines.</figcaption>
+          </figure>
+
+          <h3>Relational vs NoSQL</h3>
+          <div class="slide-row">
+            <figure class="slide-fig">
+              <a href="assets/slides/slide-206.png" target="_blank" rel="noopener">
+                <img src="assets/slides/slide-206.png" alt="Comparison slide: relational databases use structured tables and SQL versus NoSQL schemaless horizontal scale." loading="lazy">
+              </a>
+              <figcaption><span class="slide-no">Slide 206</span>Relational stores normalise data and join at query time. NoSQL denormalises for access patterns and trades joins for partition-local queries.</figcaption>
+            </figure>
+            <figure class="slide-fig">
+              <a href="assets/slides/slide-207.png" target="_blank" rel="noopener">
+                <img src="assets/slides/slide-207.png" alt="Comparison slide example use cases: relational for reporting, NoSQL for big data and real-time analytics." loading="lazy">
+              </a>
+              <figcaption><span class="slide-no">Slide 207</span>Reporting over modelled star schemas → RDS/Redshift. High-volume key lookups and event ingestion → DynamoDB.</figcaption>
+            </figure>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Aspect</th><th>Relational (RDS, Aurora, Redshift)</th><th>NoSQL (DynamoDB)</th></tr></thead>
+              <tbody>
+                <tr><td>Data shape</td><td>Structured tables, rows and columns</td><td>Structured, semi-structured, unstructured documents</td></tr>
+                <tr><td>Schema</td><td>Predefined schema enforced at write</td><td>Schemaless per item — each item can have different attributes</td></tr>
+                <tr><td>Scale</td><td>Vertical (bigger instance) or read replicas</td><td>Horizontal — partitions added automatically</td></tr>
+                <tr><td>Query language</td><td>SQL — joins, aggregations, complex filters</td><td>Key-based API — Query on partition key; no joins</td></tr>
+                <tr><td>Optimised for</td><td>Complex ad-hoc queries, reporting, ACID transactions across rows</td><td>Predictable key access, high throughput, low latency at scale</td></tr>
+                <tr><td>Example use case</td><td>Monthly revenue report, dimensional modelling</td><td>Real-time clickstream, session cache, IoT device state</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>DynamoDB characteristics</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-208.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-208.png" alt="Slide listing DynamoDB features: key-value and document model, fully managed, high availability, encryption, millisecond latency." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 208</span>Data is replicated across three AZs by default. Encryption at rest uses AWS owned or KMS keys. Throughput scales without downtime.</figcaption>
+          </figure>
+
+          <ul>
+            <li><strong>Key-value and document</strong> — items are JSON-like documents identified by a primary key.</li>
+            <li><strong>Fully managed</strong> — no servers, patches or filesystem tuning.</li>
+            <li><strong>High availability</strong> — synchronous replication across AZs in a Region.</li>
+            <li><strong>Millisecond latency</strong> — single-digit ms at the 99th percentile for key-based reads and writes.</li>
+          </ul>
+
+          <h3>Global tables and multi-Region active-active</h3>
+          <p><strong>DynamoDB global tables</strong> (not on the deck) replicate tables across Regions with active-active writes. Applications write to the local Region; DynamoDB propagates changes typically within a second. Use global tables for disaster recovery, geo-proximity, and multi-Region active-active workloads. Conflict resolution is <em>last writer wins</em> based on timestamp — design keys so the same item is not written concurrently in two Regions unless you accept that semantics.</p>
+        </section>
+
+        <section class="section" id="structure">
+          <h2>Structure — tables, items and keys</h2>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-209.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-209.png" alt="Slide showing DynamoDB structure: tables contain items with attributes, 400 KB item limit, all tables have a primary key." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 209</span>A table is a collection of items. Each item is a map of attributes. Maximum item size is 400 KB including attribute names and values.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-210.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-210.png" alt="JSON examples of Books table items showing nested attributes, lists, maps and the primary key BookID." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 210</span>The table is schemaless — one item can have <code>Publisher</code> as a nested map while another has <code>RelatedCourses</code> as a list. Only the primary key attributes are required on every item.</figcaption>
+          </figure>
+
+          <h3>Primary keys</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-211.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-211.png" alt="Slide describing partition key and composite key primary key types, scalar types, uniqueness requirements." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 211</span>Primary key attributes must be scalar (String, Number or Binary). They are fixed at table creation — you cannot change the key schema without rebuilding the table.</figcaption>
+          </figure>
+
+          <div class="slide-row">
+            <figure class="slide-fig">
+              <a href="assets/slides/slide-212.png" target="_blank" rel="noopener">
+                <img src="assets/slides/slide-212.png" alt="Comparison slide: partition key only versus composite partition plus sort key uniqueness rules." loading="lazy">
+              </a>
+              <figcaption><span class="slide-no">Slide 212</span>Partition key alone must be unique per item. Composite key allows duplicate partition values if the sort key differs.</figcaption>
+            </figure>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Key type</th><th>Also called</th><th>Contains</th><th>Uniqueness rule</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Partition key</strong></td><td>Hash attribute</td><td>Partition key only</td><td>Every item must have a unique partition key</td></tr>
+                <tr><td><strong>Composite key</strong></td><td>Hash + range</td><td>Partition key + sort key</td><td>Combination must be unique; partition key may repeat</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-213.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-213.png" alt="Student table examples showing simple partition key Student No versus composite key with sort key Age." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 213</span>With a composite key of <code>StudentNo</code> + <code>GraduationYear</code>, the same student can appear twice with different graduation years. A simple partition key of <code>StudentNo</code> alone would forbid duplicates.</figcaption>
+          </figure>
+
+          <h3>How partition keys map to storage</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-214.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-214.png" alt="Slide explaining partition key determines physical partition for storage and is the most efficient retrieval path." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 214</span>DynamoDB hashes the partition key value to decide which physical partition stores the item. Query efficiency depends on including the partition key in your access pattern.</figcaption>
+          </figure>
+
+          <p><strong>Query</strong> always targets one partition key (optionally filtering on sort key). You cannot efficiently look up by a non-key attribute without a secondary index or a Scan.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-216.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-216.png" alt="Slide introducing local and global secondary indexes for alternative query patterns." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 216</span>Secondary indexes exist because real applications query on attributes beyond the primary key — for example, products by category or manufacturer.</figcaption>
+          </figure>
+
+          <h3>Attribute data types</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-235.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-235.png" alt="Slide listing DynamoDB data types: scalar, document List and Map, and Set types." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 235</span>Scalar types hold one value. Document types (List, Map) nest structures. Sets hold unique scalar values of the same type. Primary keys cannot be List, Map or Set.</figcaption>
+          </figure>
+
+          <h3>Single-table design and overloaded keys</h3>
+          <p>Production DynamoDB applications often use <strong>single-table design</strong>: one table holds multiple entity types, distinguished by composite keys and generic attribute names. The <strong>overloaded key pattern</strong> stores entity type in the sort key prefix — for example <code>PK=USER#123</code>, <code>SK=PROFILE</code> alongside <code>PK=USER#123</code>, <code>SK=ORDER#456</code>. GSIs invert the pattern for alternate access paths. This is beyond the deck but frequently tested at associate level when the scenario describes "one table for users and their orders".</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>PK</th><th>SK</th><th>Entity</th><th>Access pattern</th></tr></thead>
+              <tbody>
+                <tr><td><code>CUST#100</code></td><td><code>PROFILE</code></td><td>Customer profile</td><td>GetItem on PK+SK</td></tr>
+                <tr><td><code>CUST#100</code></td><td><code>ORDER#501</code></td><td>Order for customer</td><td>Query PK=<code>CUST#100</code>, SK begins_with <code>ORDER#</code></td></tr>
+                <tr><td><code>ORDER#501</code></td><td><code>METADATA</code></td><td>Order header (inverted GSI)</td><td>GSI1PK=<code>ORDER#501</code> for lookup by order id</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <pre data-lang="shell" data-title="AWS CLI — create a composite-key table" data-explain="Partition key CustomerId and sort key OrderId let you Query all orders for one customer efficiently."><code>aws dynamodb create-table \
+  --table-name Orders \
+  --attribute-definitions \
+      AttributeName=CustomerId,AttributeType=S \
+      AttributeName=OrderId,AttributeType=S \
+  --key-schema \
+      AttributeName=CustomerId,KeyType=HASH \
+      AttributeName=OrderId,KeyType=RANGE \
+  --billing-mode PAY_PER_REQUEST \
+  --region us-east-1</code></pre>
+        </section>
+
+        <section class="section" id="secondary-indexes">
+          <h2>Secondary indexes — LSI vs GSI</h2>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-217.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-217.png" alt="Comparison slide: local secondary index same partition key different sort key versus global secondary index with different keys." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 217</span>LSIs share the partition key with the base table. GSIs have their own partition and sort keys. GSI write throttling throttles the base table too.</figcaption>
+          </figure>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Feature</th><th>Local Secondary Index (LSI)</th><th>Global Secondary Index (GSI)</th></tr></thead>
+              <tbody>
+                <tr><td>When created</td><td>Only at table creation — cannot add later</td><td>Any time — create, update, delete after table exists</td></tr>
+                <tr><td>Partition key</td><td>Must match base table</td><td>Can differ from base table</td></tr>
+                <tr><td>Sort key</td><td>Must differ from base table</td><td>Optional; can differ</td></tr>
+                <tr><td>Max per table</td><td>5</td><td>20</td></tr>
+                <tr><td>Consistency</td><td>Strongly consistent reads supported</td><td>Eventually consistent only</td></tr>
+                <tr><td>Capacity</td><td>Shares table RCU/WCU</td><td>Has its own provisioned/on-demand capacity</td></tr>
+                <tr><td>Size limit</td><td>10 GB per partition key value (base + all LSIs)</td><td>No fixed per-partition limit beyond 400 KB per item</td></tr>
+                <tr><td>Throttling</td><td>Throttles base table</td><td>GSI throttling also throttles base table writes</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-218.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-218.png" alt="Product table with ProductID partition key and CategoryIndex and ManufacturerIndex GSIs for alternate queries." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 218</span>Base table queries by <code>ProductID</code>. <code>CategoryIndex</code> GSI uses <code>Category</code> as partition key to find all Books. <code>ManufacturerIndex</code> GSI queries by manufacturer.</figcaption>
+          </figure>
+
+          <h3>GSI and LSI projection types</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-219.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-219.png" alt="Slide describing GSI projection types KEYS_ONLY, INCLUDE and ALL for copied attributes." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 219</span>Projection controls which attributes are copied into the index. ALL costs more storage but avoids fetching the base table after an index Query. KEYS_ONLY is cheapest.</figcaption>
+          </figure>
+
+          <ul>
+            <li><strong>KEYS_ONLY</strong> — index keys from the base table only.</li>
+            <li><strong>INCLUDE</strong> — keys plus up to 20 non-key attributes you specify.</li>
+            <li><strong>ALL</strong> — full item copy — highest storage cost, lowest read latency.</li>
+          </ul>
+        </section>
+
+        <section class="section" id="streams">
+          <h2>DynamoDB Streams</h2>
+          <p class="lead"><strong>DynamoDB Streams</strong> captures a time-ordered sequence of item-level changes (insert, update, delete) in a table. Each change becomes a <strong>stream record</strong>. Streams enable event-driven pipelines — CDC from DynamoDB into Lambda, Kinesis, or S3 without polling.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-220.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-220.png" alt="Diagram of DynamoDB table changes flowing to a stream as INSERT UPDATE DELETE records in chronological order." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 220</span>One stream record per modified item per write operation. Records are ordered per shard and retained 24 hours.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-221.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-221.png" alt="Slide noting Streams are optional, disabled by default, 24 hour retention, no history before enable." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 221</span>Enable Streams before you need them — changes before activation are not backfilled. Data expires after 24 hours whether or not a consumer reads it.</figcaption>
+          </figure>
+
+          <h3>Stream view types</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-222.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-222.png" alt="Slide listing stream record view types KEYS_ONLY NEW_IMAGE OLD_IMAGE NEW_AND_OLD_IMAGES." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 222</span>Choose the view at enable time. NEW_AND_OLD_IMAGES costs the most stream storage but supports diff-based CDC logic.</figcaption>
+          </figure>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>View type</th><th>What is in each record</th></tr></thead>
+              <tbody>
+                <tr><td><strong>KEYS_ONLY</strong></td><td>Primary key attributes only</td></tr>
+                <tr><td><strong>NEW_IMAGE</strong></td><td>The item after the change</td></tr>
+                <tr><td><strong>OLD_IMAGE</strong></td><td>The item before the change</td></tr>
+                <tr><td><strong>NEW_AND_OLD_IMAGES</strong></td><td>Both images — needed for UPDATE diffs</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Stream consumers</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-223.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-223.png" alt="Slide listing stream consumers: Lambda, Kinesis Data Streams, OpenSearch, custom apps, Glue, cross-Region replication." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 223</span>Lambda is the most common consumer. Kinesis Data Streams for DynamoDB exports changes to Kinesis for multiple subscribers or longer retention than 24 hours.</figcaption>
+          </figure>
+
+          <div class="callout info"><strong>Deck correction.</strong> The slide says "Amazon Elasticsearch Service" — the service is now <strong>Amazon OpenSearch Service</strong>. DynamoDB Streams can feed OpenSearch for search indexing.</div>
+
+          <h3>Lambda trigger pattern</h3>
+          <div class="diagram">
+            <p class="diagram-title">DynamoDB Streams → Lambda CDC pipeline</p>
+            <div class="flow">
+              <div class="node is-store"><b>DynamoDB table</b><small>PutItem · UpdateItem · DeleteItem</small></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-store pulse"><b>Stream</b><small>24h retention · ordered per shard</small></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-compute"><b>Lambda</b><small>event source mapping · batch invoke</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-serve"><b>Targets</b><small>S3 · OpenSearch · SNS · Redshift zero-ETL</small></div>
+            </div>
+          </div>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-224.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-224.png" alt="Three-step Lambda trigger setup: enable stream, create Lambda, configure event source mapping." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 224</span>Event source mapping polls the stream and invokes Lambda with batches of records. Failed batches retry until the data expires or land on a DLQ.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-225.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-225.png" alt="Slide overview of DynamoDB API layers: control plane, data plane, streams APIs and transactions." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 225</span>Streams have their own API surface (<code>ListStreams</code>, <code>GetRecords</code>) separate from table CRUD operations.</figcaption>
+          </figure>
+
+          <pre data-lang="json" data-title="DynamoDB Streams — Lambda event payload (excerpt)" data-explain="Each Records entry contains eventName INSERT/MODIFY/REMOVE and dynamodb keys plus NewImage/OldImage depending on view type."><code>{
+  "Records": [
+    {
+      "eventID": "1",
+      "eventName": "INSERT",
+      "eventSource": "aws:dynamodb",
+      "awsRegion": "us-east-1",
+      "dynamodb": {
+        "Keys": { "CustomerId": { "S": "C100" }, "OrderId": { "S": "O999" } },
+        "NewImage": {
+          "CustomerId": { "S": "C100" },
+          "OrderId": { "S": "O999" },
+          "Status": { "S": "SHIPPED" }
+        },
+        "StreamViewType": "NEW_AND_OLD_IMAGES",
+        "SequenceNumber": "111",
+        "SizeBytes": 128
+      }
+    }
+  ]
+}</code></pre>
+
+          <p><strong>TTL + Streams archive pattern:</strong> enable TTL on an expiry attribute, set stream view to <code>NEW_IMAGE</code>, and use a Lambda on <code>REMOVE</code> events with <code>userIdentity</code> type <code>Service</code> (TTL deletion) to copy expiring items to S3 before they disappear.</p>
+        </section>
+
+        <section class="section" id="api">
+          <h2>The API surface</h2>
+          <p>DynamoDB exposes a REST API grouped into control plane (table management), data plane (CRUD), Streams, and transactions.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-226.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-226.png" alt="Slide listing control plane APIs CreateTable DescribeTable UpdateTable DeleteTable ListTables." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 226</span>Control plane operations change table metadata — capacity mode, indexes, streams, TTL, PITR.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-227.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-227.png" alt="Slide introducing data plane CRUD operations via PartiQL and classic APIs." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 227</span>Data plane operations read and write items. Applications spend most of their time here.</figcaption>
+          </figure>
+
+          <h3>PartiQL</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-228.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-228.png" alt="Slide describing PartiQL as SQL-compatible language for DynamoDB CRUD via ExecuteStatement and BatchExecuteStatement." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 228</span>PartiQL wraps the same underlying operations — it does not add joins or ad-hoc analytics across partitions.</figcaption>
+          </figure>
+
+          <pre data-lang="sql" data-title="PartiQL — SELECT with parameter" data-explain="ExecuteStatement runs a single statement. Primary key must still be specified for efficient reads — this is a GetItem equivalent."><code>aws dynamodb execute-statement \
+  --statement "SELECT * FROM Orders WHERE CustomerId=? AND OrderId=?" \
+  --parameters '[{"S":"C100"},{"S":"O501"}]'</code></pre>
+
+          <h3>Classic CRUD APIs</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-229.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-229.png" alt="Slide listing write APIs PutItem and BatchWriteItem up to 25 items." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 229</span>PutItem overwrites the entire item unless you use a condition expression. BatchWriteItem handles up to 25 put or delete requests.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-230.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-230.png" alt="Slide listing read APIs GetItem BatchGetItem Query and Scan." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 230</span>Query and GetItem are efficient key-based reads. Scan reads every item in the table or index.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-231.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-231.png" alt="Slide listing UpdateItem and DeleteItem APIs." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 231</span>UpdateItem can modify individual attributes atomically with update expressions — no need to read-modify-write in application code.</figcaption>
+          </figure>
+
+          <div class="callout exam"><strong>Query vs Scan — the most common DynamoDB exam question.</strong> <strong>Query</strong> requires a partition key (and optional sort key condition). It reads only one partition (or index partition) and consumes capacity proportional to data read. <strong>Scan</strong> reads every item in the table or index — cost grows with table size regardless of how many items match. Never Scan a large table in production when a GSI + Query would work. FilterExpression on a Query filters <em>after</em> the key condition — it still reads every item in the partition that matches the key condition, and you pay for those reads.</div>
+
+          <h3>Batch and pagination limits</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>API</th><th>Limit</th><th>Notes</th></tr></thead>
+              <tbody>
+                <tr><td><code>BatchWriteItem</code></td><td>25 put/delete requests per call</td><td>Unprocessed items returned for retry with exponential backoff</td></tr>
+                <tr><td><code>BatchGetItem</code></td><td>100 items, 16 MB total per call</td><td>Strongly or eventually consistent per request</td></tr>
+                <tr><td><code>Query</code> / <code>Scan</code></td><td>1 MB data per page</td><td>Use <code>LastEvaluatedKey</code> to paginate — a Query is not "free" after the first page</td></tr>
+                <tr><td><code>TransactWriteItems</code></td><td>100 actions, 4 MB transaction payload</td><td>All succeed or all fail; 2× WCU cost</td></tr>
+                <tr><td><code>TransactGetItems</code></td><td>100 items</td><td>2× RCU cost; supports cross-table reads in one Region</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <pre data-lang="shell" data-title="Query — key condition plus filter expression" data-explain="KeyConditionExpression must use the partition key. FilterExpression removes items after read — it does not reduce RCUs if most items in the partition are read anyway."><code>aws dynamodb query \
+  --table-name Orders \
+  --key-condition-expression "CustomerId = :cid AND OrderDate BETWEEN :start AND :end" \
+  --filter-expression "OrderTotal &gt; :min" \
+  --expression-attribute-values '{
+    ":cid":{"S":"C100"},
+    ":start":{"S":"2026-01-01"},
+    ":end":{"S":"2026-03-31"},
+    ":min":{"N":"500"}
+  }'</code></pre>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-232.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-232.png" alt="Slide listing DynamoDB Streams APIs ListStreams DescribeStream GetShardIterator GetRecords." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 232</span>Custom consumers use shard iterators to paginate through stream records. Lambda hides this behind event source mappings.</figcaption>
+          </figure>
+
+          <h3>Transactions</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-233.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-233.png" alt="Slide describing DynamoDB transactions providing ACID via ExecuteTransaction PartiQL API." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 233</span>Transactions coordinate up to 100 actions across multiple items and tables in one Region.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-234.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-234.png" alt="Slide listing TransactWriteItems and TransactGetItems classic transaction APIs." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 234</span>TransactWriteItems is all-or-nothing — either every action succeeds or none do. Transactional reads and writes consume <strong>double</strong> the normal RCUs/WCUs.</figcaption>
+          </figure>
+
+          <h3>ConditionExpression for idempotency</h3>
+          <p>Use <code>ConditionExpression</code> on <code>PutItem</code> to make writes idempotent — for example, "put this order only if the primary key does not exist yet". Combined with a natural business key as the partition key, retries from Lambda or Kinesis do not create duplicates.</p>
+
+          <pre data-lang="python" data-title="boto3 — conditional PutItem for idempotent insert" data-explain="attribute_not_exists on the partition key prevents overwrite if the Lambda retries the same event."><code>import boto3
+
+ddb = boto3.resource("dynamodb", region_name="us-east-1")
+table = ddb.Table("Orders")
+
+table.put_item(
+    Item={
+        "CustomerId": "C100",
+        "OrderId": "O501",
+        "Status": "PENDING",
+        "OrderTotal": 750,
+    },
+    ConditionExpression="attribute_not_exists(OrderId)",
+)</code></pre>
+        </section>
+
+        <section class="section" id="capacity">
+          <h2>Capacity and cost</h2>
+
+          <h3>On-demand vs provisioned</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-236.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-236.png" alt="Slide describing on-demand billing per request with no throttling and higher cost for steady workloads." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 236</span>On-demand (<code>PAY_PER_REQUEST</code>) scales instantly. You pay per request. No throttling under normal AWS limits — ideal for unknown or spikey traffic.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-237.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-237.png" alt="Slide describing provisioned mode with RCU WCU specification, auto scaling and throttling risk." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 237</span>Provisioned mode is cheaper at predictable volume. You specify RCUs and WCUs (table and per-GSI). Exceeding provisioned capacity causes throttling unless auto scaling has added headroom.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-238.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-238.png" alt="Slide describing reserved capacity 1 or 3 year commitment for provisioned RCU WCU discounts." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 238</span>Reserved capacity applies to provisioned mode in standard table class only — not on-demand or IA table class.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-239.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-239.png" alt="Slide describing DynamoDB auto scaling with min max and target utilization for provisioned capacity." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 239</span>Application Auto Scaling adjusts RCU/WCU toward a target utilisation (typically 70%). Scaling reacts in minutes, not seconds.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-248.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-248.png" alt="Slide stating auto scaling maintains target utilization and requests never throttle when configured correctly." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 248</span>Auto scaling prevents most throttling but cannot fix hot partitions — a single partition key receiving more traffic than its share will still throttle.</figcaption>
+          </figure>
+
+          <h3>WCU and RCU maths</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-240.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-240.png" alt="Slide defining write capacity unit: 1 WCU equals one 1 KB write per second with rounding up for larger items." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 240</span>1 WCU = one write per second for an item up to 1 KB. A 3 KB item needs 3 WCUs per write. Transactional writes cost 2× WCUs.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-241.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-241.png" alt="Slide defining read capacity unit: 1 RCU for one strongly consistent 4 KB read or two eventually consistent reads." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 241</span>1 RCU = one strongly consistent read per second for items up to 4 KB, or two eventually consistent reads per second for the same size.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-242.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-242.png" alt="Slide comparing eventually consistent reads versus strongly consistent reads for freshness and cost." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 242</span>Eventually consistent reads are half the RCU cost but may return stale data for up to one second after a write. Strongly consistent reads always reflect all successful prior writes.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-243.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-243.png" alt="Slide worked RCU examples: 8 KB strongly consistent item needs 2 RCUs; ten 3 KB eventually consistent items need 5 RCUs per second." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 243</span>Round item size up to the next 1 KB boundary for writes and 4 KB boundary for reads when calculating capacity.</figcaption>
+          </figure>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Operation</th><th>Capacity formula</th><th>Example</th></tr></thead>
+              <tbody>
+                <tr><td>Write</td><td>ceil(itemSize KB) × writes/sec × (2 if transactional)</td><td>3 KB item at 10 writes/sec → 3 × 10 = 30 WCUs</td></tr>
+                <tr><td>Strongly consistent read</td><td>ceil(itemSize / 4 KB) × reads/sec × (2 if transactional)</td><td>8 KB item at 1 read/sec → ceil(8/4) = 2 RCUs</td></tr>
+                <tr><td>Eventually consistent read</td><td>Strong RCU ÷ 2 (round up)</td><td>10 items × 3 KB, 10 reads/sec eventual → 10 units ÷ 2 = 5 RCUs</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Worked WCU example</h3>
+          <p>Suppose you ingest IoT telemetry: 500 writes per second, each item is 2.3 KB.</p>
+          <ul>
+            <li>Round 2.3 KB up to 3 KB → 3 WCUs per write.</li>
+            <li>500 writes/sec × 3 WCUs = <strong>1,500 WCUs</strong> provisioned on the table.</li>
+            <li>If each write also updates a GSI projecting all attributes, the GSI needs its own 1,500 WCUs.</li>
+            <li>Transactional writes would double both to 3,000 WCUs each.</li>
+          </ul>
+
+          <h3>GSI capacity is separate</h3>
+          <p>When you write an item, DynamoDB updates every GSI that projects attributes from that item. A write consumes WCUs on the base table <em>and</em> on each affected GSI. Size the GSI capacity (or use on-demand) alongside the table — throttling on a GSI write propagates back and throttles the base table write too.</p>
+
+          <h3>Hot partitions and throttling</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-244.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-244.png" alt="Slide describing hot partitions from poor partition key choice causing throttling and high latency." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 244</span>A hot partition occurs when one partition key receives disproportionate traffic — for example, writing all events with <code>PK=GLOBAL</code>.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-245.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-245.png" alt="Slide listing best practices to avoid throttling: good keys, exponential backoff, CloudWatch monitoring, DAX." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 245</span>Design partition keys for even distribution — high cardinality, avoid monotonically increasing keys unless you suffix-shard writes.</figcaption>
+          </figure>
+
+          <p><strong>Write-sharding suffix:</strong> if many writes target the same logical entity, append a random suffix <code>#0</code>…<code>#9</code> to the partition key on write and fan-out Query across shards on read. Example: <code>DEVICE#123#shard4</code> instead of <code>DEVICE#123</code>.</p>
+
+          <h3>Burst capacity and adaptive capacity</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-246.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-246.png" alt="Slide describing burst capacity using unused credits for 5 minutes and adaptive capacity balancing partitions." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 246</span>Burst capacity lets provisioned tables absorb short spikes using unused capacity credits (up to several minutes). Adaptive capacity redistributes unused partition throughput to hot partitions — but it cannot overcome fundamentally bad key design forever.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-247.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-247.png" alt="Slide describing reserved capacity billing and sharing across organization accounts." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 247</span>Reserved capacity is Regional. Unused reserved WCUs/RCUs can apply to other accounts in the same AWS Organization.</figcaption>
+          </figure>
+
+          <h3>Backup, export and zero-ETL</h3>
+          <ul>
+            <li><strong>Point-in-time recovery (PITR)</strong> — continuous backups for 35 days; restore to any second within that window. Enable on production tables — exam scenarios asking for "recover from accidental deletion an hour ago" point here, not on-demand backup alone.</li>
+            <li><strong>On-demand backup</strong> — full table snapshot retained until you delete it; no second-level restore granularity. Good before schema changes.</li>
+            <li><strong>Export to S3</strong> — full or incremental export to S3 in DynamoDB JSON or Ion format for Athena/Glue analysis; <strong>does not consume read capacity</strong> on the table. Preferred over Scan for analytics snapshots.</li>
+            <li><strong>Import from S3</strong> — bulk load from S3 without consuming write capacity on the live table during import; creates a new table or overwrites with a import job.</li>
+            <li><strong>Zero-ETL to Redshift</strong> — managed integration replicates DynamoDB changes into Redshift for analytics without Lambda/Kinesis glue. Competes with Streams → Lambda → S3 → COPY for "least operational overhead" questions — zero-ETL wins when the requirement is analytics-only replication.</li>
+            <li><strong>Zero-ETL to OpenSearch</strong> — near-real-time search indexing from DynamoDB. Replaces the older Streams → Lambda → OpenSearch pattern from slide 223.</li>
+          </ul>
+
+          <div class="callout tip"><strong>Kinesis Data Streams for DynamoDB.</strong> When you need stream data retained longer than 24 hours, fan-out to multiple consumers, or replay history, enable Kinesis streaming instead of (or in addition to) DynamoDB Streams. Kinesis Data Firehose can then land changes in S3 for the lake.</div>
+        </section>
+
+        <section class="section" id="dax">
+          <h2>DynamoDB Accelerator (DAX)</h2>
+          <p class="lead"><strong>DAX</strong> is a managed, in-memory cache for DynamoDB. It uses a <strong>write-through</strong> model: writes go to DynamoDB first, then update the cache. Reads can hit microsecond latency — roughly 10× faster than DynamoDB alone for hot keys.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-249.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-249.png" alt="Slide introducing DAX cluster with primary node, microsecond latency, and ThrottlingException when overloaded." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 249</span>Applications point the DynamoDB SDK at DAX cluster endpoints instead of DynamoDB directly. DAX is API-compatible for supported operations.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-250.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-250.png" alt="Diagram of DAX read path: cache hit returns from DAX, cache miss forwards GetItem Query Scan to DynamoDB." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 250</span>Item cache serves GetItem. Query cache serves repeated Query/Scan results. Cache hits avoid RCU consumption on the table.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-251.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-251.png" alt="Diagram of DAX write-through path: writes go to DynamoDB table first then update DAX cache." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 251</span>Write-through keeps DAX consistent with DynamoDB for cached keys, but only eventually consistent reads are served from cache by default.</figcaption>
+          </figure>
+
+          <h3>DAX vs ElastiCache</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Aspect</th><th>DAX</th><th>ElastiCache (Redis/Memcached)</th></tr></thead>
+              <tbody>
+                <tr><td>Purpose</td><td>DynamoDB-specific API cache</td><td>General-purpose in-memory store</td></tr>
+                <tr><td>Integration</td><td>Drop-in SDK endpoint change</td><td>Application manages cache keys and invalidation</td></tr>
+                <tr><td>Consistency</td><td>Write-through; no strongly consistent DAX reads</td><td>You implement consistency logic</td></tr>
+                <tr><td>When DAX does not help</td><td>Strongly consistent reads, write-heavy workloads where cache churn is high</td><td>N/A — different layer</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout warn"><strong>DAX is not a write accelerator.</strong> Every write still hits DynamoDB and consumes WCUs. DAX helps read-heavy, eventually consistent access patterns — leaderboards, product catalogs, session lookups — not bulk ingestion.</div>
+        </section>
+
+        <section class="section" id="ttl">
+          <h2>Time to Live (TTL)</h2>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-253.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-253.png" alt="Slide describing DynamoDB TTL automatic deletion with Unix epoch timestamp, no write capacity cost, 48 hour deletion window." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 253</span>TTL deletes expired items in the background at no WCU charge. Deletion is not immediate — typically within 48 hours of expiry. Expired items can still be read or updated until deleted.</figcaption>
+          </figure>
+
+          <ul>
+            <li>Designate one Number attribute (epoch seconds) as the TTL attribute.</li>
+            <li>Expired items appear in Streams as <code>REMOVE</code> events with user identity type <code>Service</code>.</li>
+            <li>Pair TTL with Streams + Lambda to archive expiring session or telemetry data to S3 before deletion.</li>
+            <li>TTL works in on-demand and provisioned modes and on global tables.</li>
+          </ul>
+        </section>
+
+        <section class="section" id="deeper">
+          <h2>Deeper detail and exam edge cases</h2>
+          <p class="lead">Operational limits, billing meters, and failure modes that decide real architectures — beyond the slide-level WCU/RCU maths and Query-versus-Scan guidance above.</p>
+
+          <h3>Limits and quotas that decide answers</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Limit</th><th>Value</th><th>Adjustable?</th><th>Why it matters</th></tr></thead>
+              <tbody>
+                <tr><td>Maximum item size</td><td>400 KB (attribute names + values)</td><td>Hard</td><td>Larger blobs must use S3 with a pointer attribute — storing multi-MB payloads in DynamoDB fails at write time</td></tr>
+                <tr><td>Throughput per partition</td><td>3,000 RCU or 1,000 WCU (provisioned)</td><td>Soft (more partitions via key design)</td><td>A hot partition key cannot borrow another key's capacity — throttling persists even when table-wide capacity is idle</td></tr>
+                <tr><td>LSIs per table</td><td>5 (table creation only)</td><td>Hard</td><td>Cannot add an LSI after create; plan alternate sort keys upfront</td></tr>
+                <tr><td>GSIs per table</td><td>20</td><td>Soft (quota increase)</td><td>Each GSI has separate capacity and eventual consistency — every write may fan out to multiple indexes</td></tr>
+                <tr><td>Data per partition key (with LSI)</td><td>10 GB combined (base + all LSIs)</td><td>Hard</td><td>High-cardinality partition keys or write sharding required for large entities under one key</td></tr>
+                <tr><td>Query/Scan page size</td><td>1 MB data per response</td><td>Hard</td><td>Large partitions require pagination with <code>LastEvaluatedKey</code>; each page consumes RCUs</td></tr>
+                <tr><td>BatchWriteItem</td><td>25 put/delete requests per call</td><td>Hard</td><td>Bulk loaders must loop; unprocessed items need exponential backoff</td></tr>
+                <tr><td>BatchGetItem</td><td>100 items, 16 MB total per call</td><td>Hard</td><td>Cross-partition reads batch efficiently but still count per-item RCUs</td></tr>
+                <tr><td>TransactWriteItems / TransactGetItems</td><td>100 actions, 4 MB payload</td><td>Hard</td><td>All-or-nothing across up to 100 items; costs 2× normal RCU/WCU</td></tr>
+                <tr><td>Stream retention</td><td>24 hours</td><td>Hard</td><td>Consumers must catch up within a day or use Kinesis streaming for longer retention</td></tr>
+                <tr><td>Lambda consumers per stream shard</td><td>2 concurrent pollers (default)</td><td>Soft (parallelization factor)</td><td>More than two Lambdas per shard need enhanced fan-out or Kinesis export</td></tr>
+                <tr><td>TTL deletion window</td><td>Typically within 48 hours of expiry</td><td>Hard</td><td>Expired items remain readable until deleted — do not rely on TTL for immediate purge</td></tr>
+                <tr><td>PITR window</td><td>35 days</td><td>Hard</td><td>Second-level restore granularity; enable before you need it — no backfill of pre-enable history</td></tr>
+                <tr><td>Tables per Region (default)</td><td>2,500</td><td>Soft</td><td>Multi-tenant platforms hitting account limits need a quota increase or table consolidation</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>What you actually pay for</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Billed dimension</th><th>Unit</th><th>How to spend less</th></tr></thead>
+              <tbody>
+                <tr><td>Provisioned RCU/WCU</td><td>Per hour per unit (us-east-1)</td><td>Right-size with auto scaling; use eventually consistent reads (half RCU); reserved capacity for steady load</td></tr>
+                <tr><td>On-demand requests</td><td>Per million read/write request units</td><td>Switch to provisioned when sustained utilisation exceeds roughly 14–18% of peak provisioned capacity</td></tr>
+                <tr><td>GSI capacity</td><td>Separate RCU/WCU or on-demand per index</td><td>Project only needed attributes (KEYS_ONLY or INCLUDE); drop unused GSIs</td></tr>
+                <tr><td>Storage</td><td>GB-month per table + indexes</td><td>TTL for ephemeral data; compress large attributes; S3 pointer pattern for blobs</td></tr>
+                <tr><td>PITR</td><td>GB-month of table size (continuous backup)</td><td>Enable only on tables needing point-in-time restore; disable on disposable staging tables</td></tr>
+                <tr><td>Streams</td><td>GetRecords read request units</td><td>One consumer per shard where possible; trim view type to KEYS_ONLY if images not needed</td></tr>
+                <tr><td>Global tables</td><td>Replicated write units + cross-Region data transfer</td><td>Replicate only tables that truly need multi-Region writes; prefer single-Region with cross-Region backup for DR-only</td></tr>
+                <tr><td>DAX cluster</td><td>DAX node hours (separate from table RCU)</td><td>Size cluster for cache hit rate; DAX does not eliminate table WCUs on writes</td></tr>
+                <tr><td>Export to S3</td><td>Per GB exported (no RCU charge)</td><td>Prefer export over Scan for analytics snapshots — export does not consume table read capacity</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout cost"><strong>Biggest money leak.</strong> On-demand mode on tables with predictable 24/7 traffic — you pay per-request premium indefinitely. A provisioned table with auto scaling and reserved capacity for the baseline saves 50–70% at steady utilisation.</div>
+          <div class="callout danger"><strong>Surprise bill.</strong> A Scan on a terabyte table in on-demand mode charges for every item read, even if FilterExpression returns ten rows. A misconfigured Glue job or debug script running Scan in a loop can cost hundreds of dollars in hours.</div>
+
+          <h3>Traps that catch people</h3>
+          <ul>
+            <li><strong>400 KB wall —</strong> Teams store PDFs or images in DynamoDB attributes. Writes above 400 KB fail. Store the object in S3 and keep a pointer attribute (<code>s3://bucket/key</code>) plus metadata in the item.</li>
+            <li><strong>GSI throttles base table —</strong> Under-provisioned GSI write capacity causes <code>ProvisionedThroughputExceededException</code> on the base table PutItem even when the table itself has headroom. Size every GSI independently.</li>
+            <li><strong>GSI reads are eventually consistent only —</strong> You cannot request strongly consistent reads on a GSI. Patterns needing read-your-writes across alternate keys must Query the base table or accept staleness.</li>
+            <li><strong>FilterExpression does not save RCUs —</strong> A Query with a filter still reads every item matching the key condition and bills for those reads. Design the sort key or GSI so the key condition narrows data, not the filter alone.</li>
+            <li><strong>Hot partition vs table capacity —</strong> Adaptive capacity helps uneven load across partitions but one partition key receiving more than 3,000 RCU or 1,000 WCU still throttles. Auto scaling adds table-wide units, not per-key units.</li>
+            <li><strong>LSI creation window —</strong> LSIs exist only at table creation. Attempting to add one later requires a new table and migration — a common exam "what went wrong" scenario.</li>
+            <li><strong>TTL is not instant —</strong> Items past expiry can appear in reads and Streams for up to 48 hours. Do not use TTL as a real-time access-control mechanism.</li>
+            <li><strong>Transactional cost doubling —</strong> TransactWriteItems consumes 2× WCUs per item. Budget capacity for transactional paths separately from standard writes.</li>
+            <li><strong>DAX and strong consistency —</strong> DAX serves eventually consistent reads from cache. GetItem with <code>ConsistentRead=true</code> bypasses DAX and hits DynamoDB directly — plan RCU for those paths.</li>
+            <li><strong>Scan vs Query in analytics —</strong> Export to S3 or Streams → S3 avoids RCU entirely for bulk extracts. Scanning a production table for nightly reports is the wrong tool.</li>
+          </ul>
+
+          <h3>Troubleshooting playbook</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Symptom</th><th>Most likely cause</th><th>What to check / fix</th></tr></thead>
+              <tbody>
+                <tr><td><code>ProvisionedThroughputExceededException</code> on writes</td><td>Insufficient WCU or GSI WCU; hot partition</td><td>CloudWatch <code>ConsumedWriteCapacityUnits</code> per table/GSI; <code>ThrottledRequests</code>; redesign partition key or add write sharding</td></tr>
+                <tr><td><code>ThrottlingException</code> from DAX</td><td>DAX cluster overloaded, not DynamoDB</td><td>DAX CloudWatch <code>CPUUtilization</code>, <code>CacheHitRate</code>; scale cluster nodes or bypass DAX for hot keys</td></tr>
+                <tr><td>Lambda stream iterator age growing</td><td>Consumer slower than write rate; shard hot spot</td><td>CloudWatch <code>IteratorAge</code>; increase Lambda concurrency or batch window; check for poison records</td></tr>
+                <tr><td>Query returns stale data after write</td><td>Eventually consistent read or GSI lag</td><td>Use strongly consistent GetItem on base table; wait for GSI propagation (typically sub-second but not guaranteed instant)</td></tr>
+                <tr><td>BatchWriteItem returns UnprocessedItems</td><td>Transient throttle or throughput spike</td><td>Retry with exponential backoff; reduce batch size; check partition heat map in CloudWatch contributor insights</td></tr>
+                <tr><td>PITR restore missing recent data</td><td>PITR was not enabled before the incident</td><td>PITR only covers from enable time forward — on-demand backups for pre-PITR snapshots</td></tr>
+                <tr><td>Items not deleting at TTL expiry</td><td>TTL worker backlog; attribute not Number epoch</td><td>Confirm TTL attribute type is Number (seconds); check <code>TimeToLiveDeletedItemCount</code> metric; allow up to 48 hours</td></tr>
+                <tr><td>On-demand costs spiking unexpectedly</td><td>Scan, large Query pages, or missing pagination</td><td>Enable CloudWatch contributor insights; replace Scan with Query/GSI; paginate with <code>LastEvaluatedKey</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Production patterns</h3>
+          <div class="grid-2">
+            <div class="mini-card">
+              <h4>Operational store + lake export</h4>
+              <p>Hot path: single-table design with composite keys and two GSIs for alternate lookups. Streams with <code>NEW_AND_OLD_IMAGES</code> feed Lambda that lands changes in S3 as Parquet. Nightly Glue job or zero-ETL to Redshift for analytics — never Scan the table for reports.</p>
+            </div>
+            <div class="mini-card">
+              <h4>Large attribute offload</h4>
+              <p>Keep items under 100 KB for predictable RCU. Store documents in S3; item holds <code>docS3Key</code>, <code>contentType</code>, <code>sizeBytes</code>. Lambda pre-signed URL for client download. Anti-pattern: storing base64 images in DynamoDB — hits 400 KB limit and doubles storage cost in GSIs projecting ALL.</p>
+            </div>
+          </div>
+          <div class="diagram">
+            <p class="diagram-title">S3 pointer pattern for items exceeding 400 KB</p>
+            <div class="flow">
+              <div class="node is-source"><b>Write path</b><small>PutObject → S3</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-store"><b>DynamoDB item</b><small>s3Key + metadata &lt; 1 KB</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-serve"><b>Read path</b><small>GetItem → presigned S3 GET</small></div>
+            </div>
+          </div>
+<pre data-lang="shell" data-title="Enable PITR and export table to S3 (no RCU consumed)" data-explain="Export runs as a managed snapshot — preferred over Scan for analytics handoff to Athena or Glue."><code>aws dynamodb update-continuous-backups \
+  --table-name orders \
+  --point-in-time-recovery-specification PointInTimeRecoveryEnabled=true
+
+aws dynamodb export-table-to-point-in-time \
+  --table-arn arn:aws:dynamodb:us-east-1:123456789012:table/orders \
+  --s3-bucket dea-lab-ab-4821 \
+  --s3-prefix exports/orders/ \
+  --export-format DYNAMODB_JSON</code></pre>
+
+          <h3>Where this fits with the rest of the exam</h3>
+          <p>DynamoDB is the default when a scenario needs single-digit millisecond key-value access at scale with no server management. It pairs with streaming ingestion in <a href="s06-streaming.html">Section 6</a> (Streams → Lambda → Kinesis), operational-to-analytical replication in <a href="s10-redshift.html">Section 10</a> (zero-ETL or Streams → S3 → COPY), and event-driven compute in <a href="s05-lambda.html">Section 5</a> (Stream triggers, conditional writes). Object storage for large payloads lives in <a href="s07-s3.html">Section 7</a>.</p>
+          <ul>
+            <li><a href="s06-streaming.html#kinesis-data-streams">Kinesis Data Streams</a> — when you need retention beyond 24 hours or multiple independent consumers of DynamoDB changes.</li>
+            <li><a href="s10-redshift.html#integrations">Redshift zero-ETL</a> — managed CDC from DynamoDB to the warehouse without building Lambda glue.</li>
+            <li><a href="s11-other-databases.html#database-selection">Purpose-built database selection</a> — DynamoDB vs DocumentDB vs Aurora when the scenario mentions documents or SQL.</li>
+            <li><a href="s08-other-storage.html">Section 8 (ElastiCache)</a> — general-purpose cache vs DAX when the data lives only in DynamoDB.</li>
+          </ul>
+          <div class="callout exam"><strong>How the exam frames the choice.</strong> "Partition key access at any scale, millisecond latency" → DynamoDB. "Ad-hoc SQL across columns" → Redshift or Aurora, not DynamoDB. "MongoDB API" → DocumentDB. "Least operational overhead for DynamoDB → analytics" → zero-ETL or export to S3, not Scan. Do not pick DynamoDB when the access pattern requires joins, aggregations across entities, or full-table search without a designed GSI.</div>
+        </section>
+
+        <section class="section" id="interview">
+          <h2>Interview questions</h2>
+          <p class="muted">Answer each one out loud before opening it.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+            <details class="qa">
+              <summary>Explain Query versus Scan and when each is appropriate.<span class="qa-tag">Exam</span></summary>
+              <div class="qa-body">
+                <p><strong>Query</strong> requires a partition key equality condition (and optional sort key conditions). It reads only items in that partition — cost scales with items returned or filtered in that partition, not the whole table. Use Query (or GetItem for a full primary key) for every production access path.</p>
+                <p><strong>Scan</strong> reads every item in a table or index. Cost is proportional to table size. Acceptable only for small tables, one-off admin tasks, or when backed by a parallel Scan on a GSI designed for export. Exam scenarios describing "find all users older than 30" without a key hint are steering you toward a GSI, not a Scan.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>When would you add a GSI instead of an LSI?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>Add a <strong>GSI</strong> when you need a different partition key, when the table already exists (LSIs cannot be added later), or when you need more than five alternate sort-key patterns. GSIs scale independently and support sparse indexes — only items with the projected attributes appear.</p>
+                <p>Choose an <strong>LSI</strong> only at table creation when you need an alternate sort key on the <em>same</em> partition key and strongly consistent reads on that pattern. LSIs share table capacity and have a 10 GB per-partition-key limit across base + LSIs.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How many RCUs do you need to strongly read fifty 6 KB items per second?<span class="qa-tag">Cost</span></summary>
+              <div class="qa-body">
+                <p>Each 6 KB item rounds up to 2 × 4 KB units = 2 RCUs per strongly consistent read. Fifty items per second → 50 × 2 = <strong>100 RCUs</strong>.</p>
+                <p>If eventually consistent reads were acceptable, the same workload would need 50 RCUs (half the strongly consistent cost).</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What is a hot partition and how do you fix one?<span class="qa-tag">Troubleshooting</span></summary>
+              <div class="qa-body">
+                <p>A hot partition is one physical partition receiving more read/write traffic than its share of table capacity — usually because the partition key has low cardinality (everyone writes to <code>STATUS=ACTIVE</code>) or a monotonic key concentrates new writes.</p>
+                <p>Fixes: redesign the partition key for high cardinality (use user ID, not status), add a random write-sharding suffix, split hot entities across composite sort keys, or use write buffering through SQS/Kinesis before DynamoDB. Adaptive capacity helps temporarily but is not a design strategy.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Describe the DynamoDB Streams → Lambda CDC pattern for keeping Redshift in sync.<span class="qa-tag">Architecture</span></summary>
+              <div class="qa-body">
+                <p>Enable a stream with <code>NEW_AND_OLD_IMAGES</code> on the operational table. Attach a Lambda event source mapping. The handler transforms each INSERT/MODIFY/REMOVE into a staging record and writes to S3 or directly invokes Redshift <code>COPY</code> / the zero-ETL integration.</p>
+                <p>For analytics without custom code, <strong>DynamoDB zero-ETL to Redshift</strong> replicates changes automatically. Streams + Lambda still wins when you need custom transformation or multi-target fan-out.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>On-demand versus provisioned capacity — how do you decide?<span class="qa-tag">Cost</span></summary>
+              <div class="qa-body">
+                <p><strong>On-demand</strong> when traffic is unknown, spikey, or the table is new — you pay per request, never throttle under service quotas, and accept a premium per million requests.</p>
+                <p><strong>Provisioned + auto scaling</strong> when traffic is predictable and sustained — you pay for reserved RCU/WCU at lower unit rates, optionally with reserved capacity for a 1–3 year commit. Switch modes with <code>UpdateTable</code> once per 24 hours.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What does DAX not accelerate?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p>DAX does not support strongly consistent reads — those always go to DynamoDB. It does not reduce write latency meaningfully because writes are write-through to the table. Scan-heavy analytics, write-heavy ingestion, and workloads needing item sizes near 400 KB see little benefit.</p>
+                <p>DAX is also DynamoDB-specific — ElastiCache is the answer when you cache computed aggregates or non-DynamoDB objects.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How do you implement idempotent order creation with DynamoDB?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>Use the business order ID as the partition key (or sort key in a composite design). On <code>PutItem</code>, set <code>ConditionExpression='attribute_not_exists(OrderId)'</code>. A retry from API Gateway or Lambda that resubmits the same order gets <code>ConditionalCheckFailedException</code> instead of a duplicate row.</p>
+                <p>For updates, use condition expressions on a version attribute or status transition rules — for example, only allow <code>PENDING → SHIPPED</code>.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Why export DynamoDB to S3 instead of scanning the table for Athena?<span class="qa-tag">Performance</span></summary>
+              <div class="qa-body">
+                <p><strong>Export to S3</strong> runs as a server-side job that does not consume table RCUs and produces a consistent snapshot in S3 format compatible with Athena and Glue. A Scan of a large table is slow, expensive in RCUs, and impacts production traffic.</p>
+                <p>Schedule exports for periodic analytics; use Streams for incremental CDC between exports.</p>
+              </div>
+            </details>
+          </div>
+        </section>
+
+        <section class="section" id="practice">
+          <h2>Hands-on practice</h2>
+          <p class="muted">Free tier where possible. Delete everything at the end of each task.</p>
+          <ol class="practice-list">
+            <li class="practice">
+              <p class="practice-task">Create an on-demand DynamoDB table <code>dea-lab-orders</code> with partition key <code>CustomerId</code> and sort key <code>OrderId</code>. Insert three orders for one customer and Query them with a key condition.</p>
+              <span class="console-path">DynamoDB → Tables → Create table</span>
+              <p class="practice-expect"><code>aws dynamodb query</code> returns three items for the customer without using Scan.</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">Console + CLI</span></summary>
+                <div class="qa-body">
+<pre data-lang="shell"><code>aws dynamodb create-table \
+  --table-name dea-lab-orders \
+  --attribute-definitions \
+    AttributeName=CustomerId,AttributeType=S \
+    AttributeName=OrderId,AttributeType=S \
+  --key-schema \
+    AttributeName=CustomerId,KeyType=HASH \
+    AttributeName=OrderId,KeyType=RANGE \
+  --billing-mode PAY_PER_REQUEST \
+  --region us-east-1
+
+aws dynamodb put-item --table-name dea-lab-orders \
+  --item '{"CustomerId":{"S":"C100"},"OrderId":{"S":"O1"},"Total":{"N":"120"}}'
+
+aws dynamodb query --table-name dea-lab-orders \
+  --key-condition-expression "CustomerId = :c" \
+  --expression-attribute-values '{":c":{"S":"C100"}}'</code></pre>
+                  <p class="muted">Cleanup: <code>aws dynamodb delete-table --table-name dea-lab-orders</code></p>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Enable DynamoDB Streams on the table, create a Lambda that logs each INSERT to CloudWatch, and verify with a test PutItem.</p>
+              <span class="console-path">DynamoDB → Exports and streams → Enable → Lambda → Add trigger</span>
+              <p class="practice-expect">CloudWatch Logs show the stream record JSON within seconds of PutItem.</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">Console</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Enable stream with view type <code>New image</code>.</li>
+                    <li>Create a Python Lambda that prints <code>event["Records"]</code>.</li>
+                    <li>Add DynamoDB trigger, starting position <code>Latest</code>, batch size 1.</li>
+                    <li>PutItem a new order; check CloudWatch.</li>
+                  </ol>
+                  <p class="muted">Cleanup: remove trigger, delete Lambda, disable/delete stream, delete table.</p>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Add a GSI on <code>OrderStatus</code> with KEYS_ONLY projection. Query the index for <code>SHIPPED</code> orders.</p>
+              <span class="console-path">DynamoDB → Table → Indexes → Create index</span>
+              <p class="practice-expect">Query on <code>StatusIndex</code> returns order keys without a table Scan.</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">Console + CLI</span></summary>
+                <div class="qa-body">
+<pre data-lang="shell"><code>aws dynamodb update-table --table-name dea-lab-orders \
+  --attribute-definitions AttributeName=OrderStatus,AttributeType=S \
+  --global-secondary-index-updates '[{
+    "Create": {
+      "IndexName": "StatusIndex",
+      "KeySchema": [{"AttributeName":"OrderStatus","KeyType":"HASH"}],
+      "Projection": {"ProjectionType":"KEYS_ONLY"}
+    }
+  }]'</code></pre>
+                  <p class="muted">Cleanup: delete GSI then table.</p>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Enable TTL on attribute <code>ExpiresAt</code> (epoch seconds). Insert an item expiring in five minutes. Confirm it disappears from Query after TTL processing.</p>
+              <span class="console-path">DynamoDB → Additional settings → Time to Live</span>
+              <p class="practice-expect">Item is readable immediately after insert; gone from Query after TTL background deletion (may take up to 48 hours — use a near-past epoch for faster demo).</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">Console</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Enable TTL on attribute <code>ExpiresAt</code>.</li>
+                    <li>PutItem with <code>ExpiresAt</code> set to <code>int(time.time()) - 3600</code> (already expired).</li>
+                    <li>Wait and re-query — item eventually removed at no WCU cost.</li>
+                  </ol>
+                  <p class="muted">Cleanup: delete table.</p>
+                </div>
+              </details>
+            </li>
+          </ol>
+        </section>
+
+        <section class="section" id="recap">
+          <h2>Recap</h2>
+          <div class="recap">
+            <ul class="checklist">
+              <li>DynamoDB = serverless NoSQL, key-value/document, schemaless items, 400 KB max item size.</li>
+              <li>Partition key alone must be unique; composite key allows duplicate partition values with different sort keys.</li>
+              <li>LSI: same PK, different SK, at creation only, max 5, strongly consistent. GSI: any keys, max 20, own capacity.</li>
+              <li>Query on partition key — efficient. Scan — reads entire table; avoid at scale.</li>
+              <li>1 WCU = 1 KB write/sec. 1 RCU = 4 KB strongly consistent read/sec (2× eventual). Transactions cost double.</li>
+              <li>On-demand = pay per request, no throttling. Provisioned + auto scaling = cheaper at steady load.</li>
+              <li>Streams: 24h retention, view types KEYS_ONLY/NEW/OLD/BOTH, Lambda or Kinesis consumers.</li>
+              <li>DAX = write-through read cache, microsecond reads, no strongly consistent reads.</li>
+              <li>TTL deletes in background, no WCU, not immediate — pair with Streams to archive to S3.</li>
+              <li>Hot partitions → high-cardinality keys or write-sharding suffix. Export to S3 for Athena without RCU cost.</li>
+              <li>ConditionExpression on PutItem enables idempotent writes for at-least-once delivery sources.</li>
+            </ul>
+            <p style="margin-top:1rem;">
+              <button type="button" data-complete="section-09">Mark complete</button>
+            </p>
+          </div>
+        </section>
+
+      </div>
+
+      <aside class="toc" aria-label="On this page">
+        <strong>On this page</strong>
+        <ol>
+          <li><a href="#lectures">Lectures</a></li>
+          <li><a href="#overview">Overview</a></li>
+          <li><a href="#structure">Structure and keys</a></li>
+          <li><a href="#secondary-indexes">Secondary indexes</a></li>
+          <li><a href="#streams">Streams</a></li>
+          <li><a href="#api">API surface</a></li>
+          <li><a href="#capacity">Capacity and cost</a></li>
+          <li><a href="#dax">DAX</a></li>
+          <li><a href="#ttl">TTL</a></li>
+          <li><a href="#deeper">Deeper detail</a></li>
+          <li><a href="#interview">Interview questions</a></li>
+          <li><a href="#practice">Hands-on practice</a></li>
+          <li><a href="#recap">Recap</a></li>
+        </ol>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<footer class="footer">AWS Certified Data Engineer Associate (DEA-C01) · Section 9 · Offline study edition</footer>
+</body>
+</html>

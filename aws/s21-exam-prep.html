@@ -1,0 +1,1556 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="DEA-C01 Section 21: full 65-question practice exam, service-selection decision tables, exam tactics, scheduling via Pearson VUE or PSI, and capstone pipeline labs.">
+<title>Section 21 — Practice Exam, Exam Tips &amp; Scheduling | AWS Data Engineer DEA-C01 Notes</title>
+<link rel="stylesheet" href="assets/aws.css">
+<script defer src="assets/search-index.js"></script>
+<script defer src="assets/code-highlight.js"></script>
+<script defer src="assets/aws.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">Course section 21 of 21 · AWS Certified Data Engineer Associate</p>
+    <h1>Practice Exam, Exam Tips &amp; Scheduling</h1>
+    <p class="subtitle">This section replaces the course's practice-test and exam-tips lectures — there are no deck slides after Section 20. You get the full 65-question timed practice exam, the service-selection decision tables the real exam is built on, sitting tactics, three capstone builds, and step-by-step scheduling guidance.</p>
+    <div class="hero-meta">
+      <span class="chip">Full practice exam · 65 questions</span>
+      <span class="chip">Exam domain: all four</span>
+      <span class="chip">No deck slides — this section is the course's practice test</span>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <nav class="pager" aria-label="Section navigation">
+    <a href="s20-security.html">← Security</a>
+    <a href="index.html">Course contents</a>
+    <a href="extras.html">Next: Beyond the course →</a>
+  </nav>
+
+  <main id="main">
+    <div class="layout">
+      <div class="content">
+
+        <section class="section" id="lectures">
+          <h2>Lectures in this section</h2>
+          <p class="lead">The final section of the course is not slide-driven. The three lecture groups below are the practice test, exam strategy, and booking the real exam — all written out here so you never need the video-only segments.</p>
+          <ol class="lecture-list">
+            <li class="lecture">
+              <a class="lec-title" href="#exam">Full practice exam — 65 scenario questions</a>
+              <span class="lec-time">~130:00</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#decisions">Service-selection decision tables and trigger phrases</a>
+              <span class="lec-time">~25:00</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#tactics">Exam tactics and common traps</a>
+              <span class="lec-time">~12:00</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#scheduling">How to schedule the DEA-C01 exam</a>
+              <span class="lec-time">~8:00</span>
+            </li>
+          </ol>
+        </section>
+
+        <section class="section" id="decisions">
+          <h2>Service-selection decision tables</h2>
+          <p class="lead">The DEA-C01 exam is a service-selection test dressed in scenarios. When two options both work, the <strong>qualifier in the last sentence</strong> breaks the tie. These tables are the compressed version of Sections 1–20 — bookmark this page during revision.</p>
+
+          <h3>Ingestion — which pipe?</h3>
+          <p class="muted">Match the trigger phrase in the question stem to a row.</p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>If the question says…</th><th>Pick</th><th>Why not the others</th></tr></thead>
+              <tbody>
+                <tr><td>Real-time streaming, replay within retention, multiple consumers</td><td><strong>Kinesis Data Streams</strong> or <strong>MSK</strong></td><td>Firehose cannot replay; SQS deletes after consume</td></tr>
+                <tr><td>Near real-time delivery to S3/Redshift/OpenSearch, least code</td><td><strong>Kinesis Data Firehose</strong></td><td>Streams need custom consumers; Batch is not streaming</td></tr>
+                <tr><td>Existing Kafka clients, &gt;1 MB messages, Kafka ACLs</td><td><strong>Amazon MSK</strong></td><td>Kinesis 1 MB limit; Firehose is not Kafka</td></tr>
+                <tr><td>Database CDC to AWS with minimal downtime</td><td><strong>AWS DMS</strong> ongoing replication</td><td>DataSync is files; Glue is batch transform</td></tr>
+                <tr><td>Incremental file sync from on-premises NAS to S3</td><td><strong>AWS DataSync</strong></td><td>Snowball is offline bulk; DMS is relational</td></tr>
+                <tr><td>SaaS (Salesforce, SAP) to S3 on a schedule</td><td><strong>Amazon AppFlow</strong></td><td>Custom Lambda is more overhead; DMS is not SaaS</td></tr>
+                <tr><td>Partner uploads via existing SFTP clients to S3</td><td><strong>AWS Transfer Family</strong></td><td>S3 API is not SFTP; DataSync uses an agent</td></tr>
+                <tr><td>Petabyte/exabyte offline migration, limited network</td><td><strong>Snowball / Snowmobile</strong></td><td>DataSync needs network; Firehose is streaming</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Transformation — where does compute run?</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Requirement</th><th>Service</th><th>Exam distractor to reject</th></tr></thead>
+              <tbody>
+                <tr><td>Serverless PySpark ETL, Data Catalog integration</td><td><strong>AWS Glue ETL</strong></td><td>Spark on EC2</td></tr>
+                <tr><td>Visual profiling and recipes, no code</td><td><strong>Glue DataBrew</strong></td><td>QuickSight prep</td></tr>
+                <tr><td>Long-running Spark, custom libraries, fine cluster control</td><td><strong>Amazon EMR</strong></td><td>Glue when overhead matters more</td></tr>
+                <tr><td>Event-driven, &lt;15 min, &lt;10 GB per invocation</td><td><strong>AWS Lambda</strong></td><td>Glue for tiny jobs is overkill but Lambda fails on huge data</td></tr>
+                <tr><td>Container batch job, no always-on cluster</td><td><strong>AWS Batch</strong></td><td>24/7 EMR</td></tr>
+                <tr><td>SQL transforms inside the warehouse</td><td><strong>Redshift SQL</strong> / materialized views</td><td>Athena for data already in Redshift</td></tr>
+                <tr><td>Stateful streaming windows, joins, exactly-once</td><td><strong>Managed Apache Flink</strong></td><td>Lambda for complex state</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Analytical query — SQL without loading?</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Pattern</th><th>Query engine</th><th>Notes</th></tr></thead>
+              <tbody>
+                <tr><td>Ad-hoc SQL on S3, pay per scan, no cluster</td><td><strong>Athena</strong></td><td>Partition + Parquet = cost control</td></tr>
+                <tr><td>High concurrency BI, complex joins on TB+ loaded data</td><td><strong>Redshift</strong></td><td>Provisioned or Serverless</td></tr>
+                <tr><td>Query S3 from Redshift without COPY</td><td><strong>Redshift Spectrum</strong></td><td>Uses Glue Catalog metadata</td></tr>
+                <tr><td>Interactive SQL at petabyte scale on S3 (Hadoop ecosystem)</td><td><strong>EMR + Presto/Trino</strong></td><td>Higher overhead than Athena</td></tr>
+                <tr><td>Full-text search, log analytics dashboards</td><td><strong>Amazon OpenSearch</strong></td><td>Not general SQL warehouse</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Operational store — OLTP and specialised engines</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Access pattern</th><th>Store</th></tr></thead>
+              <tbody>
+                <tr><td>Key-value / document at scale, single-digit ms, unpredictable traffic</td><td><strong>DynamoDB</strong> (on-demand)</td></tr>
+                <tr><td>Relational OLTP, complex transactions, SQL apps</td><td><strong>RDS / Aurora</strong></td></tr>
+                <tr><td>MongoDB-compatible migration</td><td><strong>DocumentDB</strong></td></tr>
+                <tr><td>Cassandra / wide-column CQL</td><td><strong>Keyspaces</strong></td></tr>
+                <tr><td>Graph traversals, relationships</td><td><strong>Neptune</strong></td></tr>
+                <tr><td>Time-series metrics, automatic rollups</td><td><strong>Timestream</strong></td></tr>
+                <tr><td>Durable Redis-compatible primary store</td><td><strong>MemoryDB</strong></td></tr>
+                <tr><td>Cache layer in front of DB</td><td><strong>ElastiCache</strong> or <strong>DynamoDB DAX</strong></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Orchestration — who coordinates the pipeline?</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Need</th><th>Service</th></tr></thead>
+              <tbody>
+                <tr><td>Multi-service workflow, parallel branches, human approval, visual errors</td><td><strong>Step Functions</strong></td></tr>
+                <tr><td>Event routing, decoupled pub/sub between AWS services</td><td><strong>EventBridge</strong></td></tr>
+                <tr><td>Python Airflow DAGs, existing Airflow operators</td><td><strong>MWAA</strong></td></tr>
+                <tr><td>Glue crawlers + jobs only, minimal moving parts</td><td><strong>Glue Workflows</strong></td></tr>
+                <tr><td>Simple S3 → Lambda → one downstream step</td><td><strong>Lambda chaining</strong> or EventBridge (not Step Functions unless complexity grows)</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>File format and compression</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Format / codec</th><th>Splittable</th><th>Schema evolution</th><th>Analytics workload</th></tr></thead>
+              <tbody>
+                <tr><td>CSV</td><td>Yes (text)</td><td>Weak — column adds break parsers</td><td>Legacy ingest only; Athena scans full rows</td></tr>
+                <tr><td>JSON</td><td>Yes (line-delimited)</td><td>Flexible schema</td><td>Raw zone; expensive to query at scale</td></tr>
+                <tr><td>Parquet</td><td>Yes</td><td>Good with optional columns</td><td><strong>Default exam answer</strong> for curated lake + Athena/Redshift</td></tr>
+                <tr><td>ORC</td><td>Yes</td><td>Good</td><td>Hive/EMR ecosystems; Redshift COPY supports it</td></tr>
+                <tr><td>Avro</td><td>Yes</td><td><strong>Best</strong> for schema evolution in streaming</td><td>Kinesis/MSK serialisation; row-based not columnar</td></tr>
+                <tr><td>Snappy</td><td>—</td><td>—</td><td>Fast compress/decompress; default with Parquet on AWS</td></tr>
+                <tr><td>GZIP</td><td>—</td><td>—</td><td>Better ratio than Snappy; slower; splittable only with certain formats</td></tr>
+                <tr><td>BZIP2</td><td>—</td><td>—</td><td>Higher compression, slow; exam rarely picks over Snappy/ZSTD</td></tr>
+                <tr><td>ZSTD</td><td>—</td><td>—</td><td>Modern balance of speed and ratio; increasingly supported</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Security and governance</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Requirement</th><th>Tool</th></tr></thead>
+              <tbody>
+                <tr><td>Central fine-grained grants on lake tables/columns/tags</td><td><strong>Lake Formation</strong></td></tr>
+                <tr><td>Identity-based access to AWS APIs and resources</td><td><strong>IAM roles/policies</strong></td></tr>
+                <tr><td>Resource-based access (cross-account bucket)</td><td><strong>S3 bucket policy</strong> + IAM</td></tr>
+                <tr><td>Row/column security inside Redshift</td><td><strong>Redshift RLS</strong> and <strong>dynamic data masking</strong></td></tr>
+                <tr><td>Discover PII in S3 automatically</td><td><strong>Amazon Macie</strong></td></tr>
+                <tr><td>Encryption keys with rotation and audit</td><td><strong>AWS KMS</strong> CMKs</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Trigger-phrase glossary</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Phrase in the question</th><th>It implies</th></tr></thead>
+              <tbody>
+                <tr><td>Least operational overhead</td><td>Serverless / fully managed — reject EC2 self-managed</td></tr>
+                <tr><td>Most cost-effective</td><td>Pay-per-use, no idle cluster; partition and compress</td></tr>
+                <tr><td>Real time</td><td>Kinesis Data Streams, Managed Flink, DynamoDB Streams — seconds or less</td></tr>
+                <tr><td>Near real time</td><td>Firehose buffering (≥60 s) is acceptable</td></tr>
+                <tr><td>No code / minimal code</td><td>DataBrew, Firehose, AppFlow, Glue visual ETL</td></tr>
+                <tr><td>Existing SFTP clients</td><td>AWS Transfer Family</td></tr>
+                <tr><td>Minimal downtime</td><td>DMS ongoing replication, Aurora read replicas</td></tr>
+                <tr><td>Single-digit millisecond</td><td>DynamoDB, DAX, ElastiCache — not Athena</td></tr>
+                <tr><td>Petabyte scale (offline)</td><td>Snowball / Snowmobile</td></tr>
+                <tr><td>Unpredictable traffic</td><td>On-demand capacity: DynamoDB on-demand, Kinesis on-demand</td></tr>
+                <tr><td>Ordered processing</td><td>FIFO queue, Kinesis partition key, single-shard ordering</td></tr>
+                <tr><td>Must be replayable</td><td>Kinesis Data Streams, MSK, S3 as source of truth — not Firehose alone</td></tr>
+                <tr><td>Audit who read the object</td><td>CloudTrail data events, S3 server access logging</td></tr>
+                <tr><td>Cannot leave the VPC</td><td>VPC endpoints (S3 gateway, interface endpoints for other services)</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout info"><strong>Cross-link.</strong> Section 1 introduced the five-slot pipeline model; this page is the full tie-breaker list. <a href="s01-introduction.html#service-map">Section 1 service map</a> → here for every ambiguous pair.</div>
+        </section>
+
+        <section class="section" id="tactics">
+          <h2>Exam tactics</h2>
+          <p class="lead">Scenario exams reward process, not memorised fact lists. The routine below matches the 130-minute / 65-question clock and the wording patterns AWS uses in DEA-C01.</p>
+
+          <h3>Time budgeting</h3>
+          <ul>
+            <li><strong>Two minutes per question</strong> on average — 130 ÷ 65. Bank time on short questions; spend three to four minutes on long scenarios.</li>
+            <li><strong>Flag and move on.</strong> Unanswered and wrong score the same; return to flags in the last 20 minutes.</li>
+            <li>Do not leave any blank — there is no penalty for guessing.</li>
+          </ul>
+
+          <h3>Reading strategy</h3>
+          <ul>
+            <li><strong>Read the last sentence first.</strong> The qualifier (<em>least operational overhead</em>, <em>most cost-effective</em>, <em>real time</em>) eliminates distractors before you compare services.</li>
+            <li>Underline constraints: latency, data volume, existing software, compliance, VPC-only.</li>
+            <li>Ignore services that solve a problem the question never asked about — a perfect security answer in an ingestion question is a distractor.</li>
+          </ul>
+
+          <h3>Eliminating distractors</h3>
+          <ul>
+            <li><strong>Self-managed on EC2</strong> (Kafka, Spark, Airflow, databases) loses to managed equivalents unless the question explicitly requires custom OS packages.</li>
+            <li><strong>Wrong domain:</strong> GuardDuty in a data-format question; QuickSight in an ingestion question; Route 53 in a lake governance question.</li>
+            <li><strong>Over-engineering:</strong> Step Functions for a single S3→Lambda step; Redshift cluster for twice-daily Athena-scale queries.</li>
+          </ul>
+
+          <h3>Multiple-response questions</h3>
+          <p>Select TWO (or three) questions require <strong>all correct choices</strong> — partial credit does not exist. Evaluate each option independently: if one of five is wrong, do not select it even if the other looks right. Prefer two strong matches over guessing a third.</p>
+
+          <h3>When two answers both work</h3>
+          <p>Pick the one that matches the <strong>stated constraint</strong>, not your real-world preference. If both Glue and EMR can run Spark but the question says <em>least operational overhead</em>, Glue wins. If both Athena and Redshift can query the data but the question says <em>ad-hoc queries a few times per day</em>, Athena wins.</p>
+
+          <h3>Longer answers</h3>
+          <p>When stuck between two plausible options, the longer answer that names the correct integration path (e.g. "Firehose with Lambda transform and Glue Data Catalog conversion") is often correct — AWS wants you to recognise the full pattern. Shorter generic answers ("use S3") are usually incomplete.</p>
+
+          <div class="callout exam"><strong>The five most common traps:</strong>
+            <ol>
+              <li><strong>Firehose for replay</strong> — Firehose delivers forward; replay needs Data Streams, MSK or S3 reprocessing.</li>
+              <li><strong>Athena vs Redshift cost</strong> — infrequent ad-hoc on S3 is Athena; concurrent BI on loaded TB is Redshift.</li>
+              <li><strong>Forgetting KMS permissions</strong> — encrypted S3/Glue/Redshift failures need both S3 and <code>kms:Decrypt</code> on the role.</li>
+              <li><strong>SQS for streaming</strong> — queues are not durable logs with retention-based replay.</li>
+              <li><strong>EC2 "because flexible"</strong> — flexibility loses to managed when the question includes <em>operational overhead</em> or <em>minimal management</em>.</li>
+            </ol>
+          </div>
+        </section>
+
+        <section class="section" id="exam">
+          <h2>Practice exam — 65 questions</h2>
+          <p class="lead">Sit this timed: 130 minutes, no notes, flag uncertain questions. Distribution mirrors the official weightings — roughly 22 on Domain 1 (Ingestion and Transformation), 17 on Domain 2 (Store Management), 14 on Domain 3 (Operations and Support), 12 on Domain 4 (Security and Governance). Fifteen questions are unscored on the real exam; treat all 65 here as scored.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+
+          <h3>Domain 1 — Data Ingestion and Transformation (~34%)</h3>
+            <details class="qa">
+              <summary>Q1. A company ingests 20,000 clickstream events per second and needs consumers to reprocess the last 48 hours after a bug fix. Which solution meets the requirement with the LEAST operational overhead?<span class="qa-tag">Domain 1</span></summary>
+              <div class="qa-body">
+                <ol type="A">
+      <li>Amazon Kinesis Data Firehose to Amazon S3</li>
+      <li>Amazon Kinesis Data Streams with a 48-hour retention period</li>
+      <li>Apache Kafka on Amazon EC2</li>
+      <li>Amazon SQS standard queue</li>
+                </ol>
+                <p><strong>Answer: B.</strong> Kinesis Data Streams retains records for up to 365 days and lets multiple consumers read from the same shard iterator or checkpoint, so replay within 48 hours is native. On-demand mode removes shard tuning.</p>
+                <p class="muted"><strong>Why not the others:</strong> A — Firehose is forward-only with no replay buffer. C — self-managed Kafka works but adds broker patching and monitoring the question excludes. D — SQS deletes messages after consumption and cannot replay a 48-hour window.</p>
+                <p class="muted">Covered in <a href="s06-streaming.html">Section 6</a>.</p>
+              </div>
+            </details>            <details class="qa">
+              <summary>Q2. A data team must land Salesforce account updates into S3 every hour with no custom connector code. Which service is MOST appropriate?<span class="qa-tag">Domain 1</span></summary>
+              <div class="qa-body">
+                <ol type="A">
+      <li>AWS Database Migration Service</li>
+      <li>Amazon AppFlow</li>
+      <li>Amazon Kinesis Data Firehose</li>
+      <li>AWS Glue crawler</li>
+                </ol>
+                <p><strong>Answer: B.</strong> AppFlow provides managed SaaS connectors including Salesforce with scheduled or event-driven flows directly to S3, Redshift or Snowflake.</p>
+                <p class="muted"><strong>Why not the others:</strong> A — DMS is for database CDC, not SaaS CRM. C — Firehose needs a custom producer for Salesforce. D — a crawler discovers schemas; it does not extract from Salesforce.</p>
+                <p class="muted">Covered in <a href="s15-app-integration.html#appflow">Section 15</a>.</p>
+              </div>
+            </details>            <details class="qa">
+              <summary>Q3. An ETL job must convert 500 GB of JSON logs to partitioned Parquet nightly using PySpark with minimal infrastructure management. Which option fits BEST?<span class="qa-tag">Domain 1</span></summary>
+              <div class="qa-body">
+                <ol type="A">
+      <li>Amazon EMR with a long-running cluster</li>
+      <li>AWS Glue ETL job</li>
+      <li>AWS Lambda with 15-minute timeout</li>
+      <li>Amazon EC2 running a cron script</li>
+                </ol>
+                <p><strong>Answer: B.</strong> Glue is serverless Spark: you pay per DPU-hour, it integrates with the Data Catalog, and it is the default exam answer for managed PySpark ETL at scale.</p>
+                <p class="muted"><strong>Why not the others:</strong> A — EMR fits when you need fine-grained cluster control or long-lived Spark, not least overhead. C — Lambda cannot hold 500 GB in memory and times out at 15 minutes. D — self-managed EC2 is maximum operational overhead.</p>
+                <p class="muted">Covered in <a href="s04-glue.html">Section 4</a>.</p>
+              </div>
+            </details>            <details class="qa">
+              <summary>Q4. Select TWO. A streaming pipeline must detect fraudulent transactions within two seconds and also archive all events to S3 for compliance. Which TWO components should be in the architecture?<span class="qa-tag">Domain 1</span></summary>
+              <div class="qa-body">
+                <ol type="A">
+      <li>Amazon Kinesis Data Streams</li>
+      <li>Amazon Kinesis Data Firehose</li>
+      <li>AWS Batch</li>
+      <li>Amazon SQS</li>
+      <li>Amazon EventBridge Scheduler</li>
+                </ol>
+                <p><strong>Answer: A and B.</strong> Data Streams provides sub-second ingestion and fan-out to multiple consumers including Managed Flink for fraud scoring. Firehose delivers near-real-time archival to S3 with buffering.</p>
+                <p class="muted"><strong>Why not the others:</strong> C — Batch is minutes-to-hours latency. D — SQS is a queue, not a durable stream with retention for replay. E — Scheduler triggers on a schedule, not per event.</p>
+                <p class="muted">Covered in <a href="s06-streaming.html">Section 6</a>.</p>
+              </div>
+            </details>            <details class="qa">
+              <summary>Q5. A business analyst needs to visually clean and standardise 50 CSV columns without writing Python. Which AWS service should they use?<span class="qa-tag">Domain 1</span></summary>
+              <div class="qa-body">
+                <ol type="A">
+      <li>AWS Glue DataBrew</li>
+      <li>Amazon Athena</li>
+      <li>AWS Glue Studio notebook</li>
+      <li>Amazon QuickSight</li>
+                </ol>
+                <p><strong>Answer: A.</strong> DataBrew is a visual data preparation tool with 250+ transforms, profiling and recipe publishing — the exam's answer for no-code cleansing.</p>
+                <p class="muted"><strong>Why not the others:</strong> B — Athena queries data; it does not profile or transform visually. C — Studio still expects Spark/Python for complex work. D — QuickSight is BI visualisation, not ETL prep.</p>
+                <p class="muted">Covered in <a href="s04-glue.html#databrew">Section 4</a>.</p>
+              </div>
+            </details>            <details class="qa">
+              <summary>Q6. A startup receives unpredictable bursts of IoT readings (100/sec to 50,000/sec) and wants a managed stream without shard planning. What should they choose?<span class="qa-tag">Domain 1</span></summary>
+              <div class="qa-body">
+                <ol type="A">
+      <li>Kinesis Data Streams on-demand mode</li>
+      <li>Kinesis Data Streams provisioned with 50 shards</li>
+      <li>Kinesis Data Firehose</li>
+      <li>Amazon MSK provisioned</li>
+                </ol>
+                <p><strong>Answer: A.</strong> On-demand Data Streams auto-scales capacity from observed traffic up to 200 MB/s write — no shard count to maintain.</p>
+                <p class="muted"><strong>Why not the others:</strong> B — fixed shard count causes over-provisioning cost or throttling during spikes. C — Firehose delivers to destinations; it is not a general-purpose replayable stream. D — MSK requires broker sizing and is higher overhead.</p>
+                <p class="muted">Covered in <a href="s06-streaming.html#kinesis-data-streams">Section 6</a>.</p>
+              </div>
+            </details>            <details class="qa">
+              <summary>Q7. A nightly job must copy changed rows from an on-premises Oracle database to Amazon RDS PostgreSQL with minimal downtime on the source. Which service?<span class="qa-tag">Domain 1</span></summary>
+              <div class="qa-body">
+                <ol type="A">
+      <li>AWS DataSync</li>
+      <li>AWS Database Migration Service with ongoing replication</li>
+      <li>AWS Snowball Edge</li>
+      <li>Amazon AppFlow</li>
+                </ol>
+                <p><strong>Answer: B.</strong> DMS ongoing replication performs CDC from Oracle to RDS with a brief initial load — the standard migration answer for databases.</p>
+                <p class="muted"><strong>Why not the others:</strong> A — DataSync is file/object sync, not relational CDC. C — Snowball is offline bulk transfer. D — AppFlow is SaaS connectors.</p>
+                <p class="muted">Covered in <a href="s18-migration.html#dms">Section 18</a>.</p>
+              </div>
+            </details>            <details class="qa">
+              <summary>Q8. An application uploads 2 TB of files from an on-premises NAS to S3 weekly over a 1 Gbps link. Which service automates incremental sync?<span class="qa-tag">Domain 1</span></summary>
+              <div class="qa-body">
+                <ol type="A">
+      <li>AWS Snowball</li>
+      <li>AWS DataSync</li>
+      <li>Amazon S3 Transfer Acceleration</li>
+      <li>AWS Database Migration Service</li>
+                </ol>
+                <p><strong>Answer: B.</strong> DataSync agents on-premises schedule incremental file replication to S3 or EFS with built-in verification.</p>
+                <p class="muted"><strong>Why not the others:</strong> A — Snowball suits limited bandwidth or petabyte one-time moves. C — Transfer Acceleration speeds uploads but does not schedule incremental sync. D — DMS is for databases.</p>
+                <p class="muted">Covered in <a href="s18-migration.html#datasync">Section 18</a>.</p>
+              </div>
+            </details>            <details class="qa">
+              <summary>Q9. A Lambda function triggered by S3 must process duplicate events idempotently. Which design meets the requirement?<span class="qa-tag">Domain 1</span></summary>
+              <div class="qa-body">
+                <ol type="A">
+      <li>Write each object to a random UUID key in DynamoDB</li>
+      <li>Use the S3 object ETag as a conditional write key in DynamoDB before processing</li>
+      <li>Disable S3 event notifications after the first delivery</li>
+      <li>Process every event twice and deduplicate in QuickSight</li>
+                </ol>
+                <p><strong>Answer: B.</strong> Conditional writes on a deterministic key (ETag or object key) make re-invocation a no-op — idempotency pattern from Section 5.</p>
+                <p class="muted"><strong>Why not the others:</strong> A — random keys allow duplicates. C — events can still duplicate during delivery. D — QuickSight is not in the ingestion path.</p>
+                <p class="muted">Covered in <a href="s05-lambda.html#replayability">Section 5</a>.</p>
+              </div>
+            </details>            <details class="qa">
+              <summary>Q10. A team already runs Apache Kafka clients and needs 5 MB messages with Kafka ACLs per topic. Which managed service?<span class="qa-tag">Domain 1</span></summary>
+              <div class="qa-body">
+                <ol type="A">
+      <li>Amazon Kinesis Data Streams</li>
+      <li>Amazon MSK</li>
+      <li>Amazon Kinesis Data Firehose</li>
+      <li>Amazon MQ</li>
+                </ol>
+                <p><strong>Answer: B.</strong> MSK is managed Kafka with native ACLs, up to 10 MB records (configurable), and Kafka Connect support.</p>
+                <p class="muted"><strong>Why not the others:</strong> A — Kinesis record limit is 1 MB. C — Firehose max record is 1 MB. D — MQ is for ActiveMQ/RabbitMQ protocols, not Kafka.</p>
+                <p class="muted">Covered in <a href="s06-streaming.html#amazon-msk">Section 6</a>.</p>
+              </div>
+            </details>            <details class="qa">
+              <summary>Q11. Select TWO. Which TWO services can transform records in flight before writing to Amazon S3?<span class="qa-tag">Domain 1</span></summary>
+              <div class="qa-body">
+                <ol type="A">
+      <li>Kinesis Data Firehose with Lambda transform</li>
+      <li>Kinesis Data Streams with built-in Parquet conversion</li>
+      <li>Managed Service for Apache Flink</li>
+      <li>Amazon SQS</li>
+      <li>AWS DataSync</li>
+                </ol>
+                <p><strong>Answer: A and C.</strong> Firehose invokes Lambda on each batch before delivery. Flink performs stateful stream processing with windows and joins before sinking to S3.</p>
+                <p class="muted"><strong>Why not the others:</strong> B — Data Streams stores bytes; conversion happens in consumers. D — SQS does not transform message bodies natively. E — DataSync replicates files unchanged.</p>
+                <p class="muted">Covered in <a href="s06-streaming.html">Section 6</a>.</p>
+              </div>
+            </details>            <details class="qa">
+              <summary>Q12. A partner sends daily CSV files over SFTP and they must land in S3 with existing SFTP client software unchanged. Which service?<span class="qa-tag">Domain 1</span></summary>
+              <div class="qa-body">
+                <ol type="A">
+      <li>Amazon S3 Transfer Acceleration</li>
+      <li>AWS Transfer Family SFTP server</li>
+      <li>AWS DataSync</li>
+      <li>Amazon AppFlow</li>
+                </ol>
+                <p><strong>Answer: B.</strong> Transfer Family provides a managed SFTP endpoint backed by S3 — the trigger phrase "existing SFTP clients".</p>
+                <p class="muted"><strong>Why not the others:</strong> A — Transfer Acceleration is HTTP/TCP optimisation, not SFTP. C — DataSync uses an agent, not partner SFTP clients. D — AppFlow is SaaS API connectors.</p>
+                <p class="muted">Covered in <a href="s18-migration.html#transfer">Section 18</a>.</p>
+              </div>
+            </details>            <details class="qa">
+              <summary>Q13. A Glue workflow must run Crawler A, then Job B only if Crawler A succeeds, then send SNS on failure. Which orchestration fits with LEAST custom code?<span class="qa-tag">Domain 1</span></summary>
+              <div class="qa-body">
+                <ol type="A">
+      <li>Cron on EC2 calling aws glue start-job-run</li>
+      <li>AWS Glue Workflows with triggers and conditions</li>
+      <li>Amazon MWAA only</li>
+      <li>AWS Step Functions calling shell scripts on EC2</li>
+                </ol>
+                <p><strong>Answer: B.</strong> Glue Workflows natively chain crawlers, jobs and triggers with success/failure branching inside the Glue console.</p>
+                <p class="muted"><strong>Why not the others:</strong> A and D — self-managed scheduling adds overhead. C — MWAA works but is heavier for Glue-only chains unless Airflow is already standard.</p>
+                <p class="muted">Covered in <a href="s04-glue.html#workflows">Section 4</a>.</p>
+              </div>
+            </details>            <details class="qa">
+              <summary>Q14. A company must move 80 PB from a data centre with no usable network in under six months. What is the MOST appropriate transfer mechanism?<span class="qa-tag">Domain 1</span></summary>
+              <div class="qa-body">
+                <ol type="A">
+      <li>AWS Snowmobile</li>
+      <li>AWS Snowball Edge Storage Optimized</li>
+      <li>AWS DataSync over VPN</li>
+      <li>Amazon Kinesis Data Firehose</li>
+                </ol>
+                <p><strong>Answer: A.</strong> Snowmobile is an exabyte-scale container truck for the largest offline migrations — petabyte/exabyte trigger phrase.</p>
+                <p class="muted"><strong>Why not the others:</strong> B — Snowball devices are terabyte-scale; 80 PB would require an impractical number of devices. C — no usable network rules out sync. D — Firehose is streaming ingestion, not bulk migration.</p>
+                <p class="muted">Covered in <a href="s18-migration.html#snow">Section 18</a>.</p>
+              </div>
+            </details>            <details class="qa">
+              <summary>Q15. An event-driven pipeline must react when any object lands in s3://data-lake/raw/ and invoke a Lambda that starts a Glue job. Which combination is MOST serverless?<span class="qa-tag">Domain 1</span></summary>
+              <div class="qa-body">
+                <ol type="A">
+      <li>S3 event notification → Amazon EventBridge → Lambda → Glue</li>
+      <li>CloudWatch Events cron → EC2 script</li>
+      <li>S3 → SQS → EC2 worker</li>
+      <li>AWS Config rule → SNS → manual start</li>
+                </ol>
+                <p><strong>Answer: A.</strong> S3 can publish to EventBridge; rules route to Lambda which starts Glue — fully managed, no servers.</p>
+                <p class="muted"><strong>Why not the others:</strong> B — EC2 is self-managed. C — EC2 worker adds overhead though SQS is valid. D — Config detects compliance drift, not every new object for ETL.</p>
+                <p class="muted">Covered in <a href="s07-s3.html#event-notifications">Section 7</a>.</p>
+              </div>
+            </details>            <details class="qa">
+              <summary>Q16. A Managed Flink application must count transactions per user in a five-minute sliding window with exactly-once semantics to DynamoDB. Which service processes the Kinesis stream?<span class="qa-tag">Domain 1</span></summary>
+              <div class="qa-body">
+                <ol type="A">
+      <li>AWS Lambda with Kinesis trigger</li>
+      <li>Amazon Managed Service for Apache Flink</li>
+      <li>Amazon Kinesis Data Analytics for SQL</li>
+      <li>AWS Glue streaming job</li>
+                </ol>
+                <p><strong>Answer: B.</strong> Managed Flink supports event-time windows, state, and exactly-once sinks — the exam choice for complex streaming analytics.</p>
+                <p class="muted"><strong>Why not the others:</strong> A — Lambda windows are limited and at-least-once unless carefully designed. C — KDA SQL is retired/replaced by Flink. D — Glue streaming exists but Flink wins for stateful windowed joins in exam scenarios.</p>
+                <p class="muted">Covered in <a href="s06-streaming.html#managed-flink">Section 6</a>.</p>
+              </div>
+            </details>            <details class="qa">
+              <summary>Q17. A batch transformation must run a containerised Spark job on a schedule with no cluster to manage between runs. Which service?<span class="qa-tag">Domain 1</span></summary>
+              <div class="qa-body">
+                <ol type="A">
+      <li>Amazon EMR on EKS</li>
+      <li>AWS Batch on Fargate</li>
+      <li>Amazon EC2 Auto Scaling</li>
+      <li>AWS Glue Python shell job</li>
+                </ol>
+                <p><strong>Answer: B.</strong> Batch submits container jobs to Fargate or EC2 compute environments — pay per job, no always-on cluster.</p>
+                <p class="muted"><strong>Why not the others:</strong> A — EMR on EKS still manages Kubernetes and Spark operators. C — EC2 ASG is self-managed. D — Python shell is for small pandas scripts, not full Spark containers.</p>
+                <p class="muted">Covered in <a href="s12-compute.html#batch">Section 12</a>.</p>
+              </div>
+            </details>            <details class="qa">
+              <summary>Q18. A data engineer needs to orchestrate 15 microservices with parallel branches, human approval steps, and visual error handling. Which service?<span class="qa-tag">Domain 1</span></summary>
+              <div class="qa-body">
+                <ol type="A">
+      <li>Amazon EventBridge</li>
+      <li>AWS Step Functions Standard workflow</li>
+      <li>Amazon SNS</li>
+      <li>AWS Glue Workflow</li>
+                </ol>
+                <p><strong>Answer: B.</strong> Step Functions Standard supports parallel states, Task tokens for human approval, and catch/retry — longest exam scenarios for multi-service orchestration.</p>
+                <p class="muted"><strong>Why not the others:</strong> A — EventBridge routes events; it does not coordinate long-running branches with compensation. C — SNS is notification only. D — Glue Workflow is Glue-centric, not general microservices.</p>
+                <p class="muted">Covered in <a href="s15-app-integration.html#step-functions">Section 15</a>.</p>
+              </div>
+            </details>            <details class="qa">
+              <summary>Q19. A Firehose delivery stream must convert incoming JSON to Parquet before writing to S3 with no Lambda code. What enables this?<span class="qa-tag">Domain 1</span></summary>
+              <div class="qa-body">
+                <ol type="A">
+      <li>Firehose built-in record format conversion using Glue Data Catalog</li>
+      <li>Kinesis Data Streams enhanced fan-out</li>
+      <li>S3 Object Lambda</li>
+      <li>Athena CREATE TABLE</li>
+                </ol>
+                <p><strong>Answer: A.</strong> Firehose can use a Glue table schema to convert JSON to Parquet/ORC natively during delivery.</p>
+                <p class="muted"><strong>Why not the others:</strong> B — EFO is a read mode for consumers, not format conversion. C — Object Lambda transforms on GET, not ingest. D — Athena DDL does not sit in the Firehose path.</p>
+                <p class="muted">Covered in <a href="s06-streaming.html#kinesis-firehose">Section 6</a>.</p>
+              </div>
+            </details>            <details class="qa">
+              <summary>Q20. Select TWO. A company replatforming from self-hosted Airflow wants managed scheduling with Python DAGs and existing operators for AWS. Which TWO are valid choices?<span class="qa-tag">Domain 1</span></summary>
+              <div class="qa-body">
+                <ol type="A">
+      <li>Amazon MWAA</li>
+      <li>AWS Glue Workflows</li>
+      <li>AWS Step Functions with Amazon States Language only</li>
+      <li>Amazon EventBridge Scheduler</li>
+      <li>Apache Airflow on EC2</li>
+                </ol>
+                <p><strong>Answer: A and B.</strong> MWAA is managed Airflow — direct DAG migration. Glue Workflows cover Glue-native DAGs with triggers when Airflow is overkill.</p>
+                <p class="muted"><strong>Why not the others:</strong> C — Step Functions uses ASL, not Python DAGs. D — Scheduler is cron for single targets, not multi-step DAGs. E — EC2 Airflow fails least-overhead constraint.</p>
+                <p class="muted">Covered in <a href="s15-app-integration.html#mwaa">Section 15</a>.</p>
+              </div>
+            </details>            <details class="qa">
+              <summary>Q21. A micro-batch pipeline runs every 15 minutes and aggregates logs already in S3. Cost must stay minimal with SQL-only transforms. Best approach?<span class="qa-tag">Domain 1</span></summary>
+              <div class="qa-body">
+                <ol type="A">
+      <li>Amazon EMR Spark cluster 24/7</li>
+      <li>Scheduled Athena INSERT INTO … SELECT over partitioned Parquet</li>
+      <li>Kinesis Data Streams</li>
+      <li>Redshift provisioned cluster</li>
+                </ol>
+                <p><strong>Answer: B.</strong> Athena charges per TB scanned — ideal for periodic SQL over S3 without always-on compute.</p>
+                <p class="muted"><strong>Why not the others:</strong> A — 24/7 EMR dominates cost for 15-minute batch. C — Kinesis is for streaming ingress, not batch over existing S3. D — Redshift cluster is expensive for infrequent batch.</p>
+                <p class="muted">Covered in <a href="s03-athena.html">Section 3</a>.</p>
+              </div>
+            </details>            <details class="qa">
+              <summary>Q22. A producer exceeds Kinesis shard limits due to hot partition keys. What is the FASTEST mitigation without adding shards?<span class="qa-tag">Domain 1</span></summary>
+              <div class="qa-body">
+                <ol type="A">
+      <li>Add a random suffix to partition keys and deduplicate downstream</li>
+      <li>Switch to Firehose</li>
+      <li>Increase retention to 365 days</li>
+      <li>Enable enhanced fan-out</li>
+                </ol>
+                <p><strong>Answer: A.</strong> Salting partition keys spreads load across shards immediately; consumers dedupe on business key.</p>
+                <p class="muted"><strong>Why not the others:</strong> B — Firehose changes architecture and still needs upstream if replay required. C — retention does not affect throughput. D — EFO adds read capacity, not write.</p>
+                <p class="muted">Covered in <a href="s06-streaming.html#troubleshooting">Section 6</a>.</p>
+              </div>
+            </details>
+          <h3>Domain 2 — Data Store Management (~26%)</h3>
+            <details class="qa">
+              <summary>Q23. A shopping cart service needs single-digit millisecond reads by user_id with unpredictable traffic spikes. Which store?<span class="qa-tag">Domain 2</span></summary>
+              <div class="qa-body">
+                <ol type="A">
+      <li>Amazon RDS PostgreSQL</li>
+      <li>Amazon DynamoDB on-demand</li>
+      <li>Amazon Redshift</li>
+      <li>Amazon S3 with Athena</li>
+                </ol>
+                <p><strong>Answer: B.</strong> DynamoDB on-demand scales instantly per request with single-digit ms latency at key access — classic OLTP pattern.</p>
+                <p class="muted"><strong>Why not the others:</strong> A — RDS scales vertically/read replicas; spikes need capacity planning. C — Redshift is OLAP. D — Athena is seconds latency and scans objects.</p>
+                <p class="muted">Covered in <a href="s09-dynamodb.html">Section 9</a>.</p>
+              </div>
+            </details>            <details class="qa">
+              <summary>Q24. An analytics team runs complex JOINs across 10 TB of historical sales with 50 concurrent BI users. Which store?<span class="qa-tag">Domain 2</span></summary>
+              <div class="qa-body">
+                <ol type="A">
+      <li>Amazon DynamoDB</li>
+      <li>Amazon Redshift</li>
+      <li>Amazon DocumentDB</li>
+      <li>Amazon ElastiCache</li>
+                </ol>
+                <p><strong>Answer: B.</strong> Redshift columnar MPP warehouse is built for concurrent analytical SQL over terabytes.</p>
+                <p class="muted"><strong>Why not the others:</strong> A — DynamoDB lacks relational joins at scale. C — DocumentDB is MongoDB-compatible OLTP. D — ElastiCache is caching, not primary analytics store.</p>
+                <p class="muted">Covered in <a href="s10-redshift.html">Section 10</a>.</p>
+              </div>
+            </details>            <details class="qa">
+              <summary>Q25. Ad-hoc analysts query 500 GB in S3 a few times daily with unpredictable SQL. MOST cost-effective query engine?<span class="qa-tag">Domain 2</span></summary>
+              <div class="qa-body">
+                <ol type="A">
+      <li>Amazon Redshift provisioned cluster</li>
+      <li>Amazon Athena</li>
+      <li>Amazon EMR Presto cluster 24/7</li>
+      <li>Amazon RDS</li>
+                </ol>
+                <p><strong>Answer: B.</strong> Athena serverless pricing per TB scanned fits infrequent ad-hoc queries — no idle cluster cost.</p>
+                <p class="muted"><strong>Why not the others:</strong> A — cluster runs 24/7. C — EMR cluster idle cost exceeds Athena at low query volume. D — RDS is row-store OLTP.</p>
+                <p class="muted">Covered in <a href="s03-athena.html">Section 3</a>.</p>
+              </div>
+            </details>            <details class="qa">
+              <summary>Q26. Select TWO. Which TWO actions reduce Athena query cost on a large JSON dataset in S3?<span class="qa-tag">Domain 2</span></summary>
+              <div class="qa-body">
+                <ol type="A">
+      <li>Convert to Snappy-compressed Parquet partitioned by date</li>
+      <li>Store all years in one prefix without partitions</li>
+      <li>Use columnar formats and partition pruning</li>
+      <li>Query with SELECT * always</li>
+      <li>Disable the Glue Data Catalog</li>
+                </ol>
+                <p><strong>Answer: A and C.</strong> Parquet is columnar and splittable; Snappy balances speed and compression; partitions limit scanned data.</p>
+                <p class="muted"><strong>Why not the others:</strong> B — no partitions forces full scans. D — SELECT * reads every column. E — catalog enables partition metadata for pruning.</p>
+                <p class="muted">Covered in <a href="s03-athena.html#performance">Section 3</a>.</p>
+              </div>
+            </details>            <details class="qa">
+              <summary>Q27. A data lake stores raw JSON in s3://lake/raw/year=2024/month=03/. What makes Athena scans cheapest?<span class="qa-tag">Domain 2</span></summary>
+              <div class="qa-body">
+                <ol type="A">
+      <li>Increase object size to 5 GB per file</li>
+      <li>Use partition projection or MSCK REPAIR after Hive-style prefixes</li>
+      <li>Disable S3 versioning</li>
+      <li>Store as CSV without headers</li>
+                </ol>
+                <p><strong>Answer: B.</strong> Hive-style partition keys let Athena skip irrelevant prefixes — largest cost lever for lake queries.</p>
+                <p class="muted"><strong>Why not the others:</strong> A — huge files hurt parallelism. C — versioning is unrelated to scan bytes. D — CSV without headers still scans all columns unless partitioned Parquet.</p>
+                <p class="muted">Covered in <a href="s07-s3.html#partitioning">Section 7</a>.</p>
+              </div>
+            </details>            <details class="qa">
+              <summary>Q28. A team needs graph traversals (friend-of-friend) with millisecond latency at scale. Which database?<span class="qa-tag">Domain 2</span></summary>
+              <div class="qa-body">
+                <ol type="A">
+      <li>Amazon Neptune</li>
+      <li>Amazon DynamoDB</li>
+      <li>Amazon Redshift</li>
+      <li>Amazon Timestream</li>
+                </ol>
+                <p><strong>Answer: A.</strong> Neptune is a managed graph DB for Gremlin/SPARQL relationship queries — graph trigger phrases.</p>
+                <p class="muted"><strong>Why not the others:</strong> B — DynamoDB can model graphs awkwardly with adjacency lists. C — Redshift is not for traversal latency. D — Timestream is time-series.</p>
+                <p class="muted">Covered in <a href="s11-other-databases.html#neptune">Section 11</a>.</p>
+              </div>
+            </details>            <details class="qa">
+              <summary>Q29. IoT sensor readings arrive every second and queries aggregate by device over the last 30 days. Best store?<span class="qa-tag">Domain 2</span></summary>
+              <div class="qa-body">
+                <ol type="A">
+      <li>Amazon Timestream</li>
+      <li>Amazon DynamoDB</li>
+      <li>Amazon RDS</li>
+      <li>Amazon OpenSearch</li>
+                </ol>
+                <p><strong>Answer: A.</strong> Timestream is purpose-built for time-series ingest and SQL analytics with automatic tiered storage.</p>
+                <p class="muted"><strong>Why not the others:</strong> B — DynamoDB works but lacks native time-series functions and tiering. C — RDS costly at this ingest rate. D — OpenSearch suits search/logs, not primary TSDB.</p>
+                <p class="muted">Covered in <a href="s11-other-databases.html#timestream">Section 11</a>.</p>
+              </div>
+            </details>            <details class="qa">
+              <summary>Q30. A gaming leaderboard needs microsecond reads of top scores with Redis API compatibility and multi-AZ durability. Which service?<span class="qa-tag">Domain 2</span></summary>
+              <div class="qa-body">
+                <ol type="A">
+      <li>Amazon ElastiCache for Redis</li>
+      <li>Amazon MemoryDB for Redis</li>
+      <li>Amazon DynamoDB DAX</li>
+      <li>Amazon DocumentDB</li>
+                </ol>
+                <p><strong>Answer: B.</strong> MemoryDB is durable Redis — data persisted to Multi-AZ transactional log, unlike ElastiCache which is primarily cache.</p>
+                <p class="muted"><strong>Why not the others:</strong> A — ElastiCache is cache-first; data can be lost on failover unless app writes elsewhere. C — DAX accelerates DynamoDB, not Redis API. D — DocumentDB is document store.</p>
+                <p class="muted">Covered in <a href="s11-other-databases.html#memorydb">Section 11</a>.</p>
+              </div>
+            </details>            <details class="qa">
+              <summary>Q31. A MongoDB application is replatforming with minimal code change. Which AWS service?<span class="qa-tag">Domain 2</span></summary>
+              <div class="qa-body">
+                <ol type="A">
+      <li>Amazon DocumentDB</li>
+      <li>Amazon DynamoDB</li>
+      <li>Amazon Aurora PostgreSQL</li>
+      <li>Amazon Keyspaces</li>
+                </ol>
+                <p><strong>Answer: A.</strong> DocumentDB is MongoDB-compatible — migration trigger for existing MongoDB drivers.</p>
+                <p class="muted"><strong>Why not the others:</strong> B — DynamoDB API differs entirely. C — Aurora is relational. D — Keyspaces is Cassandra-compatible.</p>
+                <p class="muted">Covered in <a href="s11-other-databases.html#documentdb">Section 11</a>.</p>
+              </div>
+            </details>            <details class="qa">
+              <summary>Q32. An existing Cassandra workload must move to AWS with CQL unchanged. Which service?<span class="qa-tag">Domain 2</span></summary>
+              <div class="qa-body">
+                <ol type="A">
+      <li>Amazon DynamoDB</li>
+      <li>Amazon Keyspaces</li>
+      <li>Amazon DocumentDB</li>
+      <li>Amazon Neptune</li>
+                </ol>
+                <p><strong>Answer: B.</strong> Keyspaces is serverless Cassandra-compatible — CQL and drivers work with minimal change.</p>
+                <p class="muted"><strong>Why not the others:</strong> A — different API. C — MongoDB API. D — graph queries.</p>
+                <p class="muted">Covered in <a href="s11-other-databases.html#keyspaces">Section 11</a>.</p>
+              </div>
+            </details>            <details class="qa">
+              <summary>Q33. A Redshift table grows skewed on a KEY distribution column with one value dominating. Symptom: one compute node at 100% while others idle. Fix?<span class="qa-tag">Domain 2</span></summary>
+              <div class="qa-body">
+                <ol type="A">
+      <li>Change distribution to EVEN or ALL on the skewed table</li>
+      <li>Increase WLM memory</li>
+      <li>Enable Spectrum</li>
+      <li>Add more RA3 nodes only</li>
+                </ol>
+                <p><strong>Answer: A.</strong> EVEN or ALL redistributes rows when a KEY column has low cardinality — classic skew remediation from Section 10.</p>
+                <p class="muted"><strong>Why not the others:</strong> B — WLM helps queueing, not data skew. C — Spectrum queries S3, not local skew. D — more nodes without fixing distribution wastes capacity.</p>
+                <p class="muted">Covered in <a href="s10-redshift.html#distribution">Section 10</a>.</p>
+              </div>
+            </details>            <details class="qa">
+              <summary>Q34. Select TWO. A data warehouse team wants to query historical data in S3 without loading it into Redshift local SSD. Which TWO features apply?<span class="qa-tag">Domain 2</span></summary>
+              <div class="qa-body">
+                <ol type="A">
+      <li>Redshift Spectrum external tables</li>
+      <li>Redshift COPY for every query</li>
+      <li>Glue Data Catalog as metadata store</li>
+      <li>DynamoDB global tables</li>
+      <li>ElastiCache cluster mode</li>
+                </ol>
+                <p><strong>Answer: A and C.</strong> Spectrum runs Redshift SQL against S3 via external tables registered in Glue Catalog.</p>
+                <p class="muted"><strong>Why not the others:</strong> B — COPY loads into local storage, opposite of federated query. D and E — unrelated to warehouse federated SQL.</p>
+                <p class="muted">Covered in <a href="s10-redshift.html#spectrum">Section 10</a>.</p>
+              </div>
+            </details>            <details class="qa">
+              <summary>Q35. A company must retain S3 objects for seven years then delete them automatically with no Lambda. What should they configure?<span class="qa-tag">Domain 2</span></summary>
+              <div class="qa-body">
+                <ol type="A">
+      <li>S3 Lifecycle expiration rule after 2,555 days</li>
+      <li>CloudWatch alarm</li>
+      <li>AWS Backup plan only</li>
+      <li>S3 Object Lock without retention period</li>
+                </ol>
+                <p><strong>Answer: A.</strong> Lifecycle rules transition and expire objects on schedule — no code, minimal overhead.</p>
+                <p class="muted"><strong>Why not the others:</strong> B — alarms notify, they do not delete. C — Backup protects; lifecycle manages cost/retention in S3. D — Object Lock prevents deletion; must set retention.</p>
+                <p class="muted">Covered in <a href="s07-s3.html#storage-classes">Section 7</a>.</p>
+              </div>
+            </details>            <details class="qa">
+              <summary>Q36. A DynamoDB table receives hot partition traffic on one sort key. What is the recommended fix?<span class="qa-tag">Domain 2</span></summary>
+              <div class="qa-body">
+                <ol type="A">
+      <li>Split the table into two tables</li>
+      <li>Redesign partition key for higher cardinality or add write sharding</li>
+      <li>Switch to on-demand without schema change</li>
+      <li>Enable DAX</li>
+                </ol>
+                <p><strong>Answer: B.</strong> Hot keys need better key design or suffix salting — on-demand does not fix skewed access patterns.</p>
+                <p class="muted"><strong>Why not the others:</strong> A — splitting does not fix bad key choice alone. C — on-demand handles capacity spikes but one hot key still throttles per-partition limits. D — DAX caches reads, not write hot keys.</p>
+                <p class="muted">Covered in <a href="s09-dynamodb.html#capacity">Section 9</a>.</p>
+              </div>
+            </details>            <details class="qa">
+              <summary>Q37. Aurora PostgreSQL needs read scaling for reporting queries without impacting the writer. Solution?<span class="qa-tag">Domain 2</span></summary>
+              <div class="qa-body">
+                <ol type="A">
+      <li>Aurora Replicas</li>
+      <li>DynamoDB streams</li>
+      <li>Redshift Spectrum</li>
+      <li>S3 Intelligent-Tiering</li>
+                </ol>
+                <p><strong>Answer: A.</strong> Up to 15 Aurora Replicas share storage with the writer and serve read-only traffic.</p>
+                <p class="muted"><strong>Why not the others:</strong> B — DynamoDB unrelated. C — Spectrum is Redshift+S3. D — S3 tiering is storage cost, not DB read scaling.</p>
+                <p class="muted">Covered in <a href="s11-other-databases.html#aurora">Section 11</a>.</p>
+              </div>
+            </details>            <details class="qa">
+              <summary>Q38. A data modeller needs ACID transactions and upserts on S3 using open table format for Athena and Spark. Which format?<span class="qa-tag">Domain 2</span></summary>
+              <div class="qa-body">
+                <ol type="A">
+      <li>CSV</li>
+      <li>Apache Iceberg on S3</li>
+      <li>JSON lines</li>
+      <li>Fixed-width text</li>
+                </ol>
+                <p><strong>Answer: B.</strong> Iceberg adds ACID, time travel and schema evolution on S3 — lakehouse exam pattern.</p>
+                <p class="muted"><strong>Why not the others:</strong> A and C — no ACID on raw files. D — legacy batch format.</p>
+                <p class="muted">Covered in <a href="s13-analytics.html">Section 13</a>.</p>
+              </div>
+            </details>            <details class="qa">
+              <summary>Q39. Redshift Serverless automatically scales RPU based on workload. When is it preferred over provisioned?<span class="qa-tag">Domain 2</span></summary>
+              <div class="qa-body">
+                <ol type="A">
+      <li>Predictable 24/7 heavy load where reserved capacity is cheaper</li>
+      <li>Spiky or unknown analytics workload with minimal admin</li>
+      <li>Need DC2 local SSD at fixed node count</li>
+      <li>Requires custom WLM manual queues only on provisioned</li>
+                </ol>
+                <p><strong>Answer: B.</strong> Serverless scales to zero-ish billing units and removes cluster sizing — least overhead for variable analytics.</p>
+                <p class="muted"><strong>Why not the others:</strong> A — steady load often cheaper on provisioned RA3. C — Serverless uses managed capacity, not DC2 choice. D — Serverless has automatic WLM.</p>
+                <p class="muted">Covered in <a href="s10-redshift.html#serverless">Section 10</a>.</p>
+              </div>
+            </details>
+          <h3>Domain 3 — Data Operations and Support (~22%)</h3>
+            <details class="qa">
+              <summary>Q40. A Glue crawler completes but Athena returns zero rows. The data exists in s3://bucket/data/. First check?<span class="qa-tag">Domain 3</span></summary>
+              <div class="qa-body">
+                <ol type="A">
+      <li>IAM user password expiry</li>
+      <li>Whether the table location in Glue Catalog matches the S3 prefix and file format</li>
+      <li>Redshift WLM queues</li>
+      <li>CloudFront cache</li>
+                </ol>
+                <p><strong>Answer: B.</strong> Catalog location mismatch is the most common crawler-vs-query disconnect — wrong prefix or SerDe.</p>
+                <p class="muted"><strong>Why not the others:</strong> A — unrelated. C — Redshift not in Athena path. D — CloudFront not default for Athena.</p>
+                <p class="muted">Covered in <a href="s02-data-ingestion.html#glue-catalog">Section 2</a>.</p>
+              </div>
+            </details>            <details class="qa">
+              <summary>Q41. A Step Functions workflow fails intermittently on Lambda throttling. Best built-in fix?<span class="qa-tag">Domain 3</span></summary>
+              <div class="qa-body">
+                <ol type="A">
+      <li>Retry with exponential backoff on the Task state</li>
+      <li>Delete the state machine</li>
+      <li>Switch to Standard SQS</li>
+      <li>Disable CloudWatch</li>
+                </ol>
+                <p><strong>Answer: A.</strong> Step Functions Task states support Retry/Catch blocks — exam answer for transient Lambda errors.</p>
+                <p class="muted"><strong>Why not the others:</strong> B — deletes workflow. C — SQS decouples but does not replace orchestration retry config. D — removes observability.</p>
+                <p class="muted">Covered in <a href="s15-app-integration.html#step-functions">Section 15</a>.</p>
+              </div>
+            </details>            <details class="qa">
+              <summary>Q42. Select TWO. Which TWO services provide searchable audit of who called which AWS API against S3 and IAM?<span class="qa-tag">Domain 3</span></summary>
+              <div class="qa-body">
+                <ol type="A">
+      <li>AWS CloudTrail</li>
+      <li>Amazon CloudWatch Logs Insights</li>
+      <li>AWS Config</li>
+      <li>Amazon Macie</li>
+      <li>Amazon Athena</li>
+                </ol>
+                <p><strong>Answer: A and B.</strong> CloudTrail records API calls; Logs Insights queries log groups including CloudTrail Lake or S3-delivered logs.</p>
+                <p class="muted"><strong>Why not the others:</strong> C — Config records configuration changes, not every data-plane API by default. D — Macie finds sensitive data. E — Athena queries data you point it at, not automatic audit.</p>
+                <p class="muted">Covered in <a href="s16-management.html#cloudtrail">Section 16</a>.</p>
+              </div>
+            </details>            <details class="qa">
+              <summary>Q43. An EMR cluster processes 20 TB nightly then sits idle 23 hours. How to cut cost MOST?<span class="qa-tag">Domain 3</span></summary>
+              <div class="qa-body">
+                <ol type="A">
+      <li>Keep cluster running for faster next run</li>
+      <li>Terminate after job using transient cluster or EMR Serverless</li>
+      <li>Switch to larger instances</li>
+      <li>Enable EMR managed scaling to maximum</li>
+                </ol>
+                <p><strong>Answer: B.</strong> Transient clusters or EMR Serverless pay only for job duration — classic cost optimisation question.</p>
+                <p class="muted"><strong>Why not the others:</strong> A — 23 idle hours dominate cost. C — larger instances increase bill. D — scaling max increases peak cost.</p>
+                <p class="muted">Covered in <a href="s13-analytics.html#emr">Section 13</a>.</p>
+              </div>
+            </details>            <details class="qa">
+              <summary>Q44. OpenSearch cluster CPU is high on indexing during business hours. Immediate relief?<span class="qa-tag">Domain 3</span></summary>
+              <div class="qa-body">
+                <ol type="A">
+      <li>Reduce refresh interval temporarily and scale data nodes</li>
+      <li>Delete the domain</li>
+      <li>Disable encryption</li>
+      <li>Move indexes to DynamoDB</li>
+                </ol>
+                <p><strong>Answer: A.</strong> Increasing refresh_interval reduces indexing pressure; adding data nodes spreads shards.</p>
+                <p class="muted"><strong>Why not the others:</strong> B — destructive. C — security regression. D — wrong service class.</p>
+                <p class="muted">Covered in <a href="s13-analytics.html#opensearch">Section 13</a>.</p>
+              </div>
+            </details>            <details class="qa">
+              <summary>Q45. A CloudWatch alarm should fire when Kinesis iterator age exceeds 60 seconds. Which metric?<span class="qa-tag">Domain 3</span></summary>
+              <div class="qa-body">
+                <ol type="A">
+      <li>GetRecords.IteratorAgeMilliseconds</li>
+      <li>IncomingRecords</li>
+      <li>WriteProvisionedThroughputExceeded</li>
+      <li>S3 NumberOfObjects</li>
+                </ol>
+                <p><strong>Answer: A.</strong> Iterator age measures consumer lag behind the stream head — primary consumer health metric.</p>
+                <p class="muted"><strong>Why not the others:</strong> B — ingest volume, not lag. C — producer throttling. D — S3 metric.</p>
+                <p class="muted">Covered in <a href="s16-management.html#cloudwatch">Section 16</a>.</p>
+              </div>
+            </details>            <details class="qa">
+              <summary>Q46. A data quality rule must block downstream loads when null rate in a column exceeds 5%. Where to implement in AWS?<span class="qa-tag">Domain 3</span></summary>
+              <div class="qa-body">
+                <ol type="A">
+      <li>AWS Glue Data Quality rules on the Glue job or crawler</li>
+      <li>Amazon Route 53 health check</li>
+      <li>AWS Shield Advanced</li>
+      <li>Amazon SNS alone</li>
+                </ol>
+                <p><strong>Answer: A.</strong> Glue Data Quality evaluates rulesets and can fail jobs or alert — native data quality in Domain 3.</p>
+                <p class="muted"><strong>Why not the others:</strong> B — DNS health checks. C — DDoS protection. D — SNS notifies but does not evaluate data.</p>
+                <p class="muted">Covered in <a href="s04-glue.html">Section 4</a>.</p>
+              </div>
+            </details>            <details class="qa">
+              <summary>Q47. QuickSight dashboards show stale data. The SPICE refresh failed silently. Where to investigate FIRST?<span class="qa-tag">Domain 3</span></summary>
+              <div class="qa-body">
+                <ol type="A">
+      <li>QuickSight dataset refresh history and ingestion errors</li>
+      <li>AWS KMS key policy</li>
+      <li>VPC peering routes</li>
+      <li>Snowball job status</li>
+                </ol>
+                <p><strong>Answer: A.</strong> Dataset refresh logs show SPICE ingestion failures — operational troubleshooting for BI.</p>
+                <p class="muted"><strong>Why not the others:</strong> B — encryption rarely causes silent SPICE fail alone. C — networking unless VPC-connected datasource. D — irrelevant.</p>
+                <p class="muted">Covered in <a href="s13-analytics.html#quicksight">Section 13</a>.</p>
+              </div>
+            </details>            <details class="qa">
+              <summary>Q48. An organisation wants infrastructure-as-code for a repeatable Glue catalog and job setup. Which service?<span class="qa-tag">Domain 3</span></summary>
+              <div class="qa-body">
+                <ol type="A">
+      <li>AWS CloudFormation</li>
+      <li>Amazon Macie</li>
+      <li>AWS DataSync</li>
+      <li>Amazon AppFlow</li>
+                </ol>
+                <p><strong>Answer: A.</strong> CloudFormation (or SAM/CDK) defines Glue databases, crawlers and jobs in versioned templates.</p>
+                <p class="muted"><strong>Why not the others:</strong> B — Macie is security. C — file sync. D — SaaS flows.</p>
+                <p class="muted">Covered in <a href="s16-management.html#cloudformation">Section 16</a>.</p>
+              </div>
+            </details>            <details class="qa">
+              <summary>Q49. Select TWO. A containerised Spark job must run on Kubernetes with AWS-managed control plane. Which TWO services are involved?<span class="qa-tag">Domain 3</span></summary>
+              <div class="qa-body">
+                <ol type="A">
+      <li>Amazon EKS</li>
+      <li>Amazon ECR for container images</li>
+      <li>Amazon MQ</li>
+      <li>AWS Snowcone</li>
+      <li>Amazon MemoryDB</li>
+                </ol>
+                <p><strong>Answer: A and B.</strong> EKS runs Kubernetes; ECR stores the Spark container image.</p>
+                <p class="muted"><strong>Why not the others:</strong> C — message broker. D — edge device. E — Redis durable store.</p>
+                <p class="muted">Covered in <a href="s17-containers.html">Section 17</a>.</p>
+              </div>
+            </details>            <details class="qa">
+              <summary>Q50. Lake Formation tag-based access control should hide PII columns from analysts but allow aggregates. Combined with which query service?<span class="qa-tag">Domain 3</span></summary>
+              <div class="qa-body">
+                <ol type="A">
+      <li>Lake Formation column-level permissions with Athena or Redshift Spectrum</li>
+      <li>S3 Object Lock</li>
+      <li>AWS Backup</li>
+      <li>Amazon ElastiCache</li>
+                </ol>
+                <p><strong>Answer: A.</strong> Lake Formation grants table/column/tag permissions consumed by Athena, Redshift Spectrum and Glue.</p>
+                <p class="muted"><strong>Why not the others:</strong> B — Object Lock is immutability. C — backup. D — cache.</p>
+                <p class="muted">Covered in <a href="s13-analytics.html#lake-formation">Section 13</a>.</p>
+              </div>
+            </details>            <details class="qa">
+              <summary>Q51. A nightly pipeline missed its SLA. CloudWatch shows Glue job duration doubled. First performance step?<span class="qa-tag">Domain 3</span></summary>
+              <div class="qa-body">
+                <ol type="A">
+      <li>Check data volume growth, shuffle partitions and DPU allocation in Spark UI / job metrics</li>
+      <li>Delete the S3 bucket</li>
+      <li>Disable encryption</li>
+      <li>Increase Kinesis retention</li>
+                </ol>
+                <p><strong>Answer: A.</strong> Job metrics and Spark UI reveal skew, spill or under-provisioned DPUs — standard ops playbook.</p>
+                <p class="muted"><strong>Why not the others:</strong> B — destructive. C — unrelated. D — streaming setting for batch Glue job.</p>
+                <p class="muted">Covered in <a href="s04-glue.html#glue-costs">Section 4</a>.</p>
+              </div>
+            </details>            <details class="qa">
+              <summary>Q52. AWS Config reports an S3 bucket became public. Which service detected the configuration change?<span class="qa-tag">Domain 3</span></summary>
+              <div class="qa-body">
+                <ol type="A">
+      <li>AWS Config rule on s3-bucket-public-read-prohibited</li>
+      <li>Amazon Athena</li>
+      <li>AWS Batch</li>
+      <li>Amazon Kinesis</li>
+                </ol>
+                <p><strong>Answer: A.</strong> Config rules evaluate resource configurations continuously and flag non-compliance.</p>
+                <p class="muted"><strong>Why not the others:</strong> B — SQL engine. C — batch compute. D — streaming.</p>
+                <p class="muted">Covered in <a href="s16-management.html#config">Section 16</a>.</p>
+              </div>
+            </details>            <details class="qa">
+              <summary>Q53. An operator needs a single pane for pipeline failures across Lambda, Glue and Step Functions. Minimum setup?<span class="qa-tag">Domain 3</span></summary>
+              <div class="qa-body">
+                <ol type="A">
+      <li>CloudWatch dashboards and alarms on each service metric plus Step Functions execution history</li>
+      <li>Only S3 access logs</li>
+      <li>Delete CloudTrail</li>
+      <li>Use Excel on localhost</li>
+                </ol>
+                <p><strong>Answer: A.</strong> CloudWatch metrics/alarms plus Step Functions console cover cross-service operational visibility.</p>
+                <p class="muted"><strong>Why not the others:</strong> B — S3 logs alone miss compute failures. C — removes audit. D — not AWS-native.</p>
+                <p class="muted">Covered in <a href="s16-management.html#cloudwatch">Section 16</a>.</p>
+              </div>
+            </details>
+          <h3>Domain 4 — Data Security and Governance (~18%)</h3>
+            <details class="qa">
+              <summary>Q54. Sensitive HR files in S3 must be discovered automatically for GDPR review. Which service?<span class="qa-tag">Domain 4</span></summary>
+              <div class="qa-body">
+                <ol type="A">
+      <li>Amazon Macie</li>
+      <li>AWS KMS</li>
+      <li>AWS Shield</li>
+      <li>Amazon GuardDuty</li>
+                </ol>
+                <p><strong>Answer: A.</strong> Macie scans S3 for PII and sensitive data patterns — discovery trigger phrase.</p>
+                <p class="muted"><strong>Why not the others:</strong> B — KMS encrypts, does not classify content. C — DDoS. D — GuardDuty is threat detection, not PII discovery.</p>
+                <p class="muted">Covered in <a href="s20-security.html#macie">Section 20</a>.</p>
+              </div>
+            </details>            <details class="qa">
+              <summary>Q55. A Redshift analyst may see only rows for their sales region. Which feature?<span class="qa-tag">Domain 4</span></summary>
+              <div class="qa-body">
+                <ol type="A">
+      <li>Row-level security policies in Redshift</li>
+      <li>S3 bucket policy only</li>
+      <li>CloudFront signed URLs</li>
+      <li>AWS Batch job queue</li>
+                </ol>
+                <p><strong>Answer: A.</strong> Redshift RLS filters rows based on session user — fine-grained access in warehouse.</p>
+                <p class="muted"><strong>Why not the others:</strong> B — bucket policy is bucket-wide, not row-level in SQL. C — CDN access. D — compute scheduler.</p>
+                <p class="muted">Covered in <a href="s10-redshift.html#fgac">Section 10</a>.</p>
+              </div>
+            </details>            <details class="qa">
+              <summary>Q56. Select TWO. Which TWO encrypt data at rest in S3 using keys you control in KMS?<span class="qa-tag">Domain 4</span></summary>
+              <div class="qa-body">
+                <ol type="A">
+      <li>SSE-KMS with a customer managed CMK</li>
+      <li>SSE-S3 only</li>
+      <li>Client-side encryption before upload with KMS-backed keys</li>
+      <li>HTTP without TLS</li>
+      <li>Unencrypted bucket</li>
+                </ol>
+                <p><strong>Answer: A and C.</strong> SSE-KMS and client-side encryption with KMS CMKs give audit trail and key policy control.</p>
+                <p class="muted"><strong>Why not the others:</strong> B — SSE-S3 uses AWS-managed keys with less control. D and E — not encryption at rest in AWS.</p>
+                <p class="muted">Covered in <a href="s20-security.html#kms-overview">Section 20</a>.</p>
+              </div>
+            </details>            <details class="qa">
+              <summary>Q57. An application in a private subnet must read S3 without traversing the public internet or NAT Gateway. How?<span class="qa-tag">Domain 4</span></summary>
+              <div class="qa-body">
+                <ol type="A">
+      <li>Gateway VPC endpoint for S3</li>
+      <li>Internet Gateway only</li>
+      <li>AWS Direct Connect alone</li>
+      <li>Public S3 bucket</li>
+                </ol>
+                <p><strong>Answer: A.</strong> S3 gateway endpoint keeps traffic on AWS network — "cannot leave the VPC" / cost-saving pattern.</p>
+                <p class="muted"><strong>Why not the others:</strong> B — IGW is public path. C — DX is hybrid link, not VPC-to-S3 private routing alone. D — security violation.</p>
+                <p class="muted">Covered in <a href="s19-vpc.html#vpc-endpoints">Section 19</a>.</p>
+              </div>
+            </details>            <details class="qa">
+              <summary>Q58. Database credentials rotated every 30 days must be retrieved by Lambda without hardcoding. Which service?<span class="qa-tag">Domain 4</span></summary>
+              <div class="qa-body">
+                <ol type="A">
+      <li>AWS Secrets Manager with automatic rotation</li>
+      <li>Plaintext in environment variables</li>
+      <li>S3 public object</li>
+      <li>IAM access keys in code</li>
+                </ol>
+                <p><strong>Answer: A.</strong> Secrets Manager stores and rotates secrets; Lambda reads via SDK with IAM — exam standard.</p>
+                <p class="muted"><strong>Why not the others:</strong> B — static credentials. C — public exposure. D — long-lived keys in code.</p>
+                <p class="muted">Covered in <a href="s20-security.html#secrets-manager">Section 20</a>.</p>
+              </div>
+            </details>            <details class="qa">
+              <summary>Q59. A data lake admin needs to grant a role SELECT on specific Glue tables without writing bucket policies per prefix. Which service?<span class="qa-tag">Domain 4</span></summary>
+              <div class="qa-body">
+                <ol type="A">
+      <li>AWS Lake Formation permissions</li>
+      <li>Amazon SNS</li>
+      <li>AWS DataSync</li>
+      <li>Amazon EventBridge</li>
+                </ol>
+                <p><strong>Answer: A.</strong> Lake Formation centralises fine-grained grants on catalog objects — governs Athena/Redshift access.</p>
+                <p class="muted"><strong>Why not the others:</strong> B — messaging. C — sync. D — events.</p>
+                <p class="muted">Covered in <a href="s13-analytics.html#lake-formation">Section 13</a>.</p>
+              </div>
+            </details>            <details class="qa">
+              <summary>Q60. CloudTrail must show who downloaded a specific S3 object for audit. Which logging is required?<span class="qa-tag">Domain 4</span></summary>
+              <div class="qa-body">
+                <ol type="A">
+      <li>S3 server access logging or CloudTrail data events for S3 object-level API activity</li>
+      <li>VPC Flow Logs only</li>
+      <li>AWS Config only</li>
+      <li>QuickSight audit</li>
+                </ol>
+                <p><strong>Answer: A.</strong> Data events log GetObject — "audit who read the object" trigger phrase.</p>
+                <p class="muted"><strong>Why not the others:</strong> B — network metadata, not object identity. C — resource config, not every GetObject. D — BI audit separate.</p>
+                <p class="muted">Covered in <a href="s16-management.html#cloudtrail">Section 16</a>.</p>
+              </div>
+            </details>            <details class="qa">
+              <summary>Q61. A company requires all new S3 buckets to block public access and use KMS encryption by default. Enforcement mechanism?<span class="qa-tag">Domain 4</span></summary>
+              <div class="qa-body">
+                <ol type="A">
+      <li>SCP plus AWS Config rules with remediation or Service Control Policies with bucket settings</li>
+      <li>Disable IAM</li>
+      <li>Remove CloudTrail</li>
+      <li>Use HTTP</li>
+                </ol>
+                <p><strong>Answer: A.</strong> Organizations SCPs prevent opt-out; Config rules detect drift — governance at scale.</p>
+                <p class="muted"><strong>Why not the others:</strong> B — removes access control. C — removes audit. D — insecure transport.</p>
+                <p class="muted">Covered in <a href="s16-management.html#iam">Section 16</a>.</p>
+              </div>
+            </details>            <details class="qa">
+              <summary>Q62. Select TWO. Which TWO are responsibilities of the customer under the AWS shared responsibility model for a managed Redshift cluster?<span class="qa-tag">Domain 4</span></summary>
+              <div class="qa-body">
+                <ol type="A">
+      <li>Configuring VPC security groups for the cluster</li>
+      <li>Patching the underlying hypervisor</li>
+      <li>Managing database user permissions and RLS</li>
+      <li>Physical data centre security</li>
+      <li>Replacing failed SSD hardware</li>
+                </ol>
+                <p><strong>Answer: A and C.</strong> Customer manages network access to the cluster and DB-level auth; AWS patches infrastructure and hardware.</p>
+                <p class="muted"><strong>Why not the others:</strong> B, D, E — AWS responsibility for managed services.</p>
+                <p class="muted">Covered in <a href="s16-management.html#iam">Section 16</a>.</p>
+              </div>
+            </details>            <details class="qa">
+              <summary>Q63. Cross-account analysts query a shared Glue catalog. The bucket owner must retain object ownership. Recommended bucket setting?<span class="qa-tag">Domain 4</span></summary>
+              <div class="qa-body">
+                <ol type="A">
+      <li>S3 Object Ownership enforced Bucket owner enforced</li>
+      <li>Make bucket public</li>
+      <li>Disable encryption</li>
+      <li>Use HTTP</li>
+                </ol>
+                <p><strong>Answer: A.</strong> Bucket owner enforced disables ACL confusion in cross-account lake access.</p>
+                <p class="muted"><strong>Why not the others:</strong> B — security fail. C — unrelated to ownership. D — insecure.</p>
+                <p class="muted">Covered in <a href="s07-s3.html#bucket-policies">Section 7</a>.</p>
+              </div>
+            </details>            <details class="qa">
+              <summary>Q64. A pipeline writes to S3 with SSE-KMS. A Glue job fails with AccessDenied on GetObject. Most likely fix?<span class="qa-tag">Domain 4</span></summary>
+              <div class="qa-body">
+                <ol type="A">
+      <li>Add kms:Decrypt on the CMK key policy and s3:GetObject on the bucket to the Glue job role</li>
+      <li>Disable KMS</li>
+      <li>Use root credentials</li>
+      <li>Delete the bucket</li>
+                </ol>
+                <p><strong>Answer: A.</strong> KMS encryption requires both S3 and KMS permissions on the job role — classic encryption troubleshooting.</p>
+                <p class="muted"><strong>Why not the others:</strong> B — removes encryption requirement. C — never use root. D — destructive.</p>
+                <p class="muted">Covered in <a href="s20-security.html#encryption-services">Section 20</a>.</p>
+              </div>
+            </details>            <details class="qa">
+              <summary>Q65. Macie findings must trigger automated blocking of public exposure on new buckets. Architecture?<span class="qa-tag">Domain 4</span></summary>
+              <div class="qa-body">
+                <ol type="A">
+      <li>EventBridge rule on Macie findings → Lambda → S3 Block Public Access API</li>
+      <li>Manual email only</li>
+      <li>Disable Macie</li>
+      <li>Use Snowball</li>
+                </ol>
+                <p><strong>Answer: A.</strong> Event-driven response to Macie findings automates governance — security automation pattern.</p>
+                <p class="muted"><strong>Why not the others:</strong> B — manual fails scale. C — removes detection. D — offline transfer.</p>
+                <p class="muted">Covered in <a href="s20-security.html#macie">Section 20</a>.</p>
+              </div>
+            </details>
+          </div>
+          <div class="callout tip"><strong>Scoring yourself.</strong> Aim for 56+ correct (roughly 850+ practice scale) before booking. Re-read the linked sections for any cluster of misses in one domain. Official pass is 720/1000 scaled.</div>
+        </section>
+
+        <section class="section" id="deeper">
+          <h2>Deeper detail and exam edge cases</h2>
+          <p class="lead">The cross-service reference this page was missing — every number, pricing model, and question-reading tactic that appears across Sections 1–20, consolidated for the final revision pass.</p>
+
+          <h3>Limits and quotas that decide answers</h3>
+          <p class="muted">Master numbers table — one figure per service that most often changes the answer. Prices are us-east-1 where noted; verify current pricing for your Region.</p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Service</th><th>Number</th><th>What it decides</th></tr></thead>
+              <tbody>
+                <tr><td><strong>DEA-C01 exam</strong></td><td>65 questions / 130 min; pass 720/1000; 50 scored</td><td>Time budget (~2 min/question); 15 unscored trial items you cannot identify.</td></tr>
+                <tr><td><strong>Kinesis Data Streams</strong></td><td>1 MB/s or 1,000 records/s in per shard; 2 MB/s out (standard)</td><td>Shard count sizing; hot partition key throttles one shard.</td></tr>
+                <tr><td><strong>Kinesis retention</strong></td><td>24 h default; up to 365 days</td><td>Replay window — Firehose has none; Streams/MSK retain for reprocessing.</td></tr>
+                <tr><td><strong>Kinesis record size</strong></td><td>1 MB max (hard)</td><td>Larger payloads → MSK (up to 10 MB) or S3 reference pattern.</td></tr>
+                <tr><td><strong>MSK message size</strong></td><td>Configurable up to 10 MB</td><td>Existing Kafka clients with &gt;1 MB messages → MSK not Kinesis.</td></tr>
+                <tr><td><strong>Firehose S3 buffer</strong></td><td>1–128 MB; interval 0–900 s</td><td>Near-real-time vs batch landing; no replay buffer in Firehose itself.</td></tr>
+                <tr><td><strong>Lambda timeout</strong></td><td>15 minutes max</td><td>Longer ETL → Glue, Batch, ECS, or Step Functions orchestrating Glue.</td></tr>
+                <tr><td><strong>Lambda memory</strong></td><td>128 MB–10 GB</td><td>More memory = more CPU; 10 GB ceiling for in-memory transforms.</td></tr>
+                <tr><td><strong>Lambda payload</strong></td><td>6 MB sync invoke; 256 KB async event</td><td>Large S3 metadata in events fails; use S3 reference or Step Functions.</td></tr>
+                <tr><td><strong>Glue Spark ETL</strong></td><td>Minimum 2 DPUs; ~$0.44/DPU-hour</td><td>Cannot run one-DPU Spark job — Python Shell for tiny scripts.</td></tr>
+                <tr><td><strong>Glue crawler</strong></td><td>10-minute minimum bill (classic runtimes)</td><td>Daily crawl on huge bucket adds cost even when empty — use ADD PARTITION.</td></tr>
+                <tr><td><strong>Athena SQL</strong></td><td>~$5/TB scanned; 10 MB minimum per query</td><td>Partition + Parquet; trivial health-check SQL still bills 10 MB.</td></tr>
+                <tr><td><strong>S3 single PUT</strong></td><td>5 GB max; object max 5 TB (multipart)</td><td>10 GB upload scenario → multipart API required.</td></tr>
+                <tr><td><strong>S3 request rate</strong></td><td>~3,500 PUT / ~5,500 GET per second per prefix</td><td>Hot prefix throttling — randomise or date-shard keys.</td></tr>
+                <tr><td><strong>DynamoDB item</strong></td><td>400 KB max</td><td>Large blobs → S3 pointer attribute in item.</td></tr>
+                <tr><td><strong>DynamoDB WCU / RCU</strong></td><td>1 WCU = 1 KB write/s; 1 RCU = 4 KB strong read/s</td><td>Capacity maths questions — round up item size to next boundary.</td></tr>
+                <tr><td><strong>SQS message</strong></td><td>256 KB max; retention 1 min–14 days</td><td>Not a replay log; extended client stores body in S3.</td></tr>
+                <tr><td><strong>SQS FIFO throughput</strong></td><td>300 msg/s (3,000 batched)</td><td>Exactly-once ordering trade-off vs Standard unlimited throughput.</td></tr>
+                <tr><td><strong>Step Functions Standard</strong></td><td>Up to 1 year execution; 256 KB state payload</td><td>Long workflows vs Express (5 min max); large input → S3 reference.</td></tr>
+                <tr><td><strong>KMS direct encrypt</strong></td><td>4 KB max</td><td>Large objects use envelope encryption (SSE-KMS) — not one Encrypt call.</td></tr>
+                <tr><td><strong>KMS CMK pricing</strong></td><td>$1/key/month + $0.03/10K requests</td><td>S3 Bucket Keys reduce KMS API volume on hot buckets.</td></tr>
+                <tr><td><strong>Redshift WLM</strong></td><td>~50 concurrent queries on main cluster</td><td>Query 51 waits unless concurrency scaling enabled.</td></tr>
+                <tr><td><strong>Redshift concurrency scaling</strong></td><td>1 free scaling hour per 24 h cluster runtime</td><td>Beyond free tier, scaling clusters bill per second.</td></tr>
+                <tr><td><strong>VPC subnet</strong></td><td>5 reserved IPs; /24 = 251 usable</td><td>Dense Lambda/Glue ENI placement in small subnets.</td></tr>
+                <tr><td><strong>S3 gateway endpoint</strong></td><td>Free</td><td>Private subnet S3 access without NAT — highest-value VPC cost fact.</td></tr>
+                <tr><td><strong>NAT Gateway</strong></td><td>~$0.045/hr + ~$0.045/GB processed</td><td>S3-heavy pipelines through NAT waste money — use gateway endpoint.</td></tr>
+                <tr><td><strong>Snowball Edge Storage Optimized</strong></td><td>80 TB usable per device</td><td>Offline bulk when bandwidth math exceeds deadline.</td></tr>
+                <tr><td><strong>DMS migration type</strong></td><td>Full load + CDC for minimal downtime</td><td>Database live during migration — not DataSync or Snowball.</td></tr>
+                <tr><td><strong>Secrets Manager vs SSM</strong></td><td>Rotation built-in vs Standard params free</td><td>Rotating RDS password → Secrets Manager; static config → Parameter Store.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>What you actually pay for</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Pricing model</th><th>Services</th><th>Idle cost?</th><th>Exam "cheapest for intermittent" pick</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Per hour provisioned</strong></td><td>Redshift provisioned, EMR cluster, MSK brokers, NAT Gateway, DMS replication instance, Transfer Family endpoint, EKS control plane</td><td>Yes — bills while resource exists</td><td>Avoid for sporadic workloads unless question ignores cost.</td></tr>
+                <tr><td><strong>Per second / minute of compute</strong></td><td>Lambda, Fargate, Glue DPU-hour, Athena Spark sessions, Redshift Serverless RPU</td><td>No when stopped</td><td>Lambda, Glue job, Athena query, Redshift Serverless for spiky SQL.</td></tr>
+                <tr><td><strong>Per GB scanned / transferred</strong></td><td>Athena SQL, DataSync, NAT processing, cross-AZ transfer, Macie scan</td><td>N/A — usage only</td><td>Athena with partitioned Parquet beats scanning raw JSON repeatedly.</td></tr>
+                <tr><td><strong>Per request / message</strong></td><td>S3 PUT/GET, KMS API, DynamoDB on-demand, Kinesis PUT payload units, SQS per million requests</td><td>No idle meter</td><td>S3 Intelligent-Tiering + fewer LIST calls; DynamoDB on-demand for unpredictable traffic.</td></tr>
+                <tr><td><strong>Per shard / broker / stream hour</strong></td><td>Kinesis provisioned shards, MSK broker hours, Firehose delivery stream hour</td><td>Yes for provisioned Kinesis/MSK</td><td>Kinesis on-demand or Firehose when shard tuning is overhead.</td></tr>
+                <tr><td><strong>Per secret / key / month</strong></td><td>Secrets Manager (~$0.40/secret), KMS CMK ($1/key)</td><td>Yes — monthly fixed</td><td>Parameter Store Standard for non-rotating config; SSE-S3 if CMK policy not required.</td></tr>
+                <tr><td><strong>Scale to zero</strong></td><td>Lambda, Athena SQL, Glue per-job, Batch on-demand, Redshift Serverless (scales down)</td><td>True zero at rest</td><td>Default exam answer for "infrequent" + "least operational overhead".</td></tr>
+                <tr><td><strong>Never scale to zero</strong></td><td>Provisioned Redshift, MSK, NAT GW, Transfer Family endpoint, always-on ECS service</td><td>Continuous charge</td><td>Wrong answer when stem says "only runs twice daily" unless HA is explicit.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout cost"><strong>Intermittent workload rule.</strong> When the stem says <em>most cost-effective</em> and the workload runs minutes per day, eliminate anything with an hourly endpoint or cluster fee first (NAT left on, Transfer Family SFTP, provisioned Redshift, MSK). Then compare per-run serverless options (Glue vs Lambda vs Athena).</div>
+          <div class="callout danger"><strong>Hidden idle meters.</strong> NAT Gateway, Transfer Family endpoints, DMS replication instances, and provisioned Kinesis shards bill 24/7. Exam scenarios describing completed migrations or nightly-only jobs still leave these running unless the answer explicitly includes teardown.</div>
+
+          <h3>Traps that catch people</h3>
+          <ul>
+            <li><strong>Same service, wrong capability —</strong> Firehose for replay; Athena for high-concurrency BI; SQS for streaming retention; Macie for threat detection; GuardDuty for PII classification; DMS for NFS files.</li>
+            <li><strong>Qualifier swap —</strong> Identical stem, but <em>least operational overhead</em> → managed/serverless; <em>most cost-effective</em> → pay-per-use or Spot; <em>lowest latency</em> → provisioned capacity or Enhanced Fan-Out; <em>fastest time to implement</em> → console-native integration (Glue, Firehose, AppFlow).</li>
+            <li><strong>Keyword → service map —</strong> "Sub-second" / "real time" → Kinesis Streams or Flink; "near real time" → Firehose; "exactly-once FIFO" → SQS FIFO; "SQL over S3" → Athena; "no code" profiling → DataBrew; "managed Kafka" → MSK; "minimal downtime database" → DMS full load + CDC; "existing SFTP" → Transfer Family.</li>
+            <li><strong>Technically possible but not AWS-native —</strong> Kafka on EC2, Spark on self-managed EMR forever, cron on EC2 instead of EventBridge, JDBC in Lambda for heavy ETL — all work in reality but lose when the question rewards managed services.</li>
+            <li><strong>KMS permission half-fix —</strong> Adding <code>s3:GetObject</code> without <code>kms:Decrypt</code> on SSE-KMS buckets — most common Domain 4 trick.</li>
+            <li><strong>Glue without S3 route —</strong> VPC connection alone fails; subnet needs gateway endpoint or NAT — appears in Domain 1 and 4 questions.</li>
+            <li><strong>Athena vs Redshift false dichotomy —</strong> Both query S3 via Spectrum technically, but exam intent separates ad-hoc scan billing from warehouse concurrency.</li>
+            <li><strong>Over-orchestration —</strong> Step Functions for one Lambda step; MWAA for three Glue jobs — match orchestrator complexity to step count.</li>
+            <li><strong>Ignoring minimum bills —</strong> Athena 10 MB floor; Glue 10-minute crawler minimum; Fargate 1-minute minimum — small frequent jobs accumulate.</li>
+            <li><strong>Deck-era facts —</strong> S3 strong consistency is current; Firehose S3 buffer can be 0 s interval — trust these notes over outdated slide wording.</li>
+          </ul>
+
+          <h3>Troubleshooting playbook</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Question shape</th><th>Most likely cause</th><th>Tactic to apply</th></tr></thead>
+              <tbody>
+                <tr><td>Two answers both seem correct</td><td>Missed qualifier in last sentence</td><td>Re-read final clause for overhead / cost / latency / compliance; eliminate the option that violates that axis only.</td></tr>
+                <tr><td>Never heard of the service named</td><td>Obscure service is a distractor</td><td>Match stem requirements to a core service from the <a href="#decisions">decision tables</a>; unknown name is usually wrong.</td></tr>
+                <tr><td>Long scenario with vendor names and team politics</td><td>Irrelevant narrative padding</td><td>Extract: data type, volume, latency, existing software, network constraints — ignore org chart detail.</td></tr>
+                <tr><td>Multiple-response: choose TWO of five</td><td>Partial credit trap — one wrong pick fails all</td><td>Evaluate each option independently; select only options you can defend in one sentence.</td></tr>
+                <tr><td>All four options are real AWS services</td><td>Wrong domain or wrong capability</td><td>Classify each option: ingest / store / transform / govern — discard wrong domain first.</td></tr>
+                <tr><td>Numeric answer choices (TB, hours, RCUs)</td><td>Calculation or limit recall</td><td>Use <a href="#deeper">numbers table</a> above; show work on bandwidth (Snowball) or capacity (DynamoDB RCU) scratch pad.</td></tr>
+                <tr><td>Scenario mentions "existing Kafka" or "SFTP scripts"</td><td>Compatibility constraint dominates</td><td>MSK or Transfer Family wins even if greenfield design would differ — honour legacy client requirement.</td></tr>
+                <tr><td>Every option includes encryption</td><td>Encryption type or key ownership detail</td><td>SSE-S3 vs SSE-KMS vs client-side; CMK when key policy / cross-account / audit required.</td></tr>
+                <tr><td>Stuck between Glue and EMR</td><td>Ops vs control trade-off</td><td>Glue = least overhead + Catalog integration; EMR = custom libs, long-running, fine cluster control.</td></tr>
+                <tr><td>Running out of time at question 50</td><td>Over-invested in early scenarios</td><td>Flag, guess, move — unanswered equals wrong; return if clock allows.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Production patterns</h3>
+          <p>This section is your exam-eve revision schedule — not production architecture, but the study pattern that converts these notes into a pass.</p>
+          <div class="grid-2">
+            <div class="mini-card">
+              <h4>Last 72 hours</h4>
+              <ul>
+                <li><strong>Day −3:</strong> Full timed <a href="#exam">65-question practice exam</a>; score by domain; list weak sections.</li>
+                <li><strong>Day −2:</strong> Re-read weak sections only; answer every <code>#interview</code> block cold; skim this page's numbers table.</li>
+                <li><strong>Day −1:</strong> <a href="#decisions">Decision tables</a> + <a href="#tactics">Exam tactics</a>; one capstone skim; no new topics.</li>
+              </ul>
+            </div>
+            <div class="mini-card">
+              <h4>Last hour (before the sitting)</h4>
+              <ul>
+                <li>Numbers table (limits section above) — 10 minutes.</li>
+                <li>Five common traps from <a href="#tactics">Exam tactics</a> — 5 minutes.</li>
+                <li>Domain weightings: 34% ingest, 26% store, 22% ops, 18% security — prioritise misses accordingly.</li>
+                <li>Read last sentence first — say it out loud once before clicking.</li>
+              </ul>
+            </div>
+          </div>
+          <p>Use the rest of this site systematically: work through missed practice questions' linked sections; read <a href="extras.html">Extras</a> for DEA-C01 topics not in the main 21 sections (file formats, compression, SCD types, Bedrock touchpoints); use <a href="interview-prep.html">Interview prep</a> after the cert for role-based depth. Do not run new labs the night before — sleep beats one more crawler.</p>
+
+          <h3>Where this fits with the rest of the exam</h3>
+          <p>Domain-weighted map — jump to your weakest column. Each link is the primary section for that domain's services.</p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Domain</th><th>Weight</th><th>Sections to re-read</th><th>Focus if short on time</th></tr></thead>
+              <tbody>
+                <tr><td><strong>1 — Ingestion &amp; Transformation</strong></td><td>34%</td><td><a href="s02-data-ingestion.html">02</a>, <a href="s04-glue.html">04</a>, <a href="s05-lambda.html">05</a>, <a href="s06-streaming.html">06</a>, <a href="s15-app-integration.html">15</a>, <a href="s18-migration.html">18</a></td><td>Kinesis vs Firehose vs MSK; Glue vs EMR; DMS vs DataSync</td></tr>
+                <tr><td><strong>2 — Data Store Management</strong></td><td>26%</td><td><a href="s07-s3.html">07</a>, <a href="s08-other-storage.html">08</a>, <a href="s09-dynamodb.html">09</a>, <a href="s10-redshift.html">10</a>, <a href="s11-other-databases.html">11</a></td><td>S3 lifecycle/encryption; DynamoDB keys/RCU; Redshift DISTKEY/Spectrum</td></tr>
+                <tr><td><strong>3 — Operations &amp; Support</strong></td><td>22%</td><td><a href="s03-athena.html">03</a>, <a href="s12-compute.html">12</a>, <a href="s13-analytics.html">13</a>, <a href="s16-management.html">16</a>, <a href="s17-containers.html">17</a></td><td>Athena cost; CloudWatch vs CloudTrail; Batch/containers when Lambda too short</td></tr>
+                <tr><td><strong>4 — Security &amp; Governance</strong></td><td>18%</td><td><a href="s19-vpc.html">19</a>, <a href="s20-security.html">20</a>, <a href="s16-management.html#iam">16 IAM</a>, <a href="s13-analytics.html#lake-formation">13 Lake Formation</a></td><td>S3 gateway endpoint; KMS envelope + key policy; Macie vs GuardDuty</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <ul>
+            <li><strong>Foundation:</strong> <a href="s01-introduction.html">Section 1</a> — exam format, domain weights, study economics.</li>
+            <li><strong>Cross-cutting ML touchpoint:</strong> <a href="s14-sagemaker.html">Section 14</a> — feature store, lineage (lighter weight).</li>
+            <li><strong>Beyond syllabus gaps:</strong> <a href="extras.html">Extras</a> — formats, SCDs, compression codecs not duplicated in Sections 1–21.</li>
+          </ul>
+          <div class="callout exam"><strong>Final exam framing.</strong> You are not proving you can build every architecture — you are proving you read the constraint and pick the AWS-native service whose billing model and capability match. When stuck, ask: (1) what data shape, (2) what qualifier, (3) what idle cost. Three questions eliminate most distractors.</div>
+        </section>
+
+        <section class="section" id="interview">
+          <h2>Interview questions</h2>
+          <p class="muted">Answer each one out loud before opening it. These are strategy and design questions — not duplicates of the practice exam above.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+            <details class="qa">
+              <summary>How do you decide between Athena and Redshift for a new analytics workload?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p>Start with <strong>query pattern and concurrency</strong>. Athena is serverless over S3: you pay per TB scanned, there is no cluster to size, and it suits ad-hoc or intermittent SQL. Redshift suits <strong>many concurrent users</strong>, complex joins on data that lives in the warehouse, and predictable performance from columnar storage and result caching.</p>
+                <p>Then check <strong>data location</strong>. If data must stay in the lake, Athena or Redshift Spectrum avoids COPY. If the team already loads curated Parquet nightly and runs dashboards all day, Redshift (often Serverless for spiky use) wins. Cost crossover is usually query volume: a handful of daily analysts on partitioned Parquet → Athena; a department hitting the same models hourly → Redshift.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Walk me through designing an event-driven pipeline from S3 raw landing to curated Parquet and an SNS alert on failure.<span class="qa-tag">Architecture</span></summary>
+              <div class="qa-body">
+                <p><strong>Ingest:</strong> producers write to <code>s3://bucket/raw/</code> with Hive-style prefixes. Enable EventBridge notifications on the bucket (or S3 → EventBridge).</p>
+                <p><strong>Orchestrate:</strong> EventBridge rule matches <code>Object Created</code> under <code>raw/</code> and starts a Step Functions Standard workflow (or Glue Workflow for Glue-only shops). States: start Glue job (JSON → partitioned Parquet in <code>staging/</code>), on failure → SNS to ops topic, on success → optional second job for aggregation into <code>curated/</code>.</p>
+                <p><strong>Catalog:</strong> Glue crawler on <code>curated/</code> registers tables. Athena workgroup with scan limits for validation queries. Idempotency: job writes overwrite partition paths deterministically.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How would you cut this pipeline's cost in half without changing the business outcome?<span class="qa-tag">Cost</span></summary>
+              <div class="qa-body">
+                <p>Audit the <strong>three cost levers</strong>: storage class, compute idle time, and bytes scanned. Move raw data older than 90 days to S3 Intelligent-Tiering or Glacier Instant Retrieval; keep curated Parquet in Standard. Terminate EMR/Redshift provisioned resources when jobs finish; switch intermittent workloads to Athena, Glue pay-per-run, or Redshift Serverless.</p>
+                <p>On the lake side, convert JSON to Snappy Parquet, partition by date, and enforce workgroup bytes-scanned limits in Athena. Enable query result reuse where queries repeat. For streaming, right-size Kinesis shards or use on-demand mode; use Firehose instead of custom consumers when replay is not required.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>When do you put Kinesis Data Streams in front of Firehose instead of Firehose alone?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>Add Data Streams when you need <strong>more than one consumer</strong> at different speeds (Flink for real-time + Firehose for archive), <strong>replay</strong> within retention after code fixes, or <strong>sub-minute latency</strong> for a custom consumer. Firehose alone is enough when the only destination is S3/Redshift/OpenSearch and near-real-time (buffered) delivery satisfies the SLA.</p>
+                <p>Cost trade-off: paying for stream shards plus Firehose is justified when replay or multi-consumer fan-out is a stated requirement; otherwise Firehose direct from producers (or via API) is cheaper and simpler.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Explain how you would implement fine-grained access on a shared data lake for multiple teams.<span class="qa-tag">Security</span></summary>
+              <div class="qa-body">
+                <p>Register S3 locations in <strong>Lake Formation</strong>, revoke overly broad IAM catalog permissions, and grant per-team LF-tags or named permissions on databases, tables and columns. Analyst roles assume IAM roles that Lake Formation vends temporary credentials for.</p>
+                <p>Combine with <strong>SSE-KMS</strong> CMKs whose key policies trust only approved roles, S3 Block Public Access account-wide, and CloudTrail data events on sensitive prefixes. For Redshift consumers, sync LF grants to Spectrum external tables or use Redshift datashares with RLS for row filters.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>A Glue job suddenly went from 20 minutes to 3 hours. What is your troubleshooting order?<span class="qa-tag">Troubleshooting</span></summary>
+              <div class="qa-body">
+                <p>Check <strong>input volume</strong> (more files or larger partitions?), then <strong>Spark UI / job metrics</strong> for skew, spill to disk, and shuffle-heavy stages. Verify DPU allocation — under-provisioned jobs crawl. Look for small files problem after upstream changes; compact partitions if needed.</p>
+                <p>Confirm no downstream lock (Iceberg commit contention, Redshift lock). Compare CloudWatch <code>glue.driver.ExecutorAllocationManager.executors.numberMaxNeeded</code> and error logs. Roll back recent code or schema changes if correlated.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What is your approach to making a Lambda + S3 pipeline idempotent?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>Assume <strong>at-least-once delivery</strong>. Use deterministic output keys (<code>curated/year=…/id=…</code>) so retries overwrite. Track processed object keys or ETags in DynamoDB with conditional writes. For aggregations, design merge logic (delete partition + insert, Iceberg MERGE, or Redshift staging table swap).</p>
+                <p>Enable partial batch failure reporting on SQS/Lambda if batching. Dead-letter queues capture poison objects after N tries without blocking the whole queue.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Compare DMS, DataSync and Snowball for migration — how do you choose?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p><strong>DMS:</strong> homogeneous or heterogeneous <strong>database</strong> migration and ongoing CDC with minimal downtime. <strong>DataSync:</strong> scheduled <strong>file</strong> replication NAS → S3/EFS over the network. <strong>Snowball/Snowmobile:</strong> offline <strong>bulk</strong> when bandwidth or time constraints make network transfer impractical at terabyte/petabyte scale.</p>
+                <p>Many replatforming projects use two: Snowball for initial bulk, DMS for incremental DB sync, DataSync for file shares — pick per data shape, not one service for everything.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How do VPC endpoints change the security posture of a data pipeline?<span class="qa-tag">Security</span></summary>
+              <div class="qa-body">
+                <p>Interface and gateway endpoints keep traffic between your VPC and AWS services on the <strong>AWS private network</strong>, avoiding the public internet and often NAT Gateway data processing charges. A Glue job or Lambda in private subnets reaches S3 via the S3 gateway endpoint; reaches KMS, Secrets Manager, or STS via interface endpoints.</p>
+                <p>Security groups and endpoint policies add another layer: you can restrict which buckets or actions are reachable even after network path exists. Exam phrase <em>cannot leave the VPC</em> points here.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Describe how Redshift distribution and sort keys interact with query performance.<span class="qa-tag">Performance</span></summary>
+              <div class="qa-body">
+                <p><strong>Distribution (DISTKEY)</strong> controls which compute node holds which rows. KEY on a high-cardinality join column co-locates joins and reduces shuffle. ALL replicates small dimension tables. EVEN spreads when no clear join key. Skew on a low-cardinality KEY melts one node.</p>
+                <p><strong>Sort keys</strong> physically order data on disk for range filters — compound sort for multi-column predicates, interleaved for equal-weight columns (maintenance-heavy). After loads, run VACUUM and ANALYZE; use <code>SVV_TABLE_INFO</code> to inspect skew and unsorted regions.</p>
+              </div>
+            </details>
+          </div>
+        </section>
+
+        <section class="section" id="practice">
+          <h2>Hands-on practice — capstone builds</h2>
+          <p class="muted">These three builds chain the whole course. Use bucket <code>dea-lab-&lt;initials&gt;-&lt;random&gt;</code>, region <code>us-east-1</code>, sample <code>data/customers.csv</code>. Delete all resources after each capstone.</p>
+          <ol class="practice-list">
+            <li class="practice">
+              <p class="practice-task">Capstone 1 — Raw → staging → curated lake: run a Glue crawler on <code>raw/customers/</code>, convert CSV to partitioned Snappy Parquet in <code>staging/</code>, register curated table, and compare Athena bytes scanned before and after.</p>
+              <span class="console-path">Glue → Crawlers · ETL jobs · Athena → Query editor</span>
+              <p class="practice-expect">Athena <code>SELECT COUNT(*)</code> on curated Parquet scans at least 10× fewer bytes than the same query on raw CSV (check the query statistics panel).</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">Console + CLI</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Upload <code>data/customers.csv</code> to <code>s3://$BUCKET/raw/customers/</code>.</li>
+                    <li>Create IAM role <code>GlueServiceRole-dea-lab</code> with <code>AWSGlueServiceRole</code> and S3 access to the bucket.</li>
+                    <li>Glue crawler on <code>s3://$BUCKET/raw/customers/</code> → database <code>dea_lab</code>.</li>
+                    <li>Run baseline Athena query on raw CSV; note <strong>Data scanned</strong>.</li>
+                    <li>Create Glue ETL job (Spark) to write Parquet to <code>s3://$BUCKET/staging/customers/state=NY/</code> (partition by State).</li>
+                    <li>Crawler on staging; query curated table with partition filter <code>WHERE state='NY'</code>.</li>
+                  </ol>
+<pre data-lang="shell"><code>BUCKET=dea-lab-ab-4821
+
+aws s3 cp data/customers.csv s3://$BUCKET/raw/customers/customers.csv
+
+aws glue create-crawler --name dea-raw-customers \
+  --role GlueServiceRole-dea-lab --database-name dea_lab \
+  --targets '{"S3Targets":[{"Path":"s3://'$BUCKET'/raw/customers/"}]}'
+
+aws glue start-crawler --name dea-raw-customers
+
+# After job converts to Parquet (Glue console or script):
+aws s3 ls s3://$BUCKET/staging/customers/ --recursive</code></pre>
+<pre data-lang="sql" data-title="Athena — compare scan size"><code>-- Raw (note bytes scanned in query stats)
+SELECT * FROM dea_lab.customers_raw;
+
+-- Curated with partition prune
+SELECT city, COUNT(*) FROM dea_lab.customers_parquet
+WHERE state = 'NY' GROUP BY city;</code></pre>
+                  <p class="muted">Cleanup: delete Glue crawlers, jobs, database tables; empty and delete bucket; delete IAM role.</p>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Capstone 2 — Event-driven pipeline: S3 object created under <code>raw/</code> → EventBridge → Step Functions → Glue job → SNS success/failure notification.</p>
+              <span class="console-path">S3 → EventBridge → Step Functions → Glue → SNS</span>
+              <p class="practice-expect">Uploading a file starts one Step Functions execution; Glue job runs; SNS email arrives with success or failure JSON.</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">Console + CLI</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Enable EventBridge on the bucket (S3 → Properties → Event notifications → Send to EventBridge).</li>
+                    <li>Create SNS topic <code>dea-pipeline-alerts</code>; confirm email subscription.</li>
+                    <li>Step Functions Standard state machine: EventBridge trigger → <code>glue:startJobRun</code> → Choice on status → SNS publish.</li>
+                    <li>EventBridge rule: source <code>aws.s3</code>, detail-type <code>Object Created</code>, prefix <code>raw/</code>.</li>
+                    <li>Upload test file; watch execution in Step Functions console.</li>
+                  </ol>
+<pre data-lang="json" data-title="Step Functions — simplified task"><code>{
+  "StartAt": "StartGlueJob",
+  "States": {
+    "StartGlueJob": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::glue:startJobRun.sync",
+      "Parameters": { "JobName": "dea-customers-etl" },
+      "Catch": [{
+        "ErrorEquals": ["States.ALL"],
+        "Next": "NotifyFailure"
+      }],
+      "Next": "NotifySuccess"
+    },
+    "NotifySuccess": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sns:publish",
+      "Parameters": {
+        "TopicArn": "arn:aws:sns:us-east-1:123456789012:dea-pipeline-alerts",
+        "Message": "Pipeline succeeded"
+      },
+      "End": true
+    },
+    "NotifyFailure": { "...": "similar SNS with error" }
+  }
+}</code></pre>
+                  <p class="muted">Cleanup: disable rule, delete state machine, SNS topic, EventBridge rule; remove test objects.</p>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Capstone 3 — Load curated Parquet into Redshift Serverless with COPY, apply row-level security by region, and query as two different users to verify isolation.</p>
+              <span class="console-path">Redshift Serverless → Query editor v2 · IAM · SQL</span>
+              <p class="practice-expect">User <code>analyst_east</code> sees only eastern rows; <code>analyst_west</code> sees only western rows; same underlying table.</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">SQL + Console</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Create Redshift Serverless namespace and workgroup; note JDBC endpoint.</li>
+                    <li>IAM role for Redshift with S3 read on <code>curated/</code>; attach to namespace.</li>
+                    <li>Create table <code>customers</code> and COPY from Parquet prefix.</li>
+                    <li>Create users and RLS policy binding <code>region</code> column to session user mapping.</li>
+                  </ol>
+<pre data-lang="sql" data-title="Redshift — COPY and RLS"><code>CREATE TABLE customers (
+  id INT, name VARCHAR, state VARCHAR, region VARCHAR
+);
+
+COPY customers FROM 's3://dea-lab-ab-4821/curated/customers/'
+IAM_ROLE 'arn:aws:iam::123456789012:role/RedshiftS3Access'
+FORMAT AS PARQUET;
+
+CREATE ROW LEVEL SECURITY POLICY region_policy ON customers
+  USING (region = current_user);
+
+ALTER TABLE customers ROW LEVEL SECURITY ON;</code></pre>
+                  <p>See <a href="s10-redshift.html#fgac">Section 10 FGAC</a> for full RLS syntax variants. Redshift Serverless bills while the workgroup is active — pause or delete promptly.</p>
+                  <p class="muted">Cleanup: delete workgroup and namespace, IAM role, S3 curated prefix if dedicated.</p>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Capstone 4 (optional) — Take the 65-question practice exam above under exam conditions: 130 minutes, no notes, one flag pass at the end. Log misses by domain and re-read those sections.</p>
+              <span class="console-path">This page → #exam</span>
+              <p class="practice-expect">A written list of weak domains and links to re-study before booking Pearson VUE or PSI.</p>
+              <details class="qa">
+                <summary>Show approach<span class="qa-tag">Exam</span></summary>
+                <div class="qa-body">
+                  <p>Use the tactics in <a href="#tactics">Exam tactics</a> and decision tables in <a href="#decisions">Service-selection tables</a>. Score 56+ before scheduling. Pair with <a href="interview-prep.html">Interview prep</a> and <a href="extras.html">Extras</a> for topics outside the deck.</p>
+                </div>
+              </details>
+            </li>
+          </ol>
+        </section>
+
+        <section class="section" id="scheduling">
+          <h2>Scheduling the exam</h2>
+          <p class="lead">Book only when practice scores are consistently above 850 equivalent (56+ on this set). A fixed date converts passive watching into revision.</p>
+
+          <h3>Where to book</h3>
+          <ul>
+            <li>Create or sign in to your <strong>AWS Certification Account</strong> at <code>aws.training</code> (Certification → Go to your account). This is separate from the console login.</li>
+            <li>Exam delivery is through <strong>Pearson VUE</strong> or <strong>PSI</strong> — you choose the provider when scheduling. Both offer test-centre and online proctored options in most countries.</li>
+            <li>Exam code: <strong>DEA-C01</strong>. Fee: <strong>150 USD</strong> (plus local tax where applicable).</li>
+          </ul>
+
+          <h3>Test centre vs online proctored</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Option</th><th>Pros</th><th>Requirements</th></tr></thead>
+              <tbody>
+                <tr><td>Test centre</td><td>No home distractions; staff handle check-in</td><td>Government ID; arrive early; no personal items in secure locker</td></tr>
+                <tr><td>Online proctored</td><td>No travel; schedule flexibly</td><td>Private room; clear desk (no papers, drinks label rules vary); <strong>one monitor</strong>; webcam and microphone; government ID shown to camera; no notes; close other apps; proctor may ask to pan the room</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Rescheduling and retakes</h3>
+          <ul>
+            <li>Reschedule or cancel through Pearson VUE/PSI within the provider's window (typically 24–48 hours before; check your confirmation email).</li>
+            <li>If you fail, you must wait <strong>14 days</strong> before retaking the same exam.</li>
+            <li>If you hold a previous AWS certification, you may qualify for a <strong>50% retake voucher</strong> — request it through the certification account help paths listed in the official FAQ.</li>
+          </ul>
+
+          <h3>Exam day and results</h3>
+          <ul>
+            <li>Check in early; online proctoring check-in can take 15–30 minutes.</li>
+            <li>You receive a pass/fail on screen at the end. Detailed score report with domain breakdown arrives within <strong>five business days</strong> (often sooner).</li>
+            <li>Credential is valid <strong>three years</strong>. Recertify by passing DEA-C01 again or a qualifying higher-level AWS exam per the current recertification policy.</li>
+          </ul>
+
+          <div class="callout warn"><strong>Before you click Schedule.</strong> Redshift clusters, MSK brokers and NAT Gateways left running in your lab account will cost more than the exam fee. Run cleanup on all capstone resources first.</div>
+        </section>
+
+        <section class="section" id="recap">
+          <h2>Recap</h2>
+          <div class="recap">
+            <ul class="checklist">
+              <li>Read the last sentence first — qualifiers pick the service, not the longest feature list.</li>
+              <li>Replay → Kinesis Data Streams or MSK; near-real-time archive → Firehose; SFTP → Transfer Family; SaaS → AppFlow; DB CDC → DMS.</li>
+              <li>Ad-hoc SQL on S3 → Athena with Parquet partitions; concurrent warehouse BI → Redshift; query S3 from Redshift → Spectrum.</li>
+              <li>Least operational overhead → serverless managed services; reject self-managed EC2 unless explicitly required.</li>
+              <li>Encryption failures: check IAM role plus KMS key policy for <code>kms:Decrypt</code> and S3 permissions together.</li>
+              <li>Lake Formation for catalog fine-grained access; Macie for PII discovery; CloudTrail data events for object read audit.</li>
+              <li>65 questions, 130 minutes, 720 to pass — flag, never leave blank, retake after 14 days if needed.</li>
+              <li>Book via AWS Certification Account through Pearson VUE or PSI; online proctoring needs clear desk, one screen, government ID.</li>
+              <li>Complete the three capstone builds to connect ingestion, orchestration, catalog, Athena cost and Redshift RLS.</li>
+              <li>Recertify within three years; use <a href="extras.html">Extras</a> and <a href="interview-prep.html">Interview prep</a> after this section.</li>
+            </ul>
+            <p style="margin-top:1rem;">
+              <button type="button" data-complete="section-21">Mark complete</button>
+            </p>
+          </div>
+        </section>
+
+      </div>
+
+      <aside class="toc" aria-label="On this page">
+        <strong>On this page</strong>
+        <ol>
+          <li><a href="#lectures">Lectures</a></li>
+          <li><a href="#decisions">Decision tables</a></li>
+          <li><a href="#tactics">Exam tactics</a></li>
+          <li><a href="#exam">Practice exam</a></li>
+          <li><a href="#deeper">Deeper detail</a></li>
+          <li><a href="#interview">Interview questions</a></li>
+          <li><a href="#practice">Capstone builds</a></li>
+          <li><a href="#scheduling">Scheduling</a></li>
+          <li><a href="#recap">Recap</a></li>
+        </ol>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<footer class="footer">AWS Certified Data Engineer Associate (DEA-C01) · Section 21 · Offline study edition</footer>
+</body>
+</html>

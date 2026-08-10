@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="dbt bootcamp Section 4: ETL versus ELT, the layers of the modern data stack, where dbt sits, and the Snowflake + dbt + Preset + Dagster stack the course builds.">
+<title>Section 4 — The Modern Data Stack and ELT | The Complete dbt Bootcamp Notes</title>
+<link rel="stylesheet" href="assets/dbt.css">
+<script defer src="assets/search-index.js"></script>
+<script defer src="assets/code-highlight.js"></script>
+<script defer src="assets/dbt.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">Course section 4 of 22 · The Complete dbt Bootcamp: Zero to Hero</p>
+    <h1>The Modern Data Stack and ELT</h1>
+    <p class="subtitle">Why pipelines flipped from ETL to ELT, what each layer of a contemporary analytics stack is responsible for, and where dbt sits in that picture. This is the architectural frame for every Snowflake model, Preset chart and Dagster schedule you build from Section&nbsp;6 onward.</p>
+    <div class="hero-meta">
+      <span class="chip">5 lectures · ~25min</span>
+      <span class="chip">Theory foundation</span>
+      <span class="chip">dbt transformation layer</span>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <nav class="pager" aria-label="Section navigation">
+    <a href="s03-warehouses-lakes.html">← Warehouses, Lakes and Lakehouses</a>
+    <a href="index.html">Course contents</a>
+    <a href="s05-dimensional-modelling.html">Next: Dimensional Modelling and SCDs →</a>
+  </nav>
+
+  <main id="main">
+    <div class="layout">
+      <div class="content">
+
+        <section class="section" id="lectures">
+          <h2>Lectures in this section</h2>
+          <ol class="lecture-list">
+            <li class="lecture">
+              <a class="lec-title" href="#etl">ETL and why it was built that way</a>
+              <span class="lec-time">~5:30</span>
+              <span class="lec-src">Theory lecture</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#elt">ELT and what changed</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">Theory lecture</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#stack-layers">The layers of the modern data stack</a>
+              <span class="lec-time">~6:00</span>
+              <span class="lec-src">Theory lecture</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#dbt-position">Where dbt sits in the stack</a>
+              <span class="lec-time">~4:30</span>
+              <span class="lec-src">Theory lecture</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#course-stack">The tools around dbt</a>
+              <span class="lec-time">~4:00</span>
+              <span class="lec-src">Theory lecture</span>
+            </li>
+          </ol>
+          <p class="muted">Pure theory, but every tool named here appears in the Airbnb project. When you run <code>dbt run</code> in Section&nbsp;7, you are executing the T in a stack whose E and L already happened in Snowflake.</p>
+        </section>
+
+        <section class="section" id="etl">
+          <h2>ETL: extract, transform, load</h2>
+          <p class="lead">For twenty years, the default data pipeline pattern was extract from sources, transform on a separate server, then load the finished tables into a warehouse. That order was not an accident &mdash; it was the rational response to expensive storage, expensive compute and rigid warehouse engines that could not do much beyond serving pre-built tables.</p>
+
+          <h3>The classic ETL pattern</h3>
+          <p>In the classic pattern, data leaves the source system and passes through a transformation engine before it ever reaches the warehouse. The engine might be Informatica, Talend, Microsoft SSIS, a hand-rolled Python script on a cron job, or a stored-procedure chain inside an on-prem database. Regardless of tool, the shape is the same: read from A, reshape in the middle, write to B.</p>
+
+          <div class="diagram">
+            <p class="diagram-title">Classic ETL: transform before the warehouse sees the data</p>
+            <div class="flow">
+              <div class="node is-source"><b>Source systems</b><small>CRM · ERP · logs · files</small></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-compute pulse"><b>Transform engine</b><small>Informatica · Talend · Python</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-store"><b>Warehouse</b><small>clean, narrow tables only</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-serve"><b>Reports</b><small>read pre-built marts</small></div>
+            </div>
+          </div>
+
+          <p>The warehouse received curated, denormalised tables. Raw source rows rarely landed intact. If a column was messy, the ETL job cleaned it before load. If two sources needed joining, the join happened in the middle tier. The warehouse was treated as an expensive filing cabinet for finished goods, not a workshop.</p>
+
+          <h3>Why transformation happened before loading</h3>
+          <p>Three constraints drove that design, and they reinforced each other.</p>
+
+          <p><strong>Storage was expensive.</strong> Keeping every raw row forever in a warehouse billed per gigabyte per month. Teams loaded only what they had already shaped into something useful, which meant throwing away or never copying messy fields, duplicate keys and columns nobody had named yet.</p>
+
+          <p><strong>Compute was expensive and fixed.</strong> The transformation engine often ran on a dedicated ETL server or a batch cluster whose size you provisioned months ahead. You paid for that capacity whether the nightly job took twenty minutes or four hours. It made sense to do heavy work there and ship small, finished tables to the warehouse.</p>
+
+          <p><strong>Warehouses were rigid.</strong> Traditional MPP databases and early cloud warehouses could scan and aggregate, but they were awkward places to express complex business logic, had poor tooling for version control, and charged you to store data you might never query. Transformation outside the warehouse kept the bill down and kept analysts away from production schemas they could accidentally break.</p>
+
+          <div class="analogy"><strong>Everyday analogy &mdash;</strong> ETL is a commercial kitchen that receives raw ingredients, cooks everything off-site, and delivers plated meals to a restaurant that only has a warming drawer. The restaurant never sees the flour, the bones or the failed batch of sauce.</div>
+
+          <h3>The tooling generation: Informatica, Talend, SSIS, Python</h3>
+          <p>Enterprise ETL tools dominated large companies for a decade. Informatica and Talend offered visual DAG editors where transformations were boxes and wires. SSIS shipped with SQL Server and filled the same niche in Microsoft shops. They handled connectivity to dozens of source systems, scheduling, error handling and operational monitoring &mdash; things a warehouse alone did not provide.</p>
+
+          <p>Smaller teams often skipped the licence fees and wrote Python or Scala jobs: pull from an API, pandas-transform, bulk-insert into Postgres or Redshift. The pattern was identical; only the tooling differed. In every case the transformation logic lived outside the warehouse, in a runtime the analytics team did not always control.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Tool class</th><th>Examples</th><th>Where logic lives</th><th>Typical buyer</th></tr></thead>
+              <tbody>
+                <tr><td>Enterprise GUI ETL</td><td>Informatica PowerCenter, Talend, IBM DataStage</td><td>Visual job definitions, often in a proprietary repository</td><td>IT / data engineering</td></tr>
+                <tr><td>Database-native ETL</td><td>SSIS, Oracle ODI, stored procedures</td><td>SQL and procedural code tied to a DBMS</td><td>DBA teams</td></tr>
+                <tr><td>Scripted batch</td><td>Python + Airflow tasks, custom Java</td><td>Git repos, but often without tests or docs</td><td>Startups, scrappy teams</td></tr>
+                <tr><td>Cloud managed ETL</td><td>AWS Glue, Azure Data Factory</td><td>Spark jobs or copy activities in a cloud console</td><td>Cloud-first migrations</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Real failure modes of ETL</h3>
+          <p>ETL worked until organisations needed to move faster than a central pipeline team could schedule changes. The failure modes are structural, not accidental.</p>
+
+          <ul>
+            <li><strong>Transformation logic locked in a GUI</strong> &mdash; a business rule lives as a box on a canvas in Informatica. You cannot diff it in git, you cannot review it in a pull request, and when the author leaves, the job becomes archaeology.</li>
+            <li><strong>No version control</strong> &mdash; even when SQL snippets exist, they are exported XML or checked into a tool-specific format nobody reads outside the ETL server. Rolling back a bad deploy means restoring a backup of the job repository, not reverting a commit.</li>
+            <li><strong>No tests</strong> &mdash; ETL tools have row-count checks at best. Nobody asserts that <code>status</code> is one of five values, that grain is one row per order, or that revenue matches finance's definition. Bad data reaches dashboards and the first signal is an angry Slack message.</li>
+            <li><strong>Re-processing means re-extracting</strong> &mdash; if you fix a transformation bug, you often re-pull from the source because the warehouse never kept the raw rows. That re-extract may be slow, may hit API rate limits, and may be impossible if the source no longer has historical data.</li>
+            <li><strong>One team owns the pipeline</strong> &mdash; analysts who understand the business cannot safely change the transform layer. Every new metric queues behind a data-engineering backlog. Definitions diverge in spreadsheet pivots while everyone waits for the same ETL job to be edited.</li>
+          </ul>
+
+          <div class="callout warn"><strong>ETL is not wrong for every workload.</strong> Streaming ingestion, heavy ML feature engineering outside SQL, and compliance pipelines that must strip PII before data enters a shared store still look like ETL or ETL-adjacent patterns. The shift to ELT is about analytics on a cloud warehouse, not a universal law.</div>
+        </section>
+
+        <section class="section" id="elt">
+          <h2>ELT: extract, load, transform</h2>
+          <p class="lead">ELT reverses the middle steps: extract from sources, load raw data into the warehouse cheaply, then transform with SQL inside the warehouse itself. The pattern only became dominant once storage separated from compute, warehouses scaled elastically, and SQL engines got fast enough to be the transformation runtime.</p>
+
+          <h3>What cheap storage and elastic compute changed</h3>
+          <p>Cloud warehouses decoupled storage from compute. On Snowflake, BigQuery, Databricks and Redshift, you pay for storage at object-store rates and spin compute up or down independently. Keeping a full copy of raw data is affordable. Running a heavy transformation for an hour and then suspending the warehouse is affordable. Re-running yesterday's logic against five years of history without re-touching the source is affordable.</p>
+
+          <p>That economics change the design. There is no longer a strong reason to discard messy columns at the door. Land everything, keep it append-only or slowly mutable in a <code>RAW</code> schema, and let downstream models decide what to expose. When a bug is found in a cleansing rule, you fix the SQL and re-run &mdash; the inputs are still there.</p>
+
+          <div class="diagram">
+            <p class="diagram-title">Modern ELT: raw data lands first, SQL transforms inside the warehouse</p>
+            <div class="flow">
+              <div class="node is-source"><b>Source systems</b><small>APIs · DBs · events</small></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-compute"><b>Loader</b><small>Fivetran · Airbyte · Snowpipe</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-store pulse"><b>Raw tables</b><small>untouched, retained</small></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-model"><b>Transform (dbt)</b><small>SQL models · tests</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-serve"><b>BI &amp; apps</b><small>dashboards · ML · reverse ETL</small></div>
+            </div>
+          </div>
+
+          <h3>Raw data lands untouched and is kept</h3>
+          <p>In ELT, the loader's job is fidelity, not business logic. Fivetran copies <code>raw_listings</code> with the price still a string containing <code>$</code> because that is what the source had. dbt's <code>src_listings</code> and <code>dim_listings_cleansed</code> models &mdash; built in <a href="s07-models.html">Section&nbsp;7</a> &mdash; are where cleansing happens. If marketing later decides they need the original string for an audit, it still exists in <code>AIRBNB.RAW</code>.</p>
+
+          <p>Retention policy becomes a governance question rather than a pipeline constraint. Time Travel on Snowflake, partition expiry on BigQuery, and lifecycle rules on object storage give you cheap history without re-extracting from SaaS APIs that only expose the last ninety days.</p>
+
+          <h3>Transformation becomes SQL inside the warehouse</h3>
+          <p>The warehouse is now the compute engine. Joins, aggregations, window functions and case expressions run where the data already lives. No bulk export to a Spark cluster, no CSV round trip, no second copy in flight. On Snowflake the course uses, dbt sends SQL over a connection; Snowflake's warehouse does the work and bills you for credits consumed.</p>
+
+          <p>That shift is why dbt exists. dbt does not replace the warehouse engine &mdash; it organises the SQL that the engine runs. A folder of <code>.sql</code> files becomes a dependency-ordered pipeline with tests and documentation, which is what the ETL GUI never provided but git-native analytics teams needed.</p>
+
+          <h3>Re-processing is a re-run, not a re-extract</h3>
+          <p>Fix a bug in <code>dim_listings_cleansed</code>, run <code>dbt run --select dim_listings_cleansed+</code>, and every downstream model rebuilds from the raw tables already in Snowflake. You do not call the Airbnb CSV again. You do not re-run Fivetran unless the source schema changed.</p>
+
+          <p>That property is the operational payoff of ELT. Incidents shorten from "wait for a full re-extract this weekend" to "merge the fix and run the DAG". Incremental models and snapshots (Sections&nbsp;8 and&nbsp;10) refine the cost of those re-runs, but the raw layer is always the reset button.</p>
+
+          <h3>Transformation logic as reviewable code</h3>
+          <p>When transformation is SQL in git, anyone who reads SQL can review a pull request. Analysts with strong SQL can contribute models. Data engineers focus on ingestion and platform. Tests live next to the models they protect. Documentation generates from the same YAML that defines tests. The transformation layer inherits software-engineering practice instead of resisting it.</p>
+
+          <div class="callout tip"><strong>The T in ELT is where analytics engineering lives.</strong> Extraction and loading remain specialised &mdash; connectors, credentials, rate limits, schema drift detection. Transformation is where business definitions live, and that is the layer dbt was built to own.</div>
+
+          <h3>ETL versus ELT comparison</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Dimension</th><th>ETL</th><th>ELT</th></tr></thead>
+              <tbody>
+                <tr><td>Where transformation runs</td><td>Separate engine (ETL server, Spark, Python)</td><td>Inside the cloud warehouse, as SQL</td></tr>
+                <tr><td>Cost profile</td><td>Fixed ETL infrastructure + smaller warehouse storage</td><td>Cheap storage for raw data + elastic compute billed per query</td></tr>
+                <tr><td>Who can contribute</td><td>Mostly central data engineering / ETL developers</td><td>Analytics engineers and strong-SQL analysts via git</td></tr>
+                <tr><td>Reprocessing</td><td>Often requires re-extract from source</td><td>Re-run transforms against data already loaded</td></tr>
+                <tr><td>Raw-data retention</td><td>Rarely kept in full; lossy by design</td><td>Default to keep raw; curated layers built on top</td></tr>
+                <tr><td>Schema-change handling</td><td>Change ETL mapping, redeploy job, often re-extract</td><td>Loader adds column; dbt models updated in git; rebuild downstream</td></tr>
+                <tr><td>Testing story</td><td>Row counts, manual QA, late discovery in reports</td><td><code>dbt test</code>, unit tests, source freshness, contracts</td></tr>
+                <tr><td>Typical tools</td><td>Informatica, Talend, SSIS, Glue, custom Python</td><td>Fivetran/Airbyte + Snowflake/BigQuery + dbt</td></tr>
+                <tr><td>Failure mode</td><td>Opaque GUI jobs, slow change queue, divergent spreadsheet metrics</td><td>Tool sprawl, warehouse bill surprises, untested views in production</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout info"><strong>On BigQuery and Databricks the pattern is the same; the meters differ.</strong> BigQuery charges per bytes scanned; lazy view chains hurt there faster than on Snowflake table storage. Databricks often lands Bronze tables in Delta or Iceberg and runs dbt or Spark SQL in Silver/Gold layers. The E-L-T separation of concerns still holds.</div>
+        </section>
+
+        <section class="section" id="stack-layers">
+          <h2>The layers of the modern data stack</h2>
+          <p class="lead">"Modern data stack" is a label for a particular arrangement: SaaS and cloud-native tools snapped together around a central warehouse, with dbt at the transformation layer. The label is imperfect, but the layer model is a useful map for where each tool in this course sits.</p>
+
+          <div class="stack">
+            <div class="layer"><strong>Cross-cutting: cataloguing &amp; governance</strong> &mdash; Alation, Atlan, Collibra, Snowflake Horizon, Unity Catalog. Business glossary, PII tagging, access policies, column lineage across tools.</div>
+            <div class="layer"><strong>Cross-cutting: observability &amp; data quality</strong> &mdash; Monte Carlo, Soda, Elementary, dbt tests. Freshness alerts, anomaly detection, incident workflows when pipelines break silently.</div>
+            <div class="layer"><strong>Cross-cutting: reverse ETL</strong> &mdash; Census, Hightouch, RudderStack. Sync modeled warehouse tables back into SaaS tools (Salesforce, Braze, ad platforms).</div>
+            <div class="layer"><strong>Serving / BI</strong> &mdash; Preset (Superset), Looker, Tableau, Power BI, Hex, Mode. Dashboards, self-serve exploration, embedded analytics. The course uses Preset against Snowflake.</div>
+            <div class="layer"><strong>Orchestration</strong> &mdash; Dagster, Airflow, Prefect, dbt Cloud jobs. Schedules dependencies, passes variables, retries failures, coordinates dbt with non-dbt steps. The course uses Dagster (<a href="s18-orchestration.html">Section&nbsp;18</a>).</div>
+            <div class="layer"><strong>Transformation</strong> &mdash; dbt Core or dbt Cloud. SQL models, tests, documentation, snapshots, lineage. Owns the T only.</div>
+            <div class="layer"><strong>Storage / compute (warehouse)</strong> &mdash; Snowflake, BigQuery, Databricks, Redshift, Postgres. Stores data and executes SQL. The course uses Snowflake database <code>AIRBNB</code>.</div>
+            <div class="layer"><strong>Ingestion / loading</strong> &mdash; Fivetran, Airbyte, Stitch, Meltano, Snowpipe, custom scripts. Extracts from sources and loads into the warehouse raw layer. The course loads CSVs via Snowflake <code>COPY INTO</code> instead of a SaaS loader.</div>
+            <div class="layer"><strong>Data sources</strong> &mdash; Application databases, SaaS APIs, event streams, files, spreadsheets. The course's sources are three CSV datasets representing listings, hosts and reviews.</div>
+          </div>
+
+          <h3>Data sources</h3>
+          <p>Everything upstream of your warehouse: production Postgres, Salesforce, Stripe webhooks, Kafka topics, S3 buckets, Google Sheets someone refuses to retire. Sources define freshness expectations, schema volatility and compliance boundaries. The Airbnb course simplifies this to static CSV files on S3 loaded once into <code>AIRBNB.RAW</code>, but the layer is the same &mdash; without source data in the warehouse, dbt has nothing to transform.</p>
+
+          <h3>Ingestion and loading</h3>
+          <p>Loaders move data from sources into warehouse tables with minimal transformation. Managed EL tools (Fivetran, Airbyte, Stitch, Meltano) handle connectors, incremental sync, primary-key detection and schema drift alerts. Custom paths use Snowpipe, Kafka connectors, or Python. Responsibility: reliable delivery, credential management, and landing a faithful copy in a raw schema. Not business logic, not aggregations, not naming conventions for metrics.</p>
+
+          <p>The course skips a SaaS loader and uses Snowflake SQL:</p>
+
+<pre data-lang="sql" data-title="course-resources.md · Snowflake import" data-explain="The manual load path: create raw tables and COPY FROM S3. This is the L and E equivalent for the bootcamp dataset."><code>CREATE OR REPLACE TABLE raw_listings
+                    (id integer,
+                     listing_url string,
+                     name string,
+                     room_type string,
+                     minimum_nights integer,
+                     host_id integer,
+                     price string,
+                     created_at datetime,
+                     updated_at datetime);
+
+COPY INTO raw_listings (id, listing_url, name, room_type, minimum_nights,
+                        host_id, price, created_at, updated_at)
+                   from 's3://dbt-datasets/listings.csv'
+                    FILE_FORMAT = (type = 'CSV' skip_header = 1
+                    FIELD_OPTIONALLY_ENCLOSED_BY = '"');</code></pre>
+
+          <h3>Storage and compute</h3>
+          <p>The warehouse is the system of record and the SQL execution engine. Snowflake separates storage (micro-partitions in cloud object storage) from compute (virtual warehouses sized in credits). BigQuery bills on-demand by bytes scanned. Databricks unifies lake storage (Delta/Iceberg) with Spark and SQL warehouses. This layer persists raw and transformed tables, enforces roles and grants, and runs every dbt model. <a href="s03-warehouses-lakes.html">Section&nbsp;3</a> compares warehouse, lake and lakehouse shapes; this course commits to Snowflake.</p>
+
+          <h3>Transformation</h3>
+          <p>dbt sits here exclusively. It compiles project SQL, builds tables and views in dependency order, runs tests, generates docs and tracks lineage. It does not schedule itself, does not extract, and does not serve charts. In the Airbnb project, transformation turns <code>RAW.RAW_LISTINGS</code> into staging models, dimensions like <code>dim_listings_cleansed</code>, facts like <code>fct_reviews</code>, and marts like <code>mart_fullmoon_reviews</code>.</p>
+
+          <h3>Orchestration</h3>
+          <p>Something must invoke dbt on a cadence and handle failures. Options include cron, Apache Airflow, Prefect, Dagster, Azure Data Factory, and dbt Cloud's job scheduler. Orchestrators pass variables (date windows for incremental runs), run non-dbt steps (exports, ML training), and surface SLAs. The course scaffolds a Dagster project with <code>dagster-dbt</code> and runs <code>dagster dev</code> locally (<a href="s18-orchestration.html">Section&nbsp;18</a>).</p>
+
+          <h3>Serving and BI</h3>
+          <p>BI tools query the tables dbt builds. Preset is a hosted Apache Superset offering; the course creates a Snowflake <code>PRESET</code> user with the <code>REPORTER</code> role and builds an executive dashboard exposed in dbt as an <code>exposure</code> (<a href="s15-analyses-hooks-exposures.html">Section&nbsp;15</a>). Looker, Tableau and Power BI play the same layer in other companies. Responsibility: visualisation, exploration, and sometimes a semantic layer &mdash; though metric definitions ideally originate in dbt, not in twelve conflicting workbook calculated fields.</p>
+
+          <h3>Cataloguing and governance</h3>
+          <p>As stack surface area grows, teams add catalogues (Alation, Atlan, Collibra) and warehouse-native governance (Snowflake Horizon, Unity Catalog). These tools index tables across systems, document owners, classify sensitive columns, and enforce access. dbt's generated docs and <code>manifest.json</code> feed many of them, but they also track assets dbt never touches &mdash; raw landing tables, BI dashboards, ML features.</p>
+
+          <h3>Observability and data quality</h3>
+          <p>Beyond dbt tests, platforms like Monte Carlo, Soda and Elementary monitor freshness, volume anomalies and schema changes in production. dbt tests catch bad values; observability tools catch "the pipeline ran but the row count dropped 40%". The course uses dbt built-in tests plus <code>dbt_expectations</code> (<a href="s16-debugging-logging.html">Section&nbsp;16</a>); larger teams add a dedicated observability layer.</p>
+
+          <h3>Reverse ETL</h3>
+          <p>Reverse ETL tools (Census, Hightouch) sync curated warehouse segments back into operational systems &mdash; pushing a "high LTV customer" list into Salesforce or an ad audience into Meta. They read the same marts BI tools read, but write outward. Not part of the course project, but commonly drawn as an arrow leaving the serving layer back to SaaS apps.</p>
+
+          <div class="diagram">
+            <p class="diagram-title">Modern data stack layers with dbt at the transform step</p>
+            <div class="dag">
+              <div class="dag-col">
+                <p class="dag-label">Sources</p>
+                <div class="node is-source"><b>Apps &amp; files</b></div>
+              </div>
+              <div class="dag-col">
+                <p class="dag-label">Load</p>
+                <div class="node is-compute"><b>Fivetran</b></div>
+              </div>
+              <div class="dag-col">
+                <p class="dag-label">Store</p>
+                <div class="node is-store"><b>Snowflake RAW</b></div>
+              </div>
+              <div class="dag-col">
+                <p class="dag-label">Transform</p>
+                <div class="node is-model pulse"><b>dbt</b></div>
+              </div>
+              <div class="dag-col">
+                <p class="dag-label">Orchestrate</p>
+                <div class="node is-compute"><b>Dagster</b></div>
+              </div>
+              <div class="dag-col">
+                <p class="dag-label">Serve</p>
+                <div class="node is-serve"><b>Preset</b></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="section" id="dbt-position">
+          <h2>Where dbt sits, precisely</h2>
+          <p class="lead">dbt owns the T and only the T. It is the transformation layer in an ELT stack: the place where raw warehouse tables become tested, documented datasets with agreed business meaning. Everything else is a different product with a different job.</p>
+
+          <h3>What dbt does not do</h3>
+          <p>State the boundary explicitly, because interviewers and vendor slides blur it constantly.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Responsibility</th><th>Owner in this course</th><th>Not dbt</th></tr></thead>
+              <tbody>
+                <tr><td>Extract from APIs / databases</td><td>Snowflake <code>COPY INTO</code> from S3 (stand-in for Fivetran)</td><td>dbt has no connectors</td></tr>
+                <tr><td>Load into warehouse</td><td>Same load scripts; raw tables in <code>AIRBNB.RAW</code></td><td>dbt only loads <code>seeds</code> (small CSV reference data)</td></tr>
+                <tr><td>Schedule runs</td><td>Dagster (<a href="s18-orchestration.html">Section&nbsp;18</a>)</td><td>dbt runs when invoked; no built-in cron</td></tr>
+                <tr><td>Persist data</td><td>Snowflake storage</td><td>dbt sends DDL/DML; Snowflake holds bytes</td></tr>
+                <tr><td>Serve dashboards</td><td>Preset (<a href="s15-analyses-hooks-exposures.html">Section&nbsp;15</a>)</td><td>dbt documents exposures; it does not render charts</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="diagram">
+            <p class="diagram-title">dbt boundary in the Airbnb pipeline</p>
+            <div class="flow">
+              <div class="node is-source"><b>S3 CSVs</b><small>listings · hosts · reviews</small></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-compute"><b>Load</b><small>COPY INTO · not dbt</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-store"><b>AIRBNB.RAW</b><small>raw_* tables</small></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-model pulse"><b>dbt</b><small>src → dim → fct → mart</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-serve"><b>Preset dashboard</b><small>exposure in dashboards.yml</small></div>
+            </div>
+          </div>
+
+          <h3>What dbt adds on top of raw SQL</h3>
+          <p>You could run the same transforms as naked SQL scripts in Snowflake worksheets. dbt adds the engineering wrapper that makes that approach survivable at team scale.</p>
+
+          <ul>
+            <li><strong>Dependency resolution from <code>ref()</code></strong> &mdash; models declare parents; dbt builds the DAG and runs in order. See <a href="s07-models.html">Section&nbsp;7</a> for the first models that use it.</li>
+            <li><strong>Environments</strong> &mdash; the same project compiles to <code>DEV</code> or <code>PROD</code> schemas via <code>profiles.yml</code> targets without editing model SQL.</li>
+            <li><strong>Materialisation strategies</strong> &mdash; view, table, incremental, ephemeral, snapshots; each model picks how it persists. Covered in <a href="s08-materializations.html">Section&nbsp;8</a>.</li>
+            <li><strong>Tests</strong> &mdash; schema tests, singular tests, unit tests, contracts. A failing test can block downstream builds when you use <code>dbt build</code>.</li>
+            <li><strong>Documentation and lineage</strong> &mdash; descriptions in YAML become a static docs site with a graph of dependencies.</li>
+            <li><strong>Version control</strong> &mdash; transformations live in git, reviewed like application code.</li>
+            <li><strong>Reusable macros</strong> &mdash; Jinja macros deduplicate patterns across models (<a href="s13-jinja-macros-packages.html">Section&nbsp;13</a>).</li>
+          </ul>
+
+          <div class="callout exam"><strong>Certification:</strong> expect a question that lists five things dbt does and asks you to pick the one it does not &mdash; scheduling, extracting, and serving dashboards are the usual wrong answers.</div>
+
+          <h3>Sources versus refs</h3>
+          <p>Models built by dbt reference each other with <code>ref()</code>. Tables loaded by something else &mdash; Fivetran, a script, Snowflake <code>COPY</code> &mdash; are declared in <code>sources.yml</code> and referenced with <code>source()</code>. That distinction marks the boundary between the L layer and the T layer. The staging model <code>src_listings</code> reads <code>source('airbnb', 'listings')</code> (configured to point at <code>RAW.RAW_LISTINGS</code>); everything downstream reads <code>ref()</code>.</p>
+
+<pre data-lang="sql" data-title="models/src/src_listings.sql" data-explain="Staging reads a source (loaded outside dbt), not a ref. This is the handoff from L to T."><code>WITH raw_listings AS (
+    SELECT *
+    FROM AIRBNB.RAW.RAW_LISTINGS
+)
+SELECT
+    id AS listing_id,
+    name AS listing_name,
+    ...
+FROM raw_listings</code></pre>
+
+          <p>By <a href="s09-seeds-sources.html">Section&nbsp;9</a> the hard-coded name becomes a proper <code>source()</code> call with freshness tests &mdash; the pattern is the same.</p>
+        </section>
+
+        <section class="section" id="course-stack">
+          <h2>The stack this course uses</h2>
+          <p class="lead">Theory meets a concrete toolchain. Every layer below is installed or configured in the repo; sections later in the course attach to each row.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Layer</th><th>Tool in this course</th><th>Version / detail</th><th>Covered in</th></tr></thead>
+              <tbody>
+                <tr><td>Storage &amp; compute</td><td>Snowflake</td><td>Database <code>AIRBNB</code>, warehouse <code>COMPUTE_WH</code>, roles <code>TRANSFORM</code> / <code>REPORTER</code></td><td><a href="s06-setup.html">Section&nbsp;6</a></td></tr>
+                <tr><td>Load</td><td>Snowflake <code>COPY INTO</code></td><td>CSV from <code>s3://dbt-datasets/</code> into <code>RAW</code> schema</td><td><a href="s06-setup.html">Section&nbsp;6</a></td></tr>
+                <tr><td>Transform</td><td>dbt Core</td><td><code>dbt-core~=1.11.0</code>, <code>dbt-snowflake~=1.11.0</code> (resolved to 1.11.12 / 1.11.6 in <code>requirements.txt</code>)</td><td>Sections&nbsp;7&ndash;17</td></tr>
+                <tr><td>Package manager</td><td>uv</td><td><code>uv sync</code> from repo-root <code>pyproject.toml</code></td><td><a href="s06-setup.html">Section&nbsp;6</a></td></tr>
+                <tr><td>dbt packages</td><td>dbt_utils, dbt_expectations</td><td>1.3.3 and 0.10.10 (metaplane fork)</td><td><a href="s13-jinja-macros-packages.html">Section&nbsp;13</a>, <a href="s16-debugging-logging.html">Section&nbsp;16</a></td></tr>
+                <tr><td>Orchestration</td><td>Dagster + dagster-dbt</td><td><code>dagster-dbt~=0.28.0</code>, <code>dagster-webserver~=1.12.0</code></td><td><a href="s18-orchestration.html">Section&nbsp;18</a></td></tr>
+                <tr><td>BI / serving</td><td>Preset (Apache Superset)</td><td><code>PRESET</code> service user, dashboard exposure in <code>dashboards.yml</code></td><td><a href="s15-analyses-hooks-exposures.html">Section&nbsp;15</a></td></tr>
+                <tr><td>CI</td><td>GitHub Actions</td><td><code>pr-slim-ci.yml</code>, <code>prod-build.yml</code> with <code>uv</code> and Slim CI deferral</td><td><a href="s19-production.html">Section&nbsp;19</a></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Snowflake roles and users</h3>
+          <p>The setup script creates two functional identities. The <code>dbt</code> user with role <code>TRANSFORM</code> owns building models. The <code>PRESET</code> user with role <code>REPORTER</code> has <code>SELECT</code> on transformed schemas only &mdash; a small illustration of least privilege between transform and serve layers.</p>
+
+          <h3>Environment workflow</h3>
+          <p>Developers run dbt locally (or in the devcontainer) with a personal schema inside <code>AIRBNB</code>. Production deploys via GitHub Actions into a shared prod schema, using artifact deferral so pull requests only build what changed. Orchestration in Dagster wraps the same <code>dbt build</code> command you run by hand, adding schedules and observability.</p>
+
+          <div class="filetree">
+            <ul>
+              <li><span class="dir">complete-dbt-bootcamp-zero-to-hero/</span>
+                <ul>
+                  <li><span class="file">pyproject.toml</span> <span class="note">dbt 1.11, Dagster pins</span></li>
+                  <li><span class="dir">airbnb/</span> <span class="note">dbt project &mdash; transform layer</span></li>
+                  <li><span class="dir">dbt_dagster_project/</span> <span class="note">orchestration wrapper</span></li>
+                  <li><span class="dir">.github/workflows/</span> <span class="note">CI pipelines</span></li>
+                </ul>
+              </li>
+            </ul>
+          </div>
+
+          <h3>Tools around dbt in the wider ecosystem</h3>
+          <p>The course stack is intentionally small. In production you often add Fivetran or Airbyte at the load layer, Elementary or Monte Carlo for observability, and Census for reverse ETL. dbt integrates with all of them by convention: loaders land raw tables dbt sources point at; observability tools read <code>manifest.json</code> and warehouse metadata; reverse ETL reads marts dbt builds. dbt Labs also sells dbt Cloud, which collapses orchestration, CI and development into one product &mdash; the course uses Core plus Dagster instead so you see each layer separately.</p>
+
+          <div class="svc-pills">
+            <span class="badge">Snowflake</span>
+            <span class="badge">dbt Core 1.11</span>
+            <span class="badge">uv</span>
+            <span class="badge">Dagster</span>
+            <span class="badge">Preset</span>
+            <span class="badge">GitHub Actions</span>
+          </div>
+        </section>
+
+        <section class="section" id="criticisms">
+          <h2>Criticisms and where the stack is heading</h2>
+          <p class="lead">The modern data stack solved real problems &mdash; slow ETL queues, opaque transformations, warehouse bills for unused rigid capacity &mdash; but it introduced its own costs and abstractions. A working analytics engineer should know the counterarguments without dismissing either side.</p>
+
+          <p><strong>Tool sprawl and cost.</strong> A minimal stack is already loader + warehouse + dbt + orchestrator + BI + git + CI. Each line item has a subscription or a cloud meter. Fivetran bills on monthly active rows; Snowflake bills on storage and warehouse uptime; Preset and dbt Cloud bill per seat; GitHub Actions bills on minutes. Teams discover they spend more on integration and overlap than they saved leaving Informatica. FinOps for data &mdash; tagging workloads, right-sizing warehouses, incremental models instead of nightly full refreshes &mdash; becomes a discipline of its own.</p>
+
+          <p><strong>"Modern data stack" as marketing.</strong> The phrase was popularised by vendors whose business model depends on you buying six SaaS products instead of one. Critics note that best-of-breed composability favors well-funded US tech companies with dedicated data platform teams. Smaller orgs sometimes get further with Postgres, Metabase and a single strong analyst than with a fully snapped-together MDS. The pattern is a default, not a moral upgrade.</p>
+
+          <p><strong>Consolidation and the semantic layer.</strong> The pendulum is swinging back toward integrated platforms: Snowflake buying Streamlit, Databricks pushing Unity Catalog and AI/BI, dbt Cloud adding scheduling and the Semantic Layer. The Semantic Layer (formerly dbt Metrics) aims to centralise metric definitions so Looker, Preset and Excel do not each redefine "revenue". Data contracts push schema guarantees upstream so loaders cannot silently break dbt models. Open table formats (Iceberg, Delta) blur warehouse/lake boundaries from <a href="s03-warehouses-lakes.html">Section&nbsp;3</a>. AI-assisted SQL and transformation copilots sit on top but still need the same layer boundaries &mdash; someone must own definitions, tests and lineage.</p>
+
+          <div class="callout info"><strong>None of this makes ELT wrong.</strong> It means the stack is evolving toward fewer hand-wired pipes and stronger contracts at layer boundaries. dbt's bet remains that transformation should be code in the warehouse; the open question is how much orchestration, metrics and cataloguing fold into the same tool versus stay separate.</div>
+        </section>
+
+        <section class="section" id="deeper">
+          <h2>Deeper detail and edge cases</h2>
+          <p class="lead">Stack-level operational detail the theory lectures skip: how conventions shifted since "modern data stack" became a phrase, where money leaks across layers, and what to do when tools disagree.</p>
+
+          <h3>Version notes</h3>
+          <p>The stack's shape has changed faster than individual tool versions. These rows track conventions that affect how you design pipelines, not just dbt syntax.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Behaviour</th><th>Before</th><th>Now</th><th>Version</th></tr></thead>
+              <tbody>
+                <tr><td>Primary dbt entry point</td><td><code>dbt run</code> then <code>dbt test</code> separately</td><td><code>dbt build</code> runs models and tests in DAG order</td><td>dbt 0.21+</td></tr>
+                <tr><td>Hosted development</td><td>dbt Cloud IDE only on paid tiers</td><td>dbt Cloud free tier; Fusion local LSP</td><td>2023&ndash;2025</td></tr>
+                <tr><td>Metric definitions</td><td>dbt Metrics in Cloud</td><td>Semantic Layer (Fusion + Cloud); dbt Metrics deprecated</td><td>dbt 1.6+</td></tr>
+                <tr><td>Transformation engine option</td><td>dbt Core only</td><td>dbt Fusion (Rust) optional drop-in</td><td>2025</td></tr>
+                <tr><td>Loader market</td><td>Stitch + Fivetran duopoly</td><td>Airbyte open core, Meltano Singer taps, native warehouse pipes</td><td>2020&ndash;2024</td></tr>
+                <tr><td>Orchestrator default for dbt</td><td>Airflow BashOperator</td><td>Dagster/Prefect asset models, dbt Cloud jobs, GitHub Actions CI</td><td>2022&ndash;2025</td></tr>
+                <tr><td>Table format convergence</td><td>Proprietary warehouse tables only</td><td>Iceberg/Delta managed tables in Snowflake, BigQuery, Redshift</td><td>2023&ndash;2025</td></tr>
+                <tr><td>Reverse ETL</td><td>Custom scripts to Salesforce</td><td>Census, Hightouch, warehouse-native apps (Snowflake Marketplace)</td><td>2021&ndash;2024</td></tr>
+                <tr><td>Data quality</td><td>Ad hoc SQL checks</td><td>dbt tests + Elementary/Monte Carlo; dbt <code>unit_tests</code></td><td>dbt 1.8</td></tr>
+                <tr><td>CI pattern for dbt</td><td>Full <code>dbt run</code> on every PR</td><td>Slim CI with <code>state:modified</code> deferral to prod artifacts</td><td>dbt 1.0+</td></tr>
+                <tr><td>Package install</td><td>pip + <code>requirements.txt</code></td><td>uv + <code>pyproject.toml</code> (this course)</td><td>2024</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>What it costs to run</h3>
+          <p>ELT moves spend from fixed ETL servers to variable warehouse and SaaS meters. dbt itself is free (Core); the stack around it is not.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>What runs</th><th>Where the cost lands</th><th>How to spend less</th></tr></thead>
+              <tbody>
+                <tr><td>Fivetran / Airbyte sync</td><td>Per-row or per-connector MAR pricing</td><td>Sync only needed tables; use incremental where supported</td></tr>
+                <tr><td>Raw storage in Snowflake</td><td>Monthly per TB stored + Time Travel retention</td><td>Drop unused raw columns at load via loader config; shorten retention</td></tr>
+                <tr><td>dbt full-refresh table models</td><td>Warehouse credits scanning entire upstream chains</td><td>Incremental materialisations; <code>dbt build --select state:modified</code> in CI</td></tr>
+                <tr><td>BI queries on views</td><td>Every Preset chart re-executes view SQL</td><td>Materialise hot paths as tables; cluster keys on large facts</td></tr>
+                <tr><td>dbt tests on big tables</td><td>One warehouse query per test</td><td>Scope with <code>where:</code>; test grain not every column</td></tr>
+                <tr><td>Dagster / Airflow always-on</td><td>Small VM or Cloud run cost</td><td>Serverless schedulers; dbt Cloud jobs if seat count is low</td></tr>
+                <tr><td>Preset / Looker seats</td><td>Per-editor and per-viewer SaaS fees</td><td>Embed read-only dashboards; limit explore access</td></tr>
+                <tr><td>GitHub Actions CI</td><td>Minutes × warehouse time for each PR build</td><td>Slim CI deferral; block full prod builds on every commit</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout cost"><strong>The quietest stack tax is row-based ingestion pricing plus full-refresh dbt models.</strong> Load everything Fivetran will sync, materialise every model as a table rebuilt nightly, and point Preset at views on top &mdash; you pay MAR on ingest, credits on rebuild, and credits again every time an executive opens the dashboard. ELT economics assume you optimise each layer deliberately.</div>
+
+          <h3>Traps that catch people</h3>
+          <ul>
+            <li><strong>Calling the whole stack "dbt" &mdash;</strong> stakeholders say "dbt is down" when Fivetran failed or Snowflake suspended the warehouse. Clarify layer boundaries in incident comms.</li>
+            <li><strong>Assuming raw is always present &mdash;</strong> teams migrate from ETL and never backfill raw history. ELT's re-run advantage only works if someone actually loaded the raw tables.</li>
+            <li><strong>Transforming in the loader &mdash;</strong> Fivetran and Airbyte support column hashing and basic casts. Business logic there is invisible to dbt lineage and duplicates in models later.</li>
+            <li><strong>No orchestration layer &mdash;</strong> cron runs <code>dbt run</code> without <code>dbt test</code> or freshness checks. Dashboards update with untested data; use <code>dbt build</code> from Dagster instead.</li>
+            <li><strong>Hard-coded schemas in models &mdash;</strong> bypasses environment separation. Same failure mode as ETL: dev code touches prod relations.</li>
+            <li><strong>BI semantic layer overrides dbt &mdash;</strong> Preset metrics contradict <code>mart_fullmoon_reviews</code> because an analyst added a calculated field. Pick one source of truth for definitions.</li>
+            <li><strong>Treating views as free at every layer &mdash;</strong> a stack of views from raw to mart means one dashboard query scans everything. Materialise the mart.</li>
+            <li><strong>Ignoring loader schema drift &mdash;</strong> a new nullable column is fine; a type change or rename breaks compiled SQL until sources.yml and staging models update.</li>
+            <li><strong>Reverse ETL before mart quality &mdash;</strong> syncing immature data into Salesforce amplifies errors into operational tools.</li>
+          </ul>
+
+          <h3>Troubleshooting playbook</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Symptom</th><th>Most likely cause</th><th>What to check / fix</th></tr></thead>
+              <tbody>
+                <tr><td>Loader changed a column type; every downstream model fails at compile or run</td><td>Schema drift in raw layer not reflected in dbt sources</td><td>Compare <code>INFORMATION_SCHEMA</code> to <code>models/sources.yml</code>; update staging; run <code>dbt run --select source:airbnb+</code></td></tr>
+                <tr><td>Dashboard is stale but dbt job reports success</td><td>Orchestrator ran the wrong selection, or BI cache, or Preset points at wrong schema</td><td>Check Dagster run logs for <code>--select</code>; confirm Preset dataset schema matches prod target; hit refresh in Superset</td></tr>
+                <tr><td>Two tools disagree on the same metric</td><td>Duplicate logic in BI calculated field vs dbt mart</td><td>Trace lineage: <code>dbt docs</code> exposure → mart SQL; remove duplicate definition in Preset</td></tr>
+                <tr><td>Schema change landed with no warning</td><td>No observability on raw; loader auto-added column dbt ignored until a model broke</td><td>Enable Fivetran/Airbyte alerts; add source freshness and schema tests; Elementary schema change monitor</td></tr>
+                <tr><td>Warehouse bill spiked after adopting dbt</td><td>Table materialisations on large models; tests scanning full facts</td><td>Query history in Snowflake; switch heavy models to incremental; scope tests</td></tr>
+                <tr><td><code>dbt run</code> succeeds, executives see wrong numbers</td><td>Tests not run; incremental watermark ahead of data</td><td>Switch production to <code>dbt build</code>; inspect <code>fct_reviews</code> max date vs source</td></tr>
+                <tr><td>Dagster shows green, Snowflake tables empty</td><td>Wrong <code>dbt-project-dir</code> or target in constants.py</td><td>Verify <code>dbt_dagster_project/constants.py</code> points at <code>airbnb/</code></td></tr>
+                <tr><td>CI passes, prod broken</td><td>Slim CI deferred to stale artifact; breaking change not in modified selection</td><td>Run full <code>dbt build</code> on main nightly; review deferral state</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Production patterns</h3>
+          <p>Mature teams document their stack as a diagram with named owners per layer. Ingestion is owned by data platform; dbt project by analytics engineering; BI by analytics or product; orchestration often shared. Contracts at the raw-to-staging boundary &mdash; column names, types, freshness SLAs &mdash; prevent the loader from becoming a shadow transform layer.</p>
+
+          <p>Anti-pattern: "ELT without the L" &mdash; analysts write dbt models against production application databases via federated queries. You skip reliable loading, overload operational OLTP systems, and lose raw history. The fix is always a dedicated load into the warehouse first, even if it is a nightly export rather than Fivetran.</p>
+
+          <div class="diagram">
+            <p class="diagram-title">Production handoffs between stack layers</p>
+            <div class="flow">
+              <div class="node is-compute"><b>Loader SLA</b><small>fresh raw by 06:00</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-model"><b>dbt build</b><small>tests gate downstream</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-serve"><b>BI refresh</b><small>after orchestration OK</small></div>
+            </div>
+          </div>
+
+<pre data-lang="yaml" data-title="models/sources.yml (pattern)" data-explain="Declare raw tables at the L/T boundary with freshness — the contract loaders should meet."><code>sources:
+  - name: airbnb
+    database: airbnb
+    schema: raw
+    freshness:
+      warn_after: {count: 24, period: hour}
+    loaded_at_field: updated_at
+    tables:
+      - name: listings
+        identifier: raw_listings</code></pre>
+
+          <h3>Certification pointers</h3>
+          <p>The exam treats stack literacy as context for dbt-specific questions: you must know dbt does not extract, load, schedule or serve BI, and that ELT places transformation inside the warehouse. Comparison questions pit ETL against ELT on where compute runs and who can contribute. Orchestration and <code>dbt build</code> appear as separate concerns.</p>
+
+          <ul>
+            <li><a href="s07-models.html">Section&nbsp;7</a> &mdash; first hands-on transform layer; <code>ref()</code> and staging pattern.</li>
+            <li><a href="s09-seeds-sources.html">Section&nbsp;9</a> &mdash; <code>source()</code> and freshness complete the L/T boundary.</li>
+            <li><a href="s18-orchestration.html">Section&nbsp;18</a> &mdash; where dbt fits inside Dagster schedules.</li>
+            <li><a href="s15-analyses-hooks-exposures.html">Section&nbsp;15</a> &mdash; serving layer link via exposures and Preset.</li>
+            <li><a href="s19-production.html">Section&nbsp;19</a> &mdash; CI as part of the transform layer lifecycle.</li>
+          </ul>
+
+          <div class="callout exam"><strong>Certification:</strong> if a question asks what runs transformation in a modern ELT stack, the answer is the warehouse executing dbt-generated SQL &mdash; not dbt "processing data" itself and not the loader.</div>
+        </section>
+
+        <section class="section" id="interview">
+          <h2>Interview questions</h2>
+          <p class="muted">Answer each one out loud before opening it.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+
+            <details class="qa">
+              <summary>Explain ETL and name two structural reasons it dominated before cloud warehouses.<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>ETL extracts data from sources, transforms it on a separate engine, then loads finished tables into a warehouse. Transformation happened outside the warehouse because storage and compute were both expensive and fixed-size, and because legacy warehouses were poor places to express and version complex business logic.</p>
+                <p>Teams minimised warehouse storage by loading only curated tables, and they sized ETL servers separately from the database. That made sense when adding a raw column cost real money and when the warehouse could not elastically scale compute for ad hoc SQL transforms.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What changed that made ELT practical at scale?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p>Cloud warehouses separated storage from compute and priced storage near object-store rates. Compute became elastic &mdash; spin up a warehouse for an hour, run SQL transforms, suspend it. Loaders (Fivetran, Airbyte, native pipes) made landing raw data cheap and reliable.</p>
+                <p>Once raw data was affordable to keep, reprocessing became a SQL re-run instead of a re-extract, and transformation could move into the warehouse where dbt manages it as version-controlled code with tests.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Where does dbt sit in the modern data stack, and what are three things it explicitly does not do?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>dbt owns the transformation layer: it compiles and runs SQL models inside the warehouse, with tests, docs and lineage. It does not extract data from source systems, does not load raw tables (except small seeds), does not schedule itself, does not store data outside the warehouse, and does not render dashboards.</p>
+                <p>Extraction and loading belong to connectors and scripts; scheduling belongs to Dagster, Airflow or dbt Cloud; serving belongs to BI tools like Preset or Looker. dbt generates SQL &mdash; the warehouse executes it.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Compare ETL and ELT on reprocessing after a transformation bug is found.<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p>In ETL, raw data often never reached the warehouse, so fixing logic frequently requires re-extracting from sources &mdash; slow, rate-limited and sometimes impossible if history was truncated. In ELT, raw tables remain in the warehouse; you fix the dbt model and re-run the DAG, and downstream models rebuild from retained history.</p>
+                <p>ELT turns reprocessing into a warehouse compute problem you control. ETL turns it into a cross-system replay problem involving the source application.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Name the major layers of the modern data stack in order from source to dashboard.<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>Sources → ingestion/loading → warehouse storage/compute → transformation (dbt) → orchestration → BI/serving, with cross-cutting cataloguing/governance, observability/data quality, and often reverse ETL back to operational tools.</p>
+                <p>Interviewers accept different wording, but the critical separations are load vs transform vs serve, and the fact that orchestration wraps the transform step rather than replacing it.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Why is transformation logic in a GUI ETL tool harder to maintain than dbt models in git?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>GUI jobs are difficult to diff, review in pull requests, and bisect when a metric changes. Logic is stored in proprietary formats tied to the ETL server, not in plain SQL your team already knows. Testing is weaker &mdash; row counts instead of grain and uniqueness assertions.</p>
+                <p>dbt puts transformations in text files with version control, CI, and tests colocated with models. That is the organisational shift ELT enables: analytics engineers can own the T layer without waiting for a central ETL team queue.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Your CFO asks why the data stack costs more after moving to ELT. What do you say?<span class="qa-tag">Cost</span></summary>
+              <div class="qa-body">
+                <p>ELT shifts spend from fixed ETL infrastructure to variable meters: raw storage, warehouse compute for dbt runs, loader MAR pricing, BI seats, and orchestration hosting. Initial costs often rise because teams keep all raw data, run more frequent transforms, and add tools that were previously bundled in one ETL licence.</p>
+                <p>The answer is not to revert to ETL but to optimise each layer: incremental models, Slim CI, scoped tests, warehouse auto-suspend, and selective sync from loaders. Cost visibility is better because each layer bills separately &mdash; which is both the problem and the lever.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What is reverse ETL and how does it relate to dbt?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>Reverse ETL syncs data from the warehouse back into operational systems &mdash; CRM, marketing automation, support tools. Tools like Census and Hightouch read curated tables (often dbt marts) and push segments outward.</p>
+                <p>dbt does not perform reverse ETL. It builds the marts reverse ETL reads. Quality and tests on those marts matter more because errors propagate into systems customers and sales teams touch directly.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>When would you still choose ETL or an ETL-style pattern over ELT?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>When data must be redacted or filtered before entering a shared environment (PII, HIPAA), when transforms are not expressible in SQL (heavy ML feature engineering in Python), when streaming latency requirements are sub-minute, or when the destination is not a SQL warehouse at all.</p>
+                <p>Many real pipelines are hybrid: ELT for analytics in Snowflake, ETL-style streaming for operational events, and batch exports for legal archives. The label matters less than matching pattern to constraints.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>The dashboard shows yesterday's revenue but dbt Cloud job succeeded. Walk through how you debug across stack layers.<span class="qa-tag">Troubleshooting</span></summary>
+              <div class="qa-body">
+                <p>Start by confirming which relation the dashboard queries &mdash; wrong schema or a cached dataset in Preset is common. Check orchestration logs: did the job run <code>dbt build</code> on the full mart or a slim selection that skipped the revenue model? Verify the mart's <code>max(date)</code> in Snowflake against source freshness.</p>
+                <p>If dbt truly built current data, the break is in the serve layer (BI cache, wrong connection) or in a semantic layer calculated field overriding the mart. If the mart is stale, trace upstream incremental watermarks and loader sync times. Stack debugging moves down from BI to transform to load, never assuming one green checkmark covers all layers.</p>
+              </div>
+            </details>
+
+          </div>
+        </section>
+
+        <section class="section" id="practice">
+          <h2>Hands-on practice</h2>
+          <p class="muted">Run these from the <code>airbnb</code> folder once Section&nbsp;6 setup is complete. Tasks 1&ndash;2 require only the repo and a text editor.</p>
+          <ol class="practice-list">
+
+            <li class="practice">
+              <p class="practice-task">Draw your own company's data stack against the six core layers (sources, load, warehouse, transform, orchestrate, serve). Label the actual product at each layer, even if some are spreadsheets or "Bob runs a script".</p>
+              <span class="console-path">Pen and paper or Excalidraw</span>
+              <p class="practice-expect">A diagram with six labelled layers, at least one gap identified (e.g. no orchestration, transform logic in the BI tool), and one arrow showing where raw data lands before transformation.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Start from the dashboard or report executives trust &mdash; that is the serve layer.</li>
+                    <li>Walk backward: what tables does it query? Who builds those? That is transform (dbt, SQL scripts, or inline in BI).</li>
+                    <li>Where do those tables live? That is warehouse/storage.</li>
+                    <li>How did data get there? Loader, manual CSV, replication &mdash; that is load.</li>
+                    <li>What generates the rows originally? Sources.</li>
+                    <li>What triggers builds on a schedule? Cron, Airflow, or "someone clicks Run" &mdash; orchestration, often missing.</li>
+                  </ol>
+                  <p>Most legacy stacks expose transform logic duplicated in serve (Excel, Looker calculated fields) and no retained raw layer &mdash; the main argument for ELT adoption.</p>
+                  <p class="muted">Undo: nothing to undo.</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">Trace one Airbnb column from raw table to dashboard: follow <code>price</code> from <code>RAW.RAW_LISTINGS</code> through dbt models to the Preset executive dashboard exposure, naming every tool and file it passes through.</p>
+              <span class="console-path">airbnb/models/ · models/dashboards.yml</span>
+              <p class="practice-expect">A written chain of at least five steps ending at the <code>executive_dashboard</code> exposure, mentioning Snowflake, dbt model names, and Preset.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li><strong>Source / load:</strong> CSV on S3 → Snowflake <code>COPY INTO</code> → <code>AIRBNB.RAW.RAW_LISTINGS.price</code> (string with <code>$</code>).</li>
+                    <li><strong>Staging:</strong> dbt <code>src_listings.sql</code> renames to <code>price_str</code> (ephemeral or view depending on config).</li>
+                    <li><strong>Transform:</strong> <code>dim_listings_cleansed.sql</code> casts to numeric <code>price</code> via <code>REPLACE</code> and <code>:: NUMBER</code>.</li>
+                    <li><strong>Join mart:</strong> <code>dim_listings_w_hosts.sql</code> combines listings and hosts for dashboard grain.</li>
+                    <li><strong>Exposure:</strong> <code>dashboards.yml</code> declares <code>executive_dashboard</code> depending on <code>dim_listings_w_hosts</code>; Preset queries Snowflake tables built by dbt.</li>
+                    <li><strong>Orchestration (later):</strong> Dagster job runs <code>dbt build</code> on a schedule so Preset sees refreshed data.</li>
+                  </ol>
+                  <p class="muted">Undo: nothing to undo.</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">Decide ETL vs ELT for three scenarios: (A) HIPAA data that must be de-identified before analysts see it, (B) SaaS analytics on Snowflake with ten analysts writing metrics, (C) sub-second fraud scoring on live transactions. Justify each choice in two sentences.</p>
+              <span class="console-path">Written answers</span>
+              <p class="practice-expect">Three short decisions with constraints named (compliance, team skill, latency).</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Design</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li><strong>(A) ETL or hybrid ETL:</strong> de-identification must happen before data enters the shared warehouse analysts access. Load redacted tables or use a locked staging environment; do not land raw PHI in <code>RAW</code> open to general roles.</li>
+                    <li><strong>(B) ELT:</strong> Snowflake already holds the data; ten analysts need git-reviewed SQL transforms dbt provides. Raw retention and reprocessing beat a central ETL queue for metric iteration.</li>
+                    <li><strong>(C) Neither classic batch pattern:</strong> sub-second fraud needs stream processing (Flink, Kafka, dedicated ML service), not nightly dbt. Warehouse ELT is the wrong latency class; maybe archive events to the lake for later analytics.</li>
+                  </ol>
+                  <p class="muted">Undo: nothing to undo.</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">Open the course repo's <code>pyproject.toml</code> and <code>requirements.txt</code>. List the pinned dbt and Dagster versions and match each to a stack layer from this section.</p>
+              <span class="console-path">complete-dbt-bootcamp-zero-to-hero/pyproject.toml</span>
+              <p class="practice-expect">At least four version strings mapped to transform, orchestration, or tooling layers.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Orientation</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li><code>dbt-core~=1.11.0</code> / resolved 1.11.12 → transform layer.</li>
+                    <li><code>dbt-snowflake~=1.11.0</code> / 1.11.6 → transform adapter to warehouse layer.</li>
+                    <li><code>dagster-dbt~=0.28.0</code> / 0.29.13 → orchestration integrating transform.</li>
+                    <li><code>dagster-webserver~=1.12.0</code> / 1.13.13 → orchestration UI.</li>
+                    <li><code>uv sync</code> → environment/package management supporting local dbt runs.</li>
+                  </ol>
+                  <p class="muted">Undo: nothing to undo.</p>
+                </div>
+              </details>
+            </li>
+
+          </ol>
+        </section>
+
+        <section class="section" id="recap">
+          <h2>Recap</h2>
+          <div class="recap">
+            <ul class="checklist">
+              <li>ETL transforms before load, driven by expensive storage, fixed compute and rigid warehouses. Logic often lived in GUI tools without version control or tests.</li>
+              <li>ELT loads raw data first, transforms with SQL inside the warehouse. Reprocessing is a re-run; raw history stays available.</li>
+              <li>The modern data stack layers: sources → load → warehouse → transform (dbt) → orchestration → BI, plus governance, observability and reverse ETL.</li>
+              <li>dbt owns the T only. It does not extract, load, schedule, store data outside the warehouse, or serve dashboards.</li>
+              <li>On top of raw SQL, dbt adds <code>ref()</code>, environments, materialisations, tests, docs, lineage, git workflow and macros.</li>
+              <li>Raw loaded tables use <code>source()</code>; dbt-built tables use <code>ref()</code> &mdash; that line is the L/T boundary.</li>
+              <li>This course: Snowflake + manual COPY load + dbt Core 1.11 + uv + Dagster + Preset + GitHub Actions CI.</li>
+              <li>Real ETL failure modes: opaque GUI logic, re-extract to fix bugs, single pipeline team bottleneck.</li>
+              <li>Real ELT failure modes: tool sprawl, warehouse and MAR costs, untested views, metric definitions split across BI and dbt.</li>
+              <li>The stack is consolidating toward semantic layers, data contracts, Iceberg/Delta convergence and integrated platforms &mdash; without undoing ELT's core idea.</li>
+              <li>Production should use <code>dbt build</code> (tests gate downstream), orchestrated by Dagster or equivalent, with exposures linking marts to Preset dashboards.</li>
+            </ul>
+            <p style="margin-top:1rem;">
+              <button type="button" data-complete="section-04">Mark complete</button>
+            </p>
+          </div>
+        </section>
+
+      </div>
+
+      <aside class="toc" aria-label="On this page">
+        <strong>On this page</strong>
+        <ol>
+          <li><a href="#lectures">Lectures</a></li>
+          <li><a href="#etl">ETL</a></li>
+          <li><a href="#elt">ELT</a></li>
+          <li><a href="#stack-layers">Stack layers</a></li>
+          <li><a href="#dbt-position">Where dbt sits</a></li>
+          <li><a href="#course-stack">Course stack</a></li>
+          <li><a href="#criticisms">Criticisms</a></li>
+          <li><a href="#deeper">Deeper detail</a></li>
+          <li><a href="#interview">Interview questions</a></li>
+          <li><a href="#practice">Hands-on practice</a></li>
+          <li><a href="#recap">Recap</a></li>
+        </ol>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<footer class="footer">The Complete dbt Bootcamp: Zero to Hero &middot; Section 4 &middot; Offline study edition</footer>
+</body>
+</html>

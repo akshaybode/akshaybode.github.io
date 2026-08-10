@@ -1,0 +1,840 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Open-ended analytics engineering interview scenarios: debugging slow models, wrong numbers, production incidents, modelling trade-offs, testing strategy, and behavioural questions grounded in the Airbnb dbt project.">
+<title>Analytics Engineering Interview Prep | The Complete dbt Bootcamp Notes</title>
+<link rel="stylesheet" href="assets/dbt.css">
+<script defer src="assets/search-index.js"></script>
+<script defer src="assets/code-highlight.js"></script>
+<script defer src="assets/dbt.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">Beyond the course · The Complete dbt Bootcamp: Zero to Hero</p>
+    <h1>Analytics Engineering Interview Prep</h1>
+    <p class="subtitle">The open-ended questions a real interview asks: a model went from two minutes to forty, a test passes but the numbers are wrong, the CFO&rsquo;s dashboard disagrees with finance &mdash; what do you do? Rehearse these scenarios out loud; the goal is a structured response under pressure, not memorised trivia.</p>
+    <div class="hero-meta">
+      <span class="chip">30+ scenario questions</span>
+      <span class="chip">Behavioural and technical</span>
+      <span class="chip">Not covered in the bootcamp</span>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <nav class="pager" aria-label="Section navigation">
+    <a href="extras.html">&larr; Beyond the Course</a>
+    <a href="index.html">Course contents</a>
+    <a href="index.html">Back to course contents</a>
+  </nav>
+
+  <main id="main">
+    <div class="layout">
+      <div class="content">
+
+        <section class="section" id="intro">
+          <h2>How to use this page</h2>
+          <p class="lead">These are scenario questions, not flashcards. An interviewer is listening for how you think: whether you ask clarifying questions, whether you separate symptoms from causes, and whether you can tie a warehouse problem back to a modelling decision.</p>
+          <p>Cover the summary, say your first step out loud, then open the answer and compare. If your version missed a step, close it and try again without reading. Pair with a colleague if you can &mdash; the follow-up questions (&ldquo;what if the source changed?&rdquo;, &ldquo;what would you check in prod?&rdquo;) are where interviews actually live. Cross-links point at the numbered course sections where the bootcamp goes deeper on a topic; this page assumes you have built the Airbnb project through <code>fct_reviews</code>, <code>dim_listings_cleansed</code>, the mart layer, and snapshots.</p>
+          <div class="callout tip"><strong>Structure every answer.</strong> A workable template: restate the problem, name what you would inspect first (logs, compiled SQL, row counts, lineage), form a hypothesis, validate it with one cheap query, then describe the fix and how you would prevent recurrence. Interviewers forgive not knowing every dbt flag; they do not forgive jumping to a solution before understanding the failure mode.</div>
+
+          <div class="diagram">
+            <p class="diagram-title">Airbnb project lineage — where debugging questions usually land</p>
+            <div class="dag">
+              <div class="dag-col">
+                <p class="dag-label">Raw</p>
+                <div class="node is-source"><b>raw_reviews</b></div>
+                <div class="node is-source"><b>raw_listings</b></div>
+                <div class="node is-source"><b>raw_hosts</b></div>
+              </div>
+              <div class="dag-col">
+                <p class="dag-label">Staging</p>
+                <div class="node is-model"><b>src_reviews</b></div>
+                <div class="node is-model"><b>src_listings</b></div>
+                <div class="node is-model"><b>src_hosts</b></div>
+              </div>
+              <div class="dag-col">
+                <p class="dag-label">Core</p>
+                <div class="node is-model"><b>dim_listings_cleansed</b></div>
+                <div class="node is-model"><b>fct_reviews</b><small>incremental</small></div>
+                <div class="node is-snapshot"><b>raw_listings_snapshot</b></div>
+              </div>
+              <div class="dag-col">
+                <p class="dag-label">Serve</p>
+                <div class="node is-mart pulse"><b>mart_fullmoon_reviews</b></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Interview phase</th><th>What to demonstrate</th><th>Airbnb example to cite</th></tr></thead>
+              <tbody>
+                <tr><td>Clarify</td><td>Grain, environment, when it broke, blast radius</td><td>&ldquo;Is this <code>fct_reviews</code> in prod or my dev schema?&rdquo;</td></tr>
+                <tr><td>Inspect</td><td>Logs, compiled SQL, query history, row counts</td><td><code>target/compiled/.../fct_reviews.sql</code>, <code>logs/dbt.log</code></td></tr>
+                <tr><td>Hypothesize</td><td>One likely cause tied to a layer</td><td>Incremental predicate skipped; snapshot scan grew</td></tr>
+                <tr><td>Validate</td><td>One cheap query or isolated re-run</td><td><code>dbt run --select fct_reviews --vars '{start_date: ...}'</code></td></tr>
+                <tr><td>Fix and prevent</td><td>Code or process change plus test or monitor</td><td>Add daily row-count test; alert on runtime &gt; 2&times; baseline</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Follow-ups to prepare for</h3>
+          <p>Interviewers rarely stop at the first answer. After you describe debugging a slow model, expect: &ldquo;How would you know if it happens again?&rdquo; After a modelling answer: &ldquo;What would you do at ten times the data volume?&rdquo; After a testing answer: &ldquo;Who decides if we ship with a failing warn-level test?&rdquo; Have a second beat ready — usually monitoring, documentation, or a phased rollout.</p>
+
+          <div class="grid-2">
+            <div class="mini-card">
+              <h4>Technical depth</h4>
+              <p>Compile artifacts, incremental merge strategies, snapshot strategies, selector design, hooks, and contracts — the course covers these in <a href="s08-materializations.html">Sections 8–12</a> and <a href="s19-production.html">19</a>. Scenario answers should name the relevant lever even if you do not recite every config key.</p>
+            </div>
+            <div class="mini-card">
+              <h4>Judgment and communication</h4>
+              <p>Stakeholder alignment, metric definitions, and saying no with alternatives. The behavioural block at the end is not filler — senior analytics engineering roles weight it heavily because you own what the company believes about its data.</p>
+            </div>
+          </div>
+
+          <div class="filetree">
+            <ul>
+              <li><span class="dir">airbnb/</span>
+                <ul>
+                  <li><span class="dir">models/</span>
+                    <ul>
+                      <li><span class="dir">src/</span> <span class="note">staging — cite when debugging grain</span></li>
+                      <li><span class="dir">dim/</span> <span class="note">cleansed dimensions</span></li>
+                      <li><span class="dir">fct/</span> <span class="note">incremental facts</span></li>
+                      <li><span class="dir">mart/</span> <span class="note">consumer-facing wide tables</span></li>
+                      <li><span class="file">schema.yml</span> <span class="note">tests and documentation</span></li>
+                    </ul>
+                  </li>
+                  <li><span class="dir">snapshots/</span> <span class="note">SCD history on raw tables</span></li>
+                  <li><span class="dir">tests/</span> <span class="note">singular and generic tests</span></li>
+                  <li><span class="file">dbt_project.yml</span></li>
+                </ul>
+              </li>
+            </ul>
+          </div>
+
+          <p class="muted">Forty-two questions across six themes below. Each answer is a starting script — adapt it to your experience and to the stack the interviewer names (Snowflake, BigQuery, Databricks). The Airbnb filenames are deliberate anchors; replace them with your own project names if you interview with a portfolio company.</p>
+
+<pre data-lang="text" data-title="Commands to mention in debugging scenarios" data-explain="Interviewers notice when you name concrete CLI steps instead of saying you would debug the model."><code>dbt compile --select model_name
+dbt run --select +model_name
+dbt test --select model_name
+dbt build --select +model_name
+dbt ls --select +model_name --output name --output schema
+# Artifacts: target/compiled/...  target/run/...  logs/dbt.log</code></pre>
+
+          <div class="svc-pills">
+            <span class="badge">Debugging</span>
+            <span class="badge">Modelling</span>
+            <span class="badge">Testing</span>
+            <span class="badge">Production</span>
+            <span class="badge">Architecture</span>
+            <span class="badge">Behavioural</span>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Question theme</th><th>Course sections to review</th><th>Airbnb models to cite</th></tr></thead>
+              <tbody>
+                <tr><td>Debugging and incidents</td><td><a href="s16-debugging-logging.html">16</a>, <a href="s17-selectors-commands.html">17</a></td><td><code>fct_reviews</code>, <code>src_*</code></td></tr>
+                <tr><td>Modelling judgment</td><td><a href="s05-dimensional-modelling.html">5</a>, <a href="s07-models.html">7</a></td><td><code>dim_listings_cleansed</code>, <code>dim_listings_w_hosts</code></td></tr>
+                <tr><td>Testing and trust</td><td><a href="s11-tests.html">11</a>, <a href="s12-advanced-testing.html">12</a></td><td><code>schema.yml</code>, singular tests</td></tr>
+                <tr><td>Production and reliability</td><td><a href="s18-orchestration.html">18</a>, <a href="s19-production.html">19</a></td><td><code>profiles.yml</code>, exposures</td></tr>
+                <tr><td>Architecture and trade-offs</td><td><a href="s08-materializations.html">8</a>, <a href="s10-snapshots.html">10</a>, <a href="extras.html">Extras</a></td><td>snapshots, incremental facts</td></tr>
+                <tr><td>Behavioural</td><td><a href="s21-best-practices.html">21</a>, <a href="s14-documentation.html">14</a></td><td>docs, metric definitions</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout info"><strong>Pair with the course.</strong> This page does not replace the numbered sections — it pressure-tests judgment. Complete the Airbnb build through <a href="s20-poweruser-fusion-ai.html">Section 20</a> first so file names and materialisations are muscle memory; then use interview prep as the last step before applying for analytics engineering roles or sitting the certification exam in <a href="s22-certification.html">Section 22</a>.</div>
+        </section>
+
+        <section class="section" id="interview">
+          <h2>Debugging and incidents</h2>
+          <p class="muted">Answer each one out loud before opening it. These are the questions that start with &ldquo;something broke in production&rdquo; &mdash; see also <a href="s16-debugging-logging.html">Section 16</a> for the course&rsquo;s debugging toolkit.</p>
+
+          <div class="callout warn"><strong>Do not skip clarifying questions.</strong> &ldquo;A model got slow&rdquo; is ambiguous. Ask whether runtime jumped suddenly or crept over weeks, whether only prod is affected, and whether the model is incremental, a view, or a snapshot. Your first thirty seconds should sound like a calm incident commander, not a guess at the answer.</div>
+
+          <p>The scenarios below reference the course DAG. In a live interview you may not have Snowflake open — describe exactly which artifact you would open first and what you expect to see if your hypothesis is correct. That habit matters more than getting the root cause right on the first try.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+
+            <details class="qa">
+              <summary>A model went from two minutes to forty &mdash; walk me through how you&rsquo;d find out why?<span class="qa-tag">Troubleshooting</span></summary>
+              <div class="qa-body">
+                <p>First I would confirm scope: one model or the whole DAG, dev or prod, and whether anything changed in code, upstream data volume, or warehouse state (auto-suspend, warehouse size, query queue). I would pull the last successful run from orchestration logs and compare row counts, bytes scanned, and execution time in the warehouse query history.</p>
+<pre data-lang="sql" data-title="models/fct/fct_reviews.sql" data-explain="The incremental config and event_time column are the first things to verify when runtime explodes."><code>{{
+  config(
+    materialized = 'incremental',
+    on_schema_change='fail',
+    event_time='review_date'
+  )
+}}</code></pre>
+                <p>For a model like <code>fct_reviews</code>, I would open <code>target/compiled/airbnb/models/fct/fct_reviews.sql</code> and check whether the incremental filter still applies &mdash; a missed <code>is_incremental()</code> branch or a <code>--full-refresh</code> turns a cheap merge into a full-table rebuild. I would also check whether an upstream source doubled in size or lost partition pruning because someone removed a date predicate.</p>
+                <p>If compiled SQL looks unchanged, the regression is almost always warehouse-side: a bigger warehouse was downsized, clustering keys stopped working, or a concurrent job is competing for the same resources. Document the root cause and add a runtime alert or a row-count test so the next regression pages someone before the CFO does.</p>
+                <p>In the interview, narrate the commands: <code>dbt compile --select fct_reviews</code>, then inspect Snowflake query history filtered by user and model name. Mention <code>dbt run --select fct_reviews --sample "7 days"</code> from <a href="s16-debugging-logging.html">Section 16</a> as a cheap way to reproduce transform logic on a subset when <code>event_time</code> is configured.</p>
+                <p>Close with prevention: store per-model runtime in observability (dbt Cloud run metadata, Elementary, custom logging macro), alert when duration exceeds a rolling baseline, and cap concurrent full-refresh jobs in orchestration so one mistaken flag does not scan the whole fact history.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>A test passes but the numbers are visibly wrong &mdash; what does that tell you?<span class="qa-tag">Testing</span></summary>
+              <div class="qa-body">
+                <p>Passing tests only prove what you asserted. A <code>unique</code> test on <code>review_id</code> says nothing about whether revenue is correct; a <code>not_null</code> test passes on empty tables in some configurations. Wrong numbers with green tests usually mean the tests guard the wrong thing, the grain is wrong, or the test scope excludes the bad rows.</p>
+                <p>I would reconcile at the grain the business cares about: compare <code>COUNT(*)</code> and key sums between the mart and a trusted source query, then bisect upstream models with <code>dbt build --select +mart_fullmoon_reviews</code>. If staging matches raw but the mart does not, the bug is in transform logic; if staging is already wrong, the bug is earlier or in the source.</p>
+                <p>This is a signal to add relationship tests, aggregate reconciliation tests, or a singular test that encodes the business rule that was violated. See <a href="s11-tests.html">Section 11</a> and <a href="s12-advanced-testing.html">Section 12</a> for generic versus singular tests and unit tests.</p>
+                <p>Concrete example: <code>mart_fullmoon_reviews</code> could pass uniqueness on <code>review_id</code> while double-counting listings because the join to <code>dim_listings_w_hosts</code> exploded rows after a host duplicated in source. A <code>dbt_utils.unique_combination_of_columns</code> test on the mart grain, or a singular test asserting review count equals <code>fct_reviews</code>, closes that gap.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>The CFO&rsquo;s dashboard disagrees with finance&rsquo;s numbers &mdash; how do you resolve it?<span class="qa-tag">Troubleshooting</span></summary>
+              <div class="qa-body">
+                <p>Stop debating totals until both sides agree on definitions: metric formula, grain, date timezone, inclusion rules (gross versus net, cancelled bookings, refunds), and as-of date. Write each definition down before running a single query &mdash; most &ldquo;data bugs&rdquo; are two correct queries answering different questions.</p>
+                <p>Then trace lineage from each number to the warehouse table. The CFO&rsquo;s dashboard may read a cached extract or an exposure built on <code>mart_fullmoon_reviews</code> while finance exports from a spreadsheet tied to a snapshot taken yesterday. Compare row counts, date filters, and join keys at each layer.</p>
+                <p>When definitions should match, pick one query as ground truth, diff at daily grain, and find the first date or segment where totals diverge. Fix the model or document the intentional difference in the dbt docs description and the exposure metadata so the disagreement does not recur every month.</p>
+                <p>Walk the interviewer through a reconciliation query pattern: aggregate both sides by <code>DATE_TRUNC('day', review_date)</code>, full outer join on date, filter where absolute difference exceeds a tolerance. The first diverging day tells you whether a deploy, a loader change, or a filter change caused the drift. Reference exposures in <a href="s15-analyses-hooks-exposures.html">Section 15</a> as the place to document which dashboard owns which mart.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>A dbt run succeeded but a table is empty &mdash; what happened?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p>Success means dbt executed without error, not that rows were written. An incremental model with an over-restrictive <code>WHERE</code> clause, a filter that excludes all source data, or a <code>dbt run --empty</code> left in a CI job all produce zero-row relations with a green checkmark.</p>
+                <p>For <code>fct_reviews</code>, I would check the compiled incremental predicate: if <code>max(review_date)</code> on the target is ahead of the source because of bad seed data or a timezone cast, every new run matches nothing. I would also verify the upstream <code>src_reviews</code> still has rows and that a view was not swapped for a table pointing at an empty dev schema.</p>
+                <p>Add a minimum row-count test or a generic test like the course&rsquo;s <code>minimum_row_count</code> on critical facts, and compare <code>SELECT COUNT(*)</code> before and after in the orchestration step so emptiness fails the pipeline even when dbt reports OK.</p>
+<div class="terminal">
+  <p class="term-head">dbt run — success with zero rows</p>
+  <pre class="term-body"><span class="tt-cmd">dbt run --select fct_reviews</span>
+<span class="tt-dim">09:14:01  Running with dbt=1.11.12</span>
+<span class="tt-dim">09:14:04  1 of 1 START sql incremental model DEV.fct_reviews ............... [RUN]</span>
+<span class="tt-ok">09:14:06  1 of 1 OK created sql incremental model DEV.fct_reviews ...... [SUCCESS 0 in 2.1s]</span>
+<span class="tt-warn">09:14:06  0 rows inserted — easy to miss if you only read SUCCESS</span></pre>
+</div>
+                <p>The course&rsquo;s incremental model filters null <code>review_text</code> and applies a date predicate inside <code>is_incremental()</code>. If both exclude everything, dbt still reports success. Always check the row count in brackets or query the table immediately after.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary><code>fct_reviews</code> row counts dropped by half after an incremental run &mdash; where do you start?<span class="qa-tag">Troubleshooting</span></summary>
+              <div class="qa-body">
+                <p>Half is too clean to ignore &mdash; suspect a join that became inner, a deduplication key change, or an incremental strategy that deleted rows. I would compare <code>COUNT(*)</code> on <code>src_reviews</code> versus <code>fct_reviews</code> for the same date range, then read the compiled merge SQL under <code>target/run/</code> to see whether delete-plus-insert logic ran.</p>
+                <p>The surrogate key in <code>fct_reviews</code> is built from <code>listing_id</code>, <code>review_date</code>, <code>reviewer_name</code>, and <code>review_text</code>. If any of those columns changed upstream (trimming, encoding, null handling), keys no longer match and merges can drop or duplicate rows. Check whether <code>on_schema_change='fail'</code> should have stopped the run &mdash; if it did not fire, the schema did not change but the data did.</p>
+                <p>Run a full refresh in dev with a backup, diff old versus new keys, and add a singular test that compares daily review counts to the source until the merge logic is verified. See <a href="s08-materializations.html">Section 8</a> on incremental strategies.</p>
+<pre data-lang="sql" data-title="Debug query — find keys in target missing from rebuild" data-explain="Compare surrogate keys before and after an incremental run to spot merge drops."><code>SELECT review_id
+FROM dev_backup.fct_reviews
+MINUS
+SELECT review_id
+FROM dev.fct_reviews;</code></pre>
+                <p>Mention <code>on_schema_change='fail'</code> on <code>fct_reviews</code> — it protects against column drift but not against logic changes inside the SELECT. Version control diff on the model file is part of the incident checklist.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>A downstream mart looks fine but upstream staging has duplicate keys &mdash; how did that slip through?<span class="qa-tag">Testing</span></summary>
+              <div class="qa-body">
+                <p>Downstream models can hide upstream duplicates: a <code>GROUP BY</code> in the mart, a <code>DISTINCT</code>, or a join that collapses rows makes the mart look healthy while staging is wrong. Without a <code>unique</code> test on the staging grain, duplicates propagate silently until someone drills into detail rows.</p>
+                <p>I would run <code>dbt test --select src_listings</code> and add a <code>unique</code> test on <code>listing_id</code> if the grain is one row per listing. Then inspect the raw source: reloads, CDC duplicates, and multiple snapshots loaded into the same table are common causes.</p>
+                <p>Fix at the lowest layer that should enforce grain &mdash; usually staging &mdash; and add relationship tests from facts to dimensions so bad keys surface when facts are built, not when a dashboard looks odd. The course project tests cleansed dimensions; a production project would test staging too.</p>
+                <p>Follow-up the interviewer might ask: &ldquo;Would you dedupe in staging or in the fact?&rdquo; Answer: dedupe in staging if the grain is defined there (one row per listing in <code>src_listings</code>); dedupe in the fact if duplicates represent legitimate multiple events. Never hide duplicates in a mart aggregate without documenting the grain change.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Compile succeeds but the warehouse returns &ldquo;object does not exist&rdquo; at runtime &mdash; what do you check?<span class="qa-tag">Troubleshooting</span></summary>
+              <div class="qa-body">
+                <p>Compile resolves <code>ref()</code> and <code>source()</code> to relation names for your current target; runtime fails when that relation is missing in the warehouse. Common causes: upstream model not built in this schema, wrong target selected, or a source pointing at a table the loader has not created yet.</p>
+                <p>Run <code>dbt ls --select +model_name --output name --output schema</code> to see resolved locations, then <code>dbt build --select +model_name</code> to build ancestors. If only prod breaks, compare dev and prod grants and database names in <code>profiles.yml</code>.</p>
+                <p>For the Airbnb project, a failure on <code>ref('src_reviews')</code> often means staging was skipped in a selective run. In CI, ensure modified+ builds include new dependencies. Mention <code>dbt debug</code> for connection issues versus missing relations — different fixes.</p>
+              </div>
+            </details>
+
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Symptom</th><th>First file or command</th><th>Common root cause</th></tr></thead>
+              <tbody>
+                <tr><td>Runtime 20&times; baseline</td><td>Warehouse query history + compiled SQL</td><td>Full refresh, lost incremental filter, source volume spike</td></tr>
+                <tr><td>Tests green, KPI wrong</td><td>Reconciliation query at business grain</td><td>Tests on wrong columns; join fan-out; wrong grain</td></tr>
+                <tr><td>Run OK, zero rows</td><td><code>SELECT COUNT(*)</code> on target; incremental predicate</td><td>Over-filtered WHERE; empty sample; wrong schema</td></tr>
+                <tr><td>Row count halved</td><td><code>target/run/.../fct_reviews.sql</code></td><td>Merge key change; inner join replaced left join</td></tr>
+                <tr><td>Dashboard stale</td><td>Exposure + BI refresh log</td><td>Extract cache; wrong connection schema</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="section" id="modelling">
+          <h2>Modelling judgment</h2>
+          <p class="muted">These questions probe whether you can design models others will trust. The Airbnb project is the reference &mdash; see <a href="s05-dimensional-modelling.html">Section 5</a> and <a href="s07-models.html">Section 7</a>.</p>
+
+          <p>Modelling interviews are not about memorising Kimball terminology. The interviewer wants to hear you choose grain deliberately, place logic once, and explain trade-offs between normalisation and consumption speed. Reference real files: <code>dim_listings_cleansed.sql</code>, <code>dim_listings_w_hosts.sql</code>, <code>mart_fullmoon_reviews.sql</code>.</p>
+
+          <div class="callout info"><strong>Medallion language.</strong> Even if the company does not use the word, map your answer: staging (<code>src_*</code>), conformed dimensions and facts (<code>dim_*</code>, <code>fct_*</code>), and marts (<code>mart_*</code>). Interviewers use different vocabulary; translating your DAG into their layer names shows experience.</div>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+
+            <details class="qa">
+              <summary>When would you denormalize versus keep a snowflake schema?<span class="qa-tag">Modelling</span></summary>
+              <div class="qa-body">
+                <p>Denormalize when query consumers are many, SQL skill varies, and join performance or simplicity matters more than storage deduplication. The course&rsquo;s <code>dim_listings_w_hosts</code> joins listing and host attributes so analysts do not repeat the same join in every notebook.</p>
+<pre data-lang="sql" data-title="models/dim/dim_listings_cleansed.sql (fragment)" data-explain="Cleansed dimensions are where business rules live once — cite this when asked where to add a shared column."><code>SELECT
+  listing_id,
+  listing_name,
+  room_type,
+  CASE
+    WHEN minimum_nights = 0 THEN 1
+    ELSE minimum_nights
+  END AS minimum_nights,
+  host_id,
+  REPLACE(price_str, '$') :: NUMBER(10, 2) AS price
+FROM {{ ref('src_listings') }}</code></pre>
+                <p>Keep a snowflake (normalized) shape when dimensions change independently, when the same dimension is reused across many facts with different grains, or when you need a single place to fix host attributes without rebuilding wide tables. Maintain normalized core models and expose denormalized marts as views or tables on top.</p>
+                <p>The wrong answer is always one or the other. A mature project has both: cleansed dimensions at canonical grain, plus purpose-built marts that trade redundancy for consumption speed.</p>
+                <p>In interviews, mention maintenance cost: when host phone numbers change, a wide table forces you to rebuild every dependent mart or accept stale host columns until the next run. Normalized <code>dim_hosts_cleansed</code> updates once; wide tables <code>ref()</code> it. That trade-off is the heart of the question.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How do you decide the grain of a new fact table?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>Start from the business event, not the source file. Ask: &ldquo;What is one row?&rdquo; For reviews, one row per review (or per review per listing per day if the source duplicates) &mdash; the course builds <code>fct_reviews</code> at review grain with a surrogate key when natural keys are messy.</p>
+                <p>List the metrics the fact should support. If stakeholders need listing-day metrics and review-level metrics, you may need two facts at different grains rather than one fact that aggregates away detail. Document the grain in the model description and enforce it with a <code>unique</code> test on the primary key.</p>
+                <p>If you cannot state the grain in one sentence, the model is not ready to build. Resolve ambiguities with stakeholders before writing SQL, not after a dashboard shows double-counted revenue.</p>
+                <p>Cite <code>fct_reviews</code> explicitly: grain is one review event; the surrogate key handles composite natural keys that might not be unique if the source sends revisions. If the business later asks for &ldquo;one row per listing per day summarised,&rdquo; that is a different model (aggregate fact or mart), not a silent grain change on the existing fact.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>A stakeholder wants a column added to five different marts &mdash; where does the logic go?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>Once, as upstream as possible. Add the column to the shared dimension or staging model that owns the attribute, then expose it through <code>ref()</code> to each mart. If five marts need the same CASE expression copied five times, you have a missing intermediate model.</p>
+                <p>If the column is mart-specific (a segment flag only used in one campaign analysis), it belongs in that mart. If it describes a listing or host, it belongs in <code>dim_listings_cleansed</code> or <code>dim_hosts_cleansed</code> even if only some marts select it today.</p>
+                <p>For repeated logic that is not a column (complex date windows, currency conversion), extract a macro or an intermediate model. The interview signal is DRY without premature abstraction &mdash; three copies is a pattern, one copy is fine.</p>
+                <p>Example: adding &ldquo;is_full_moon_night&rdquo; to multiple marts belongs in the seed join logic once — the course centralises full-moon logic in <code>mart_fullmoon_reviews</code> via <code>seed_full_moon_dates</code> and <code>dim_fullmoon</code>. Other marts should <code>ref()</code> that pattern rather than rejoin the seed five times with slightly different date math.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Should host attributes live in <code>dim_listings_w_hosts</code> or a separate bridge table?<span class="qa-tag">Modelling</span></summary>
+              <div class="qa-body">
+                <p>For a strict one-host-per-listing domain, a wide dimension like <code>dim_listings_w_hosts</code> is appropriate and matches how analysts think about the Airbnb dataset. You get simple joins and fast consumption at the cost of repeating host columns on every listing row.</p>
+                <p>A bridge table (listing-host pairs) is warranted when listings can have co-hosts, ownership changes, or many-to-many relationships over time. Then grain is listing-host-period, and facts join through the bridge with careful effective-date logic.</p>
+                <p>Ask whether host attributes are truly listing-scoped or host-scoped. Superhost status belongs on the host dimension; &ldquo;minimum nights for this listing&rdquo; belongs on the listing side. Mixing the two in one wide table without documenting ownership causes silent inconsistencies when host data updates.</p>
+                <p>Reference <code>dim_listings_w_hosts.sql</code> from the course: it joins cleansed listings to cleansed hosts on <code>host_id</code>. If the interviewer asks about SCD Type 2, explain that this model is typically current-state unless you add effective dates from snapshots.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>When is a wide <code>mart_fullmoon_reviews</code>-style table the right choice versus normalized facts and dims?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>A wide mart is right when one audience runs one predictable query pattern repeatedly &mdash; here, reviews enriched with listing, host, and calendar attributes for a specific analysis (full-moon nights). Building it once in dbt saves every analyst from chaining five joins.</p>
+                <p>Normalized facts and dims are right when many teams slice the same events differently, when dimensions are governed centrally, or when wide marts would multiply storage and refresh cost unsustainably. Facts stay narrow; dimensions version independently.</p>
+                <p>In practice, build normalized cores for reuse, then marts as consumer-specific projections. Document which marts are official products versus exploratory so the team knows which to trust for KPIs.</p>
+                <p>The course mart joins reviews to listing, host, and calendar attributes for a niche analysis. That is the right shape when the audience is fixed and the SQL would otherwise be copy-pasted across notebooks. It is the wrong shape when ten teams need different column subsets — then expose dimensions and facts and let BI tools join, or ship multiple thin marts.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How do you handle slowly changing dimensions when the source does not send history?<span class="qa-tag">Modelling</span></summary>
+              <div class="qa-body">
+                <p>You cannot reconstruct history you never captured. Options: start snapshotting now with dbt snapshots (<a href="s10-snapshots.html">Section 10</a>), backfill from whatever audit columns exist (<code>updated_at</code> on <code>raw_listings</code>), or accept type 1 overwrite and document that historical reporting is point-in-time only.</p>
+                <p>For the Airbnb project, <code>raw_listings_snapshot</code> and <code>raw_hosts_snapshot</code> capture changes going forward. Analysts asking &ldquo;what was the price last quarter?&rdquo; before the snapshot existed need a different source or an explicit &ldquo;not available&rdquo; answer.</p>
+                <p>When only current state exists, use type 1 in dimensions and avoid fake effective dates. When audit timestamps exist, you can sometimes rebuild partial history with window functions, but validate against known events before trusting it for finance.</p>
+                <p>Mention snapshot YAML config from the course (<code>raw_listings_snapshot.yml</code>): strategy, unique key, and updated_at column are choices you defend in an interview. Check strategy versus timestamp affects cost and correctness when rows can be hard-deleted.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>When would you use an ephemeral model instead of a view in staging?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>Ephemeral models inline as CTEs — no relation in the warehouse, no direct tests against the model itself. The course uses ephemeral-style staging in early layers to avoid cluttering the catalog with intermediate objects analysts should not query.</p>
+                <p>Choose ephemeral when the logic is purely preparatory, short-lived in the DAG, and never a consumer-facing boundary. Switch to a view or table when analysts need to query staging directly, when you need to test it independently, or when the same CTE would compile into multiple huge copies and hurt performance.</p>
+                <p>Interview trap: ephemeral errors surface at the downstream model line number, which complicates debugging — mention that trade-off. See <a href="s08-materializations.html">Section 8</a> for materialisation comparison.</p>
+              </div>
+            </details>
+
+          </div>
+        </section>
+
+        <section class="section" id="testing">
+          <h2>Testing and trust</h2>
+          <p class="muted">Interviews test whether you can make data trustworthy without blocking the team. See <a href="s11-tests.html">Section 11</a> and <a href="s12-advanced-testing.html">Section 12</a>.</p>
+
+          <p>A strong candidate distinguishes test types and assigns them to layers: source freshness on <code>raw_listings</code>, schema tests on staging keys, business-rule singular tests on cleansed dimensions, unit tests on incremental logic, and lightweight checks in CI versus heavy reconciliation nightly. Weak answers treat &ldquo;add more tests&rdquo; as uniformly good without mentioning cost or merge gates.</p>
+
+<pre data-lang="yaml" data-title="models/schema.yml (fragment)" data-explain="Column tests on cleansed dimensions are the pattern to cite in testing interviews."><code>models:
+  - name: dim_listings_cleansed
+    columns:
+      - name: listing_id
+        data_tests:
+          - unique
+          - not_null
+      - name: host_id
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_hosts_cleansed')
+                field: host_id</code></pre>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+
+            <details class="qa">
+              <summary>How do you decide what to test on a new model?<span class="qa-tag">Testing</span></summary>
+              <div class="qa-body">
+                <p>Test grain first: <code>unique</code> and <code>not_null</code> on the primary key. Test relationships for every foreign key to a dimension. Then test business rules that would embarrass you if wrong &mdash; non-negative prices, minimum nights logic, row counts within expected bounds.</p>
+                <p>Prioritize by blast radius: a broken staging model poisons everything downstream; a broken ad-hoc analysis model does not. For <code>dim_listings_cleansed</code>, the course tests column values and row-count parity with raw; for a new mart, add tests that encode the mart&rsquo;s specific filters.</p>
+                <p>Do not test everything on day one. Cover what would fail silently and add tests when bugs appear. Document untested assumptions in the model description so the next hire knows the gap.</p>
+                <p>Map tests to failure modes: uniqueness catches loader duplicates; relationships catch orphaned foreign keys after inner joins; accepted-values catches enum drift in <code>room_type</code>; singular tests catch business rules like the course&rsquo;s <code>dim_listings_minimum_nights</code> test. Say which you would skip initially (expensive cross-warehouse comparisons) and why.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>A critical test would take 20 minutes to run on every commit &mdash; what do you do?<span class="qa-tag">Cost</span></summary>
+              <div class="qa-body">
+                <p>Never run a 20-minute test on every PR. Tier your tests: fast schema and uniqueness checks in CI on a slim dev target; heavy reconciliation tests on a nightly schedule or pre-production deploy. Use selectors (<a href="s17-selectors-commands.html">Section 17</a>) to define tags like <code>ci</code> versus <code>nightly</code>.</p>
+                <p>Make the expensive test cheaper if possible: sample recent partitions, compare aggregates instead of row-by-row diffs, or test against a materialized subset. A test that compares daily totals for the last seven days catches most regressions at a fraction of the cost.</p>
+                <p>If the test must stay expensive, treat it as a monitoring job with alerting, not a merge gate. Communicate the trade-off to the team: what risk you accept in CI versus what you catch overnight.</p>
+<pre data-lang="yaml" data-title="selectors.yml — tiered test runs" data-explain="Tag tests by severity and runtime so CI runs only the fast subset."><code>selectors:
+  - name: ci_tests
+    definition:
+      method: tag
+      value: ci
+  - name: nightly_heavy
+    definition:
+      method: tag
+      value: nightly</code></pre>
+                <p>Run <code>dbt test --selector ci_tests</code> on PR and <code>dbt test --selector nightly_heavy</code> on schedule. A <code>unique</code> test on a billion-row fact belongs in nightly unless the warehouse can prune partitions.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How do you communicate data quality issues to non-technical stakeholders?<span class="qa-tag">Behavioural</span></summary>
+              <div class="qa-body">
+                <p>Lead with impact, not mechanism. &ldquo;Revenue for March may be overstated by roughly 3% because cancelled listings were included&rdquo; lands better than &ldquo;the left join on <code>dim_listings_cleansed</code> failed a relationship test.&rdquo; Give a time-bound estimate for fix and a workaround if one exists.</p>
+                <p>Separate what you know from what you are still verifying. Offer a daily check-in until resolved. After the fix, send a short post-mortem: what happened, what we changed, what we added so it is caught earlier next time.</p>
+                <p>Use the dbt docs site or exposure descriptions as the permanent record of definitions so &ldquo;what does this number mean?&rdquo; does not depend on one engineer&rsquo;s memory.</p>
+                <p>Bad example: &ldquo;The relationship test on host_id failed.&rdquo; Good example: &ldquo;About 200 listings temporarily show no host name because yesterday&rsquo;s host load was incomplete; listing counts are correct, host attributes may be blank until tonight&rsquo;s run.&rdquo; Tie severity to decisions: can we still close the month?</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Your <code>unique</code> test on <code>review_id</code> passes but you know duplicates exist &mdash; how?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p>The test runs against the relation in the target schema you built, not against your mental model of the data. If you inspected raw <code>raw_reviews</code> but the test runs on <code>fct_reviews</code> after deduplication, both can be true. Alternatively, duplicates share the same surrogate key because the hash inputs collided or nulls were handled unexpectedly.</p>
+                <p>Nulls also break intuition: in SQL, two nulls are not equal, so a unique test on a nullable column may pass with duplicate-looking business rows. Open the compiled test SQL, run it manually, and run a <code>GROUP BY</code> on the columns humans consider the natural key.</p>
+                <p>Fix the key definition or add a singular test on the natural key columns. Consider <code>dbt_utils.generate_surrogate_key</code> with explicit null handling documented in the model.</p>
+                <p>The course builds <code>review_id</code> from four columns in <code>fct_reviews.sql</code>. Walk through what happens if <code>review_text</code> is null (filtered out) versus empty string (included) — small cleansing differences change the key and can hide duplicates from humans while satisfying the hash.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What tests would you add to <code>dim_listings_cleansed</code> that the course project skips?<span class="qa-tag">Testing</span></summary>
+              <div class="qa-body">
+                <p>The course covers regex on raw price strings and minimum nights bounds; I would add accepted-values tests on <code>room_type</code>, a relationship test from <code>host_id</code> to <code>dim_hosts_cleansed</code>, and a singular test that no listing has <code>minimum_nights</code> greater than 365 unless the business allows it.</p>
+                <p>Cross-model tests matter: expect row count to be less than or equal to raw listings if inactive listings are filtered, with the exceptions documented. Add a recency test if listings should always have a recent <code>updated_at</code> from the loader.</p>
+                <p>For production, source freshness on <code>raw_listings</code> (<a href="s09-seeds-sources.html">Section 9</a>) belongs in the same conversation &mdash; a perfect dimension built from stale raw data still fails the business.</p>
+                <p>Mention <code>dbt_expectations</code> from the course for distribution tests (price ranges, regex on raw strings before cleansing). Interviewers like hearing that tests belong on raw, staging, and mart layers — not only on the final presentation table.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How do you test an incremental model&rsquo;s merge logic without a full refresh?<span class="qa-tag">Testing</span></summary>
+              <div class="qa-body">
+                <p>Use unit tests (<a href="s12-advanced-testing.html">Section 12</a>): mock inputs with fixed rows, run the model logic, assert expected outputs including updated and deleted rows. The course&rsquo;s <code>unit_tests.yml</code> on the mart layer shows the pattern; apply the same to incremental facts.</p>
+                <p>In dev, run two incremental loads with controlled vars &mdash; <code>fct_reviews</code> supports <code>start_date</code> and <code>end_date</code> vars for windowed loads. Insert known rows into a dev source stub, run incremental twice, and assert idempotency: running the same window again should not change counts.</p>
+                <p>Compare <code>target/run</code> merge SQL against what the warehouse executed. For delete-plus-insert strategies, verify the delete predicate matches the insert key set. A full refresh in an isolated schema is the last resort, not the first test.</p>
+                <p>Cite the course vars on <code>fct_reviews</code>: <code>start_date</code> and <code>end_date</code> let you load a controlled window twice and assert row counts stay stable. That is cheaper than cloning prod and safer than testing merge logic only in production.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Source freshness failed but the pipeline kept running &mdash; was that wrong?<span class="qa-tag">Testing</span></summary>
+              <div class="qa-body">
+                <p>Depends on policy. Freshness checks in <code>sources.yml</code> warn or error based on configuration and orchestration settings. If reviews are stale but marketing only needs listing attributes, continuing with a warning can be correct — if finance needs today&rsquo;s reviews, it is wrong.</p>
+                <p>Define severity per source and exposure: freshness on <code>raw_reviews</code> should block <code>fct_reviews</code> and downstream marts when SLAs require current data. Document the behaviour in runbooks so on-call does not guess.</p>
+                <p>Interview answer: tie freshness to consumer impact, not generic &ldquo;always fail.&rdquo; Reference <a href="s09-seeds-sources.html">Section 9</a> for source configuration and <a href="s19-production.html">Section 19</a> for job design.</p>
+              </div>
+            </details>
+
+          </div>
+        </section>
+
+        <section class="section" id="production">
+          <h2>Production and reliability</h2>
+          <p class="muted">Green <code>dbt run</code> in dev is not production readiness. See <a href="s19-production.html">Section 19</a> and <a href="s18-orchestration.html">Section 18</a>.</p>
+
+          <p>Production questions reward people who have been on call. Mention orchestration (Airflow, Dagster, dbt Cloud jobs), artifact storage for state-aware CI, environment separation via targets, and communication when SLAs slip. Tie answers to <code>profiles.yml</code>, the prod target, and hooks from <a href="s15-analyses-hooks-exposures.html">Section 15</a> if relevant.</p>
+
+          <div class="diagram">
+            <p class="diagram-title">Typical production path from merge to dashboard</p>
+            <div class="flow">
+              <div class="node is-compute"><b>Git merge</b><small>PR + CI</small></div>
+              <span class="arrow">&rarr;</span>
+              <div class="node is-model"><b>dbt build</b><small>prod target</small></div>
+              <span class="arrow">&rarr;</span>
+              <div class="node is-test"><b>Tests</b><small>fail or warn</small></div>
+              <span class="arrow">&rarr;</span>
+              <div class="node is-store"><b>Manifest</b><small>artifact store</small></div>
+              <span class="arrow">&rarr;</span>
+              <div class="node is-serve"><b>BI refresh</b><small>exposure</small></div>
+            </div>
+          </div>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+
+            <details class="qa">
+              <summary>How would you design CI for a dbt project with no tests today?<span class="qa-tag">Production</span></summary>
+              <div class="qa-body">
+                <p>Week one: CI runs <code>dbt parse</code> and <code>dbt compile</code> on every PR to catch syntax and Jinja errors. Week two: add <code>unique</code> and <code>not_null</code> on primary keys for the ten most-used models. Week three: add source freshness and one aggregate reconciliation test on the main fact.</p>
+                <p>Use a dedicated CI target with read-only prod sources or masked dev data, <code>dbt build --select state:modified+</code> if you have a previous artifact, or slim CI with <code>--empty</code> for schema validation when data is sensitive. Block merge on compile failure; warn on test failure until the backlog is triaged.</p>
+                <p>Publish artifacts (<code>manifest.json</code>) from prod runs so CI can do state-aware selection. Document the roadmap so stakeholders see testing as incremental hardening, not a month-long freeze.</p>
+                <p>First three models to test in the Airbnb project: <code>dim_listings_cleansed</code> (unique on listing_id), <code>fct_reviews</code> (unique on review_id, not_null on listing_id), <code>src_reviews</code> (relationship to raw or row-count bounds). That covers the spine of the DAG in under two minutes of CI time on a dev target.</p>
+                <p>Mention <code>dbt build</code> versus <code>dbt run</code> from <a href="s17-selectors-commands.html">Section 17</a>: in mature CI, build runs tests in dependency order and stops early — preferable once you have any tests at all.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>A production run failed at 3am &mdash; walk through your response?<span class="qa-tag">Production</span></summary>
+              <div class="qa-body">
+                <p>Acknowledge the alert, check orchestration for the failing node and error class (compile, warehouse timeout, test failure). If downstream dashboards are broken, assess blast radius: can consumers use yesterday&rsquo;s table or a fallback view?</p>
+                <p>For a model failure, read <code>logs/dbt.log</code> and the warehouse error. Re-run the single model with <code>dbt run --select model_name</code> after a fix; do not re-run the entire DAG unless dependencies require it. For a test failure, decide whether to fix data, fix logic, or pause consumers while investigating.</p>
+                <p>Communicate status to stakeholders if SLAs are at risk. After recovery, capture a short incident note: root cause, fix, and preventive test or monitor. See <a href="s16-debugging-logging.html">Section 16</a> for log locations and compile versus run artifacts.</p>
+<div class="terminal">
+  <p class="term-head">Typical 3am triage sequence</p>
+  <pre class="term-body"><span class="tt-cmd">dbt run --select fct_reviews --target prod</span>
+<span class="tt-err">Database Error: Numeric value '$1,200' is not recognized</span>
+<span class="tt-dim">→ open dim_listings_cleansed compiled SQL — price cast broke on new format</span>
+<span class="tt-cmd">dbt test --select dim_listings_cleansed --target prod</span>
+<span class="tt-warn">1 of 3 FAIL — dbt_expectations regex on raw still passes; cleansed cast fails at runtime</span></pre>
+</div>
+                <p>Narrate rollback: revert the merge, re-run last green artifact, notify consumers, fix forward with a regex test on cleansed output. Production interviews want calm sequencing, not heroics.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How do you roll out a breaking model change without breaking downstream consumers?<span class="qa-tag">Production</span></summary>
+              <div class="qa-body">
+                <p>Use expand-contract: add new columns or a <code>v2</code> model alongside the old one, migrate consumers, deprecate the old model with a sunset date. Renaming or removing a column in place breaks every BI query and notebook that selected it.</p>
+                <p>For grain changes ( splitting <code>fct_reviews</code> grain, for example), ship a new fact with a new name, mark the old fact deprecated in docs, and give consumers a mapping period where both exist. Versioned schemas or aliases can shield prod while dev validates.</p>
+                <p>In dbt, leverage exposures to list downstream dashboards and owners. Notify them before merge, run their queries against the candidate schema in staging, and gate deploy on signed-off reconciliation.</p>
+                <p>The course ships <code>dim_hosts_cleansed_v2</code> alongside v1 as a teaching pattern — in production you would deprecate v1 in docs, set a removal date, and use dbt contracts (<a href="s19-production.html">Section 19</a>) if consumers depend on stable column types.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Your prod dbt job is green but the BI dashboard is stale &mdash; what do you check?<span class="qa-tag">Troubleshooting</span></summary>
+              <div class="qa-body">
+                <p>dbt finished; something after dbt did not. Check whether the BI tool caches extracts on its own schedule, whether the dashboard points at a different schema or database than prod dbt writes to, and whether a view was refreshed but an extract was not.</p>
+                <p>Verify <code>MAX(updated_at)</code> or row counts on the table the dashboard queries versus what dbt just built. A common mistake is dev target credentials in the BI connection, or an exposure documenting <code>mart_fullmoon_reviews</code> while the dashboard still queries an old table name.</p>
+                <p>Align orchestration: trigger BI refresh from the dbt job success webhook, or document independent schedules so stakeholders know the dashboard lag is expected. Exposures in <a href="s15-analyses-hooks-exposures.html">Section 15</a> help document the intended link.</p>
+                <p>Checklist item interviewers like: compare <code>MAX(review_date)</code> in the dashboard&rsquo;s SQL to the same query on the prod mart. If prod is fresh and the dashboard is not, the bug is outside dbt — do not re-run the whole DAG.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How would you structure dev, staging, and prod schemas for the Airbnb project at scale?<span class="qa-tag">Production</span></summary>
+              <div class="qa-body">
+                <p>Developers get personal schemas (or prefix) built from <code>generate_schema_name</code> macros &mdash; the course customizes this in <code>macros/generate_schema_name.sql</code>. CI writes to ephemeral CI schemas destroyed after the run. Staging mirrors prod structure with masked or sampled data for integration tests.</p>
+                <p>Prod is one canonical schema (or database) per layer: staging, dimensions, facts, marts. Raw stays loader-owned. No one queries prod tables directly for ad-hoc experiments; they branch in git and build to dev.</p>
+                <p>Document target names in <code>profiles.yml</code>, restrict prod credentials to the orchestrator, and use grants managed by dbt hooks or platform IAM so personal schemas cannot overwrite prod.</p>
+                <p>Reference the course macro <code>drop_dev_schemas.sql</code> for cleaning ephemeral dev objects — at scale, automate schema expiry so abandoned dev tables do not accumulate storage cost. Interview answer ties environment strategy to cost and security, not just naming conventions.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>When do you fail the pipeline versus warn and continue?<span class="qa-tag">Production</span></summary>
+              <div class="qa-body">
+                <p>Fail when downstream models would propagate wrong data: failed uniqueness on a primary key, broken relationship on a foreign key, freshness beyond SLA on a critical source, or a fact row-count drop beyond threshold. Continuing poisons trust and makes rollback harder.</p>
+                <p>Warn when the issue is isolated and well understood: a non-critical mart failed, a documentation-only change broke, a test flagged a known data quirk with a ticket open. Store warnings in observability tooling and review in standup.</p>
+                <p>Make the policy explicit in project docs so on-call does not debate at 3am. Severity tags on tests (<code>error</code> versus <code>warn</code> in dbt Cloud, or custom hooks) encode the contract.</p>
+                <p>Example: fail on <code>fct_reviews</code> uniqueness; warn on documentation-only test failures; fail on source freshness for raw listings if the daily executive dashboard depends on it. Connect policy to exposures in <code>dashboards.yml</code> so severity matches business impact.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How do you safely test a prod fix without writing to prod twice?<span class="qa-tag">Production</span></summary>
+              <div class="qa-body">
+                <p>Clone prod data to a staging schema or use a clone database (Snowflake zero-copy clone, BigQuery snapshot) and run <code>dbt build --target staging</code> against the fixed branch. Compare row counts and key metrics to prod before merging.</p>
+                <p>For logic-only fixes, <code>dbt compile</code> plus manual execution of compiled SQL in a worksheet limited to a sample window validates the change without materialising the full DAG. Use <code>--sample</code> when <code>event_time</code> is set, as on <code>fct_reviews</code>.</p>
+                <p>Never test experimental fixes by running unreviewed SQL directly in prod. The interview signal is disciplined promotion: dev branch, staging build, compare, merge, prod deploy with monitoring.</p>
+              </div>
+            </details>
+
+          </div>
+        </section>
+
+        <section class="section" id="architecture">
+          <h2>Architecture and trade-offs</h2>
+          <p class="muted">Senior interviews probe system design, not just SQL. Cross-link to <a href="s08-materializations.html">Section 8</a>, <a href="s10-snapshots.html">Section 10</a>, and <a href="extras.html">Extras</a> for Mesh and cost topics.</p>
+
+          <p>Architecture answers should acknowledge constraints: dbt is batch-oriented, the warehouse bills per scan, and organisational boundaries matter as much as technology. When asked about real-time or Mesh, start with &ldquo;what problem are we solving?&rdquo; before naming products.</p>
+
+          <div class="analogy"><strong>Everyday analogy &mdash;</strong> Choosing incremental versus snapshot is like choosing between a diary entry (events append) and a photo album of your house (how it looked over time). You would not take a daily full photo album of every review written; you might snapshot listing price because the source overwrites it.</div>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+
+            <details class="qa">
+              <summary>When would you choose an incremental model over a snapshot?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p>Incremental models append or merge new events efficiently &mdash; <code>fct_reviews</code> is the right tool when you have a reliable timestamp and only need current-plus-new rows, not full history of every attribute change.</p>
+                <p>Snapshots capture slowly changing attributes on a mutable source: <code>raw_listings_snapshot</code> tracks how price and availability changed even when the loader overwrites rows. Use snapshots when history matters and the source does not provide it.</p>
+                <p>If you need both event stream and attribute history, you often need both patterns: incremental facts for reviews, snapshots for listing attributes. Choosing wrong means either runaway cost (snapshotting a billion-row fact) or lost history (incremental overwrite on a dimension).</p>
+                <p>Say explicitly: <code>fct_reviews</code> with <code>event_time='review_date'</code> is optimised for append-heavy event data; <code>raw_listings_snapshot</code> captures how listing attributes drift. An interviewer follow-up might ask about hard deletes — point to snapshot hard-delete handling in <a href="s10-snapshots.html">Section 10</a>.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How would you evaluate whether to introduce dbt Mesh?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>Mesh solves ownership boundaries between teams, not performance. Evaluate it when multiple groups maintain separate dbt projects, cross-team <code>ref()</code> breaks release cadence, and contracts are negotiated informally instead of enforced.</p>
+                <p>Prerequisites: stable public models, semantic agreement on grain, CI that can run cross-project, and organizational willingness to version interfaces. If one team owns the Airbnb pipeline end to end, Mesh adds overhead without benefit.</p>
+                <p>Pilot with one downstream consumer project referencing a published package or Mesh node, measure deploy friction before and after, and read the trade-offs in <a href="extras.html">Extras</a>. Do not adopt Mesh because it is fashionable.</p>
+                <p>Anti-pattern to name: splitting the Airbnb repo into three projects because three engineers work on it — if they deploy together and share one warehouse schema, a monorepo with folders and ownership tags is simpler. Mesh pays off when legal, cadence, or stack boundaries are real.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Your company wants real-time data &mdash; how does that change the dbt architecture?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>dbt is batch-oriented. Real-time KPIs usually come from streaming into the warehouse (materialized views, streaming tables, or a separate serving layer) while dbt builds authoritative batch marts on a schedule for reconciliation and complex joins.</p>
+                <p>Draw a clear line: what must be sub-minute (operational alerts, fraud) versus what can be hourly or daily (finance, executive dashboards). Do not run dbt every minute on full models; incremental micro-batches with tight SLAs on small models are the compromise.</p>
+                <p>Document dual paths so analysts know which table is provisional versus certified. The Semantic Layer and MetricFlow (<a href="extras.html">Extras</a>) can unify definitions across batch and near-real-time sources if both expose the same grain.</p>
+                <p>For Airbnb-style analytics, reviews do not need second-level latency; listing price monitoring might. Put real-time on the narrow use case; keep <code>mart_fullmoon_reviews</code> on hourly or daily dbt with tests. Reconcile streaming counts to batch totals daily — drift between paths is a common production incident.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>When would you use a Python model like <code>dim_review_sentiment</code> instead of SQL?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p>Python models fit ML inference, API calls, and transformations SQL expresses poorly (NLP, complex stats, library ecosystems). The course&rsquo;s sentiment dimension is the pattern: call a model or UDF per batch, write results back as a table.</p>
+                <p>SQL remains default for joins, aggregations, and anything warehouse-native compute handles cheaply. Python adds operational complexity: cluster sizing, package management, longer compile times, and harder local debugging.</p>
+                <p>Interview answer: choose Python when the warehouse would ship data out to a notebook anyway; keep the boundary thin and persist results so downstream models stay SQL. See <a href="s20-poweruser-fusion-ai.html">Section 20</a> for Python model mechanics.</p>
+                <p>Downstream marts should <code>ref('dim_review_sentiment')</code> like any SQL model — the interviewer is checking you will not embed ML training inside a mart or call APIs row-by-row in SQL UDFs without batching.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How do you decide between views and tables for mart layer models?<span class="qa-tag">Cost</span></summary>
+              <div class="qa-body">
+                <p>Views are free at rest but charge on every query; tables cost storage and build time but amortize compute across consumers. A mart queried fifty times a day by a BI server should usually be a table; a mart used weekly for ad-hoc exploration can be a view.</p>
+                <p>On Snowflake, also consider dynamic tables and materialized views for middle ground. The course uses views for dimensions and incremental tables for large facts &mdash; a sensible default until query patterns prove otherwise.</p>
+                <p>Measure before optimizing: warehouse query history shows which models dominate spend. Promote hot views to tables or incremental models; demote cold tables to views if freshness allows.</p>
+                <p>Cite materialization defaults from <a href="s08-materializations.html">Section 8</a>: the course leaves dimensions as views and facts as incremental where size warrants it. In an interview, ask how many concurrent BI users hit the mart — that number drives the answer more than dogma.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>The warehouse bill doubled after adding snapshots &mdash; is that expected?<span class="qa-tag">Cost</span></summary>
+              <div class="qa-body">
+                <p>Often yes, especially timestamp-strategy snapshots that scan the full source each run. <code>raw_listings_snapshot</code> compares every row daily; as listings grow, snapshot cost grows linearly or worse if the warehouse cannot prune.</p>
+                <p>Mitigate: snapshot only columns and entities that need history, use check strategy when appropriate, reduce frequency, or move high-volume history capture to CDC. Compare snapshot cost to the cost of wrong historical reports &mdash; sometimes the bill is correct.</p>
+                <p>Track bytes scanned per snapshot in query history and alert on week-over-week growth. Snapshots are easy to add and expensive to forget.</p>
+                <p>Quantify when you can: if <code>raw_listings</code> has 50k rows and the snapshot runs daily with timestamp strategy, you scan 50k rows times 365 times per year — acceptable at course scale, unacceptable at billion-row scale. That is the cost conversation interviewers want.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Would you put raw tables in the dbt project as sources or as models?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>Sources. Raw tables are loaded by EL tools; dbt reads them via <code>source()</code> in staging models like <code>src_listings</code>. Declaring them in <code>sources.yml</code> enables freshness, source tests, and lineage without implying dbt owns the load.</p>
+                <p>Do not turn raw into models unless your team also owns extraction — that blurs ownership and makes loader failures look like transform failures. Staging is the first dbt-owned layer.</p>
+                <p>Follow-up: document the contract with the loader team (expected columns, load frequency, primary keys). Analytics engineering sits at that boundary in many organisations.</p>
+              </div>
+            </details>
+
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Pattern</th><th>Best for (Airbnb)</th><th>Main cost</th><th>Section</th></tr></thead>
+              <tbody>
+                <tr><td>Incremental table</td><td><code>fct_reviews</code> — append-only events</td><td>Merge logic complexity; full-refresh mistakes</td><td><a href="s08-materializations.html">8</a></td></tr>
+                <tr><td>Snapshot</td><td><code>raw_listings_snapshot</code> — attribute history</td><td>Full source scan each run</td><td><a href="s10-snapshots.html">10</a></td></tr>
+                <tr><td>View mart</td><td>Exploratory joins, low query volume</td><td>Repeated compute per BI query</td><td><a href="s08-materializations.html">8</a></td></tr>
+                <tr><td>Table mart</td><td><code>mart_fullmoon_reviews</code> at scale</td><td>Storage + build time</td><td><a href="s07-models.html">7</a></td></tr>
+                <tr><td>Python model</td><td><code>dim_review_sentiment</code></td><td>Cluster compute + ops</td><td><a href="s20-poweruser-fusion-ai.html">20</a></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="section" id="behavioural">
+          <h2>Behavioural and soft skills</h2>
+          <p class="muted">Analytics engineering is stakeholder work. These questions test communication and judgment under ambiguity &mdash; answer with specific stories where you can.</p>
+
+          <p>Use the STAR format (Situation, Task, Action, Result) but keep it under two minutes. If you are early in your career, say so and offer a hypothetical grounded in the Airbnb project: &ldquo;I have not had this in production yet; here is how I would handle it on <code>mart_fullmoon_reviews</code>.&rdquo; Honesty plus structure beats inventing a war story.</p>
+
+          <div class="callout tip"><strong>Questions to ask them.</strong> Good candidates ask: Who owns data quality when a source breaks? How is dbt deployed today? Is there a semantic layer? What does on-call look like for the data team? It signals you evaluate employers too.</div>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+
+            <details class="qa">
+              <summary>Tell me about a time a stakeholder disagreed with your definition of a metric?<span class="qa-tag">Behavioural</span></summary>
+              <div class="qa-body">
+                <p>Use STAR: situation (two teams reported different &ldquo;active listings&rdquo;), task (align definition without breaking existing dashboards), action (workshop to write SQL-backed definitions, implemented as a documented mart with tests), result (single source adopted, disagreement resolved by reference to docs).</p>
+                <p>Emphasize curiosity over defensiveness. You asked what decision the metric drives, discovered one side included inactive listings and the other did not, and proposed explicit status filters rather than arguing whose SQL was &ldquo;right.&rdquo;</p>
+                <p>If you lack a work example, walk through the Airbnb case: define &ldquo;review volume&rdquo; at review grain versus listing grain and show how each answer changes the number.</p>
+                <p>Interview tip: end with how you prevented recurrence — updated docs, added a semantic definition in the project overview, or created a certified metric in the semantic layer. Employers hire people who close loops, not people who win arguments.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How do you push back on a request for a report you believe is wrong?<span class="qa-tag">Behavioural</span></summary>
+              <div class="qa-body">
+                <p>Validate the underlying decision, not the requester. &ldquo;Help me understand what you will do if this number is X&rdquo; often reveals a join that double-counts or a filter that excludes the segment they care about.</p>
+                <p>Offer an alternative: prototype the requested query, show the duplication or bias with a small example, and propose a corrected version with the same shape they expect. Document both in the ticket so the choice is explicit.</p>
+                <p>If they insist after understanding the flaw, deliver with clear caveats in writing and log the exposure description. Your job is informed consent, not veto power on every bad query.</p>
+                <p>Example: a request to &ldquo;count listings with reviews&rdquo; by joining <code>dim_listings_cleansed</code> to <code>fct_reviews</code> without deduplicating listings double-counts multi-review listings. Show the inflated total beside a correct <code>COUNT(DISTINCT listing_id)</code> and let them choose.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Describe how you would onboard a new analyst to a dbt project?<span class="qa-tag">Behavioural</span></summary>
+              <div class="qa-body">
+                <p>Day one: clone repo, <code>dbt debug</code>, run <code>dbt build --select +dim_listings_cleansed</code>, open generated docs and walk the DAG from sources to marts. Day two: fix a trivial doc typo via PR to learn CI. Day three: pair on adding a column with tests.</p>
+                <p>Point them at project conventions: naming, schema layout, where macros live, how selectors work, and the team&rsquo;s definition of done (tests, description, owner). Assign a small vertical slice (one source through one mart) rather than throwing them at legacy tech debt.</p>
+                <p>Reference <a href="s06-setup.html">Section 6</a> for environment setup and <a href="s21-best-practices.html">Section 21</a> for conventions. Good onboarding produces a merged PR in the first week, not just completed videos.</p>
+                <p>Include a guided tour of <code>dbt docs generate &amp;&amp; dbt docs serve</code> — lineage clicks matter more than README prose for analysts. Assign ownership of one model in <code>schema.yml</code> descriptions so they learn documentation is part of shipping.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How do you prioritize when three teams want conflicting model changes?<span class="qa-tag">Behavioural</span></summary>
+              <div class="qa-body">
+                <p>Make trade-offs visible: impact (revenue reporting versus internal ops), effort, risk, and deadline. Escalate to a product owner or data lead with a written option set, not a hallway negotiation.</p>
+                <p>Look for shared primitives: both teams may need the same host attribute added once upstream rather than two competing marts. Sequencing matters when changes collide on the same model file.</p>
+                <p>Protect stability: freeze breaking changes near month-end close, batch contract changes, and communicate the roadmap in a public channel so teams see where they queue.</p>
+                <p>Use concrete prioritisation frameworks: RICE, ICE, or &ldquo;regulatory deadline first, then revenue-impacting KPIs, then internal convenience.&rdquo; Analytics engineering interviews are not only SQL — show you can manage a backlog without letting the DAG become everyone&rsquo;s scratch pad.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Tell me about a time you had to explain a data delay to leadership?<span class="qa-tag">Behavioural</span></summary>
+              <div class="qa-body">
+                <p>Lead with facts and ETA: what is delayed, why (upstream loader missed SLA, warehouse outage, failed test blocking deploy), when you expect recovery, and what is available now (yesterday&rsquo;s table, manual estimate).</p>
+                <p>Avoid blaming vendors without a mitigation plan. Describe what you changed so the delay is less likely next time: freshness alert, redundant schedule, or a staged rollback path.</p>
+                <p>Leadership cares about decisions blocked, not dbt logs. Frame impact in their terms: board deck numbers, campaign launch, or regulatory filing.</p>
+                <p>If you lack a personal story, describe a plausible Airbnb scenario: source freshness on <code>raw_reviews</code> failed because the loader stalled, you blocked <code>fct_reviews</code> and downstream marts, and the executive dashboard showed yesterday&rsquo;s data with a banner until recovery.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How do you handle a situation where the business wants a number you cannot defend?<span class="qa-tag">Behavioural</span></summary>
+              <div class="qa-body">
+                <p>Name the gap explicitly: missing source data, undefined grain, or a methodology that violates accounting rules. Provide a range or proxy with documented assumptions rather than a false precision point estimate.</p>
+                <p>Propose a path to a defensible number: new loader field, snapshot history, stakeholder sign-off on definition, time estimate. If they need something today, ship a labeled provisional metric separate from certified KPIs.</p>
+                <p>Protect your credibility long term. Analytics engineers who ship numbers they cannot explain become scapegoats when audits fail. Written assumptions in model descriptions and exposures are your defense.</p>
+                <p>Example: &ldquo;Average nightly revenue for full-moon listings&rdquo; when price in raw listings is a string and half the rows lack bookings — ship a provisional metric with documented exclusions, not a precise-looking false decimal in the CEO slide.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How do you explain what you do as an analytics engineer to a non-technical executive?<span class="qa-tag">Behavioural</span></summary>
+              <div class="qa-body">
+                <p>Skip &ldquo;dbt&rdquo; in the first sentence. Say you make the numbers people see in dashboards trustworthy and consistent — you define what a listing, a review, and a revenue metric mean once, test them, and document them so teams do not argue about spreadsheets.</p>
+                <p>Use the Airbnb analogy: three messy raw feeds become clean dimensions, a fact table of reviews, and dashboards everyone can rely on. You are the engineer between the database and the business decision.</p>
+                <p>If they want one word: &ldquo;I build and guard the company&rsquo;s official definitions of its data.&rdquo; That framing connects to CFO disagreements and metric ownership without jargon.</p>
+              </div>
+            </details>
+
+          </div>
+
+          <div class="callout exam"><strong>Certification overlap:</strong> Scenario interviews reuse the same distinctions as the dbt Analytics Engineering exam — materialisation choice, test types, incremental versus snapshot, and what dbt does not do. If a scenario stumps you here, revisit <a href="s22-certification.html">Section 22</a> for structured review.</div>
+
+          <h3>Red flags interviewers listen for</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Weak signal</th><th>Stronger signal</th></tr></thead>
+              <tbody>
+                <tr><td>&ldquo;I would re-run everything.&rdquo;</td><td>Isolate the failing node; use <code>dbt run --select model+</code> or <code>dbt test --select model</code></td></tr>
+                <tr><td>&ldquo;Tests passed so data is fine.&rdquo;</td><td>Tests prove declared constraints; reconcile business metrics separately</td></tr>
+                <tr><td>&ldquo;I would fix it in the dashboard.&rdquo;</td><td>Fix upstream in staging or dimensions; marts are not patch layers</td></tr>
+                <tr><td>&ldquo;Snapshots and incrementals are the same.&rdquo;</td><td>Events append incrementally; mutable attributes need snapshots or CDC</td></tr>
+                <tr><td>&ldquo;dbt loads data from the API.&rdquo;</td><td>EL is separate; dbt transforms data already in the warehouse</td></tr>
+                <tr><td>No questions for the interviewer</td><td>Ask about CI, ownership, on-call, and semantic definitions</td></tr>
+                <tr><td>&ldquo;I always full-refresh to be safe.&rdquo;</td><td>Full refresh is a controlled, expensive operation — use for deploys, not habit</td></tr>
+                <tr><td>Blurting config flags without context</td><td>Name the trade-off each flag resolves (cost, correctness, downtime)</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p class="muted">Behavioural answers are evaluated on clarity and empathy as much as technical accuracy. Practice them with the same out-loud discipline as the debugging scenarios.</p>
+        </section>
+
+        <section class="section" id="recap">
+          <h2>Recap</h2>
+          <p class="lead">Interview preparation is repetition with feedback. Work through one block per sitting; mark complete when you can answer without opening the details and when your follow-ups sound natural.</p>
+          <div class="recap">
+            <ul class="checklist">
+              <li>Structure answers: restate, inspect, hypothesize, validate, fix, prevent recurrence.</li>
+              <li>Slow models: compare compiled SQL, incremental predicates, upstream volume, and warehouse query history before changing code.</li>
+              <li>Green tests with wrong numbers mean wrong test coverage or wrong grain &mdash; reconcile at business grain, not just primary keys.</li>
+              <li>Metric disagreements are usually definition disagreements; write SQL-backed definitions before debating totals.</li>
+              <li>Put shared logic upstream of marts; wide tables are consumer products, not the only place transformations happen.</li>
+              <li>Tier tests: fast checks in CI, expensive reconciliation on a schedule; tag selectors accordingly.</li>
+              <li>Production changes use expand-contract; never rename or drop columns in place without a migration window.</li>
+              <li>Incremental for event streams; snapshots for mutable history &mdash; the Airbnb project uses both for a reason.</li>
+              <li>dbt is batch; real-time needs a deliberate dual-path architecture with certified versus provisional tables.</li>
+              <li>Behavioural answers need impact, actions, and outcomes &mdash; use the Airbnb project as a concrete example when you lack war stories.</li>
+              <li>Cross-link course sections for depth; this page trains interview reflexes, not replacement for hands-on practice.</li>
+              <li>Rehearse out loud with a peer; follow-up questions are where scenario interviews are won or lost.</li>
+              <li>Before onsite, run one full debugging narrative and one modelling trade-off narrative end-to-end with timings under five minutes each.</li>
+              <li>Bring the Airbnb DAG mental map: raw → staging → dimensions/facts → marts → exposures.</li>
+              <li>Ask your interviewer what their dbt CI looks like — shows seniority and turns the interview into a conversation.</li>
+              <li>Forty-two scenarios total: seven per theme including follow-up-style prompts on compile errors, ephemeral models, source freshness, and prod promotion.</li>
+              <li>Link debugging answers to <a href="s16-debugging-logging.html">Section 16</a>, testing to <a href="s11-tests.html">11</a>/<a href="s12-advanced-testing.html">12</a>, production to <a href="s19-production.html">19</a>, snapshots to <a href="s10-snapshots.html">10</a>.</li>
+            </ul>
+            <p class="muted">Return to the <a href="index.html">course contents</a> when you want structured lectures; return here when you want to pressure-test judgment.</p>
+            <p class="muted">Suggested study loop: one theme per day (debugging Monday, modelling Tuesday, and so on), five questions per session spoken aloud, then mark complete when you can teach the recap checklist to someone else without notes.</p>
+            <p style="margin-top:1rem;">
+              <button type="button" data-complete="interview-prep">Mark complete</button>
+            </p>
+          </div>
+        </section>
+
+      </div>
+
+      <aside class="toc" aria-label="On this page">
+        <strong>On this page</strong>
+        <ol>
+          <li><a href="#intro">How to use this page</a></li>
+          <li><a href="#interview">Debugging and incidents</a></li>
+          <li><a href="#modelling">Modelling judgment</a></li>
+          <li><a href="#testing">Testing and trust</a></li>
+          <li><a href="#production">Production and reliability</a></li>
+          <li><a href="#architecture">Architecture and trade-offs</a></li>
+          <li><a href="#behavioural">Behavioural</a></li>
+          <li><a href="#recap">Recap</a></li>
+        </ol>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<footer class="footer">The Complete dbt Bootcamp: Zero to Hero · Interview prep · Offline study edition</footer>
+</body>
+</html>

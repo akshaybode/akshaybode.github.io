@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="COF-C03 Section 12: secure data sharing, direct shares, listings, clean rooms, replication overview, and collaboration choices.">
+<title>Section 12 — Data Sharing &amp; Partner Connect | Snowflake COF-C03 Course Notes</title>
+<link rel="stylesheet" href="assets/snowflake.css">
+<script defer src="assets/search-index.js"></script>
+<script defer src="assets/sql-glossary.js"></script>
+<script defer src="assets/sql-highlight.js"></script>
+<script defer src="assets/snowflake.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">Course section 12 of 17 · SnowPro Core (COF-C03)</p>
+    <h1>Data Sharing &amp; Partner Connect</h1>
+    <p class="subtitle">Share live data without copying it, protect provider logic with secure views, publish via Marketplace or private exchanges, collaborate in clean rooms, and replicate across regions when locality matters.</p>
+    <div class="hero-meta">
+      <span class="chip">8 lectures · 33min</span>
+      <span class="chip">Exam domain: Data Collaboration</span>
+      <span class="chip">Last verified: 28 Jul 2026</span>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <nav class="pager" aria-label="Section navigation">
+    <a href="s11-security-auth.html">← Security</a>
+    <a href="../index.html">Course contents</a>
+    <a href="s13-tools-interfaces.html">Next: Tools &amp; Interfaces →</a>
+  </nav>
+
+  <main id="main">
+    <div class="layout">
+      <div class="content">
+
+        <section class="section" id="lectures">
+          <h2>Lectures in this section</h2>
+          <p class="muted">Every lecture below links to the notes that cover it.</p>
+          <ol class="lecture-list">
+            <li class="lecture">
+              <a class="lec-title" href="#share-options">Various Share Options with Snowflake</a>
+              <span class="lec-time">2:30</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#direct-share">Direct Share</a>
+              <span class="lec-time">5:00</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#direct-share">[Demo] Share Option</a>
+              <span class="lec-time">7:29</span>
+              <span class="lec-src">Data Sharing &amp; Partner Connect/Secure Data Sharing.txt</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#listings">Listings</a>
+              <span class="lec-time">3:30</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#listings">Demo : Listings</a>
+              <span class="lec-time">2:52</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#clean-rooms">Snowflake Data Clean Room</a>
+              <span class="lec-time">3:01</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#choosing-option">Sharing Use Case and How to choose best option</a>
+              <span class="lec-time">4:59</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#replication">Replication</a>
+              <span class="lec-time">3:45</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#recap">Quiz</a>
+            </li>
+          </ol>
+        </section>
+
+        <section class="section" id="share-options">
+          <h2>Various Share Options with Snowflake</h2>
+          <p class="lead"><strong>Secure Data Sharing</strong> lets a provider grant read-only access to selected objects in their account. The consumer queries <em>live</em> data through Snowflake metadata — <strong>no COPY, no FTP, no duplicate storage</strong> for the shared tables themselves.</p>
+
+          <h3>Shareable object types</h3>
+          <p>A data provider can share these object types with a consumer:</p>
+          <ul>
+            <li>Tables</li>
+            <li>External tables</li>
+            <li>Secure views</li>
+            <li>Secure materialized views</li>
+            <li>Secure UDFs</li>
+          </ul>
+          <p>Always share through <strong>secure views</strong> when you need to hide row-level logic or underlying table structure. Standard views expose their defining SQL to consumers.</p>
+
+          <div class="analogy">
+            <strong>Everyday analogy — a shared Google Sheet link:</strong> You do not email a copy of the spreadsheet every morning. You share a link; they always see the latest version. Snowflake sharing is similar — but enterprise-grade, with RBAC, secure views, and billing rules.
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Option</th><th>Best for</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><strong>Direct share</strong></td><td>Known Snowflake partner, same region/cloud</td></tr>
+                <tr><td><strong>Reader account</strong></td><td>Consumer has no Snowflake contract — provider often pays compute</td></tr>
+                <tr><td><strong>Marketplace / private listing</strong></td><td>Many buyers or invited partners with billing/discovery</td></tr>
+                <tr><td><strong>Data Clean Room</strong></td><td>Joint analytics without exposing raw PII</td></tr>
+                <tr><td><strong>Replication + local share</strong></td><td>Cross-region or compliance locality requirements</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Partner Connect</h3>
+          <p><strong>Partner Connect</strong> (Snowsight) helps you provision trial and partner integrations — BI tools, ETL partners, and similar services — into your account with guided setup. It is not another data-sharing transport: shares, listings, and clean rooms move <em>data access</em>; Partner Connect wires <em>third-party services</em> to your account.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-291-partner-connect.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-291-partner-connect.png" alt="Partner Connect diagram: Snowsight interface connecting Snowflake accounts to certified third-party partner tools and services" loading="lazy" width="1920" height="1080">
+            </a>
+            <figcaption><span class="slide-no">Slide 291</span>Partner Connect onboards third-party tools — not a substitute for secure shares.</figcaption>
+          </figure>
+
+          <p>For exam purposes, treat Partner Connect as a convenience launcher for certified integrations, not a substitute for secure shares or Marketplace listings.</p>
+
+          <div class="diagram" role="img" aria-label="Provider share to consumer database without data copy">
+            <div class="flow">
+              <div class="node pulse">Provider account<br><small class="muted">owns data</small></div>
+              <span class="arrow" aria-hidden="true">→</span>
+              <div class="node">Share object<br><small class="muted">metadata pointer</small></div>
+              <span class="arrow" aria-hidden="true">→</span>
+              <div class="node">Consumer account<br><small class="muted">read-only DB</small></div>
+            </div>
+          </div>
+
+          <div class="callout exam">
+            <strong>COF-C03 exam tip:</strong> Consumer pays compute for queries when both sides are Snowflake accounts. For <strong>reader accounts</strong> (consumer has no Snowflake contract), the <strong>provider pays</strong> compute. Shared databases are always <strong>read-only</strong> on the consumer side.
+          </div>
+        </section>
+
+        <section class="section" id="direct-share">
+          <h2>Direct Share &amp; Reader Accounts</h2>
+
+          <div class="slide-row">
+            <figure class="slide-fig">
+              <a href="assets/slides/slide-279-sharing-direct.png" target="_blank" rel="noopener">
+                <img src="assets/slides/slide-279-sharing-direct.png" alt="Direct share model: provider creates share, grants access, pays storage; consumer creates read-only database from share and pays compute" loading="lazy" width="1920" height="1080">
+              </a>
+              <figcaption><span class="slide-no">Slide 279</span>Direct share — provider pays storage, consumer pays compute.</figcaption>
+            </figure>
+            <figure class="slide-fig">
+              <a href="assets/slides/slide-280-sharing-reader.png" target="_blank" rel="noopener">
+                <img src="assets/slides/slide-280-sharing-reader.png" alt="Reader account model: provider creates share, adds objects, pays all costs; reader account can run queries but has no other access and does not pay" loading="lazy" width="1920" height="1080">
+              </a>
+              <figcaption><span class="slide-no">Slide 280</span>Reader account — provider pays everything; consumer runs queries only.</figcaption>
+            </figure>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Role</th><th>What they do</th><th>Who pays</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>Provider</strong></td>
+                  <td>Creates a share; grants access to the share; can share data from multiple databases; shares with a consumer account; can add new objects to the share afterwards; can revoke at any time</td>
+                  <td>Storage</td>
+                </tr>
+                <tr>
+                  <td><strong>Consumer</strong></td>
+                  <td>A read-only database is created from the share; treated just like any other object; can view and query data</td>
+                  <td>Compute (warehouse credits)</td>
+                </tr>
+                <tr>
+                  <td><strong>Reader account</strong></td>
+                  <td>Can run queries but has no other access; managed mini-account for orgs without Snowflake</td>
+                  <td>Provider pays all costs</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p><strong>Minimum grants into a share:</strong> <code>USAGE</code> on database and schema, then <code>SELECT</code> on tables/views. Always share through <strong>secure views</strong> when you need to hide row-level logic or underlying table structure.</p>
+
+          <h3>Sharing considerations</h3>
+          <p>Every line below has appeared on certification questions:</p>
+          <ul>
+            <li>Shared databases are <strong>read-only</strong> — consumers can view and query but cannot insert, update, or create objects.</li>
+            <li>No limit on the number of shares or the number of accounts you share with.</li>
+            <li>Cannot create a clone of a shared database or any schemas/tables in it.</li>
+            <li><strong>Time Travel</strong> is not supported on a shared database or its objects.</li>
+            <li>Editing comments on a shared database is not supported.</li>
+            <li>Shared databases and all objects in them <strong>cannot be re-shared</strong> with other accounts.</li>
+            <li>Shared databases <strong>cannot be replicated</strong>.</li>
+            <li>Can consume as many shares as you like but can create only <strong>one database per share</strong>.</li>
+            <li>Cannot share from a Business Critical account to a non-Business Critical account unless the setting is explicitly overridden.</li>
+            <li>Sharing happens between accounts on the <strong>same cloud provider and same region</strong>.</li>
+            <li>Sharing to and from <strong>VPS</strong> is not supported.</li>
+          </ul>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Shareable</th><th>Notable restrictions</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>Tables, secure views, secure materialized views, secure UDFs, external tables</td><td>Consumer DB is read-only</td></tr>
+                <tr><td>Shared DB from share</td><td><strong>Cannot re-share</strong> (no second-hop sharing)</td></tr>
+                <tr><td>Time Travel on shared objects</td><td><strong>Not supported</strong> for consumer</td></tr>
+                <tr><td>Clone shared database</td><td><strong>Not supported</strong></td></tr>
+                <tr><td>Comments on shared database</td><td><strong>Cannot edit</strong></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p class="muted">Course file: <code>Data Sharing &amp; Partner Connect/Secure Data Sharing.txt</code></p>
+          <div class="callout warn">
+            <strong>Source correction:</strong> Course file embeds real account locators, passwords (<code>Snow@12345</code>), and org names — use placeholders below and rotate any credentials used in labs.
+          </div>
+          <pre><code>USE ROLE ACCOUNTADMIN;
+USE WAREHOUSE COMPUTE_WH;
+
+CREATE DATABASE IF NOT EXISTS &lt;YOUR_DB&gt;;
+CREATE SCHEMA IF NOT EXISTS &lt;YOUR_DB&gt;.&lt;YOUR_SCHEMA&gt;;
+
+CREATE OR REPLACE TABLE share_demo (id INT, name STRING, age INT);
+INSERT INTO share_demo VALUES (1, 'John Doe', 30), (2, 'Jane Doe', 25);
+
+CREATE OR REPLACE SECURE VIEW share_demo_v AS
+SELECT id, name FROM share_demo WHERE age &gt;= 18;
+
+CREATE OR REPLACE SHARE share_lab;
+
+USE ROLE SECURITYADMIN;
+GRANT USAGE ON DATABASE &lt;YOUR_DB&gt; TO SHARE share_lab;
+GRANT USAGE ON SCHEMA &lt;YOUR_DB&gt;.&lt;YOUR_SCHEMA&gt; TO SHARE share_lab;
+GRANT SELECT ON VIEW &lt;YOUR_DB&gt;.&lt;YOUR_SCHEMA&gt;.share_demo_v TO SHARE share_lab;
+
+USE ROLE ACCOUNTADMIN;
+ALTER SHARE share_lab ADD ACCOUNTS = &lt;CONSUMER_ACCOUNT_ID&gt;;
+
+-- Optional reader account for partners without Snowflake
+CREATE MANAGED ACCOUNT reader_lab
+  ADMIN_NAME = reader_admin
+  ADMIN_PASSWORD = '&lt;STRONG_TEMP_PASSWORD&gt;'
+  TYPE = READER;
+
+ALTER SHARE share_lab ADD ACCOUNTS = &lt;READER_ACCOUNT_NAME&gt;;</code></pre>
+
+          <h4>Consumer commands (run in consumer account)</h4>
+          <pre><code>SHOW SHARES;
+
+CREATE OR REPLACE DATABASE shared_from_provider
+  FROM SHARE &lt;PROVIDER_ORG&gt;.&lt;PROVIDER_ACCOUNT&gt;.SHARE_LAB;
+
+USE WAREHOUSE consumer_xs_wh;
+SELECT * FROM shared_from_provider.&lt;YOUR_SCHEMA&gt;.share_demo_v;
+-- Expect adults only; consumer cannot INSERT/UPDATE</code></pre>
+
+          <div class="callout danger">
+            <strong>Security callout:</strong> A secure view protects provider SQL logic — it does not replace governance. Combine with row access/masking on provider side before sharing aggregated/safe columns only (see <a href="s10-access-control.html">Section 10</a>).
+          </div>
+        </section>
+
+        <section class="section" id="listings">
+          <h2>Listings, Marketplace &amp; Data Exchange</h2>
+          <p>Beyond 1:1 direct shares, Snowflake supports curated distribution models.</p>
+
+          <h3>Data Exchange</h3>
+          <p>A <strong>Data Exchange</strong> is data shared between an invited group of entities. You must contact Snowflake Support to enable it. It lets you share with partners and within your own organisation while you keep control of membership and access.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-283-data-exchange.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-283-data-exchange.png" alt="Data Exchange diagram: a provider account sharing data with multiple invited consumer accounts in a controlled exchange group" loading="lazy" width="1920" height="1080">
+            </a>
+            <figcaption><span class="slide-no">Slide 283</span>Data Exchange — invited partners and internal teams, not public discovery.</figcaption>
+          </figure>
+
+          <h3>Marketplace</h3>
+          <p>The <strong>Snowflake Marketplace</strong> provides a wide variety of data, applications, and services. Discover data and apps as you need them, with quick and hassle-free access native to Snowflake. Many offerings are free or freemium.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-287-marketplace.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-287-marketplace.png" alt="Snowflake Marketplace diagram: providers publish listings discoverable by many consumers with native Snowflake access" loading="lazy" width="1920" height="1080">
+            </a>
+            <figcaption><span class="slide-no">Slide 287</span>Marketplace — public discovery, many buyers, native Snowflake access.</figcaption>
+          </figure>
+
+          <h3>Data provider workflow</h3>
+          <p>Providers use <strong>Provider Studio</strong> (Data → Provider Studio in Snowsight). Requires <code>ACCOUNTADMIN</code> or the relevant authorisation. You can create and publish listings and monitor listing performance.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Model</th><th>Audience</th><th>Key traits</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>Public Marketplace listing</strong></td>
+                  <td>Many potential buyers</td>
+                  <td>Discoverable; free or paid listings; usage monitoring</td>
+                </tr>
+                <tr>
+                  <td><strong>Private listing / Data Exchange</strong></td>
+                  <td>Invited partners</td>
+                  <td>Controlled membership; richer metadata</td>
+                </tr>
+                <tr>
+                  <td><strong>VPS private listing</strong></td>
+                  <td>VPS provider ↔ VPS or non-VPS consumer</td>
+                  <td>1:1; not publicly searchable; Snowflake Support reviews and enables</td>
+                </tr>
+                <tr>
+                  <td><strong>Cross-cloud auto-fulfillment</strong></td>
+                  <td>Multi-region consumers</td>
+                  <td>Provider enables auto-replicate to consumer regions (listing size limits apply)</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout tip">
+            <strong>Listing workflow (conceptual):</strong> Provider prepares secure views → creates listing in Snowsight → sets pricing/refresh policy → consumers request or auto-fulfil → monitor usage in provider account. Same grant discipline as direct shares — USAGE on DB/schema plus SELECT on shared objects.
+          </div>
+        </section>
+
+        <section class="section" id="clean-rooms">
+          <h2>Snowflake Data Clean Room</h2>
+          <p>A <strong>Data Clean Room</strong> lets two or more parties run approved analytics on combined datasets without exposing raw rows to each other. Policies define which queries/templates are allowed — common in advertising, healthcare, and financial partnerships where regulations forbid copying PII.</p>
+
+          <ul>
+            <li>Consumers and providers remain in separate accounts; collaboration rules enforce output constraints.</li>
+            <li>Complements secure views and aggregation — designed for <em>joint</em> analysis, not simple read-only sharing.</li>
+            <li>Choose clean rooms when both parties need compute on overlapping populations but neither may see the other's raw table.</li>
+          </ul>
+        </section>
+
+        <section class="section" id="choosing-option">
+          <h2>Sharing Use Case — How to Choose</h2>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Need</th><th>Best option</th><th>Why</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Partner already on Snowflake, same region</td>
+                  <td>Direct secure share</td>
+                  <td>Zero copy, consumer pays compute, simplest ops</td>
+                </tr>
+                <tr>
+                  <td>Partner has no Snowflake account</td>
+                  <td>Reader account + share</td>
+                  <td>Provider pays compute; still no file exports</td>
+                </tr>
+                <tr>
+                  <td>Monetise dataset publicly</td>
+                  <td>Snowflake Marketplace listing</td>
+                  <td>Discovery, billing, legal framework</td>
+                </tr>
+                <tr>
+                  <td>Internal partner group only</td>
+                  <td>Private Data Exchange</td>
+                  <td>Controlled membership, richer metadata</td>
+                </tr>
+                <tr>
+                  <td>Joint analytics, hide raw PII</td>
+                  <td>Data Clean Room</td>
+                  <td>Policy-bound collaboration</td>
+                </tr>
+                <tr>
+                  <td>DR + local sharing in second region</td>
+                  <td>Replication + share in target</td>
+                  <td>Data physically present for locality/compliance</td>
+                </tr>
+                <tr>
+                  <td>Multi-cloud consumers for listings</td>
+                  <td>Auto-fulfillment</td>
+                  <td>Snowflake replicates product to consumer regions on demand</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout exam">
+            <strong>Decision shortcut:</strong> Same region + known partner → <strong>direct share</strong>. Many customers + billing → <strong>Marketplace</strong>. Internal partner ecosystem → <strong>private Data Exchange</strong>. Analytics without raw data exchange → <strong>Clean Room</strong>.
+          </div>
+        </section>
+
+        <section class="section" id="replication">
+          <h2>Replication</h2>
+          <p><strong>Replication</strong> copies database objects to another account (often another region or cloud) for disaster recovery, compliance residency, or to enable <strong>cross-region sharing</strong>. It is not the same mechanism as live sharing — replication materialises a copy in the target account.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-309-replication-multi.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-309-replication-multi.png" alt="Multi-region replication diagram: primary database in AWS US West Oregon replicated to secondary databases in Azure UAE North Dubai and GCP EU West 2 London" loading="lazy" width="1920" height="1080">
+            </a>
+            <figcaption><span class="slide-no">Slide 309</span>One primary can replicate to multiple secondaries across regions and clouds.</figcaption>
+          </figure>
+
+          <ul>
+            <li>Replication is only for <strong>database objects</strong>.</li>
+            <li><strong>Privileges granted on the database are not replicated</strong> — re-grant in the target account.</li>
+            <li>Replicating to a <strong>lower edition</strong> raises an error (can be overcome with ops workarounds).</li>
+            <li>Can replicate to <strong>multiple accounts</strong>.</li>
+            <li>Costs data transfer plus compute.</li>
+            <li><strong>Failover / failback</strong> (promoted secondary accounts, Business Critical DR) is exam-level overview here — deeper BCDR runbooks live in <a href="extras.html">extras.html</a>.</li>
+          </ul>
+
+          <h3>Objects that do not replicate</h3>
+          <p>These object types are excluded from replication as primary objects:</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-308-replication-objects.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-308-replication-objects.png" alt="Replication exclusions diagram: external tables, event tables, stages, pipes, and databases created from a share do not replicate from primary to secondary" loading="lazy" width="1920" height="1080">
+            </a>
+            <figcaption><span class="slide-no">Slide 308</span>External tables, event tables, stages, pipes, and share-sourced databases stay on the primary.</figcaption>
+          </figure>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Not replicated</th><th>Notes</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>External tables</td><td>Point to external cloud storage — not copied</td></tr>
+                <tr><td>Event tables</td><td>Telemetry objects — excluded</td></tr>
+                <tr><td>Stages</td><td>Replicate only when included in a replication or failover group</td></tr>
+                <tr><td>Pipes</td><td>Replicate only when included in a replication or failover group</td></tr>
+                <tr><td>Databases created FROM SHARE</td><td>Consumer-side share databases are not replication sources</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="diagram" role="img" aria-label="Replication then share for cross region collaboration">
+            <div class="flow">
+              <div class="node">Primary account<br><small class="muted">us-east-1</small></div>
+              <span class="arrow" aria-hidden="true">→</span>
+              <div class="node pulse">Replication</div>
+              <span class="arrow" aria-hidden="true">→</span>
+              <div class="node">Secondary account<br><small class="muted">eu-west-1</small></div>
+              <span class="arrow" aria-hidden="true">→</span>
+              <div class="node">Local share</div>
+            </div>
+          </div>
+
+          <div class="callout exam">
+            <strong>Exam pattern:</strong> Same cloud + same region → share directly. Cross-region or cross-cloud → <strong>replicate (or auto-fulfill listing)</strong> then share locally. VPS sharing requires a <strong>Snowflake Support / private-listing workflow</strong>.
+          </div>
+
+          <pre><code>SHOW REPLICATION DATABASES;
+SHOW REPLICATION ACCOUNTS;</code></pre>
+
+          <div class="callout danger">
+            <strong>Cost callout:</strong> Replication charges data transfer (cross-region/cloud), sync compute, and target storage. Auto-fulfillment shifts ops burden but is not free.
+          </div>
+        </section>
+
+        <section class="section" id="mistakes">
+          <h2>Common Mistakes</h2>
+          <ul>
+            <li>Sharing base tables instead of secure views — leaks schema and predicates.</li>
+            <li>Forgetting <code>USAGE</code> grants on database and schema inside the share.</li>
+            <li>Expecting consumer to INSERT into shared data — always read-only.</li>
+            <li>Trying to re-share data received from another account — not allowed.</li>
+            <li>Cross-region direct share without replication — fails region/provider rules.</li>
+            <li>Embedding lab passwords in real scripts — rotate immediately.</li>
+            <li>Assuming replicated privileges travel with data — they do not.</li>
+            <li>Confusing Partner Connect with secure data sharing — different purposes.</li>
+          </ul>
+        </section>
+
+        <section class="section" id="interview">
+          <h2>Interview questions</h2>
+          <p class="muted">Try to answer each one before opening it.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+            <details class="qa">
+              <summary>How does secure data sharing work without copying data, and what is the consumer actually querying?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>The provider grants read-only access to selected objects via a share object — metadata pointers, not file exports. The consumer creates a database <code>FROM SHARE</code> and queries live provider data through Snowflake's metadata layer. No COPY, FTP, or duplicate storage for the shared tables themselves. The consumer sees current data as the provider updates it — like a shared link, but with RBAC and secure views on the provider side.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Who pays for storage and who pays for compute in a share?<span class="qa-tag">Cost</span></summary>
+              <div class="qa-body">
+                <p>The <strong>provider always pays storage</strong> — data never leaves their account. When the consumer is a full Snowflake account in the same region, the <strong>consumer pays compute</strong> (warehouse credits) for queries against the shared database. For <strong>reader accounts</strong> — managed mini-accounts for partners without a Snowflake contract — the <strong>provider typically pays compute</strong> as well. Shared databases are read-only on the consumer side regardless of who pays.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>When would you use a direct share versus a listing versus Marketplace versus a Data Exchange?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p><strong>Direct share</strong> — one known Snowflake partner, same region/cloud, simplest ops. <strong>Private listing / Data Exchange</strong> — invited partner ecosystem with richer metadata and controlled membership. <strong>Public Marketplace listing</strong> — many potential buyers, discoverable, with billing and legal framework. Direct share is fastest for 1:1; Marketplace scales monetisation; private Exchange suits internal partner groups. All require the same grant discipline: USAGE on DB/schema plus SELECT on shared objects.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>When do you need a reader account and who pays?<span class="qa-tag">Scenario</span></summary>
+              <div class="qa-body">
+                <p>Use a reader account when the consumer organisation has <strong>no Snowflake contract</strong> — you create a managed mini-account with <code>CREATE MANAGED ACCOUNT … TYPE = READER</code> and add it to the share. The provider usually pays both storage (already theirs) and compute for reader queries. Reader accounts still get live read-only access without file exports. For partners who already have Snowflake, a direct share is simpler and shifts compute cost to them.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What object types can be shared, and which cannot?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>Shareable: tables, <strong>secure views</strong>, secure materialised views, dynamic tables, external tables, and Iceberg tables — consumer DB is always read-only. Notable restrictions: databases created <code>FROM SHARE</code> <strong>cannot be re-shared</strong> (no second-hop), Time Travel on shared objects is <strong>not supported</strong> for consumers, and cloning a shared database is <strong>not supported</strong>. Standard (non-secure) views should not be shared — they expose underlying SQL and table references.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Why must you share through a secure view instead of a standard view?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p>A standard view exposes its defining SQL and underlying table/column names to consumers with appropriate privileges — leaking schema structure and filter logic. A <strong>secure view</strong> hides that definition; consumers see only the result columns you expose. Combine secure views with row access/masking on the provider side before sharing aggregated or safe columns. Secure views protect provider logic — they do not replace governance if you grant too many base-table columns.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How does cross-region or cross-cloud sharing work, and what role does replication play?<span class="qa-tag">Scenario</span></summary>
+              <div class="qa-body">
+                <p>Direct shares require same cloud and compatible region — cross-region direct share without preparation fails. For cross-region collaboration, <strong>replicate</strong> the database to a secondary account in the target region, then create a <strong>local share</strong> there. Listings can use <strong>auto-fulfillment</strong> to replicate product data to consumer regions on demand. Replication materialises a copy (unlike live same-region sharing) and privileges are <strong>not replicated</strong> — re-grant in the target account.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What problem do data clean rooms solve?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>Clean rooms let two or more parties run approved analytics on combined datasets without exposing raw rows to each other — common in advertising, healthcare, and financial partnerships where regulations forbid copying PII. Policies define which query templates are allowed and constrain outputs. Both parties remain in separate accounts; collaboration rules enforce what each side can see. Choose clean rooms when joint analytics is needed but neither party may see the other's raw table — not for simple read-only sharing.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Can you share from a Business Critical account to a Standard-edition consumer?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p>Sharing data <em>to</em> a lower edition consumer is generally supported for read-only secure shares — the consumer queries through their own account edition. Restrictions apply to <strong>replication</strong>: you <strong>cannot replicate to a lower edition</strong> (with limited ops workarounds). VPS private listings require a Snowflake Support workflow. Tri-Secret Secure and PrivateLink features on the provider side do not force the consumer onto Business Critical — but cross-edition governance features like masking policies require Enterprise+ on the querying side.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What is Partner Connect and how does it differ from secure data sharing?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p><strong>Partner Connect</strong> (Snowsight) is a guided onboarding path for third-party integrations — BI tools, ETL partners, trial setups — wiring external services into your account. It is <em>not</em> a data-sharing transport. Secure shares, listings, and clean rooms grant <em>data access</em> between Snowflake accounts; Partner Connect provisions <em>third-party tool connections</em>. For the exam, treat Partner Connect as a convenience launcher for certified integrations, not a substitute for shares or Marketplace listings.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>List every major restriction on shared databases that appears on the exam.<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p>Shared databases are read-only — no insert, update, or object creation. No limit on shares or consumer accounts. Cannot clone shared databases/schemas/tables. Time Travel not supported. Cannot edit comments. Cannot re-share (no second hop). Shared databases cannot be replicated. One database per share on the consumer side. BC-to-non-BC sharing blocked unless overridden. Same cloud provider and same region required. VPS sharing not supported.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Which object types do not replicate, and are privileges replicated?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>Replication covers database objects only. <strong>Privileges are not replicated</strong> — re-grant in the target account. Objects that do not replicate: external tables, event tables, stages, pipes (unless in a replication/failover group), and databases created from a share. Replicating to a lower edition raises an error. Replication costs data transfer plus compute. Can replicate to multiple accounts/regions — e.g. primary in AWS US West Oregon to secondaries in Azure UAE North and GCP EU West 2 London.</p>
+              </div>
+            </details>
+          </div>
+        </section>
+
+        <section class="section" id="practice">
+          <h2>Hands-on practice</h2>
+          <p class="muted">Run these in a trial account on an X-Small warehouse with <code>AUTO_SUSPEND = 60</code>. Clean up when you finish.</p>
+          <ol class="practice-list">
+            <li class="practice">
+              <p class="practice-task">Create table <code>share_demo</code> with sample rows, then create secure view <code>share_demo_v</code> that filters to adults only (<code>age &gt;= 18</code>). Verify the view returns fewer rows than the base table.</p>
+              <p class="practice-expect">Base table has 2 rows (John Doe age 30, Jane Doe age 25). Secure view returns 2 rows (both adults). If you add a minor row, the view excludes them.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">SQL</span></summary>
+                <div class="qa-body">
+<pre><code>USE ROLE ACCOUNTADMIN;
+USE WAREHOUSE COMPUTE_WH;
+
+CREATE DATABASE IF NOT EXISTS &lt;YOUR_DB&gt;;
+CREATE SCHEMA IF NOT EXISTS &lt;YOUR_DB&gt;.&lt;YOUR_SCHEMA&gt;;
+
+CREATE OR REPLACE TABLE share_demo (id INT, name STRING, age INT);
+INSERT INTO share_demo VALUES (1, 'John Doe', 30), (2, 'Jane Doe', 25);
+
+CREATE OR REPLACE SECURE VIEW share_demo_v AS
+SELECT id, name FROM share_demo WHERE age &gt;= 18;
+
+SELECT COUNT(*) FROM share_demo;       -- expect 2
+SELECT COUNT(*) FROM share_demo_v;     -- expect 2</code></pre>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Create share <code>share_lab</code>, grant USAGE on database and schema plus SELECT on the secure view, and inspect with <code>SHOW GRANTS TO SHARE share_lab</code>. If you have a second account, add it with <code>ALTER SHARE … ADD ACCOUNTS</code>; otherwise stop after verifying grants.</p>
+              <p class="practice-expect"><code>SHOW GRANTS TO SHARE share_lab</code> lists USAGE on database, USAGE on schema, and SELECT on <code>share_demo_v</code>. Missing any of the three causes consumer-side errors.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">SQL</span></summary>
+                <div class="qa-body">
+<pre><code>CREATE OR REPLACE SHARE share_lab;
+
+USE ROLE SECURITYADMIN;
+GRANT USAGE ON DATABASE &lt;YOUR_DB&gt; TO SHARE share_lab;
+GRANT USAGE ON SCHEMA &lt;YOUR_DB&gt;.&lt;YOUR_SCHEMA&gt; TO SHARE share_lab;
+GRANT SELECT ON VIEW &lt;YOUR_DB&gt;.&lt;YOUR_SCHEMA&gt;.share_demo_v TO SHARE share_lab;
+
+SHOW GRANTS TO SHARE share_lab;
+
+-- Optional: add consumer account
+-- USE ROLE ACCOUNTADMIN;
+-- ALTER SHARE share_lab ADD ACCOUNTS = &lt;CONSUMER_ACCOUNT_ID&gt;;</code></pre>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Confirm the consumer database would be read-only: attempt an INSERT into <code>share_demo_v</code> as the provider and observe the error.</p>
+              <p class="practice-expect">INSERT fails — views and shared objects are not writable by consumers; even on the provider side, inserting into a secure view may fail depending on view definition. Consumers creating a database FROM SHARE get a read-only shared database.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">SQL</span></summary>
+                <div class="qa-body">
+<pre><code>INSERT INTO share_demo_v (id, name) VALUES (99, 'Should Fail');
+-- Expect error: DML operation not supported on view or insufficient privileges
+
+-- Consumer perspective (in consumer account):
+-- CREATE DATABASE shared_from_provider FROM SHARE &lt;PROVIDER_ORG&gt;.&lt;PROVIDER_ACCOUNT&gt;.SHARE_LAB;
+-- INSERT INTO shared_from_provider.&lt;YOUR_SCHEMA&gt;.share_demo_v VALUES (99, 'Fail');
+-- Expect: Shared database is read-only</code></pre>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Write down the provider vs consumer vs reader-account billing split and three sharing restrictions (read-only, no re-share, one DB per share) from memory before checking the notes.</p>
+              <p class="practice-expect">Provider pays storage. Consumer pays compute. Reader account: provider pays all. Restrictions include read-only consumer DB, no re-sharing, one database per share, no Time Travel, same cloud/region.</p>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Run <code>SHOW REPLICATION DATABASES</code> and <code>SHOW REPLICATION ACCOUNTS</code> to inspect replication readiness, then drop the share and all demo objects in the correct order.</p>
+              <p class="practice-expect">Replication commands return current account configuration (may be empty in a trial account). Cleanup revokes share grants before dropping the share, then drops view and table.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">SQL</span></summary>
+                <div class="qa-body">
+<pre><code>SHOW REPLICATION DATABASES;
+SHOW REPLICATION ACCOUNTS;
+
+-- Cleanup (revoke before drop)
+USE ROLE SECURITYADMIN;
+REVOKE SELECT ON VIEW &lt;YOUR_DB&gt;.&lt;YOUR_SCHEMA&gt;.share_demo_v FROM SHARE share_lab;
+REVOKE USAGE ON SCHEMA &lt;YOUR_DB&gt;.&lt;YOUR_SCHEMA&gt; FROM SHARE share_lab;
+REVOKE USAGE ON DATABASE &lt;YOUR_DB&gt; FROM SHARE share_lab;
+
+USE ROLE ACCOUNTADMIN;
+DROP SHARE IF EXISTS share_lab;
+DROP VIEW IF EXISTS share_demo_v;
+DROP TABLE IF EXISTS share_demo;</code></pre>
+                </div>
+              </details>
+            </li>
+          </ol>
+        </section>
+
+        <section class="section" id="recap">
+          <h2>Recap</h2>
+          <div class="recap">
+            <ul class="checklist">
+              <li>Shareable: tables, external tables, secure views, secure materialized views, secure UDFs.</li>
+              <li>Provider pays storage; consumer pays compute; reader account — provider pays all.</li>
+              <li>Shared DB read-only; no clone, Time Travel, comment edits, re-share, or replication.</li>
+              <li>One database per share; same cloud + region; VPS sharing not supported.</li>
+              <li>BC to non-BC sharing blocked unless setting overridden.</li>
+              <li>Data Exchange: invited group, contact Support; Marketplace: public discovery.</li>
+              <li>Provider Studio: ACCOUNTADMIN publishes and monitors listings.</li>
+              <li>Partner Connect onboards third-party tools — not a share transport.</li>
+              <li>Replication: DB objects only; privileges not replicated; lower edition errors.</li>
+              <li>Not replicated: external tables, event tables, stages, pipes, share-sourced DBs.</li>
+              <li>Cross-region: replicate primary then share locally (e.g. AWS Oregon → Azure Dubai, GCP London).</li>
+            </ul>
+            <p style="margin-top:1rem;">
+              <button type="button" data-complete="section-12">Mark complete</button>
+            </p>
+          </div>
+        </section>
+
+      </div>
+
+      <aside class="toc" aria-label="On this page">
+        <strong>On this page</strong>
+        <ol>
+          <li><a href="#lectures">Lectures</a></li>
+          <li><a href="#share-options">Share options</a></li>
+          <li><a href="#direct-share">Direct share</a></li>
+          <li><a href="#listings">Listings</a></li>
+          <li><a href="#clean-rooms">Clean rooms</a></li>
+          <li><a href="#choosing-option">Choosing an option</a></li>
+          <li><a href="#replication">Replication</a></li>
+          <li><a href="#mistakes">Common mistakes</a></li>
+          <li><a href="#interview">Interview questions</a></li>
+          <li><a href="#practice">Hands-on practice</a></li>
+          <li><a href="#recap">Recap</a></li>
+        </ol>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<footer class="footer">Snowflake COF-C03 Course Notes · Section 12 · Offline study edition</footer>
+</body>
+</html>

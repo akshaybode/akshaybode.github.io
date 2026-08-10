@@ -1,0 +1,1199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="COF-C03 Section 9: micro-partitions, pruning, clustering, caching, Query Profile, resource monitors, SOS, QAS, and performance tuning.">
+<title>Section 9 — Snowflake Performance | Snowflake COF-C03 Course Notes</title>
+<link rel="stylesheet" href="assets/snowflake.css">
+<script defer src="assets/search-index.js"></script>
+<script defer src="assets/sql-glossary.js"></script>
+<script defer src="assets/sql-highlight.js"></script>
+<script defer src="assets/snowflake.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">Course section 9 of 17 · SnowPro Core (COF-C03)</p>
+    <h1>Snowflake Performance</h1>
+    <p class="subtitle">Read less data through pruning and clustering, reuse work through three cache layers, diagnose queries with the Query Profile, cap spend with resource monitors, and apply Search Optimization and Query Acceleration when appropriate.</p>
+    <div class="hero-meta">
+      <span class="chip">16 lectures · 1hr 19min</span>
+      <span class="chip">Exam domain: Performance Optimization, Querying &amp; Transformation</span>
+      <span class="chip">Last verified: 28 Jul 2026</span>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <nav class="pager" aria-label="Section navigation">
+    <a href="s08-more-features.html">← More Features</a>
+    <a href="../index.html">Course contents</a>
+    <a href="s10-access-control.html">Next: Access Control →</a>
+  </nav>
+
+  <main id="main">
+    <div class="layout">
+      <div class="content">
+
+        <section class="section" id="lectures">
+          <h2>Lectures in this section</h2>
+          <p class="muted">Every lecture below links to the notes that cover it.</p>
+          <ol class="lecture-list">
+            <li class="lecture">
+              <a class="lec-title" href="#micro-partitions">Micro Partition Concept</a>
+              <span class="lec-time">3:50</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#query-pruning">Query Pruning Concept</a>
+              <span class="lec-time">0:59</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#clustering">Data Clustering Concept</a>
+              <span class="lec-time">7:34</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#clustering">Clustering Key Concept</a>
+              <span class="lec-time">3:32</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#clustering">Demo : Clustering</a>
+              <span class="lec-time">5:26</span>
+              <span class="lec-src">Snowflake Performance/Clustering.txt</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#clustering">Quiz</a>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#caching">Snowflake Caching Concept</a>
+              <span class="lec-time">4:49</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#caching">Demo : Snowflake Caching</a>
+              <span class="lec-time">5:04</span>
+              <span class="lec-src">Snowflake Performance/Caching.txt</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#query-profile">Query Profile Concept</a>
+              <span class="lec-time">7:53</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#query-profile">Demo : Query Profile</a>
+              <span class="lec-time">8:20</span>
+              <span class="lec-src">Snowflake Performance/Query Profile.txt</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#resource-monitors">Resource Monitoring Concept</a>
+              <span class="lec-time">2:35</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#resource-monitors">Demo : Resource Monitoring</a>
+              <span class="lec-time">5:07</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#resource-monitors">Quiz</a>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#sos">Search Optimization Service Concept</a>
+              <span class="lec-time">3:42</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#sos">Demo : Search Optimization Service</a>
+              <span class="lec-time">4:52</span>
+              <span class="lec-src">Snowflake Performance/Search Optimization Services (SOS).txt</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#qas">Demo : Query Acceleration Service</a>
+              <span class="lec-time">6:18</span>
+              <span class="lec-src">Snowflake Performance/Query Acceleration Service (QAS).txt</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#monitoring">Demo : Compute and Storage Monitoring</a>
+              <span class="lec-time">5:01</span>
+              <span class="lec-src">Snowflake Performance/Storage Check.txt</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#workflow">Overall Performance Optimization</a>
+              <span class="lec-time">4:14</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#recap">Quiz</a>
+            </li>
+          </ol>
+        </section>
+
+        <section class="section" id="micro-partitions">
+          <h2>Micro-Partitions</h2>
+          <p class="lead">Snowflake automatically divides table data into immutable <strong>micro-partitions</strong> — the unit of pruning, Time Travel, and zero-copy cloning. You never define or manage them manually.</p>
+
+          <p>Traditional databases rely on <strong>static partitioning</strong> to manage performance and scaling. That design creates maintenance overhead and can produce <strong>data skew</strong> when partition boundaries no longer match how data is loaded or queried. Snowflake sidesteps both problems: the service divides each table into micro-partitions automatically — you never declare partition keys or run repartition jobs.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-164-micro-partitions.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-164-micro-partitions.png" alt="Micro-partitioning: Snowflake automatically divides a table into micro-partitions of 50-500 MB uncompressed columnar data, millions of partitions on large tables, immutability enabling Time Travel and cloning" loading="lazy" width="1920" height="1080">
+            </a>
+            <figcaption><span class="slide-no">Slide 164</span>Automatic division into columnar micro-partitions — the foundation for pruning, Time Travel, and zero-copy cloning.</figcaption>
+          </figure>
+
+          <div class="analogy">
+            <strong>Everyday analogy — index cards in a filing cabinet:</strong> Each micro-partition is a card summarising a chunk of rows (min/max values per column). When you filter <code>WHERE sale_date = '2024-01-15'</code>, Snowflake reads only cards whose date range could contain that value — skipping entire drawers of irrelevant data.
+          </div>
+
+          <ul>
+            <li><strong>Size:</strong> Roughly 50–500 MB of <em>uncompressed</em> data per partition (Snowflake compresses further on disk).</li>
+            <li><strong>Format:</strong> Columnar storage within each partition — excellent for analytic scans.</li>
+            <li><strong>Scale:</strong> Large tables may contain millions of micro-partitions.</li>
+            <li><strong>Immutability:</strong> DML creates new partitions; old versions remain for Time Travel.</li>
+            <li><strong>Metadata per partition:</strong> The range of values for each column, the number of distinct values, and additional statistics Snowflake uses to optimise query processing — all read before any data scan (powers pruning without user-defined indexes).</li>
+            <li><strong>Clustering:</strong> Optional <code>CLUSTER BY</code> co-locates related values to reduce overlap and improve pruning on large tables (covered below).</li>
+          </ul>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-166-mp-metadata.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-166-mp-metadata.png" alt="Per micro-partition metadata: range of values for each column, number of distinct values, and additional information used for optimised query processing" loading="lazy" width="1920" height="1080">
+            </a>
+            <figcaption><span class="slide-no">Slide 166</span>Snowflake stores min/max ranges, distinct counts, and other stats per micro-partition so the optimizer can skip partitions without touching data.</figcaption>
+          </figure>
+
+          <div class="diagram" role="img" aria-label="Table divided into micro-partitions with metadata pruning">
+            <div class="flow">
+              <div class="node">Full table<br><small class="muted">millions of rows</small></div>
+              <span class="arrow" aria-hidden="true">→</span>
+              <div class="node pulse">Pruning<br><small class="muted">read metadata first</small></div>
+              <span class="arrow" aria-hidden="true">→</span>
+              <div class="node">Scan subset<br><small class="muted">only matching MPs</small></div>
+            </div>
+          </div>
+
+          <div class="callout warn">
+            <strong>Common mistakes:</strong>
+            <ul>
+              <li>Assuming you must create indexes — Snowflake uses micro-partition metadata instead.</li>
+              <li>Expecting manual partition management — partitioning is automatic on load.</li>
+              <li>Confusing <em>clustering</em> (performance tuning) with <em>micro-partitions</em> (automatic storage units).</li>
+            </ul>
+          </div>
+        </section>
+
+        <section class="section" id="query-pruning">
+          <h2>Query Pruning</h2>
+          <p><strong>Query pruning</strong> means skipping the unnecessary scan of micro-partitions: before reading any column data, the optimizer checks each partition's metadata and ignores partitions whose value ranges cannot satisfy your filter. That is how large tables stay queryable — you pay I/O only for partitions that might contain matching rows.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-168-pruning.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-168-pruning.png" alt="Query pruning diagram: a WHERE filter causes Snowflake to read micro-partition metadata and skip partitions that cannot match, scanning only the remaining subset" loading="lazy" width="1920" height="1080">
+            </a>
+            <figcaption><span class="slide-no">Slide 168</span>Pruning reads metadata first and scans only micro-partitions that might match — the main lever for scan cost on large tables.</figcaption>
+          </figure>
+
+          <p>Each micro-partition stores column min/max, distinct counts, and related statistics — metadata Snowflake reads <em>before</em> touching data.</p>
+
+          <ul>
+            <li><strong>Query pruning</strong> = skipping partitions whose metadata proves they cannot match your filter.</li>
+            <li>No user-defined indexes — pruning uses partition metadata.</li>
+            <li>Partitions are immutable; DML creates new versions (supports Time Travel).</li>
+            <li>Very large tables may have millions of micro-partitions — pruning quality matters enormously.</li>
+          </ul>
+
+          <div class="diagram" role="img" aria-label="Pruning flow from filter to metadata scan to subset read">
+            <div class="flow">
+              <div class="node">WHERE filter</div>
+              <span class="arrow" aria-hidden="true">→</span>
+              <div class="node pulse">Read MP metadata</div>
+              <span class="arrow" aria-hidden="true">→</span>
+              <div class="node">Scan matching MPs only</div>
+            </div>
+          </div>
+
+          <div class="callout tip">
+            <strong>Pruning-friendly filters:</strong> Equality and range predicates on physical columns prune well. Functions on columns (e.g. <code>YEAR(order_date)</code>) often block pruning — filter on raw column instead: <code>order_date BETWEEN '2024-01-01' AND '2024-12-31'</code>.
+          </div>
+
+          <div class="callout exam">
+            <strong>COF-C03 exam tip:</strong> Warehouse cost depends on <em>size × runtime</em>, not SQL complexity. A bad query on an X-Large warehouse still costs more than a good query on Small — tuning queries often beats blindly scaling up. Right-sizing warehouses is covered in <a href="s02-basic-concepts.html">Section 2 — Basic Concepts</a>.
+          </div>
+        </section>
+
+        <section class="section" id="clustering">
+          <h2>Clustering &amp; Clustering Keys</h2>
+          <p>As tables grow, natural load order may scatter filter values across many overlapping micro-partitions. <strong>Data clustering</strong> is Snowflake's technique for co-locating rows with the same key values in the same micro-partitions — improving query performance and optimising cost by letting pruning skip more partitions per query.</p>
+
+          <blockquote class="muted" style="border-left:3px solid var(--accent);padding-left:1rem;margin:1.25rem 0;">
+            Clustering co-locates same-value data in the same micro-partitions to improve performance and optimise cost.
+          </blockquote>
+
+          <div class="grid-2">
+            <div class="mini-card">
+              <h4>What clustering gives you</h4>
+              <ul>
+                <li><strong>Automatic</strong> background reclustering once you enable it with <code>CLUSTER BY</code></li>
+                <li>Reduces micro-partition scanning on selective filters</li>
+                <li>Improves performance on repeated WHERE and ORDER BY patterns</li>
+              </ul>
+            </div>
+            <div class="mini-card">
+              <h4>What clustering costs</h4>
+              <ul>
+                <li><strong>Storage</strong> — clustered layout may use additional space</li>
+                <li><strong>Serverless compute</strong> — recluster maintenance credits on an ongoing basis</li>
+                <li>Measure before/after; small tables rarely justify the spend</li>
+              </ul>
+            </div>
+          </div>
+
+          <h3>When to consider clustering</h3>
+          <p>Choose a candidate table when most of the following apply:</p>
+          <ul>
+            <li>Table has a <strong>large number</strong> of micro-partitions.</li>
+            <li>Queries read a <strong>small fraction</strong> of total rows via <code>WHERE</code> but would otherwise scan many partitions.</li>
+            <li>Queries <strong>sort</strong> with <code>ORDER BY</code> on the same columns you filter on.</li>
+            <li>Many or most queries <strong>select or sort on the same few columns</strong>.</li>
+          </ul>
+
+          <h3>Clustering metadata</h3>
+          <p>Snowflake tracks clustering quality so you can evaluate keys before and after enabling recluster. The metrics that matter for the exam:</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Metric</th><th>Meaning</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Total micro-partitions</td>
+                  <td>How many partitions the table currently spans.</td>
+                </tr>
+                <tr>
+                  <td>Overlapping partitions</td>
+                  <td>Count of partitions whose column value ranges overlap with other partitions — overlap forces pruning to scan more files than necessary.</td>
+                </tr>
+                <tr>
+                  <td>Clustering depth</td>
+                  <td>Depth of the overlapping partition groups — lower is better. Check with <code>SYSTEM$CLUSTERING_DEPTH('table')</code>.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>The course deck walks through a concrete before/after: an unclustered table shows <strong>5 overlapping partitions at depth 5</strong>, with value ranges spanning A–Z across multiple files. After partial clustering, overlap drops to <strong>3 partitions at depth 2</strong> with tighter ranges (A–D, E–J, K–N, etc.). Once reclustering finishes, overlap can reach <strong>0 at depth 1</strong> — each partition owns a disjoint range and pruning becomes maximally effective.</p>
+
+          <div class="slide-row">
+            <figure class="slide-fig">
+              <a href="assets/slides/slide-173-clustering-depth-bad.png" target="_blank" rel="noopener">
+                <img src="assets/slides/slide-173-clustering-depth-bad.png" alt="Before clustering: five micro-partitions with overlapping A-Z value ranges, five overlapping partitions at overlap depth 5" loading="lazy" width="1920" height="1080">
+              </a>
+              <figcaption><span class="slide-no">Slide 173</span>Before clustering — overlapping ranges (many A–Z partitions) mean a single filter value may require scanning multiple files.</figcaption>
+            </figure>
+            <figure class="slide-fig">
+              <a href="assets/slides/slide-174-clustering-depth-good.png" target="_blank" rel="noopener">
+                <img src="assets/slides/slide-174-clustering-depth-good.png" alt="After clustering: partitions with disjoint ranges A-D, E-J, K-N, O-S, T-Z; overlap depth drops from 3 to 2 then to 0 at depth 1" loading="lazy" width="1920" height="1080">
+              </a>
+              <figcaption><span class="slide-no">Slide 174</span>After clustering — disjoint ranges per partition; overlap depth falls toward 1 as reclustering completes.</figcaption>
+            </figure>
+          </div>
+
+          <h3>Clustering keys</h3>
+          <p>A <strong>clustering key</strong> is analogous to an index or key in a traditional RDBMS: a set of columns designed to co-locate related rows within micro-partitions. You declare it once; Snowflake's automatic recluster service maintains the layout.</p>
+
+          <h3>Key functions &amp; commands</h3>
+          <ul>
+            <li><code>SYSTEM$CLUSTERING_INFORMATION('table', '(col)')</code> — evaluate candidate keys.</li>
+            <li><code>ALTER TABLE t CLUSTER BY (col)</code> — enable clustering (background recluster credits apply).</li>
+            <li><code>SYSTEM$CLUSTERING_DEPTH('table')</code> — average overlap depth (lower is better).</li>
+            <li><code>ALTER TABLE t SUSPEND RECLUSTER</code> / <code>RESUME RECLUSTER</code> — pause/resume maintenance.</li>
+            <li><code>ALTER TABLE t DROP CLUSTERING KEY</code> — stop clustering.</li>
+          </ul>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Clustering key choice</th><th>Guidance</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Most-used WHERE columns</td>
+                  <td>Pick the column that appears most often in filter predicates — date keys, tenant IDs, and region codes commonly prune well.</td>
+                </tr>
+                <tr>
+                  <td>Join keys</td>
+                  <td>Consider columns used in frequent equi-join predicates.</td>
+                </tr>
+                <tr>
+                  <td>Cardinality balance</td>
+                  <td>Too <strong>low</strong> → minimal pruning benefit; too <strong>high</strong> → inefficient grouping and expensive recluster with diminishing returns.</td>
+                </tr>
+                <tr>
+                  <td>Multi-column keys</td>
+                  <td>Order from <strong>low to high cardinality</strong> (per course guidance).</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout warn">
+            <strong>Cost warning:</strong> Clustering consumes serverless recluster credits. On small tables or full-scan workloads, clustering may cost money without meaningful speedup. Always measure before/after with <code>USE_CACHED_RESULT = FALSE</code>.
+          </div>
+
+          <p class="muted">Course file: <code>Snowflake Performance/Clustering.txt</code></p>
+          <pre><code>USE ROLE ACCOUNTADMIN;
+USE WAREHOUSE COMPUTE_WH;
+
+CREATE DATABASE IF NOT EXISTS &lt;YOUR_DB&gt;;
+CREATE SCHEMA IF NOT EXISTS &lt;YOUR_DB&gt;.&lt;YOUR_SCHEMA&gt;;
+USE DATABASE &lt;YOUR_DB&gt;;
+USE SCHEMA &lt;YOUR_SCHEMA&gt;;
+
+ALTER SESSION SET USE_CACHED_RESULT = FALSE;
+
+CREATE OR REPLACE TABLE cluster_sample AS
+SELECT * FROM SNOWFLAKE_SAMPLE_DATA.TPCDS_SF100TCL.STORE_SALES
+LIMIT 2000000;  -- reduce row count if credits are tight
+
+SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'CLUSTER_SAMPLE';
+
+SELECT SYSTEM$CLUSTERING_INFORMATION('CLUSTER_SAMPLE', '(SS_TICKET_NUMBER)');
+SELECT SYSTEM$CLUSTERING_INFORMATION('CLUSTER_SAMPLE', '(SS_SOLD_DATE_SK)');
+
+-- Before clustering
+SELECT COUNT(*) FROM cluster_sample WHERE ss_sold_date_sk = 2451226;
+
+ALTER TABLE cluster_sample CLUSTER BY (ss_sold_date_sk);
+
+-- After clustering (allow recluster time)
+SELECT SYSTEM$CLUSTERING_DEPTH('CLUSTER_SAMPLE');
+SELECT COUNT(*) FROM cluster_sample WHERE ss_sold_date_sk = 2451226;
+
+ALTER TABLE cluster_sample SUSPEND RECLUSTER;
+ALTER TABLE cluster_sample RESUME RECLUSTER;</code></pre>
+
+          <h4>Cleanup</h4>
+          <pre><code>ALTER TABLE IF EXISTS cluster_sample DROP CLUSTERING KEY;
+DROP TABLE IF EXISTS cluster_sample;</code></pre>
+        </section>
+
+        <section class="section" id="caching">
+          <h2>The Three Caches</h2>
+          <p>Snowflake has three distinct caches at different architectural layers. Confusing them is a frequent exam trap — each lives in a different tier, stores different artefacts, and invalidates under different conditions.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-194-caches.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-194-caches.png" alt="Snowflake architecture diagram with Query Result Cache and Metadata Cache in Cloud Services layer and Warehouse Cache in Query Processing layer above Database Storage" loading="lazy" width="1920" height="1080">
+            </a>
+            <figcaption><span class="slide-no">Slide 194</span>Result and metadata caches sit in Cloud Services; warehouse (local disk) cache sits on compute nodes in the Query Processing layer.</figcaption>
+          </figure>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Cache</th><th>Layer</th><th>What it stores</th><th>Invalidation / notes</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>Result cache</strong></td>
+                  <td>Cloud Services</td>
+                  <td>Complete query results (24 h TTL)</td>
+                  <td>Exact same query text only; controlled by <code>USE_CACHED_RESULT</code>. Does not work with runtime-evaluated functions such as <code>CURRENT_TIMESTAMP()</code> or <code>UUID_STRING()</code>, with external functions, or when table data, configuration, or micro-partitions change. <code>CURRENT_DATE()</code> is a documented exception — it can still allow a cache hit.</td>
+                </tr>
+                <tr>
+                  <td><strong>Metadata cache</strong></td>
+                  <td>Cloud Services</td>
+                  <td>Table metadata — row counts, MIN/MAX values, distinct counts, and similar statistics</td>
+                  <td>Powers cheap metadata queries; <strong>no warehouse required</strong> for many SHOW/DESCRIBE/COUNT(*) operations.</td>
+                </tr>
+                <tr>
+                  <td><strong>Warehouse (local disk) cache</strong></td>
+                  <td>Query Processing</td>
+                  <td>Recently scanned micro-partition data cached on worker-node local disk</td>
+                  <td>Local to the warehouse; <strong>purged when the warehouse suspends or shuts down</strong>. Tune <code>AUTO_SUSPEND</code>: aggressive suspend saves idle credits but cold-starts every session — judge whether keeping the warehouse warm is worth the cache hits.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="diagram" role="img" aria-label="Three cache layers stacked">
+            <div class="stack">
+              <div class="layer pulse">Result cache — full query answers (Cloud Services)</div>
+              <div class="layer">Metadata cache — table statistics (Cloud Services)</div>
+              <div class="layer">Warehouse cache — scanned data blocks (compute nodes)</div>
+            </div>
+          </div>
+
+          <div class="callout exam">
+            <strong>Exam tip:</strong> Identical SQL can hit the result cache only when underlying data is unchanged and the query contains no volatile functions. <code>CURRENT_TIMESTAMP()</code>, <code>UUID_STRING()</code>, and <code>RANDSTR()</code> force fresh execution. <code>CURRENT_DATE()</code> is the notable exception — it is evaluated once per day and can still produce cache hits. External functions also bypass the result cache.
+          </div>
+
+          <div class="callout info">
+            <strong>Result-cache blockers (current docs):</strong> Besides runtime functions and external functions, cache misses occur when underlying table data, session/object configuration, or micro-partitions change. Use <code>ALTER SESSION SET USE_CACHED_RESULT = FALSE</code> when benchmarking so a second run does not look artificially fast.
+          </div>
+
+          <p class="muted">Course file: <code>Snowflake Performance/Caching.txt</code></p>
+          <pre><code>ALTER SESSION SET USE_CACHED_RESULT = TRUE;
+
+-- First run: uses warehouse
+SELECT * FROM SNOWFLAKE_SAMPLE_DATA.TPCDS_SF100TCL.WEB_RETURNS LIMIT 1000;
+
+-- Repeat exact query within 24h: may hit result cache (0 WH credits)
+SELECT * FROM SNOWFLAKE_SAMPLE_DATA.TPCDS_SF100TCL.WEB_RETURNS LIMIT 1000;
+
+-- Documented result-cache blockers
+SELECT RANDOM(), *
+FROM SNOWFLAKE_SAMPLE_DATA.TPCDS_SF100TCL.INVENTORY LIMIT 100;
+
+-- Metadata cache: COUNT can use cloud services without WH
+ALTER WAREHOUSE COMPUTE_WH SUSPEND;
+SELECT COUNT(*) FROM SNOWFLAKE_SAMPLE_DATA.TPCDS_SF100TCL.CATALOG_SALES;
+
+ALTER WAREHOUSE COMPUTE_WH RESUME;
+
+-- Warehouse local cache: scan, suspend, resume, re-scan
+ALTER SESSION SET USE_CACHED_RESULT = FALSE;
+SELECT * FROM SNOWFLAKE_SAMPLE_DATA.TPCDS_SF100TCL.INVENTORY LIMIT 1000;
+ALTER WAREHOUSE COMPUTE_WH SUSPEND;
+ALTER WAREHOUSE COMPUTE_WH RESUME;
+SELECT * FROM SNOWFLAKE_SAMPLE_DATA.TPCDS_SF100TCL.INVENTORY LIMIT 1000;</code></pre>
+        </section>
+
+        <section class="section" id="query-profile">
+          <h2>Query Profile</h2>
+          <p>The <strong>Query Profile</strong> (Snowsight → Query History → select query → Profile) is your X-ray. It shows operators (TableScan, Join, Aggregate), bytes scanned, partitions scanned vs total, spill, and time spent per step.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-183-query-profile.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-183-query-profile.png" alt="Snowsight Query Profile view showing operator tree, execution timeline, partitions scanned, bytes scanned, and percentage of total query time per step" loading="lazy" width="1920" height="1080">
+            </a>
+            <figcaption><span class="slide-no">Slide 183</span>The Profile breaks a query into operators so you can see where time and bytes concentrate — start here before resizing a warehouse.</figcaption>
+          </figure>
+
+          <h3>What to look for first</h3>
+          <ol>
+            <li><strong>Partitions scanned</strong> — high ratio means weak pruning or full table scan.</li>
+            <li><strong>Bytes scanned</strong> — disproportionate to result size? Add filters or clustering.</li>
+            <li><strong>Spilling</strong> — memory exceeded; warehouse too small or query too heavy.</li>
+            <li><strong>Most expensive operator</strong> — often TableScan or Join; focus optimisation there.</li>
+            <li><strong>Queued time</strong> — warehouse overloaded; separate workloads or multi-cluster (Enterprise+).</li>
+          </ol>
+
+          <div class="diagram" role="img" aria-label="Tuning loop from slow query to profile to fix to remeasure">
+            <div class="flow">
+              <div class="node">Slow query</div>
+              <span class="arrow" aria-hidden="true">→</span>
+              <div class="node pulse">Query Profile</div>
+              <span class="arrow" aria-hidden="true">→</span>
+              <div class="node">Fix prune/join/size</div>
+              <span class="arrow" aria-hidden="true">→</span>
+              <div class="node">Re-run &amp; compare</div>
+            </div>
+          </div>
+
+          <h3>Data spill</h3>
+          <p><strong>Spilling</strong> happens when an operator (sort, join, aggregate) exceeds available memory. Snowflake spills to local disk, then remote storage — dramatically slower. The Profile highlights spill bytes so you can tell whether the warehouse simply needs more memory or the SQL shape is wrong.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-184-data-spilling.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-184-data-spilling.png" alt="Query Profile operator detail showing data spilling from memory to local or remote storage when a sort or join exceeds available RAM" loading="lazy" width="1920" height="1080">
+            </a>
+            <figcaption><span class="slide-no">Slide 184</span>Spill in the Profile means an operator ran out of memory — scale up, filter earlier, or reduce concurrency.</figcaption>
+          </figure>
+
+          <p>Mitigations: scale warehouse up, filter before join, avoid <code>SELECT *</code>, or lower concurrency (<code>MAX_CONCURRENCY_LEVEL</code>).</p>
+
+          <h3>EXPLAIN plans</h3>
+          <p><code>EXPLAIN</code> shows the logical plan Snowflake intends to execute — useful for understanding join order and scan types <em>without running</em> the query or spending warehouse credits on the full execution:</p>
+          <pre><code>EXPLAIN [ USING { TABULAR | JSON | TEXT } ] &lt;statement&gt;;</code></pre>
+          <p>EXPLAIN does not show actual partition counts — use Query Profile after execution for real metrics.</p>
+
+          <h3>Query history retention</h3>
+          <p>Where you look up past queries depends on how far back you need to reach — a classic exam question:</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Source</th><th>Retention</th><th>Notes</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>Snowsight Query History</strong> (Admin → Monitoring)</td>
+                  <td><strong>14 days</strong></td>
+                  <td>Interactive UI; opens the Query Profile for each query.</td>
+                </tr>
+                <tr>
+                  <td><code>TABLE(INFORMATION_SCHEMA.QUERY_HISTORY(...))</code></td>
+                  <td><strong>7 days</strong></td>
+                  <td>Table function in the current account; good for recent session debugging.</td>
+                </tr>
+                <tr>
+                  <td><code>SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY</code></td>
+                  <td><strong>Up to 365 days</strong></td>
+                  <td>Account-wide view; requires appropriate role; latency up to ~45 minutes. Deeper governance views (including access history) are covered in <a href="s11-security-auth.html">Section 11 — Security &amp; Authentication</a>.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p class="muted">Course file: <code>Snowflake Performance/Query Profile.txt</code></p>
+          <div class="callout warn">
+            <strong>Source correction:</strong> The course <code>Query Profile.txt</code> file contains a broken query with duplicate <code>WHERE</code> clauses and an invalid join alias. Use the corrected version below.
+          </div>
+          <pre><code>ALTER SESSION SET USE_CACHED_RESULT = FALSE;
+
+SELECT ss.ss_item_sk, ss.ss_customer_sk, ss.ss_ticket_number, ss.ss_net_paid
+FROM SNOWFLAKE_SAMPLE_DATA.TPCDS_SF100TCL.STORE_SALES ss
+JOIN SNOWFLAKE_SAMPLE_DATA.TPCDS_SF100TCL.CUSTOMER c
+  ON ss.ss_customer_sk = c.c_customer_sk
+JOIN SNOWFLAKE_SAMPLE_DATA.TPCDS_SF100TCL.DATE_DIM d
+  ON ss.ss_sold_date_sk = d.d_date_sk
+WHERE c.c_current_cdemo_sk = c.c_current_hdemo_sk
+  AND d.d_year = 2001
+LIMIT 20000;
+
+-- Open Query Profile in Snowsight for the query_id above
+
+EXPLAIN USING TEXT
+SELECT cc_call_center_sk
+FROM SNOWFLAKE_SAMPLE_DATA.TPCDS_SF10TCL.CALL_CENTER;
+
+SELECT query_id, start_time, total_elapsed_time, bytes_scanned,
+       partitions_scanned, partitions_total
+FROM TABLE(INFORMATION_SCHEMA.QUERY_HISTORY(RESULT_LIMIT =&gt; 10))
+ORDER BY start_time DESC;</code></pre>
+        </section>
+
+        <section class="section" id="resource-monitors">
+          <h2>Resource Monitors</h2>
+          <p>Resource monitors track credit usage for <strong>user-managed warehouses and cloud services</strong> — they do <em>not</em> cover serverless features (Snowpipe, tasks, QAS, Search Optimization maintenance, reclustering, etc.).</p>
+
+          <ul>
+            <li>Set at <strong>account</strong> level or assigned to specific warehouses.</li>
+            <li>Define a <strong>credit quota</strong> (e.g. 100 credits) and reset frequency: daily, weekly, monthly, yearly, or never.</li>
+            <li>Three threshold actions when consumption crosses a percentage of quota: <code>NOTIFY</code>, <code>SUSPEND</code> (finish running queries first), <code>SUSPEND_IMMEDIATELY</code>.</li>
+            <li><code>NOTIFY</code> can target specific users via <code>NOTIFY_USERS</code> in addition to account administrators and monitor owners.</li>
+          </ul>
+
+          <p>The course deck uses this pattern — note the three escalating triggers and mixed-case user names in quotes:</p>
+          <pre><code>CREATE OR REPLACE RESOURCE MONITOR limiter
+  WITH CREDIT_QUOTA = 5000
+       NOTIFY_USERS = ('jdoe', 'jane smith', 'john doe')
+       TRIGGERS
+         ON 75 PERCENT DO NOTIFY
+         ON 100 PERCENT DO SUSPEND
+         ON 110 PERCENT DO SUSPEND_IMMEDIATE;
+
+ALTER WAREHOUSE COMPUTE_WH SET RESOURCE_MONITOR = limiter;</code></pre>
+
+          <p>For study labs, scale the quota down:</p>
+          <pre><code>CREATE OR REPLACE RESOURCE MONITOR study_monitor
+  WITH CREDIT_QUOTA = 50
+       FREQUENCY = MONTHLY
+       START_TIMESTAMP = IMMEDIATELY
+       TRIGGERS
+         ON 75 PERCENT DO NOTIFY
+         ON 100 PERCENT DO SUSPEND;
+
+ALTER WAREHOUSE COMPUTE_WH SET RESOURCE_MONITOR = study_monitor;
+
+SHOW RESOURCE MONITORS;</code></pre>
+
+          <div class="callout danger">
+            <strong>Common mistakes:</strong>
+            <ul>
+              <li>Expecting resource monitors to cap Snowpipe or serverless task spend — they will not.</li>
+              <li>Sizing up when queries queue — try multi-cluster scale-out first (Enterprise+); see <a href="s02-basic-concepts.html">Section 2</a> for warehouse sizing.</li>
+              <li>Ignoring warehouse cache trade-off: very low auto-suspend saves money but cold-starts every session.</li>
+            </ul>
+          </div>
+        </section>
+
+        <section class="section" id="sos">
+          <h2>Search Optimization Service (SOS)</h2>
+          <p><strong>SOS</strong> (Enterprise edition or higher) builds and maintains a persistent auxiliary data structure called the <strong>search access path</strong>. It significantly improves selective lookup and analytical queries that apply extensive predicate filters — especially on wide tables where normal micro-partition pruning still scans too much data.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-203-sos.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-203-sos.png" alt="Search Optimization Service diagram: a point lookup on CUSTOMER equals 1234 uses a search access path auxiliary structure alongside the base table micro-partitions" loading="lazy" width="1920" height="1080">
+            </a>
+            <figcaption><span class="slide-no">Slide 203</span>SOS maintains a search access path — an extra structure that points directly to matching rows for selective lookups.</figcaption>
+          </figure>
+
+          <h3>Query types SOS improves</h3>
+          <ul>
+            <li><strong>Selective point lookups</strong> returning a small number of distinct rows (e.g. <code>WHERE customer = '1234'</code>).</li>
+            <li><strong>Substring and regex-style searches</strong> with <code>LIKE</code>, <code>ILIKE</code>, and similar predicates.</li>
+            <li><strong>Equality and IN predicates</strong> on fields inside <code>VARIANT</code>, <code>OBJECT</code>, or <code>ARRAY</code> columns.</li>
+            <li>Queries using <strong>selected geospatial functions</strong>.</li>
+          </ul>
+
+          <h3>Before you enable SOS</h3>
+          <p>Enable only when profiling shows all three patterns:</p>
+          <ul>
+            <li>The filtered column has roughly <strong>100 000–200 000 distinct values</strong> (high cardinality but not unique-every-row).</li>
+            <li>Filters are <strong>highly selective</strong> — returning very few rows relative to table size.</li>
+            <li>The query already runs for <strong>at least a few seconds</strong> without SOS — you need proof the scan cost is real.</li>
+          </ul>
+
+          <p>The search access path is <strong>updated automatically</strong> as table data changes. Track build progress with the <code>search_optimization_progress</code> column in <code>SHOW TABLES</code>. SOS bills for both <strong>storage</strong> of the access path and <strong>maintenance compute</strong>.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>SOS vs Clustering</th><th>Search Optimization</th><th>Clustering</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Mechanism</td>
+                  <td>Additional <strong>search access path</strong> data structure (extra storage)</td>
+                  <td>Physically reorders rows within micro-partitions on declared key columns</td>
+                </tr>
+                <tr>
+                  <td>Column scope</td>
+                  <td>Can apply to <strong>all column types</strong> you opt in — not limited to one key</td>
+                  <td>Focused on the declared clustering key column(s)</td>
+                </tr>
+                <tr>
+                  <td>Best for</td>
+                  <td>Highly selective lookups, LIKE/ILIKE, VARIANT path equality</td>
+                  <td>Large tables with repeated range/equality filters on key columns</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p class="muted">Course file: <code>Snowflake Performance/Search Optimization Services (SOS).txt</code></p>
+          <pre><code>SELECT APPROX_COUNT_DISTINCT(c_customer_id)
+FROM SNOWFLAKE_SAMPLE_DATA.TPCDS_SF100TCL.CUSTOMER;
+
+CREATE OR REPLACE TABLE sos_customer AS
+SELECT * FROM SNOWFLAKE_SAMPLE_DATA.TPCDS_SF100TCL.CUSTOMER;
+
+ALTER SESSION SET USE_CACHED_RESULT = FALSE;
+
+-- c_customer_id is CHAR(16) — pick an ID that exists
+SELECT c_customer_id FROM sos_customer LIMIT 5;
+
+SELECT * FROM sos_customer
+WHERE c_customer_id = (
+  SELECT c_customer_id FROM sos_customer LIMIT 1
+);
+
+ALTER TABLE sos_customer ADD SEARCH OPTIMIZATION ON EQUALITY(c_customer_id);
+
+SHOW TABLES LIKE 'sos_customer';  -- check search_optimization_progress column
+
+SELECT * FROM TABLE(INFORMATION_SCHEMA.SEARCH_OPTIMIZATION_HISTORY());</code></pre>
+
+          <div class="callout danger">
+            <strong>Cost:</strong> SOS bills for storage of optimisation structures and maintenance compute. Enable only on tables with proven selective-query pain.
+          </div>
+        </section>
+
+        <section class="section" id="qas">
+          <h2>Query Acceleration Service (QAS)</h2>
+          <p><strong>QAS</strong> (Enterprise+) adds burst compute to accelerate parts of a warehouse's workload — reducing the impact of <strong>outlier queries</strong> on an otherwise right-sized warehouse without permanently sizing up for every ad hoc analyst.</p>
+
+          <p>QAS suits workloads where scan volume per query is unpredictable:</p>
+          <ul>
+            <li><strong>Ad hoc analysis</strong> — exploratory SQL with unknown data volumes.</li>
+            <li><strong>Unpredictable data volume per query</strong> — some runs scan millions of rows, others scan thousands.</li>
+            <li><strong>Large scan plus selective filter</strong> — the classic pattern where pruning helps but the remaining scan is still heavy.</li>
+          </ul>
+
+          <ul>
+            <li>Enable per warehouse: <code>ENABLE_QUERY_ACCELERATION = TRUE</code></li>
+            <li><code>QUERY_ACCELERATION_MAX_SCALE_FACTOR</code> caps burst parallelism. <strong>0 = no cap</strong> (Snowflake may scale up to platform maximum); a positive value (e.g. 8) sets an explicit upper limit. Disabling QAS is <code>ENABLE_QUERY_ACCELERATION = FALSE</code>, not scale factor 0.</li>
+            <li>Check eligibility: <code>SNOWFLAKE.ACCOUNT_USAGE.QUERY_ACCELERATION_ELIGIBLE</code></li>
+            <li>Estimate benefit: <code>SYSTEM$ESTIMATE_QUERY_ACCELERATION('&lt;query_id&gt;')</code></li>
+          </ul>
+
+          <p class="muted">Course file: <code>Snowflake Performance/Query Acceleration Service (QAS).txt</code></p>
+          <div class="callout warn">
+            <strong>Source correction:</strong> The course file sets <code>QUERY_ACCELERATION_MAX_SCALE_FACTOR = 0</code> thinking QAS is disabled — 0 means <em>uncapped</em> acceleration. Use a positive cap (e.g. 8) or disable with <code>ENABLE_QUERY_ACCELERATION = FALSE</code>.
+          </div>
+          <pre><code>SELECT query_id, eligible_query_acceleration_time
+FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_ACCELERATION_ELIGIBLE
+ORDER BY eligible_query_acceleration_time DESC
+LIMIT 20;
+
+-- After running a heavy query, estimate (replace query_id):
+SELECT PARSE_JSON(
+  SYSTEM$ESTIMATE_QUERY_ACCELERATION('&lt;QUERY_ID&gt;')
+);
+
+ALTER WAREHOUSE COMPUTE_WH SET
+  ENABLE_QUERY_ACCELERATION = TRUE
+  QUERY_ACCELERATION_MAX_SCALE_FACTOR = 8;
+
+SHOW WAREHOUSES LIKE 'COMPUTE_WH';</code></pre>
+
+          <div class="callout exam">
+            <strong>Exam note:</strong> QAS helps <em>outlier</em> queries — not a replacement for clustering, better filters, or right-sized warehouses. Scale factor multiplies burst cost — monitor eligibility before enabling broadly.
+          </div>
+        </section>
+
+        <section class="section" id="monitoring">
+          <h2>Compute &amp; Storage Monitoring</h2>
+          <p>Use account usage and information schema views to see where credits and bytes go. These views help validate tuning changes and catch runaway spend.</p>
+
+          <h3>Warehouse load monitoring</h3>
+          <p>Snowsight exposes warehouse load over time — queued queries, running queries, and cluster utilisation — so you can tell whether slowness is queuing (need another warehouse or multi-cluster) versus execution (need pruning, spill fixes, or a larger size). The Monitoring area is the first place to look when users report "the warehouse is slow" without a specific query ID.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-212-warehouse-load.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-212-warehouse-load.png" alt="Snowsight warehouse load chart showing running and queued queries over time for a virtual warehouse" loading="lazy" width="1920" height="1080">
+            </a>
+            <figcaption><span class="slide-no">Slide 212</span>Warehouse load in Snowsight — distinguish queuing (concurrency pressure) from long-running execution.</figcaption>
+          </figure>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>View</th><th>Purpose</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>SNOWFLAKE.ACCOUNT_USAGE.WAREHOUSE_METERING_HISTORY</code></td>
+                  <td>Compute vs cloud-services credits per warehouse over time</td>
+                </tr>
+                <tr>
+                  <td><code>INFORMATION_SCHEMA.TABLE_STORAGE_METRICS</code></td>
+                  <td>Per-table active bytes, Time Travel, Fail-safe in current database</td>
+                </tr>
+                <tr>
+                  <td><code>SNOWFLAKE.ACCOUNT_USAGE.STORAGE_USAGE</code></td>
+                  <td>Account-wide storage trend (active + Time Travel + Fail-safe + stages)</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p class="muted">Course file: <code>Snowflake Performance/Storage Check.txt</code></p>
+          <pre><code>-- Per-database table storage (local schema)
+SELECT * FROM &lt;YOUR_DB&gt;.INFORMATION_SCHEMA.TABLE_STORAGE_METRICS;
+
+-- Sample share database (read-only consumer perspective)
+SELECT * FROM SNOWFLAKE_SAMPLE_DATA.INFORMATION_SCHEMA.TABLE_STORAGE_METRICS;
+
+-- Warehouse credit usage (ACCOUNT_USAGE — admin role)
+SELECT warehouse_name, start_time, credits_used_compute, credits_used_cloud_services
+FROM SNOWFLAKE.ACCOUNT_USAGE.WAREHOUSE_METERING_HISTORY
+WHERE start_time &gt;= DATEADD(day, -7, CURRENT_TIMESTAMP())
+ORDER BY start_time DESC
+LIMIT 50;</code></pre>
+
+          <div class="callout tip">
+            <strong>Cost notes:</strong> Heavy ACCOUNT_USAGE scans themselves consume warehouse credits. Filter by date, use LIMIT, and prefer a small audit warehouse. Deeper cost attribution (tags, serverless breakdown) is covered in later operations sections.
+          </div>
+        </section>
+
+        <section class="section" id="workflow">
+          <h2>Overall Performance Optimisation</h2>
+          <p class="lead">Snowflake query speed comes from <strong>reading less data</strong> (pruning), <strong>reusing prior work</strong> (caches), and <strong>right-sizing compute</strong> (warehouse + optional accelerators). You rarely “add an index” — you shape data layout, filters, and warehouse size instead. The course groups tuning levers into three buckets: <strong>storage</strong>, <strong>warehouse</strong>, and <strong>query</strong>.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-215-perf-optimization.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-215-perf-optimization.png" alt="Performance optimization diagram with three pillars: Warehouse, Storage, and Query" loading="lazy" width="1920" height="1080">
+            </a>
+            <figcaption><span class="slide-no">Slide 215</span>Optimise storage layout, warehouse configuration, and query patterns — not just one layer in isolation.</figcaption>
+          </figure>
+
+          <div class="analogy">
+            <strong>Everyday analogy — finding a book in a library:</strong> <strong>Micro-partitions</strong> are shelf labels (“authors A–C”). <strong>Pruning</strong> is skipping entire shelves. <strong>Clustering</strong> is reorganising books so all Stephen King titles sit on one shelf. <strong>Caching</strong> is keeping yesterday’s checkout list at the desk. <strong>Spill</strong> is when the desk is too small and you walk to a storage room mid-search.
+          </div>
+
+          <ol>
+            <li><strong>Reproduce</strong> with <code>USE_CACHED_RESULT = FALSE</code> and note query ID.</li>
+            <li><strong>Open Query Profile</strong> — identify scan %, spill, top operator.</li>
+            <li><strong>Improve pruning</strong> — tighten WHERE, avoid wrapping filter columns in functions, consider clustering.</li>
+            <li><strong>Check caches</strong> — if repeat workload, allow result cache; if interactive scratch, shorter auto-suspend may be cheaper than keeping WH warm.</li>
+            <li><strong>Right-size warehouse</strong> — scale up for spill; scale down when queries are CPU-idle (see <a href="s02-basic-concepts.html">Section 2</a>).</li>
+            <li><strong>Advanced accelerators</strong> — SOS for selective lookups; QAS for proven outlier scans (Enterprise+).</li>
+            <li><strong>Separate workloads</strong> — ETL warehouse vs BI warehouse; limit concurrent heavy jobs.</li>
+            <li><strong>Monitor</strong> — <code>QUERY_HISTORY</code>, warehouse metering, resource monitors.</li>
+          </ol>
+
+          <div class="grid-3 card-grid">
+            <div class="mini-card">
+              <h4>Storage</h4>
+              <ul>
+                <li>Use clustering on large, selectively queried tables</li>
+                <li>Use Search Optimization Service (SOS) for selective lookups</li>
+                <li>Use materialised views for repeated expensive transforms</li>
+                <li>Purge stage data you no longer need</li>
+                <li>Use temporary tables where applicable</li>
+                <li>Save on Time Travel via <code>DATA_RETENTION_TIME_IN_DAYS</code></li>
+                <li>Monitor memory consumption and table storage metrics</li>
+              </ul>
+            </div>
+            <div class="mini-card">
+              <h4>Warehouse</h4>
+              <ul>
+                <li>Reduce queues — separate workloads or multi-cluster (Enterprise+)</li>
+                <li>Resolve memory spillage — right-size or filter earlier</li>
+                <li>Right-size the warehouse for execution, not queuing</li>
+                <li>Query Acceleration Service (QAS) for outlier scans</li>
+                <li>Optimise warehouse cache — balance <code>AUTO_SUSPEND</code> vs warm cache</li>
+                <li>Limit concurrent queries with <code>MAX_CONCURRENCY_LEVEL</code></li>
+                <li>Use different warehouses for different tasks</li>
+                <li>Monitor compute via metering views and resource monitors</li>
+              </ul>
+            </div>
+            <div class="mini-card">
+              <h4>Query</h4>
+              <ul>
+                <li>Use Query Profile statistics to find the expensive operator</li>
+                <li>Use Query History — 14 days in UI, 7 in Information Schema, 365 in Account Usage</li>
+                <li>Avoid <code>SELECT *</code>; name only the columns you need</li>
+                <li>Filter wherever applicable — pruning beats bigger warehouses</li>
+              </ul>
+            </div>
+          </div>
+
+          <h3>Common mistakes</h3>
+          <ul>
+            <li>Scaling warehouse to XL before fixing a full-table scan — you pay more to read everything faster.</li>
+            <li>Benchmarking with result cache on — second run looks “magic” but production will not always hit cache.</li>
+            <li>Clustering tiny tables — overhead with no pruning gain.</li>
+            <li>Enabling SOS on every table — extra storage/compute cost without selective queries.</li>
+            <li>Setting <code>QUERY_ACCELERATION_MAX_SCALE_FACTOR = 0</code> thinking QAS is off — 0 means <em>uncapped</em> acceleration.</li>
+            <li>Comparing clustering depth without disabling cache or using consistent predicates.</li>
+          </ul>
+        </section>
+
+        <section class="section" id="interview">
+          <h2>Interview questions</h2>
+          <p class="muted">Try to answer each one before opening it.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+            <details class="qa">
+              <summary>What is a micro-partition and why is it immutable?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>A micro-partition is Snowflake's automatic storage unit — roughly 50–500 MB of uncompressed data per partition, stored columnar and further compressed on disk. Snowflake creates them on load; you never define partitions manually. They are immutable because DML does not overwrite existing partitions in place — inserts, updates, and deletes create new partition versions while old ones remain for Time Travel and Fail-safe. That immutability is what makes pruning metadata trustworthy and cloning cheap.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How does partition pruning work, and what defeats it?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>Before reading data, Snowflake scans micro-partition metadata (min/max, NULL counts, distinct counts) and skips partitions whose ranges cannot match your filter. Equality and range predicates on physical columns prune well. Pruning breaks when you wrap the filter column in a function — e.g. <code>YEAR(order_date)</code> instead of a date range — use leading-wildcard <code>LIKE '%x'</code>, or cast the column in a way that hides its stored bounds. Fix by filtering on the raw column: <code>order_date BETWEEN '2024-01-01' AND '2024-12-31'</code>.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What is clustering depth, and when is a clustering key worth the reclustering credits?<span class="qa-tag">Scenario</span></summary>
+              <div class="qa-body">
+                <p><code>SYSTEM$CLUSTERING_DEPTH('table')</code> reports average partition overlap — lower is better. Overlap means filter values scattered across many micro-partitions, so pruning removes fewer partitions per query. A clustering key is worth the serverless recluster cost when the table has a large number of micro-partitions, queries repeatedly filter on the same few columns, and those queries read a small fraction of rows but would otherwise scan many partitions. Evaluate candidates with <code>SYSTEM$CLUSTERING_INFORMATION</code> before enabling <code>ALTER TABLE t CLUSTER BY (col)</code>, and measure before/after with <code>USE_CACHED_RESULT = FALSE</code>.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Why should you not cluster a small table?<span class="qa-tag">Cost</span></summary>
+              <div class="qa-body">
+                <p>Small tables have few micro-partitions, so pruning already scans almost everything anyway — clustering cannot meaningfully reduce partition overlap. Reclustering still consumes serverless credits on every maintenance cycle. You pay ongoing cost without a measurable speedup. Save clustering for large tables with proven repeated filter patterns on specific columns.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What are Snowflake's three caches and what invalidates each?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p><strong>Result cache</strong> (Cloud Services) stores complete query results for 24 hours — invalidated by table changes, config changes, micro-partition changes, and volatile functions like <code>RANDOM()</code>. <strong>Metadata cache</strong> (Cloud Services) holds table stats and row counts — powers cheap SHOW/DESCRIBE and many COUNT operations without a warehouse. <strong>Warehouse cache</strong> (local disk on compute nodes) holds recently scanned micro-partition data — cleared when the warehouse <strong>suspends</strong>. Tune <code>AUTO_SUSPEND</code> to balance warm-cache hits against idle cost.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Why does <code>CURRENT_TIMESTAMP()</code> prevent a result-cache hit even when the SQL text is identical?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p>The result cache requires the exact same query text <em>and</em> unchanged underlying data with no cache-blocking functions. <code>CURRENT_TIMESTAMP()</code> is evaluated at execution time, so each run produces a different result even though the SQL string is identical. Documented blockers like <code>RANDOM()</code>, <code>UUID_STRING()</code>, and <code>RANDSTR()</code> behave similarly. Do not assume date/time functions are cache-safe — benchmark with <code>ALTER SESSION SET USE_CACHED_RESULT = FALSE</code> when tuning.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How do you read a Query Profile to find the root cause of a slow query?<span class="qa-tag">Scenario</span></summary>
+              <div class="qa-body">
+                <p>Open Snowsight → Query History → select the query → Profile. Check <strong>partitions scanned vs total</strong> first — a high ratio means weak pruning or a full scan. Look at <strong>bytes scanned</strong> relative to result size. Identify the <strong>most expensive operator</strong> (often TableScan or Join) and focus optimisation there. Check <strong>queued time</strong> separately from execution time — queuing means warehouse overload, not slow SQL. Use <code>EXPLAIN</code> for the logical plan, but only the Profile shows actual partition counts after execution.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What is data spill, and what is the difference between local and remote spill?<span class="qa-tag">Scenario</span></summary>
+              <div class="qa-body">
+                <p>Spill happens when a sort, join, or aggregate operator exceeds available memory. Snowflake first spills to <strong>local disk</strong> on the warehouse node — slower than RAM but still fast. If local space is exhausted, it spills to <strong>remote storage</strong>, which is dramatically slower. Mitigations: scale the warehouse up for more memory, filter before joining, avoid <code>SELECT *</code>, or reduce concurrency with <code>MAX_CONCURRENCY_LEVEL</code>. Remote spill in the Profile is a strong signal the warehouse is undersized for that query shape.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How do you tell queuing from slow execution, and why does sizing up not fix queuing?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p>In the Query Profile, <strong>queued time</strong> is time waiting for warehouse capacity; <strong>execution time</strong> is actual compute. If queued time dominates, the warehouse is overloaded with concurrent queries — making it bigger does not add concurrency slots on a single cluster. Fix queuing by separating workloads onto dedicated warehouses, using multi-cluster warehouses (Enterprise+), or scheduling heavy jobs. Scale up only when execution time is high with spill or CPU-bound operators, not when queries are waiting in line.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>When would you choose Search Optimization over clustering, and where does a materialised view fit?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p><strong>Clustering</strong> reorders rows in micro-partitions — best for large tables with repeated range/equality filters on declared key columns. <strong>Search Optimization (SOS)</strong> builds auxiliary search structures — best for highly selective point lookups, <code>LIKE</code>/<code>ILIKE</code>, and VARIANT path equality where normal pruning struggles. Both cost ongoing serverless credits. A <strong>materialised view</strong> pre-computes and stores a result set — best when many queries repeat the same expensive aggregation or join and you can tolerate refresh lag. Use clustering for scan reduction, SOS for selective lookups on wide tables, and MVs for repeated identical transformations.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What is Query Acceleration Service and which queries are eligible?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>QAS (Enterprise+) adds burst compute to accelerate parts of expensive queries — especially ad hoc analytics with large scans but selective filters. Enable per warehouse with <code>ENABLE_QUERY_ACCELERATION = TRUE</code> and cap burst with <code>QUERY_ACCELERATION_MAX_SCALE_FACTOR</code> (0 = no cap, not disabled). Check eligibility in <code>SNOWFLAKE.ACCOUNT_USAGE.QUERY_ACCELERATION_ELIGIBLE</code> and estimate benefit with <code>SYSTEM$ESTIMATE_QUERY_ACCELERATION('&lt;query_id&gt;')</code>. QAS helps outlier queries — it is not a replacement for better filters, clustering, or right-sized warehouses.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What do resource monitors cover, and what is their serverless blind spot?<span class="qa-tag">Cost</span></summary>
+              <div class="qa-body">
+                <p>Resource monitors track credit usage for <strong>user-managed warehouses and related cloud-services credits</strong> assigned to them. Set a quota with reset frequency and threshold actions: <code>NOTIFY</code>, <code>SUSPEND</code>, or <code>SUSPEND_IMMEDIATELY</code>. They do <strong>not</strong> cap serverless features — Snowpipe, tasks, Search Optimization maintenance, QAS burst, reclustering, storage, or Cortex spend all sit outside monitor scope. Use monitors to guard warehouse burn; use separate governance for serverless and storage.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>A BI dashboard got slow last week — how would you investigate methodically?<span class="qa-tag">Scenario</span></summary>
+              <div class="qa-body">
+                <p>Start by reproducing a representative query with <code>USE_CACHED_RESULT = FALSE</code> and note the query ID. Open the Query Profile — check partitions scanned ratio, bytes scanned, spill, and whether time is queued vs executing. Compare against <code>QUERY_HISTORY</code> from last week: did data volume grow, did someone remove a filter, did a warehouse resize or auto-suspend change? Check <code>WAREHOUSE_METERING_HISTORY</code> for concurrency spikes. Improve pruning first (filters, clustering), then cache awareness, then warehouse sizing, then SOS/QAS only for proven pain points. Re-measure after each change.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What does <code>QUERY_ACCELERATION_MAX_SCALE_FACTOR = 0</code> actually mean?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p>Zero means <strong>no cap</strong> on burst parallelism — Snowflake may scale QAS up to the platform maximum. It does <em>not</em> disable QAS. To turn QAS off, set <code>ENABLE_QUERY_ACCELERATION = FALSE</code>. A positive value (e.g. 8) sets an explicit upper limit on burst cost. The course demo file incorrectly treats 0 as disabled — that is a common exam trap.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How long does query history persist in Snowsight vs Information Schema vs Account Usage?<span class="qa-tag">Exam</span></summary>
+              <div class="qa-body">
+                <p><strong>Snowsight Query History</strong> (Monitoring UI) retains roughly <strong>14 days</strong>. <code>TABLE(INFORMATION_SCHEMA.QUERY_HISTORY(...))</code> covers the last <strong>7 days</strong> in the current account. <code>SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY</code> reaches <strong>up to 365 days</strong> account-wide (with role requirements and up to ~45 minutes latency). Use the UI for interactive profiling, Information Schema for recent programmatic checks, and Account Usage for long-range audits.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Why is <code>CURRENT_DATE()</code> treated differently from <code>CURRENT_TIMESTAMP()</code> for the result cache?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p>The result cache requires identical results, not just identical SQL text. <code>CURRENT_TIMESTAMP()</code> is evaluated at execution time and changes every run, so it blocks a cache hit. <code>CURRENT_DATE()</code> is the documented exception — it resolves once per day, so repeated identical queries within the same day can still hit the result cache. <code>UUID_STRING()</code>, <code>RANDSTR()</code>, and external functions behave like <code>CURRENT_TIMESTAMP()</code> and force fresh execution.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What clustering metadata does Snowflake track, and what do the depth numbers mean?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>Snowflake records the <strong>total number of micro-partitions</strong>, how many partitions have <strong>overlapping value ranges</strong>, and the <strong>depth</strong> of those overlaps. High overlap means a selective filter still touches many files — e.g. five partitions each spanning A–Z at depth 5. After clustering, ranges become disjoint (A–D, E–J, …) and depth falls toward 1. Check with <code>SYSTEM$CLUSTERING_DEPTH('table')</code> and evaluate candidate keys with <code>SYSTEM$CLUSTERING_INFORMATION('table', '(col)')</code>.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What are the three resource-monitor trigger actions, and who gets notified?<span class="qa-tag">Cost</span></summary>
+              <div class="qa-body">
+                <p>At configurable percentage thresholds of a credit quota: <code>NOTIFY</code> sends alerts, <code>SUSPEND</code> stops the warehouse after running queries finish, and <code>SUSPEND_IMMEDIATELY</code> stops it right away. Use <code>NOTIFY_USERS = (...)</code> to name recipients. Monitors apply to user-managed warehouses and their cloud-services credits — not serverless features. Reset frequency can be daily, weekly, monthly, yearly, or never.</p>
+              </div>
+            </details>
+          </div>
+        </section>
+
+        <section class="section" id="practice">
+          <h2>Hands-on practice</h2>
+          <p class="muted">Run these in a trial account on an X-Small warehouse with <code>AUTO_SUSPEND = 60</code>. Clean up when you finish.</p>
+          <ol class="practice-list">
+            <li class="practice">
+              <p class="practice-task">Create <code>cluster_sample</code> from <code>SNOWFLAKE_SAMPLE_DATA.TPCDS_SF100TCL.STORE_SALES</code> (limit 2 000 000 rows), run <code>SYSTEM$CLUSTERING_INFORMATION</code> on <code>SS_SOLD_DATE_SK</code>, then <code>ALTER TABLE cluster_sample CLUSTER BY (ss_sold_date_sk)</code>. After a few minutes, compare <code>SYSTEM$CLUSTERING_DEPTH</code> and query runtime for <code>WHERE ss_sold_date_sk = 2451226</code> with <code>USE_CACHED_RESULT = FALSE</code>.</p>
+              <p class="practice-expect">Clustering depth should decrease after reclustering completes, and the filtered COUNT should run faster than before clustering (allow time for background recluster — this consumes serverless recluster credits).</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">SQL</span></summary>
+                <div class="qa-body">
+<pre><code>USE ROLE ACCOUNTADMIN;
+USE WAREHOUSE COMPUTE_WH;
+ALTER SESSION SET USE_CACHED_RESULT = FALSE;
+
+CREATE OR REPLACE TABLE cluster_sample AS
+SELECT * FROM SNOWFLAKE_SAMPLE_DATA.TPCDS_SF100TCL.STORE_SALES
+LIMIT 2000000;
+
+SELECT SYSTEM$CLUSTERING_INFORMATION('CLUSTER_SAMPLE', '(SS_SOLD_DATE_SK)');
+
+SELECT COUNT(*) FROM cluster_sample WHERE ss_sold_date_sk = 2451226;
+
+ALTER TABLE cluster_sample CLUSTER BY (ss_sold_date_sk);
+
+-- Wait for recluster, then:
+SELECT SYSTEM$CLUSTERING_DEPTH('CLUSTER_SAMPLE');
+SELECT COUNT(*) FROM cluster_sample WHERE ss_sold_date_sk = 2451226;</code></pre>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Demonstrate result cache vs warehouse local cache. Run the same <code>SELECT … LIMIT 1000</code> on <code>WEB_RETURNS</code> twice with <code>USE_CACHED_RESULT = TRUE</code>, then suspend and resume the warehouse and re-run with <code>USE_CACHED_RESULT = FALSE</code>.</p>
+              <p class="practice-expect">The second identical run with result cache enabled should show near-zero warehouse credits in Query History. After suspend/resume with cache disabled, the warehouse must scan data again — execution time returns to first-run levels.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">SQL</span></summary>
+                <div class="qa-body">
+<pre><code>ALTER SESSION SET USE_CACHED_RESULT = TRUE;
+
+SELECT * FROM SNOWFLAKE_SAMPLE_DATA.TPCDS_SF100TCL.WEB_RETURNS LIMIT 1000;
+SELECT * FROM SNOWFLAKE_SAMPLE_DATA.TPCDS_SF100TCL.WEB_RETURNS LIMIT 1000;
+
+ALTER SESSION SET USE_CACHED_RESULT = FALSE;
+SELECT * FROM SNOWFLAKE_SAMPLE_DATA.TPCDS_SF100TCL.INVENTORY LIMIT 1000;
+ALTER WAREHOUSE COMPUTE_WH SUSPEND;
+ALTER WAREHOUSE COMPUTE_WH RESUME;
+SELECT * FROM SNOWFLAKE_SAMPLE_DATA.TPCDS_SF100TCL.INVENTORY LIMIT 1000;</code></pre>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Run the corrected three-table join from the Query Profile demo (<code>STORE_SALES</code>, <code>CUSTOMER</code>, <code>DATE_DIM</code> with <code>d_year = 2001</code>), then inspect <code>partitions_scanned</code> and <code>partitions_total</code> from <code>INFORMATION_SCHEMA.QUERY_HISTORY</code>.</p>
+              <p class="practice-expect">Query completes with a non-zero row count (up to 20 000). In Query History / Profile, note partitions scanned vs total and the most expensive operator — typically TableScan or Join on the sales table.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">SQL</span></summary>
+                <div class="qa-body">
+<pre><code>ALTER SESSION SET USE_CACHED_RESULT = FALSE;
+
+SELECT ss.ss_item_sk, ss.ss_customer_sk, ss.ss_ticket_number, ss.ss_net_paid
+FROM SNOWFLAKE_SAMPLE_DATA.TPCDS_SF100TCL.STORE_SALES ss
+JOIN SNOWFLAKE_SAMPLE_DATA.TPCDS_SF100TCL.CUSTOMER c
+  ON ss.ss_customer_sk = c.c_customer_sk
+JOIN SNOWFLAKE_SAMPLE_DATA.TPCDS_SF100TCL.DATE_DIM d
+  ON ss.ss_sold_date_sk = d.d_date_sk
+WHERE c.c_current_cdemo_sk = c.c_current_hdemo_sk
+  AND d.d_year = 2001
+LIMIT 20000;
+
+SELECT query_id, partitions_scanned, partitions_total, bytes_scanned
+FROM TABLE(INFORMATION_SCHEMA.QUERY_HISTORY(RESULT_LIMIT =&gt; 5))
+ORDER BY start_time DESC;</code></pre>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Create <code>sos_customer</code> from the sample CUSTOMER table, run a point lookup on <code>c_customer_id</code>, then add Search Optimization and re-run. Check <code>INFORMATION_SCHEMA.SEARCH_OPTIMIZATION_HISTORY()</code>. <strong>This incurs SOS storage and maintenance credits.</strong></p>
+              <p class="practice-expect">Before SOS, the point lookup runs a full micro-partition scan. After <code>ADD SEARCH OPTIMIZATION ON EQUALITY(c_customer_id)</code> and maintenance completes, the same lookup should run faster. Search optimization history shows build activity.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">SQL</span></summary>
+                <div class="qa-body">
+<pre><code>CREATE OR REPLACE TABLE sos_customer AS
+SELECT * FROM SNOWFLAKE_SAMPLE_DATA.TPCDS_SF100TCL.CUSTOMER;
+
+ALTER SESSION SET USE_CACHED_RESULT = FALSE;
+
+SELECT * FROM sos_customer
+WHERE c_customer_id = (SELECT c_customer_id FROM sos_customer LIMIT 1);
+
+ALTER TABLE sos_customer ADD SEARCH OPTIMIZATION ON EQUALITY(c_customer_id);
+
+SELECT * FROM sos_customer
+WHERE c_customer_id = (SELECT c_customer_id FROM sos_customer LIMIT 1);
+
+SELECT * FROM TABLE(INFORMATION_SCHEMA.SEARCH_OPTIMIZATION_HISTORY());</code></pre>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Create resource monitor <code>study_monitor</code> with a 50-credit monthly quota and assign it to <code>COMPUTE_WH</code>, then drop all practice objects created in this section.</p>
+              <p class="practice-expect"><code>SHOW RESOURCE MONITORS</code> lists <code>study_monitor</code> with triggers at 75% NOTIFY and 100% SUSPEND. Cleanup removes clustering key before table drop.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">SQL</span></summary>
+                <div class="qa-body">
+<pre><code>CREATE OR REPLACE RESOURCE MONITOR study_monitor
+  WITH CREDIT_QUOTA = 50
+       FREQUENCY = MONTHLY
+       START_TIMESTAMP = IMMEDIATELY
+       TRIGGERS
+         ON 75 PERCENT DO NOTIFY
+         ON 100 PERCENT DO SUSPEND;
+
+ALTER WAREHOUSE COMPUTE_WH SET RESOURCE_MONITOR = study_monitor;
+SHOW RESOURCE MONITORS;
+
+-- Cleanup (order matters)
+ALTER TABLE IF EXISTS cluster_sample DROP CLUSTERING KEY;
+DROP TABLE IF EXISTS cluster_sample;
+DROP TABLE IF EXISTS sos_customer;
+ALTER WAREHOUSE COMPUTE_WH UNSET RESOURCE_MONITOR;
+DROP RESOURCE MONITOR IF EXISTS study_monitor;</code></pre>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Compare query-history retention: pull recent queries from <code>INFORMATION_SCHEMA.QUERY_HISTORY</code>, then query <code>SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY</code> (if your role allows) for a 30-day lookback. Cross-check one query ID in Snowsight Query History.</p>
+              <p class="practice-expect">Information Schema returns only recent activity (~7 days). Account Usage can reach months of history. Snowsight UI covers ~14 days and links to the Query Profile — know all three retentions for the exam.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">SQL</span></summary>
+                <div class="qa-body">
+<pre><code>SELECT query_id, start_time, total_elapsed_time
+FROM TABLE(INFORMATION_SCHEMA.QUERY_HISTORY(RESULT_LIMIT =&gt; 20))
+ORDER BY start_time DESC;
+
+-- Requires ACCOUNTADMIN or granted role:
+SELECT query_id, start_time, total_elapsed_time
+FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY
+WHERE start_time &gt;= DATEADD(day, -30, CURRENT_TIMESTAMP())
+ORDER BY start_time DESC
+LIMIT 20;</code></pre>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Create a resource monitor using the deck's three-trigger pattern (<code>NOTIFY</code> at 75%, <code>SUSPEND</code> at 100%, <code>SUSPEND_IMMEDIATE</code> at 110%) with a small credit quota. Assign it to your study warehouse, then drop it during cleanup.</p>
+              <p class="practice-expect"><code>SHOW RESOURCE MONITORS</code> lists the monitor with all three triggers. At 110% the warehouse suspends immediately — stricter than 100% <code>SUSPEND</code>, which lets running queries finish.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">SQL</span></summary>
+                <div class="qa-body">
+<pre><code>CREATE OR REPLACE RESOURCE MONITOR deck_pattern
+  WITH CREDIT_QUOTA = 50
+       FREQUENCY = MONTHLY
+       START_TIMESTAMP = IMMEDIATELY
+       TRIGGERS
+         ON 75 PERCENT DO NOTIFY
+         ON 100 PERCENT DO SUSPEND
+         ON 110 PERCENT DO SUSPEND_IMMEDIATE;
+
+ALTER WAREHOUSE COMPUTE_WH SET RESOURCE_MONITOR = deck_pattern;
+SHOW RESOURCE MONITORS;
+
+ALTER WAREHOUSE COMPUTE_WH UNSET RESOURCE_MONITOR;
+DROP RESOURCE MONITOR IF EXISTS deck_pattern;</code></pre>
+                </div>
+              </details>
+            </li>
+          </ol>
+        </section>
+
+        <section class="section" id="recap">
+          <h2>Recap</h2>
+          <div class="recap">
+            <ul class="checklist">
+              <li>Micro-partitions enable automatic pruning via column metadata — not manual indexes. Traditional static partitioning causes skew and maintenance overhead; Snowflake avoids both.</li>
+              <li>Each micro-partition holds ~50–500 MB uncompressed (columnar); metadata includes value ranges, distinct counts, and optimisation stats.</li>
+              <li>Query pruning = skipping micro-partitions whose metadata cannot match your filter.</li>
+              <li>Clustering co-locates same-key rows; automatic once enabled; costs storage + serverless recluster credits.</li>
+              <li>Clustering metadata: total partitions, overlapping partitions, depth — lower depth is better (<code>SYSTEM$CLUSTERING_DEPTH</code>).</li>
+              <li>Clustering keys: most-used WHERE column, join predicates, balance cardinality, multi-column order low→high.</li>
+              <li>Query Profile is the primary tuning tool; EXPLAIN shows plan only (<code>USING TABULAR | JSON | TEXT</code>).</li>
+              <li>Query history retention: Snowsight 14 days, Information Schema 7 days, Account Usage up to 365 days.</li>
+              <li>Three caches: result (24h, Cloud Services), metadata (no WH for many ops), warehouse local (purged on suspend).</li>
+              <li>Result cache: <code>CURRENT_TIMESTAMP()</code> blocks; <code>CURRENT_DATE()</code> is an exception; external functions block.</li>
+              <li>Resource monitors cap assigned warehouse + cloud-services credits — not serverless. Triggers: NOTIFY, SUSPEND, SUSPEND_IMMEDIATELY.</li>
+              <li>SOS (Enterprise+): search access path; ~100K–200K distinct values; check <code>search_optimization_progress</code> in SHOW TABLES.</li>
+              <li>QAS bursts outlier query fragments (Enterprise+); scale factor 0 = no cap, positive value = explicit cap.</li>
+              <li>Spill = memory pressure → bigger WH, fewer concurrent queries, or leaner SQL.</li>
+              <li>Performance tuning buckets: storage (clustering, SOS, MVs, retention), warehouse (queues, spill, QAS, cache), query (Profile, filters, no SELECT *).</li>
+            </ul>
+            <p style="margin-top:1rem;">
+              <button type="button" data-complete="section-09">Mark complete</button>
+            </p>
+          </div>
+        </section>
+
+      </div>
+
+      <aside class="toc" aria-label="On this page">
+        <strong>On this page</strong>
+        <ol>
+          <li><a href="#lectures">Lectures</a></li>
+          <li><a href="#micro-partitions">Micro-partitions</a></li>
+          <li><a href="#query-pruning">Query pruning</a></li>
+          <li><a href="#clustering">Clustering</a></li>
+          <li><a href="#caching">Three caches</a></li>
+          <li><a href="#query-profile">Query Profile</a></li>
+          <li><a href="#resource-monitors">Resource monitors</a></li>
+          <li><a href="#sos">SOS</a></li>
+          <li><a href="#qas">QAS</a></li>
+          <li><a href="#monitoring">Compute &amp; storage monitoring</a></li>
+          <li><a href="#workflow">Tuning workflow</a></li>
+          <li><a href="#interview">Interview questions</a></li>
+          <li><a href="#practice">Hands-on practice</a></li>
+          <li><a href="#recap">Recap</a></li>
+        </ol>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<footer class="footer">Snowflake COF-C03 Course Notes · Section 9 · Offline study edition</footer>
+</body>
+</html>

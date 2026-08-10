@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="SnowPro Core COF-C03 Section 8: sequences, AUTOINCREMENT, TABLESAMPLE sampling, estimation functions, and Snowflake supported function categories.">
+<title>Section 8 — More Features of Snowflake | Snowflake COF-C03 Course Notes</title>
+<link rel="stylesheet" href="assets/snowflake.css">
+<script defer src="assets/search-index.js"></script>
+<script defer src="assets/sql-glossary.js"></script>
+<script defer src="assets/sql-highlight.js"></script>
+<script defer src="assets/snowflake.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">Course section 8 of 17 · SnowPro Core (COF-C03)</p>
+    <h1>More Features of Snowflake</h1>
+    <p class="subtitle">Sequences and AUTOINCREMENT columns, row and block sampling with seeds, approximate distinct counts and percentiles, and the function categories Snowflake supports — including which functions work in load-time transforms.</p>
+    <div class="hero-meta">
+      <span class="chip">5 lectures · 20min</span>
+      <span class="chip">Exam domain: SQL &amp; Data Types</span>
+      <span class="chip">Last verified: 28 Jul 2026</span>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <nav class="pager" aria-label="Section navigation">
+    <a href="s07-connect-to-cloud.html">← Connect to Cloud</a>
+    <a href="../index.html">Course contents</a>
+    <a href="s09-performance.html">Next: Snowflake Performance →</a>
+  </nav>
+
+  <main id="main">
+    <div class="layout">
+      <div class="content">
+
+        <section class="section" id="lectures">
+          <h2>Lectures in this section</h2>
+          <p class="muted">Every lecture below links to the notes that cover it.</p>
+          <ol class="lecture-list">
+            <li class="lecture">
+              <a class="lec-title" href="#sequence">Demo : Sequence</a>
+              <span class="lec-time">3:40</span>
+              <span class="lec-src">More Features of Snowflake/Sequence.txt</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#sampling-concept">Sampling Concept</a>
+              <span class="lec-time">2:03</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#sampling-demo">Demo : Sampling</a>
+              <span class="lec-time">3:25</span>
+              <span class="lec-src">More Features of Snowflake/Sampling.txt</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#estimation">Demo : Estimation Functions</a>
+              <span class="lec-time">7:13</span>
+              <span class="lec-src">More Features of Snowflake/Estimation Functions.txt</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#supported-functions">Snowflake Supported Function</a>
+              <span class="lec-time">3:30</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#supported-functions">Quiz</a>
+            </li>
+          </ol>
+        </section>
+
+        <section class="section" id="sequence">
+          <h2>Demo : Sequence</h2>
+          <p class="muted">Course file: <code>More Features of Snowflake/Sequence.txt</code></p>
+          <p>Sequences generate unique integers across sessions. Defaults: <code>START = 1</code>, <code>INCREMENT = 1</code>. Snowflake does <strong>not guarantee gap-free</strong> sequences — rollbacks and distributed generation may skip values.</p>
+
+          <pre><code>USE ROLE ACCOUNTADMIN;
+USE WAREHOUSE COMPUTE_WH;
+USE DATABASE la_db;
+USE SCHEMA la_schema;
+
+CREATE OR REPLACE SEQUENCE sequence_sample START = 1 INCREMENT = 1;
+
+SHOW SEQUENCES;
+SHOW SEQUENCES LIKE '%s%';
+
+SELECT sequence_sample.NEXTVAL;  -- 1
+
+CREATE OR REPLACE TABLE sequence_table (i INTEGER);
+
+INSERT INTO sequence_table (i) VALUES (sequence_sample.NEXTVAL);
+INSERT INTO sequence_table (i) VALUES (sequence_sample.NEXTVAL);
+INSERT INTO sequence_table (i) VALUES (sequence_sample.NEXTVAL);
+
+SELECT i FROM sequence_table;
+
+CREATE OR REPLACE SEQUENCE sequence_sample2 START = 1 INCREMENT = 5;
+
+SELECT sequence_sample2.NEXTVAL AS a,
+       sequence_sample2.NEXTVAL AS b,
+       sequence_sample2.NEXTVAL AS c;  -- 1, 6, 11
+
+ALTER SEQUENCE sequence_sample RENAME TO seq_name;
+DROP SEQUENCE IF EXISTS sequence_sample;</code></pre>
+
+          <h3>AUTOINCREMENT / IDENTITY columns</h3>
+          <p>Table columns can auto-generate integers without an explicit sequence object — common in load-time transforms (see <a href="s05-advance-data-loading.html">Section 5</a>).</p>
+
+          <pre><code>CREATE OR REPLACE TABLE orders (
+  order_id  NUMBER AUTOINCREMENT START 1 INCREMENT 1,
+  customer  VARCHAR,
+  amount    NUMBER
+);
+
+INSERT INTO orders (customer, amount) VALUES ('Acme', 100);
+SELECT * FROM orders;  -- order_id populated automatically</code></pre>
+
+          <div class="callout exam">
+            <strong>Exam tip:</strong> Sequences are schema-level objects invoked with <code>seq_name.NEXTVAL</code>. <code>AUTOINCREMENT</code> is a column property — you omit that column on INSERT and Snowflake fills it in.
+          </div>
+        </section>
+
+        <section class="section" id="sampling-concept">
+          <h2>Sampling Concept</h2>
+          <p class="lead">When exploring large tables, reading every row is expensive. Snowflake supports <strong>table sampling</strong> to scan a subset of rows or micro-partitions — useful for profiling, QA, and approximate analytics.</p>
+
+          <h3>Fixed-size versus fraction-based sampling</h3>
+          <p>Sampling comes in two shapes. <strong>Fixed-size</strong> sampling returns an exact number of rows — for example <code>SAMPLE (100 ROWS)</code>. <strong>Fraction-based</strong> sampling takes a percentage of the table; the number of rows returned varies with table size.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-148-sampling.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-148-sampling.png" alt="Fixed-size sampling returns an exact row count; fraction-based BERNOULLI or ROW computes p over 100 times n row by row while SYSTEM or BLOCK samples block by block faster but may be biased; join sampling requires BERNOULLI or ROW without seed" loading="lazy" width="1920" height="1080">
+            </a>
+            <figcaption><span class="slide-no">Slide 148</span>Fixed row count versus percentage sampling, and the join constraint (BERNOULLI/ROW only, no seed).</figcaption>
+          </figure>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Method</th><th>Syntax keyword</th><th>Behaviour</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Row sampling</td>
+                  <td><code>BERNOULLI</code> (default) or <code>ROW</code></td>
+                  <td>Computes <code>(p/100) × n</code> row by row — each row included independently with the given probability, so the returned count varies. May scan more data than it returns.</td>
+                </tr>
+                <tr>
+                  <td>Block sampling</td>
+                  <td><code>SYSTEM</code> or <code>BLOCK</code></td>
+                  <td>Works block by block at the micro-partition level — faster on huge tables but can be biased if data is clustered within partitions.</td>
+                </tr>
+                <tr>
+                  <td>Fixed-size</td>
+                  <td><code>SAMPLE (n ROWS)</code></td>
+                  <td>Returns exactly <code>n</code> rows regardless of table size.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>Use <code>SEED(n)</code> for repeatable samples within a session. Disable result cache when comparing sample sizes: <code>ALTER SESSION SET USE_CACHED_RESULT = FALSE</code>.</p>
+
+          <div class="callout exam">
+            <strong>Join sampling:</strong> Sampling in a join is only possible with <code>BERNOULLI</code>/<code>ROW</code>-based methods and <strong>without</strong> a <code>SEED</code>. Block sampling cannot be used in join contexts.
+          </div>
+        </section>
+
+        <section class="section" id="sampling-demo">
+          <h2>Demo : Sampling</h2>
+          <p class="muted">Course file: <code>More Features of Snowflake/Sampling.txt</code></p>
+
+          <pre><code>ALTER SESSION SET USE_CACHED_RESULT = FALSE;
+
+SELECT COUNT(*) FROM snowflake_sample_data.tpch_sf1.customer;
+-- Full table: 150,000 rows
+
+-- Block / SYSTEM sampling — ~1% of micro-partitions
+SELECT COUNT(*) FROM snowflake_sample_data.tpch_sf1.customer
+  TABLESAMPLE SYSTEM (1);
+
+-- Row / BERNOULLI sampling — ~20.3% of rows (default method)
+SELECT COUNT(*) FROM snowflake_sample_data.tpch_sf1.customer
+  TABLESAMPLE BERNOULLI (20.3) SEED (10);
+
+-- Fixed row count (SAMPLE shorthand)
+SELECT COUNT(*) FROM snowflake_sample_data.tpch_sf1.customer
+  SAMPLE (100 ROWS);</code></pre>
+
+          <div class="callout exam">
+            <strong>Exam note:</strong> <code>TABLESAMPLE</code> and <code>SAMPLE</code> are equivalent. Percentage must be 0–100. <code>SEED</code> makes the sample reproducible. Block sampling is cheaper but can skew if data is clustered.
+          </div>
+        </section>
+
+        <section class="section" id="estimation">
+          <h2>Demo : Estimation Functions</h2>
+          <p class="muted">Course file: <code>More Features of Snowflake/Estimation Functions.txt</code></p>
+          <p>Estimation functions trade exactness for speed on large datasets using probabilistic data structures. Snowflake groups them into four families — each with a named algorithm and optional ACCUMULATE/COMBINE/ESTIMATE variants for incremental pipelines.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-150-estimating.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-150-estimating.png" alt="Four estimation function families: distinct count, similarity estimation, frequency estimation, and percentile estimation" loading="lazy" width="1920" height="1080">
+            </a>
+            <figcaption><span class="slide-no">Slide 150</span>The four families of estimation function and what each approximates.</figcaption>
+          </figure>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Family</th><th>Algorithm</th><th>Functions</th><th>Notes</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>Distinct count</strong></td>
+                  <td>HyperLogLog (HLL)</td>
+                  <td><code>APPROX_COUNT_DISTINCT</code>, <code>HLL_ACCUMULATE</code>, <code>HLL_COMBINE</code>, <code>HLL_ESTIMATE</code></td>
+                  <td>Counts distinct rows without storing every unique value.</td>
+                </tr>
+                <tr>
+                  <td><strong>Similarity estimation</strong></td>
+                  <td>MinHash</td>
+                  <td><code>MINHASH</code>, <code>APPROXIMATE_SIMILARITY</code></td>
+                  <td>Compares two or more datasets; output ranges from 0 (completely distinct) to 1 (identical).</td>
+                </tr>
+                <tr>
+                  <td><strong>Frequency estimation</strong></td>
+                  <td>Space-Saving</td>
+                  <td><code>APPROX_TOP_K</code>, <code>APPROX_TOP_K_ACCUMULATE</code>, <code>APPROX_TOP_K_COMBINE</code>, <code>APPROX_TOP_K_ESTIMATE</code></td>
+                  <td>Approximates the most frequent values in a column.</td>
+                </tr>
+                <tr>
+                  <td><strong>Percentile estimation</strong></td>
+                  <td>t-Digest</td>
+                  <td><code>APPROX_PERCENTILE</code>, <code>APPROX_PERCENTILE_ACCUMULATE</code>, <code>APPROX_PERCENTILE_COMBINE</code>, <code>APPROX_PERCENTILE_ESTIMATE</code></td>
+                  <td>Returns approximate values; works only on numeric columns; may return a value not present in the dataset.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Approximate distinct count (HLL)</h3>
+          <pre><code>ALTER SESSION SET USE_CACHED_RESULT = FALSE;
+
+-- Exact — slow on billion-row tables
+SELECT COUNT(DISTINCT wr_order_number)
+FROM snowflake_sample_data.tpcds_sf100tcl.web_returns;
+
+-- Approximate — much faster; low error rate (~1–2% typical)
+SELECT APPROX_COUNT_DISTINCT(wr_order_number)
+FROM snowflake_sample_data.tpcds_sf100tcl.web_returns;</code></pre>
+
+          <h3>Approximate top-K</h3>
+          <pre><code>SELECT hd_buy_potential, COUNT(*) AS num
+FROM snowflake_sample_data.tpcds_sf100tcl.household_demographics
+GROUP BY hd_buy_potential
+ORDER BY num DESC
+LIMIT 5;
+
+SELECT APPROX_TOP_K(hd_buy_potential, 5, 10000)
+FROM snowflake_sample_data.tpcds_sf100tcl.household_demographics;</code></pre>
+
+          <h3>Approximate percentile</h3>
+          <p><code>APPROX_PERCENTILE</code> uses the <strong>t-Digest</strong> algorithm. It returns approximate quantile values, works only on numeric columns, and may return a value that is not actually present in the dataset — unlike an exact <code>PERCENTILE_CONT</code>.</p>
+          <pre><code>CREATE OR REPLACE TABLE testtable (c1 INTEGER);
+INSERT INTO testtable SELECT SEQ4() FROM TABLE(GENERATOR(ROWCOUNT => 11));
+
+SELECT APPROX_PERCENTILE(c1, 0.1) FROM testtable;</code></pre>
+
+          <h3>MinHash similarity</h3>
+          <p><code>MINHASH</code> builds a sketch of a dataset; <code>APPROXIMATE_SIMILARITY</code> compares sketches from two or more tables. Output ranges from <strong>0</strong> (completely distinct) to <strong>1</strong> (identical).</p>
+          <pre><code>CREATE OR REPLACE TABLE sample_table1 (
+  id INT, name VARCHAR(255), city VARCHAR(255), state VARCHAR(255)
+);
+CREATE OR REPLACE TABLE sample_table2 (
+  id INT, name VARCHAR(255), city VARCHAR(255), state VARCHAR(255)
+);
+
+INSERT INTO sample_table1 VALUES
+  (1,'John Doe','San Francisco','CA'), (2,'Jane Doe','New York','NY'),
+  (3,'Peter Smith','Chicago','IL'), (4,'Susan Jones','Los Angeles','CA'),
+  (5,'David Williams','Seattle','WA');
+
+INSERT INTO sample_table2 VALUES
+  (1,'John Doe','San Francisco','CA'), (2,'Jane Doe','New York','NY'),
+  (3,'Peter Smith','Chicago','IL'), (4,'Susan Jones','Los Angeles','CA'),
+  (5,'David Williams','Seattle','WA'), (6,'Mary Johnson','Dallas','TX'),
+  (7,'Michael Brown','Miami','FL');
+
+SELECT MINHASH(5, *) FROM sample_table1;
+
+SELECT APPROXIMATE_SIMILARITY(mh)
+FROM (
+  SELECT MINHASH(100, *) AS mh FROM sample_table1
+  UNION ALL
+  SELECT MINHASH(100, *) AS mh FROM sample_table2
+);</code></pre>
+
+          <div class="callout tip">
+            <strong>When to use:</strong> Dashboard KPIs on huge fact tables, duplicate detection across datasets, and exploratory analytics where ±2% error is acceptable.
+          </div>
+        </section>
+
+        <section class="section" id="supported-functions">
+          <h2>Snowflake Supported Function</h2>
+          <p>Snowflake ships hundreds of built-in functions grouped by role in a query. Know the categories for the exam and for load-time transforms in <a href="s05-advance-data-loading.html">Section 5</a>. Snowflake also supports user-defined functions (UDFs) and external functions.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-156-function-types.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-156-function-types.png" alt="Snowflake function types: scalar, aggregate, system, window, and table, plus UDF and external function support" loading="lazy" width="1920" height="1080">
+            </a>
+            <figcaption><span class="slide-no">Slide 156</span>Five built-in function categories plus UDF and external function support.</figcaption>
+          </figure>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Category</th><th>Behaviour</th><th>Examples</th><th>Typical use</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>Scalar</strong></td>
+                  <td>Returns one value per invocation.</td>
+                  <td><code>CEIL(135.135)</code> → 136; <code>CONCAT</code>, <code>CAST</code>, <code>COALESCE</code>, <code>DATEADD</code></td>
+                  <td>Per-row expressions in SELECT, WHERE, and load transforms</td>
+                </tr>
+                <tr>
+                  <td><strong>Aggregate</strong></td>
+                  <td>Returns one value per group of rows.</td>
+                  <td><code>COUNT</code>, <code>SUM</code>, <code>AVG</code>, <code>APPROX_COUNT_DISTINCT</code>, <code>LISTAGG</code></td>
+                  <td>Group summaries — require <code>GROUP BY</code> or whole-table aggregation</td>
+                </tr>
+                <tr>
+                  <td><strong>Window</strong></td>
+                  <td>Aggregate-like functions over a subset of rows within the input set, without collapsing rows.</td>
+                  <td><code>ROW_NUMBER</code>, <code>LAG</code>, <code>ANY_VALUE</code>, <code>RATIO_TO_REPORT</code>, <code>SUM() OVER (...)</code></td>
+                  <td>Per-partition calculations — running totals, rank, share-of-group</td>
+                </tr>
+                <tr>
+                  <td><strong>System</strong></td>
+                  <td>Control functions that execute actions in the system.</td>
+                  <td><code>CURRENT_USER</code>, <code>SYSTEM$PIPE_STATUS</code>, <code>SYSTEM$ABORT_SESSION(...)</code></td>
+                  <td>Session control, account metadata, administrative actions</td>
+                </tr>
+                <tr>
+                  <td><strong>Table</strong></td>
+                  <td>Returns a set of rows for each input row — zero, one, or many rows, each with one or more columns.</td>
+                  <td><code>FLATTEN</code>, <code>GENERATOR</code>, <code>VALIDATE</code>, <code>RESULT_SCAN</code></td>
+                  <td>Row-generating functions; often used with <code>TABLE(...)</code></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Window function example</h3>
+          <p><code>RATIO_TO_REPORT</code> computes each row's share of a partition total — useful for percentage breakdowns without a separate aggregation step:</p>
+          <pre><code>SELECT province, store_ID, profit,
+       100 * RATIO_TO_REPORT(profit) OVER (PARTITION BY province) AS percent_profit
+FROM store_profit
+ORDER BY province, store_ID;</code></pre>
+
+          <h3>Functions allowed in COPY load-time transforms</h3>
+          <p>The subquery inside <code>COPY INTO … FROM (SELECT …)</code> may use <strong>scalar functions only</strong> — no aggregates, no window functions, no subqueries that return multiple rows. Allowed examples from the course labs:</p>
+          <ul>
+            <li>String: <code>CONCAT</code>, <code>SUBSTR</code>, <code>TRIM</code>, <code>UPPER</code></li>
+            <li>Conversion: <code>CAST</code>, <code>TRY_CAST</code>, <code>TO_BINARY</code>, <code>TO_VARCHAR</code></li>
+            <li>Conditional: <code>COALESCE</code>, <code>IFF</code>, <code>NVL</code></li>
+            <li>Date/time scalars: <code>TO_DATE</code>, <code>TO_TIMESTAMP</code></li>
+          </ul>
+          <p><code>AUTOINCREMENT</code> columns are populated by Snowflake during load — omit them from the column list and transform SELECT.</p>
+
+          <div class="callout exam">
+            <strong>COF-C03 exam tip:</strong> Custom UDFs (scalar) can appear in load transforms if granted to the loading role. Aggregate and window builtins cannot. User-defined table functions belong in SELECT queries, not COPY transforms.
+          </div>
+        </section>
+
+        <section class="section" id="lab">
+          <div class="lab">
+            <h3>Practical Lab — Sequence &amp; Sampling</h3>
+            <div class="lab-meta">
+              <span>Prerequisites: access to SNOWFLAKE_SAMPLE_DATA</span>
+              <span>Role: SYSADMIN</span>
+              <span>Warehouse: COMPUTE_WH</span>
+              <span>Duration: ~10 min</span>
+            </div>
+            <pre><code>CREATE OR REPLACE SEQUENCE lab_seq START = 100 INCREMENT = 10;
+
+CREATE OR REPLACE TABLE lab_ids (id INT, label VARCHAR);
+INSERT INTO lab_ids VALUES (lab_seq.NEXTVAL, 'first');
+INSERT INTO lab_ids VALUES (lab_seq.NEXTVAL, 'second');
+SELECT * FROM lab_ids;  -- 100, 110
+
+ALTER SESSION SET USE_CACHED_RESULT = FALSE;
+
+SELECT COUNT(*) AS full_cnt FROM snowflake_sample_data.tpch_sf1.customer;
+SELECT COUNT(*) AS sample_cnt FROM snowflake_sample_data.tpch_sf1.customer
+  TABLESAMPLE BERNOULLI (5) SEED (42);</code></pre>
+            <h4>Cleanup</h4>
+            <pre><code>DROP TABLE IF EXISTS lab_ids;
+DROP SEQUENCE IF EXISTS lab_seq;</code></pre>
+          </div>
+        </section>
+
+        <section class="section" id="interview">
+          <h2>Interview questions</h2>
+          <p class="muted">Try to answer each one before opening it.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+            <details class="qa">
+              <summary>What is the difference between a sequence and an <code>AUTOINCREMENT</code> column, and do either guarantee gap-free values?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p>A sequence is a standalone schema object invoked with <code>seq_name.NEXTVAL</code>; <code>AUTOINCREMENT</code> (or <code>IDENTITY</code>) is a column property filled automatically when you omit the column on INSERT or COPY. Neither guarantees gap-free values — rollbacks, failed statements, and distributed generation can skip numbers. Use them for unique identifiers, not contiguous row numbering.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Compare <code>BERNOULLI</code>/<code>ROW</code> sampling with <code>SYSTEM</code>/<code>BLOCK</code> sampling.<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p><code>BERNOULLI</code> (or <code>ROW</code>) includes each row independently at the given percentage — more uniform but may scan more data than it returns. <code>SYSTEM</code> (or <code>BLOCK</code>) samples entire micro-partitions, so it is faster on huge tables but can skew if data is clustered. Choose row sampling for statistical fairness; block sampling for cheap profiling on very large tables.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>When does a <code>SEED</code> on <code>TABLESAMPLE</code> matter?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p><code>SEED(n)</code> makes the sample reproducible within a session — the same table, percentage, method, and seed return the same rows. Without a seed, repeated samples differ. Disable result cache with <code>ALTER SESSION SET USE_CACHED_RESULT = FALSE</code> when comparing sample sizes, otherwise cached full-table results can mask sampling behaviour.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Why do approximate functions exist, and how accurate is <code>APPROX_COUNT_DISTINCT</code>?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>Exact <code>COUNT(DISTINCT …)</code> on billion-row fact tables is expensive because it must track every unique value. <code>APPROX_COUNT_DISTINCT</code> uses HyperLogLog sketches for orders-of-magnitude speedup with roughly 1–2% typical error (the course demo notes ~1.6% on TPC-DS web returns). Use it for dashboard KPIs where ±2% is acceptable; use exact count when the number must reconcile to the penny.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What are HLL state functions for, and how do they combine sketches?<span class="qa-tag">SQL</span></summary>
+              <div class="qa-body">
+                <p><code>HLL_ACCUMULATE(col)</code> builds a partial HyperLogLog sketch per partition — useful in incremental or pre-aggregated pipelines. <code>HLL_COMBINE(sketch)</code> merges multiple sketches into one. <code>HLL_ESTIMATE(sketch)</code> returns the approximate distinct count from the combined state. This lets you compute daily sketches and merge them for a weekly total without rescanning raw rows.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What do <code>APPROX_PERCENTILE</code> and <code>APPROX_TOP_K</code> return?<span class="qa-tag">SQL</span></summary>
+              <div class="qa-body">
+                <p><code>APPROX_PERCENTILE(col, 0.1)</code> estimates the value at the given quantile without sorting the entire column — on 11 evenly spaced integers it returns near 1 for the 10th percentile. <code>APPROX_TOP_K(col, k, counters)</code> estimates the k most frequent values with approximate counts; the third argument controls counter precision. Both trade exactness for speed on large datasets.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Which function categories does Snowflake support, and which can appear in a COPY load-time transform?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p>Snowflake groups functions into scalar, aggregate, window, table, and system families. The subquery inside <code>COPY INTO … FROM (SELECT …)</code> allows scalar functions only — <code>CONCAT</code>, <code>CAST</code>, <code>TO_BINARY</code>, <code>COALESCE</code>, etc. Aggregates, window functions, and table functions like <code>FLATTEN</code> are not permitted. Custom scalar UDFs work if the loading role has execute privilege.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Why might <code>TABLESAMPLE SYSTEM (1)</code> return a very different row count than <code>BERNOULLI (1)</code> on the same table?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p><code>SYSTEM</code> sampling picks roughly 1% of micro-partitions, not 1% of rows — a small table may have only a few partitions, so you get all or nothing from each block. <code>BERNOULLI (1)</code> targets 1% of rows independently and tends to track the percentage more closely on uniform data. Block sampling can also over-represent clustered values within a partition.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>When can you use table sampling in a join, and what restrictions apply?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p>Join sampling works only with <code>BERNOULLI</code>/<code>ROW</code>-based methods — not <code>SYSTEM</code>/<code>BLOCK</code>. You also cannot use a <code>SEED</code> when sampling in a join context. Fixed-size <code>SAMPLE (n ROWS)</code> applies to single-table queries.</p>
+              </div>
+            </details>
+          </div>
+        </section>
+
+        <section class="section" id="practice">
+          <h2>Hands-on practice</h2>
+          <p class="muted">Run these in a trial account on an X-Small warehouse with <code>AUTO_SUSPEND = 60</code>. Clean up when you finish.</p>
+          <ol class="practice-list">
+            <li class="practice">
+              <p class="practice-task">Create sequence <code>practice_seq</code> with <code>START = 50 INCREMENT = 5</code>, insert three rows into <code>practice_ids</code> using <code>NEXTVAL</code>, and compare with an <code>AUTOINCREMENT</code> column on a second table.</p>
+              <p class="practice-expect"><code>practice_ids</code> contains id values 50, 55, and 60. The AUTOINCREMENT table fills order_id automatically when you omit it on INSERT.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">SQL</span></summary>
+                <div class="qa-body">
+<pre><code>USE ROLE ACCOUNTADMIN;
+USE WAREHOUSE COMPUTE_WH;
+USE DATABASE la_db;
+USE SCHEMA la_schema;
+
+CREATE OR REPLACE SEQUENCE practice_seq START = 50 INCREMENT = 5;
+
+CREATE OR REPLACE TABLE practice_ids (id INT, label VARCHAR);
+INSERT INTO practice_ids VALUES (practice_seq.NEXTVAL, 'a');
+INSERT INTO practice_ids VALUES (practice_seq.NEXTVAL, 'b');
+INSERT INTO practice_ids VALUES (practice_seq.NEXTVAL, 'c');
+
+SELECT * FROM practice_ids;
+
+CREATE OR REPLACE TABLE practice_orders (
+  order_id NUMBER AUTOINCREMENT START 1 INCREMENT 1,
+  customer VARCHAR,
+  amount NUMBER
+);
+INSERT INTO practice_orders (customer, amount) VALUES ('Acme', 100);
+SELECT * FROM practice_orders;</code></pre>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">On <code>snowflake_sample_data.tpch_sf1.customer</code>, compare full row count with <code>TABLESAMPLE BERNOULLI (5) SEED (42)</code> and <code>TABLESAMPLE SYSTEM (5)</code>. Set <code>USE_CACHED_RESULT = FALSE</code> first.</p>
+              <p class="practice-expect">Full count is 150,000. Bernoulli sample is near 5% (~7,500 rows); SYSTEM sample may differ noticeably because it samples blocks, not individual rows.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">SQL</span></summary>
+                <div class="qa-body">
+<pre><code>ALTER SESSION SET USE_CACHED_RESULT = FALSE;
+
+SELECT COUNT(*) AS full_cnt
+FROM snowflake_sample_data.tpch_sf1.customer;
+
+SELECT COUNT(*) AS bernoulli_cnt
+FROM snowflake_sample_data.tpch_sf1.customer
+  TABLESAMPLE BERNOULLI (5) SEED (42);
+
+SELECT COUNT(*) AS system_cnt
+FROM snowflake_sample_data.tpch_sf1.customer
+  TABLESAMPLE SYSTEM (5);</code></pre>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Run <code>APPROX_PERCENTILE(c1, 0.5)</code> on a small numeric table and compare with an exact median. Note that the approximate result may not be a value that exists in the dataset.</p>
+              <p class="practice-expect"><code>APPROX_PERCENTILE</code> returns quickly; the value is close to but may differ from <code>PERCENTILE_CONT(0.5)</code>, and t-Digest can return a number not present in the input rows.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">SQL</span></summary>
+                <div class="qa-body">
+<pre><code>CREATE OR REPLACE TABLE pct_practice (c1 INTEGER);
+INSERT INTO pct_practice SELECT SEQ4() FROM TABLE(GENERATOR(ROWCOUNT => 11));
+
+SELECT APPROX_PERCENTILE(c1, 0.5) AS approx_median FROM pct_practice;
+SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY c1) AS exact_median FROM pct_practice;
+
+DROP TABLE IF EXISTS pct_practice;</code></pre>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Run <code>APPROX_COUNT_DISTINCT</code> on <code>wr_order_number</code> from TPC-DS web returns, then drop all practice objects from this section.</p>
+              <p class="practice-expect">Approximate distinct count returns quickly with a value close to the exact count (within a few percent). Practice tables and sequence are dropped.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">SQL</span></summary>
+                <div class="qa-body">
+<pre><code>ALTER SESSION SET USE_CACHED_RESULT = FALSE;
+
+SELECT APPROX_COUNT_DISTINCT(wr_order_number)
+FROM snowflake_sample_data.tpcds_sf100tcl.web_returns;
+
+DROP TABLE IF EXISTS practice_orders;
+DROP TABLE IF EXISTS practice_ids;
+DROP SEQUENCE IF EXISTS practice_seq;</code></pre>
+                </div>
+              </details>
+            </li>
+          </ol>
+        </section>
+
+        <section class="section" id="recap">
+          <h2>Recap</h2>
+          <div class="recap">
+            <ul class="checklist">
+              <li>Sequences: <code>seq.NEXTVAL</code>; may have gaps; defaults START=1, INCREMENT=1.</li>
+              <li><code>AUTOINCREMENT</code> columns auto-fill on INSERT / COPY when omitted from column list.</li>
+              <li>Sampling: fixed-size (<code>n ROWS</code>) vs fraction-based; <code>BERNOULLI</code>/ROW vs <code>SYSTEM</code>/BLOCK; join sampling = BERNOULLI/ROW only, no seed.</li>
+              <li>Estimation: HLL distinct, MinHash similarity (0–1), Space-Saving <code>APPROX_TOP_K</code>, t-Digest <code>APPROX_PERCENTILE</code> (numeric only).</li>
+              <li>Function categories: scalar, aggregate, window, table, system; plus UDFs and external functions.</li>
+              <li>Load transforms allow scalar functions only — no aggregates or windows.</li>
+            </ul>
+            <p style="margin-top:1rem;">
+              <button type="button" data-complete="section-08">Mark complete</button>
+            </p>
+          </div>
+        </section>
+
+      </div>
+
+      <aside class="toc" aria-label="On this page">
+        <strong>On this page</strong>
+        <ol>
+          <li><a href="#lectures">Lectures</a></li>
+          <li><a href="#sequence">Sequences</a></li>
+          <li><a href="#sampling-concept">Sampling concept</a></li>
+          <li><a href="#sampling-demo">Sampling demo</a></li>
+          <li><a href="#estimation">Estimation functions</a></li>
+          <li><a href="#supported-functions">Supported functions</a></li>
+          <li><a href="#lab">Practical lab</a></li>
+          <li><a href="#interview">Interview questions</a></li>
+          <li><a href="#practice">Hands-on practice</a></li>
+          <li><a href="#recap">Recap</a></li>
+        </ol>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<footer class="footer">Snowflake COF-C03 Course Notes · Section 8 · Offline study edition</footer>
+</body>
+</html>

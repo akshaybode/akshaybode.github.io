@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="dbt bootcamp Section 2: the four stages of data maturity, why each layer depends on the one below, and where dbt sits between wrangling and analytics in the Airbnb project.">
+<title>Section 2 — The Data Maturity Model | The Complete dbt Bootcamp Notes</title>
+<link rel="stylesheet" href="assets/dbt.css">
+<script defer src="assets/search-index.js"></script>
+<script defer src="assets/code-highlight.js"></script>
+<script defer src="assets/dbt.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">Course section 2 of 22 · The Complete dbt Bootcamp: Zero to Hero</p>
+    <h1>The Data Maturity Model</h1>
+    <p class="subtitle">Why most data teams fail by skipping stages. The four layers every organisation climbs &mdash; collection, wrangling, analytics, machine learning &mdash; and why dbt was built for the middle two. Every example ties back to the three raw Airbnb tables you will model in later sections.</p>
+    <div class="hero-meta">
+      <span class="chip">4 lectures · ~20min</span>
+      <span class="chip">Theory foundation</span>
+      <span class="chip">dbt data architecture</span>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <nav class="pager" aria-label="Section navigation">
+    <a href="s01-introduction.html">← Introduction</a>
+    <a href="index.html">Course contents</a>
+    <a href="s03-warehouses-lakes.html">Next: Warehouses, Lakes and Lakehouses →</a>
+  </nav>
+
+  <main id="main">
+    <div class="layout">
+      <div class="content">
+
+        <section class="section" id="lectures">
+          <h2>Lectures in this section</h2>
+          <ol class="lecture-list">
+            <li class="lecture">
+              <a class="lec-title" href="#maturity-pyramid">The four stages of data maturity</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">Theory lecture</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#stage-1-collection">Stage 1 &mdash; data collection and the sources you inherit</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">Theory lecture</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#stage-2-wrangling">Stages 2 and 3 &mdash; data wrangling and analytics</a>
+              <span class="lec-time">~5:30</span>
+              <span class="lec-src">Theory lecture</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#stage-4-ml">Stage 4 &mdash; machine learning, and where dbt sits</a>
+              <span class="lec-time">~4:30</span>
+              <span class="lec-src">Theory lecture</span>
+            </li>
+          </ol>
+          <p class="muted">This section is pure theory &mdash; no commands yet. It explains <em>why</em> the course builds a staging layer before dimensions, and why jumping straight to dashboards or ML models on raw tables fails.</p>
+        </section>
+
+        <section class="section" id="maturity-pyramid">
+          <h2>The maturity pyramid</h2>
+          <p class="lead">Data maturity is not a checklist of tools. It is a stack of capabilities where each layer only works if the one beneath it is solid. A company that buys a BI licence before it has reliable tables is building on sand; one that trains a churn model on untested aggregates is optimising noise.</p>
+
+          <p>The model has four stages, ordered from foundation to summit. They are often drawn as a pyramid because the base is wide &mdash; almost every company has <em>some</em> data collection &mdash; and the top is narrow. Most organisations never reach stage 4 in a meaningful way, and that is usually the right outcome.</p>
+
+          <div class="stack">
+            <div class="layer"><strong>Stage 4 &mdash; Machine learning and AI.</strong> Predictive models, recommendations, LLM-assisted analytics. Requires clean, labelled, grain-stable features built from stage 3 tables.</div>
+            <div class="layer"><strong>Stage 3 &mdash; Data analytics.</strong> BI dashboards, ad-hoc analysis, agreed metrics, self-serve reporting. Requires modelled tables with documented definitions and tests.</div>
+            <div class="layer"><strong>Stage 2 &mdash; Data wrangling.</strong> Ingestion, landing raw data untouched, storage in a warehouse or lake. Requires sources from stage 1 and a place to put them.</div>
+            <div class="layer"><strong>Stage 1 &mdash; Data collection.</strong> Application databases, event streams, SaaS APIs, files, third-party feeds. The inputs you inherit, rarely under your control.</div>
+          </div>
+
+          <h3>Dependency between stages</h3>
+          <p>Each stage is a prerequisite for the next, not an optional upgrade. Stage 2 cannot produce trustworthy analytics if stage 1 sources are missing or silently wrong. Stage 3 cannot define <em>revenue</em> once if every team reads a different raw export. Stage 4 cannot learn patterns that do not exist in consistent historical tables.</p>
+
+          <div class="diagram">
+            <p class="diagram-title">Each stage consumes the output of the stage below</p>
+            <div class="flow">
+              <div class="node is-source"><b>Stage 1</b><small>collect</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-store"><b>Stage 2</b><small>land &amp; store</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-model"><b>Stage 3</b><small>model &amp; measure</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-serve pulse"><b>Stage 4</b><small>predict &amp; automate</small></div>
+            </div>
+          </div>
+
+          <p>The central argument of this model: skipping a stage does not skip the work &mdash; it hides it. If you deploy Looker on top of spreadsheets and raw API dumps, someone is still doing wrangling and analytics by hand in every dashboard tile. The work moved from a shared pipeline into twelve slightly different SQL snippets nobody maintains.</p>
+
+          <h3>Symptoms of skipping a stage</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Skipped stage</th><th>What the organisation did instead</th><th>Symptoms you will recognise</th></tr></thead>
+              <tbody>
+                <tr><td>Stage 1 (collection)</td><td>Bought a warehouse and started querying whatever was already there</td><td>Critical tables missing; no owner for upstream feeds; &ldquo;the export broke again&rdquo; is a weekly meeting topic</td></tr>
+                <tr><td>Stage 2 (wrangling)</td><td>Analysts query production databases directly, or paste CSVs into the warehouse by hand</td><td>Production DB load spikes; no historical record when a column changes; reloads overwrite history</td></tr>
+                <tr><td>Stage 3 (analytics)</td><td>Jumped to ML or AI on raw or lightly cleaned tables</td><td>Models drift in weeks; feature definitions live in notebooks; nobody can reproduce last quarter's score</td></tr>
+                <tr><td>Stage 3 (analytics)</td><td>Every team built its own metrics in its own BI tool</td><td>Finance and product report different revenue on the same day; meetings argue about definitions instead of decisions</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout warn"><strong>Buying tools is not climbing a stage.</strong> A Fivetran connector does not complete stage 2 if nobody monitors freshness. A dbt project does not complete stage 3 if models have no tests and no owners. A feature store does not complete stage 4 if the underlying dimensions change grain every sprint.</div>
+
+          <div class="analogy"><strong>Everyday analogy &mdash;</strong> the pyramid is like building a house. You can paint the walls (dashboards) before the plumbing is inspected (tests on core tables), but the first time it rains you discover the roof was never finished (reliable ingestion). dbt is the framing and inspection between foundation and finish &mdash; not the foundation itself, and not the furniture.</div>
+        </section>
+
+        <section class="section" id="stage-1-collection">
+          <h2>Stage 1: data collection</h2>
+          <p class="lead">Stage 1 is everything that happens before your team touches the data. Application engineers write rows to databases. Product teams emit events. Finance uses SaaS tools. Partners send files. Your job starts with inheriting those shapes, not designing them.</p>
+
+          <h3>Source types a data team inherits</h3>
+          <div class="grid-2">
+            <div class="mini-card">
+              <h4>Application databases</h4>
+              <p>PostgreSQL, MySQL, SQL Server &mdash; the system of record for transactions. Normalised schemas, frequent updates, sometimes direct queries you should not run in production.</p>
+            </div>
+            <div class="mini-card">
+              <h4>Event streams</h4>
+              <p>Clickstream, product analytics, IoT. High volume, semi-structured JSON, timestamps that matter more than relational keys.</p>
+            </div>
+            <div class="mini-card">
+              <h4>SaaS APIs</h4>
+              <p>Salesforce, Stripe, Zendesk. Convenient but vendor-controlled schemas, rate limits, and breaking API version changes.</p>
+            </div>
+            <div class="mini-card">
+              <h4>Files and third-party</h4>
+              <p>CSV dumps, SFTP drops, market data, ad networks. Often the messiest: wrong encodings, header rows that move, columns added without notice.</p>
+            </div>
+          </div>
+
+          <h3>Volume, velocity and variety</h3>
+          <p>The old &ldquo;three Vs&rdquo; still describe why stage 1 is hard. <strong>Volume</strong> determines whether you need a warehouse at all &mdash; the Airbnb course uses small CSVs, but production reviews tables are billions of rows. <strong>Velocity</strong> determines batch versus streaming: nightly loads are stage 2 with Fivetran; sub-minute latency is a different architecture entirely, and dbt is not the answer there. <strong>Variety</strong> is what forces staging later: the same business concept arrives as a string with a currency symbol in one source and as a numeric column in another.</p>
+
+          <h3>Why you rarely control the input shape</h3>
+          <p>Data teams almost never own the upstream schema. Product ships a new column when a feature launches. A vendor renames a field in an API response. A legacy system stores price as text because that was expedient in 2014. You cannot rewrite history; you can only land what arrived and document what it meant on the day it landed.</p>
+
+          <p>That constraint is the main reason every mature pipeline has a <em>staging</em> layer in stage 2 and 3: one place to rename columns, cast types, and isolate upstream breakage before it reaches a dashboard or a fact table. In the course project, the three raw tables are deliberately imperfect so you practice exactly that.</p>
+
+          <h3>The Airbnb raw tables at stage 1</h3>
+          <p>The course loads three CSV files into Snowflake as <code>AIRBNB.RAW.RAW_LISTINGS</code>, <code>RAW_HOSTS</code>, and <code>RAW_REVIEWS</code>. At stage 1 they are simply <em>there</em> &mdash; loaded outside dbt, unchanged, representing what an extract job dropped overnight.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Raw table</th><th>Stage 1 role</th><th>Why staging becomes necessary</th></tr></thead>
+              <tbody>
+                <tr><td><code>raw_listings</code></td><td>Property master from the marketplace app</td><td><code>price</code> is a string with <code>$</code>; <code>minimum_nights</code> can be 0; column names like <code>name</code> are ambiguous</td></tr>
+                <tr><td><code>raw_hosts</code></td><td>Host profile data keyed by host id</td><td><code>name</code> is nullable; <code>is_superhost</code> may need normalisation for reporting</td></tr>
+                <tr><td><code>raw_reviews</code></td><td>Append-only review events per listing</td><td>Largest table; drives incremental patterns later; ties to listings by foreign key</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="diagram">
+            <p class="diagram-title">Stage 1 sources for the Airbnb course project</p>
+            <div class="dag">
+              <div class="dag-col">
+                <p class="dag-label">Upstream (not dbt)</p>
+                <div class="node is-source"><b>listings.csv</b></div>
+                <div class="node is-source"><b>hosts.csv</b></div>
+                <div class="node is-source"><b>reviews.csv</b></div>
+              </div>
+              <div class="dag-col">
+                <p class="dag-label">Landed raw</p>
+                <div class="node is-store"><b>raw_listings</b></div>
+                <div class="node is-store"><b>raw_hosts</b></div>
+                <div class="node is-store"><b>raw_reviews</b></div>
+              </div>
+            </div>
+          </div>
+
+          <p>dbt never appears at stage 1 in a real company. It does not extract from CSVs on a laptop or poll an API. The course pretends the load already happened so you can focus on everything that comes after &mdash; which is the job analytics engineers actually own.</p>
+
+          <div class="callout info"><strong>Sources versus seeds.</strong> In dbt, <code>source()</code> declares tables something else loaded &mdash; your stage 1 artefacts. <code>seed</code> is for small reference files the analytics team owns, like the full-moon calendar in <a href="s09-seeds-sources.html">Section 9</a>. Do not use a seed to stand in for a production ingestion pipeline.</div>
+        </section>
+
+        <section class="section" id="stage-2-wrangling">
+          <h2>Stage 2: data wrangling</h2>
+          <p class="lead">Stage 2 is ingestion and storage: getting stage 1 data into a system where SQL can run at scale, leaving it as untouched as practical, and keeping enough history to recover when something breaks.</p>
+
+          <h3>Ingestion tools and patterns</h3>
+          <p>Most teams use a managed loader rather than writing extract code from scratch. Common choices:</p>
+
+          <ul>
+            <li><strong>Fivetran, Airbyte, Stitch</strong> &mdash; SaaS connectors that sync sources on a schedule, handle API pagination, and write append or upsert loads into your warehouse.</li>
+            <li><strong>Cloud-native pipes</strong> &mdash; Snowpipe, BigQuery load jobs, Databricks Auto Loader for files landing in object storage.</li>
+            <li><strong>Custom scripts</strong> &mdash; Python or Spark jobs when no connector exists or when you need business logic at extract time (usually less than people think).</li>
+          </ul>
+
+          <p>The course skips this layer: the CSVs are already in <code>RAW</code>. In a job interview, still be able to name who owns extract/load versus transform &mdash; dbt is firmly on the transform side.</p>
+
+          <h3>Load first, transform later</h3>
+          <p>For decades the default pattern was ETL: transform in a middle tier, then load clean tables. Cloud warehouses changed the economics. Storage got cheap; compute separated from storage; SQL engines became fast enough to transform in place. ELT won: <strong>extract</strong> and <strong>load</strong> raw into the warehouse, then <strong>transform</strong> with SQL (and dbt) where the data already lives.</p>
+
+          <p>Loading raw data untouched has three practical benefits. First, when a transformation bug ships, you can reprocess from the raw layer without re-requesting data from vendors. Second, you preserve fields nobody needed yet &mdash; product will ask for a column that existed in the source six months ago. Third, audit and compliance often require proving what arrived, not just what you chose to keep.</p>
+
+          <div class="callout tip"><strong>Raw is not dirty by accident.</strong> Landing <code>raw_reviews</code> exactly as the export arrived is a design choice. The cleansing belongs in <code>src_reviews</code> and downstream models, where it is version controlled and tested &mdash; not buried in a one-off load script.</div>
+
+          <h3>Where stage 2 ends and stage 3 begins</h3>
+          <p>Stage 2 ends at the boundary of <em>structurally faithful</em> copies of sources. Stage 3 begins when you rename, join, aggregate, and encode business rules. That boundary is exactly where dbt's <code>source()</code> and staging models live: dbt reads from raw, but the work it does is stage 3 transformation on top of stage 2 storage.</p>
+
+          <p>The modern data stack &mdash; loader, warehouse, dbt, BI &mdash; is largely a story about making stages 2 and 3 repeatable at scale. <a href="s04-modern-data-stack.html">Section 4</a> names the tools and the ELT argument in full; this section only establishes where each stage sits.</p>
+
+          <div class="diagram">
+            <p class="diagram-title">ELT splits wrangling from analytics at the warehouse boundary</p>
+            <div class="flow">
+              <div class="node is-source"><b>Sources</b><small>stage 1</small></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-compute"><b>EL tools</b><small>stage 2</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-store"><b>RAW schema</b><small>append-only landing</small></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-model pulse"><b>dbt models</b><small>stage 3 begins</small></div>
+            </div>
+          </div>
+
+          <h3>Medallion and the raw layer</h3>
+          <p>Many teams label layers bronze (raw), silver (cleaned/conformed), gold (business-ready). The course's <code>RAW</code> schema is bronze; <code>src_*</code> models are the first silver touch; <code>dim_*</code>, <code>fct_*</code>, and <code>mart_*</code> are gold. Naming varies by company, but the idea is constant: do not mix upstream mess with metrics consumers trust.</p>
+        </section>
+
+        <section class="section" id="stage-3-analytics">
+          <h2>Stage 3: data analytics</h2>
+          <p class="lead">Stage 3 is where data becomes decisions: dashboards, exploratory analysis, KPIs with owners, and definitions that stay stable when the CEO asks the same question twice. This is the stage dbt was built for.</p>
+
+          <h3>BI, ad-hoc analysis and metrics</h3>
+          <p>Analytics work splits into three overlapping modes. <strong>BI and dashboards</strong> serve recurring questions &mdash; daily active listings, review volume, host growth &mdash; to people who will never write SQL. <strong>Ad-hoc analysis</strong> answers one-off questions with notebooks or worksheets, often faster but rarely governed. <strong>Metrics definitions</strong> are the contracts between them: what exactly counts as an active listing, whether cancelled bookings subtract from revenue, which timezone defines &ldquo;today&rdquo;.</p>
+
+          <p>Without a transformation layer, each mode reinvents the definitions. The dashboard builder writes one <code>CASE</code> for price; the analyst exports another; the board deck uses a spreadsheet from finance. Everyone is doing stage 3 work; nobody is doing it in one place.</p>
+
+          <h3>The different revenue number problem</h3>
+          <p>The classic failure mode: two dashboards, two revenue figures, both &ldquo;correct&rdquo; under different assumptions. One sums listing price times nights booked; one uses host payout after fees; one excludes test listings someone forgot to filter. Meetings become theology debates instead of strategy.</p>
+
+          <p>The fix is not a better BI tool. It is a single modelled table &mdash; say <code>fct_reviews</code> joined to <code>dim_listings_cleansed</code> with price already cast to numeric &mdash; documented in YAML, tested for grain and nulls, and referenced by every downstream consumer. When the definition changes, one pull request updates the model and the tests fail if the change breaks an invariant.</p>
+
+          <div class="callout danger"><strong>Dashboards on raw tables scale badly.</strong> Every tile re-implements cleansing logic. When <code>raw_listings.price</code> changes format, twelve dashboards break in twelve different ways. Centralising cleansing in <code>dim_listings_cleansed</code> means one fix propagates everywhere dbt runs.</div>
+
+          <h3>Analytics without versus with a transformation layer</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Dimension</th><th>Analytics without dbt (or equivalent)</th><th>Analytics with dbt</th></tr></thead>
+              <tbody>
+                <tr><td>Metric definitions</td><td>Scattered across BI layers, notebooks, and people's heads</td><td>Encapsulated in versioned SQL models with descriptions in <code>schema.yml</code></td></tr>
+                <tr><td>Lineage</td><td>Manual diagrams that rot within a month</td><td>Generated from <code>ref()</code> and <code>source()</code>; impact analysis before merge</td></tr>
+                <tr><td>Quality checks</td><td>Discovered when an executive notices a weird chart</td><td><code>data_tests:</code> on every critical column; <code>dbt build</code> blocks downstream on failure</td></tr>
+                <tr><td>Environments</td><td>Analysts query production or copy tables by hand</td><td>Same project compiles to dev schemas; prod deploy is a target switch</td></tr>
+                <tr><td>Change process</td><td>Edit live queries; no review, no rollback</td><td>Pull requests, Slim CI, documented deprecations with model versions</td></tr>
+                <tr><td>Onboarding</td><td>&ldquo;Ask Sarah, she built the v3 dashboard&rdquo;</td><td>Published docs site with entity descriptions and the DAG</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>How the Airbnb project embodies stage 3</h3>
+          <p>By the end of the course, stage 3 artefacts include:</p>
+
+          <ul>
+            <li><strong>Staging</strong> &mdash; <code>src_listings</code>, <code>src_hosts</code>, <code>src_reviews</code> rename and expose raw columns without business rules.</li>
+            <li><strong>Dimensions</strong> &mdash; <code>dim_listings_cleansed</code>, <code>dim_hosts_cleansed</code>, <code>dim_listings_w_hosts</code> encode cleansing and conformed grains.</li>
+            <li><strong>Facts</strong> &mdash; <code>fct_reviews</code> holds review events at the right grain for analysis, incrementally maintained.</li>
+            <li><strong>Marts</strong> &mdash; <code>mart_fullmoon_reviews</code> answers a specific analytical question with a tested, documented dataset.</li>
+          </ul>
+
+<pre data-lang="yaml" data-title="models/sources.yml (conceptual)" data-explain="Sources declare stage 2 tables; freshness tests are stage 3 governance on stage 1/2 inputs."><code>sources:
+  - name: airbnb
+    schema: raw
+    tables:
+      - name: raw_listings
+        loaded_at_field: updated_at
+        freshness:
+          warn_after: {count: 24, period: hour}
+      - name: raw_reviews
+        loaded_at_field: review_date</code></pre>
+
+          <p>Freshness checks are a stage 3 concern applied to stage 2 landing tables: they fail the pipeline when ingestion stops, before dashboards show stale zeros.</p>
+
+          <div class="diagram">
+            <p class="diagram-title">Stage 3 model layers in the Airbnb DAG</p>
+            <div class="dag">
+              <div class="dag-col">
+                <p class="dag-label">Raw (stage 2)</p>
+                <div class="node is-source"><b>raw_listings</b></div>
+                <div class="node is-source"><b>raw_hosts</b></div>
+                <div class="node is-source"><b>raw_reviews</b></div>
+              </div>
+              <div class="dag-col">
+                <p class="dag-label">Staging</p>
+                <div class="node is-model"><b>src_listings</b></div>
+                <div class="node is-model"><b>src_hosts</b></div>
+                <div class="node is-model"><b>src_reviews</b></div>
+              </div>
+              <div class="dag-col">
+                <p class="dag-label">Modelled</p>
+                <div class="node is-mart"><b>dim_*</b></div>
+                <div class="node is-mart"><b>fct_reviews</b></div>
+                <div class="node is-mart pulse"><b>mart_fullmoon_reviews</b></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="section" id="stage-4-ml">
+          <h2>Stage 4: machine learning and AI</h2>
+          <p class="lead">Stage 4 turns reliable historical tables into predictions: churn scores, recommendations, demand forecasts, and increasingly LLM-powered question answering over governed metrics. It is the narrow top of the pyramid for a reason &mdash; most of the work is still stage 3 done well.</p>
+
+          <h3>Feature engineering on modelled tables</h3>
+          <p>Machine learning models rarely consume raw SaaS exports. They consume <em>features</em>: numeric or categorical columns at a defined grain, aligned in time, with nulls handled consistently. Those features are almost always SQL aggregations over dimensions and facts &mdash; average review sentiment per listing per month, host tenure in days, price percentile within neighbourhood.</p>
+
+          <p>In the Airbnb project, a stage 4 feature might join <code>fct_reviews</code> to <code>dim_listings_cleansed</code> and compute rolling sentiment averages. If <code>price</code> were still a string in raw, or if <code>fct_reviews</code> double-counted rows, the model would learn artefacts of bad SQL, not patterns in guest behaviour.</p>
+
+          <h3>Why dimensional tables are the real prerequisite</h3>
+          <p>Data scientists often ask for a &ldquo;feature store&rdquo; before anyone has stable dimensions. A feature store caches and serves features for training and inference &mdash; useful at scale, irrelevant if the underlying definition of <em>listing</em> changes weekly. Reliable <code>dim_*</code> tables with documented slowly changing dimension policy, plus tested <code>fct_*</code> grains, deliver more value than any serving layer built on top of chaos.</p>
+
+          <p>Snapshots in the course (<a href="s10-snapshots.html">Section 10</a>) exist partly because ML needs point-in-time correctness: a training label must use host attributes as they were on the review date, not today's superhost flag.</p>
+
+          <h3>Feature stores in one paragraph</h3>
+          <p>A feature store (Feast, Tecton, warehouse-native offerings) registers feature definitions, materialises them on a schedule, and serves the same values in training and production to avoid train-serve skew. It sits above stage 3 tables, not instead of them. Teams without mature dimensions should treat a feature store as a stage 4 aspiration, not a shortcut past stage 3.</p>
+
+          <h3>Most companies should not be here yet</h3>
+          <p>If dashboards still disagree, if raw loads are manual, if nobody owns data quality on core entities, stage 4 projects produce demos that never reach production. The honest assessment most analytics engineers should make: our organisation is optimising stage 3; ML is a pilot, not the backbone. That is normal and healthy.</p>
+
+          <div class="callout info"><strong>AI-assisted analytics is not stage 4 only.</strong> Natural-language-to-SQL over a semantic layer is increasingly a stage 3 tool &mdash; it still requires governed metrics and column descriptions to answer safely. <a href="s20-poweruser-fusion-ai.html">Section 20</a> touches AI in the dbt context; the maturity prerequisite remains the same.</div>
+        </section>
+
+        <section class="section" id="where-dbt-fits">
+          <h2>Where dbt fits</h2>
+          <p class="lead">dbt spans the upper part of stage 2's output and nearly all of stage 3. It transforms data already in the warehouse; it does not collect it, does not schedule itself, and does not replace your BI tool.</p>
+
+          <div class="stack">
+            <div class="layer"><strong>Stage 4 &mdash; ML / AI.</strong> Downstream of dbt marts; dbt may build feature tables but does not train models.</div>
+            <div class="layer"><strong>Stage 3 &mdash; Analytics.</strong> <span class="badge">dbt core territory</span> Dimensions, facts, marts, tests, docs, exposures to dashboards.</div>
+            <div class="layer"><strong>Stage 2 &mdash; Wrangling.</strong> <span class="badge">dbt boundary</span> Declares sources, snapshots raw history; load is external.</div>
+            <div class="layer"><strong>Stage 1 &mdash; Collection.</strong> Outside dbt entirely.</div>
+          </div>
+
+          <div class="diagram">
+            <p class="diagram-title">dbt sits across wrangling outputs and the analytics layer</p>
+            <div class="flow">
+              <div class="node is-source"><b>Stage 1</b><small>sources</small></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-compute"><b>EL</b><small>Fivetran · scripts</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-store"><b>RAW</b><small>raw_* tables</small></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-model pulse"><b>dbt</b><small>src → dim → fct → mart</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-serve"><b>BI · ML</b><small>Looker · notebooks</small></div>
+            </div>
+          </div>
+
+          <h3>What dbt does</h3>
+          <ul>
+            <li>Compile modular SQL with Jinja into warehouse-native statements</li>
+            <li>Build and refresh tables, views, incremental models, snapshots</li>
+            <li>Run tests and stop the DAG when they fail (<code>dbt build</code>)</li>
+            <li>Generate documentation and lineage from the project graph</li>
+            <li>Apply software engineering workflow: packages, macros, environments, CI</li>
+          </ul>
+
+          <h3>What dbt does not do</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Responsibility</th><th>Typical owner instead of dbt</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Extract</strong> &mdash; pull from APIs, databases, files</td><td>Fivetran, Airbyte, custom Python, cloud ingestion services</td></tr>
+                <tr><td><strong>Load</strong> &mdash; land bytes in the warehouse</td><td>Same as extract; Snowpipe; COPY commands</td></tr>
+                <tr><td><strong>Orchestrate</strong> &mdash; schedule runs, retry, alert</td><td>cron, Airflow, Dagster, dbt Cloud jobs (<a href="s18-orchestration.html">Section 18</a>)</td></tr>
+                <tr><td><strong>Serve BI</strong> &mdash; charts, filters, drill-downs</td><td>Looker, Metabase, Preset, Tableau, Power BI</td></tr>
+                <tr><td><strong>Train ML models</strong></td><td>Python, Spark, SageMaker, Vertex; dbt may prepare tables only</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>The course Airbnb pipeline is the canonical picture: something external loaded <code>raw_*</code>; dbt builds everything a analyst or dashboard reads from <code>src_*</code> onward. Keeping that boundary clear prevents the most common organisational mistake &mdash; hiring dbt to fix an ingestion problem it cannot see.</p>
+
+          <div class="callout exam"><strong>Certification framing:</strong> exam questions often test this boundary. dbt transforms inside the warehouse; it is not an ETL server, not an orchestrator, and not a visualization layer. When a question lists tools for &ldquo;loading Salesforce into Snowflake,&rdquo; dbt is the wrong answer.</div>
+        </section>
+
+        <section class="section" id="deeper">
+          <h2>Deeper detail and edge cases</h2>
+          <p class="lead">Industry context the theory lectures skip: how the maturity framing itself has shifted, what each stage costs, organisational failure modes, and how teams map the pyramid to real headcount.</p>
+
+          <h3>Version notes</h3>
+          <p>This section describes industry eras more than dbt semver. Terminology and default architectures have moved; the four-stage dependency has not.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Behaviour</th><th>Before</th><th>Now</th><th>Version</th></tr></thead>
+              <tbody>
+                <tr><td>Default integration pattern</td><td>ETL servers transforming before load</td><td>ELT: load raw, transform in the warehouse with SQL</td><td>~2015&ndash;2020 shift</td></tr>
+                <tr><td>Primary storage narrative</td><td>Data warehouse OR data lake (pick one)</td><td>Lakehouse: open table formats on object storage with warehouse SQL</td><td>~2020&ndash;2024</td></tr>
+                <tr><td>Transformation ownership</td><td>Informatica / SSIS jobs, stored procedures</td><td>Git-versioned SQL via dbt; analytics engineers as a role</td><td>dbt ~2016 onward</td></tr>
+                <tr><td>Metric definitions</td><td>Embedded in each BI report</td><td>Semantic layer (dbt Semantic Layer, LookML, MetricFlow) over modelled tables</td><td>~2022&ndash;2025</td></tr>
+                <tr><td>dbt product split</td><td>dbt Core only</td><td>Core (CLI) + Cloud (hosted jobs, IDE) + Fusion engine (Rust parser)</td><td>2024&ndash;2026</td></tr>
+                <tr><td>Quality gates</td><td>Manual QA after dashboard breaks</td><td><code>dbt build</code>, unit tests, contracts, CI on pull requests</td><td>dbt 1.5+</td></tr>
+                <tr><td>ML feature pipeline</td><td>Notebooks querying raw exports ad hoc</td><td>Feature stores and batch features from dbt marts; point-in-time joins</td><td>~2019&ndash;2024</td></tr>
+                <tr><td>AI analytics positioning</td><td>Separate &ldquo;data science platform&rdquo;</td><td>LLM tools querying governed metrics; still depends on stage 3</td><td>2023&ndash;2026</td></tr>
+                <tr><td>Ingestion market</td><td>Stitch, custom scripts dominant in mid-market</td><td>Airbyte open core; Fivetran enterprise; native warehouse pipes</td><td>ongoing</td></tr>
+                <tr><td>Maturity language</td><td>CMMI-style IT maturity models</td><td>Modern data stack + medallion + &ldquo;analytics engineer&rdquo; ladder</td><td>industry framing</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>What it costs to run</h3>
+          <p>Cost accrues by stage. dbt license fees are usually tiny compared to warehouse and loader spend at stages 2 and 3.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>What runs</th><th>Where the cost lands</th><th>How to spend less</th></tr></thead>
+              <tbody>
+                <tr><td>Stage 1 instrumentation</td><td>Engineering time in product teams; sometimes paid event vendors (Segment, Mixpanel)</td><td>Collect less but collect consistently; schema registry for events</td></tr>
+                <tr><td>Stage 2 ingestion (Fivetran etc.)</td><td>Per-row or MAR pricing plus warehouse storage for raw copies</td><td>Sync only needed tables; archive cold raw partitions; monitor sync failures</td></tr>
+                <tr><td>Stage 2 warehouse storage</td><td>Raw history grows monotonically; object storage cheaper than premium warehouse tiers</td><td>Lifecycle policies; separate cold archive; avoid duplicating raw in every env</td></tr>
+                <tr><td>Stage 3 dbt runs</td><td>Warehouse compute for every model rebuild and test query</td><td>Incremental facts; views for staging; Slim CI; right-size warehouse for dev</td></tr>
+                <tr><td>Stage 3 BI consumption</td><td>Every dashboard query on a view re-pays transformation SQL</td><td>Materialise hot marts; semantic layer caching where available</td></tr>
+                <tr><td>Stage 4 ML training</td><td>GPU clusters, feature store infra, data scientist time</td><td>Do not fund until stage 3 metrics are trusted; batch features from existing marts</td></tr>
+                <tr><td>Stage 4 technical debt</td><td>Rebuilding models nobody trusts; duplicated feature pipelines</td><td>Fix grain and tests in <code>fct_*</code> before scaling ML headcount</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout cost"><strong>The biggest waste is stage 4 spend on stage 2 data.</strong> Training models on raw tables with silent duplicates and untested joins burns GPU hours learning noise. Investing one sprint in tested dimensions often delivers more business value than a new AutoML trial.</div>
+
+          <h3>Traps that catch people</h3>
+          <ul>
+            <li><strong>Confusing tool purchase with maturity &mdash;</strong> signing Snowflake and Looker contracts does not create tested metric definitions. Tools enable stages; people and process climb them.</li>
+            <li><strong>Letting analysts own stage 2 &mdash;</strong> when loading is manual, vacations become outages. Extract/load needs the same on-call discipline as production apps.</li>
+            <li><strong>Skipping staging because raw &ldquo;looks fine&rdquo;</strong> &mdash; <code>raw_listings.price</code> looks readable until currency symbols break a sum. Staging isolates upstream change to one model.</li>
+            <li><strong>Calling spreadsheets stage 3 &mdash;</strong> a shared Excel is not a transformation layer. It has no tests, no lineage, and no deploy process.</li>
+            <li><strong>Expecting dbt to backfill ingestion gaps &mdash;</strong> if <code>raw_reviews</code> stopped loading, dbt runs succeed on stale data. Freshness tests on sources exist precisely for this.</li>
+            <li><strong>Building ML on dashboard SQL &mdash;</strong> BI tools generate queries; they do not guarantee stable grains. Features must come from named models like <code>fct_reviews</code>.</li>
+            <li><strong>Treating the pyramid as linear forever &mdash;</strong> mature teams iterate all stages in parallel, but still respect dependencies. You fix ingestion while extending marts; you do not pause all stage 3 work forever.</li>
+            <li><strong>Over-engineering stage 2 for course-scale data &mdash;</strong> the Airbnb CSVs fit in memory. Production needs partitions and incremental loads; the course deliberately keeps stage 2 simple so stage 3 fits in one repo.</li>
+            <li><strong>Undervaluing documentation as stage 3 &mdash;</strong> a model without a description in <code>schema.yml</code> is not finished. Consumers cannot trust what they cannot read.</li>
+            <li><strong>Assuming one person spans all four stages equally &mdash;</strong> startups hire generalists; enterprises split data engineering (1&ndash;2) from analytics engineering (3) from ML (4). Know which stage your job emphasizes.</li>
+          </ul>
+
+          <h3>Troubleshooting playbook</h3>
+          <p>Organisational symptoms map to maturity gaps. These are not dbt compile errors &mdash; they are why teams adopt dbt in the first place.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Symptom</th><th>Most likely cause</th><th>What to check / fix</th></tr></thead>
+              <tbody>
+                <tr><td>Dashboards disagree on the same KPI</td><td>Stage 3 fragmentation; no single modelled metric</td><td>Inventory SQL behind each tile; consolidate into one <code>mart_*</code> or semantic model; add tests on grain</td></tr>
+                <tr><td>The analyst is the bottleneck for every question</td><td>Stage 3 not self-serve; no trusted marts</td><td>Prioritize documented dimensions and facts; expose in BI with certified datasets</td></tr>
+                <tr><td>Nobody trusts the numbers</td><td>Missing tests and ownership; past silent breakage</td><td>Add <code>not_null</code>, <code>unique</code>, relationships tests; run <code>dbt build</code> in CI; assign model owners</td></tr>
+                <tr><td>ML model worked in a notebook but fails in prod</td><td>Train-serve skew; features built from ad-hoc SQL</td><td>Materialise features from versioned dbt models; snapshot dimensions for point-in-time joins</td></tr>
+                <tr><td>Pipeline green but executives see stale data</td><td>Stage 2 failure masked; transforms run on old raw</td><td>Source freshness in <code>sources.yml</code>; monitor loader sync status outside dbt</td></tr>
+                <tr><td>Every new source takes months to reach dashboards</td><td>No staging pattern; each source is a one-off</td><td>Template <code>src_*</code> models; standard folder layout from <a href="s07-models.html">Section 7</a></td></tr>
+                <tr><td>Warehouse bill spiked after BI launch</td><td>Dashboards hit raw or wide views repeatedly</td><td>Materialise heavy marts; aggregate tables for hot metrics</td></tr>
+                <tr><td>Data team blamed for product bugs</td><td>Stage 1 quality issues treated as analytics bugs</td><td>Contract with upstream on schemas; separate SLAs for ingestion versus reporting</td></tr>
+                <tr><td>Executive asks for AI before KPIs exist</td><td>Stage 4 ambition without stage 3 foundation</td><td>Publish a maturity assessment; propose metric governance first</td></tr>
+                <tr><td>Reorgs keep resetting definitions</td><td>No git history for transformation logic</td><td>Move definitions into dbt; require PR review for metric changes</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Production patterns</h3>
+          <div class="grid-2">
+            <div class="mini-card">
+              <h4>Stage ownership RACI</h4>
+              <p>Platform or data engineering owns stages 1&ndash;2 SLAs. Analytics engineering owns stage 3 models and tests. ML platform owns stage 4 serving &mdash; but only after signing off on upstream grains. Document this in a one-page data architecture wiki linked from the dbt project README.</p>
+            </div>
+            <div class="mini-card">
+              <h4>Maturity assessment quarterly</h4>
+              <p>Rate each business domain (marketing, finance, product) on the four stages 1&ndash;5 scale. Domains stuck at stage 2 do not get ML budget. Domains at stage 3 get dbt investment. The exercise prevents uniform tooling mandates that ignore reality.</p>
+            </div>
+          </div>
+
+          <p>The anti-pattern: a single &ldquo;data platform team&rdquo; asked to deliver ML, dashboards, ingestion fixes, and governance simultaneously with four engineers. The pyramid explains why that team burns out &mdash; it is four jobs with four skill profiles. Splitting ownership by stage, with dbt as the contract between 2 and 3, scales further than hero analysts.</p>
+
+<pre data-lang="text" data-title="Maturity checklist template (reuse in docs)" data-explain="A one-page audit you can copy into Confluence or the dbt project docs."><code>Domain: _______________
+Stage 1 — Sources listed with owners?  [ ] Y [ ] N
+Stage 2 — Loads monitored + raw retained?  [ ] Y [ ] N
+Stage 3 — Metric models in git with tests?  [ ] Y [ ] N
+Stage 4 — ML features from those models only?  [ ] Y [ ] N / N/A
+Blocker: _______________</code></pre>
+
+          <h3>Certification pointers</h3>
+          <p>The dbt Analytics Engineering exam assumes you know where dbt sits in a pipeline. Expect questions that list five tools and ask which handles transformation, which handles extraction, or which runs on a schedule. The maturity model is not tested by name, but the boundaries are.</p>
+
+          <ul>
+            <li><a href="s01-introduction.html">Section 1</a> &mdash; the explicit list of what dbt does and does not do; memorize it before the exam.</li>
+            <li><a href="s04-modern-data-stack.html">Section 4</a> &mdash; ELT and loader + warehouse + dbt + BI as the stage 2&ndash;3 stack.</li>
+            <li><a href="s05-dimensional-modelling.html">Section 5</a> &mdash; why stage 3 uses stars of <code>dim_*</code> and <code>fct_*</code> tables.</li>
+            <li><a href="s09-seeds-sources.html">Section 9</a> &mdash; <code>source()</code> versus seeds as stage 1/2 declarations.</li>
+            <li><a href="s22-certification.html">Section 22</a> &mdash; full practice exam and topic weights.</li>
+          </ul>
+
+          <div class="callout exam"><strong>Certification:</strong> when a question mentions &ldquo;the T in ELT,&rdquo; the answer is dbt or equivalent SQL transformation in the warehouse &mdash; not Fivetran, not Airflow unless the question is specifically about orchestration scheduling the dbt run.</div>
+        </section>
+
+        <section class="section" id="interview">
+          <h2>Interview questions</h2>
+          <p class="muted">Answer each one out loud before opening it.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+
+            <details class="qa">
+              <summary>What are the four stages of the data maturity model, and why is order important?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>Collection (sources you inherit), wrangling (ingestion and raw storage), analytics (modelled metrics and BI), and machine learning (predictive features and models). Order matters because each stage consumes the output of the previous one: you cannot define trusted revenue without loaded raw data and conformed dimensions; you cannot train reliable ML on metrics that disagree across dashboards.</p>
+                <p>Skipping a stage does not eliminate the work &mdash; it pushes it into manual fixes, one-off SQL, and meetings about definitions. The pyramid is a dependency diagram, not a shopping list.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Where does dbt sit relative to extract, load, transform, and BI?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>dbt owns transform inside the warehouse after load. Extract and load are handled by connectors, scripts, or cloud ingestion &mdash; Fivetran, Airbyte, Snowpipe, and similar. dbt reads from raw or staging relations via <code>source()</code> and <code>ref()</code>, builds modelled tables, runs tests, and publishes docs. BI and ML tools read the outputs; dbt does not render charts or train models.</p>
+                <p>Scheduling is also external: cron, Airflow, Dagster, or dbt Cloud jobs invoke <code>dbt build</code>; dbt has no built-in scheduler.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Why load raw data unchanged instead of cleaning during extract?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>ELT separates durability from business logic. Raw landing preserves what actually arrived for audit, replay, and reprocessing when transform code was wrong. It also keeps columns nobody needs yet, which product will eventually ask for.</p>
+                <p>Cleaning during extract couples ingestion to analytics definitions &mdash; every metric change requires re-extracting history. Transforming in the warehouse with versioned SQL lets you fix logic once and rebuild downstream models without touching the loader.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Two dashboards show different revenue. How does the maturity model explain that failure?<span class="qa-tag">Troubleshooting</span></summary>
+              <div class="qa-body">
+                <p>It is a stage 3 failure: analytics without a single governed transformation layer. Each dashboard implemented its own cleansing and business rules on top of stage 2 raw or lightly processed tables, so definitions diverged silently.</p>
+                <p>The fix is consolidating revenue logic into one tested dbt model at an agreed grain, documenting it, and pointing both dashboards at that model or a semantic layer built on it. Tool upgrades without that step repeat the problem.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>When would you tell leadership the company is not ready for machine learning?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>When stage 3 prerequisites are missing: core entities lack tested dimensions and facts, metrics disagree across teams, ingestion has no monitoring, or nobody can explain grain on the main fact table. ML on that foundation produces demos that fail in production because features inherit the same inconsistencies.</p>
+                <p>The recommendation is to invest in modelled tables, tests, and ownership first &mdash; often faster ROI than a data science hire building features from scratch in notebooks.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What is the difference between stage 2 wrangling and stage 3 analytics in practice?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p>Stage 2 is moving bytes faithfully: sync schedules, raw schemas, retention, load monitoring. The data still looks like the source. Stage 3 is encoding business meaning: renamed columns, typed prices, conformed host and listing grains, aggregated facts, documented metrics.</p>
+                <p>In the Airbnb project, <code>raw_listings</code> is stage 2; <code>dim_listings_cleansed</code> is stage 3. dbt starts at the boundary &mdash; <code>src_listings</code> is thin staging, still closer to stage 3 because it is versioned project code, not a loader setting.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How do volume, velocity, and variety affect which maturity investments come first?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>High volume forces stage 2 warehouse choice and partition strategy before fancy stage 3 marts. High velocity pushes streaming or micro-batch ingestion &mdash; outside dbt's batch sweet spot. High variety forces explicit staging models per source so type mismatches do not propagate.</p>
+                <p>A small, low-velocity dataset like the course Airbnb files can skip expensive stage 2 tooling but still needs stage 3 patterns because variety (string prices, nullable names) is what breaks naive dashboards.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What role does a feature store play in the maturity model?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p>A feature store is a stage 4 serving layer: it registers feature definitions, materialises them on a schedule, and serves consistent values for training and inference to reduce train-serve skew. It assumes stage 3 already provides stable dimensions and facts to compute from.</p>
+                <p>Without governed upstream models, a feature store merely caches inconsistent SQL faster. Build <code>dim_*</code> and <code>fct_*</code> with tests first; add Feast or Tecton when multiple models reuse the same features at scale.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Why does the course use raw tables loaded outside dbt instead of dbt seeds for everything?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p>Because production raw data is loaded by extract/load tools, not by dbt. Seeds are small reference datasets the analytics team owns &mdash; like <code>seed_full_moon_dates.csv</code> &mdash; not a stand-in for nightly Fivetran syncs into <code>RAW</code>.</p>
+                <p>Using <code>source()</code> on <code>raw_listings</code> teaches the correct mental model: dbt transforms data someone else landed. Confusing seeds with ingestion leads teams to run inappropriate full reloads through git.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Explain ELT versus ETL using the four maturity stages.<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p>ETL transforms before load &mdash; stage 2 and early stage 3 work happened in a separate server. ELT loads raw in stage 2, then transforms with warehouse SQL in stage 3. Cloud warehouses made ELT default because compute scaled separately and SQL transformations became cheap enough to run in place.</p>
+                <p>dbt is the canonical T in ELT. It does not replace stage 2 loaders; it makes stage 3 repeatable, tested, and deployable like software.</p>
+              </div>
+            </details>
+
+          </div>
+        </section>
+
+        <section class="section" id="practice">
+          <h2>Hands-on practice</h2>
+          <p class="muted">Theory exercises anchored to the Airbnb project. No warehouse required for the first two; clone the repo if you have not already.</p>
+          <ol class="practice-list">
+
+            <li class="practice">
+              <p class="practice-task">Map your own company's data stack onto the four maturity stages. For each stage, name the tools, the team that owns it, and one thing that breaks today.</p>
+              <span class="console-path">Your notebook or internal wiki</span>
+              <p class="practice-expect">A table with four rows (collection, wrangling, analytics, ML) and no empty cells for stages 1&ndash;3 at a minimum.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Stage 1: list sources (CRM, app DB, ads). Owner is usually product or backend, not analytics.</li>
+                    <li>Stage 2: name the loader and warehouse raw schemas. Owner is data/platform engineering.</li>
+                    <li>Stage 3: BI tools, spreadsheets, any dbt or dbt-like SQL repo. Owner is analytics or analytics engineering.</li>
+                    <li>Stage 4: notebooks, ML platform, or &ldquo;N/A &mdash; not yet.&rdquo;</li>
+                    <li>Circle the lowest stage that blocks the others &mdash; that is your hiring and tooling priority.</li>
+                  </ol>
+<pre data-lang="text" data-title="Example mapping"><code>Stage 1: Salesforce, Postgres app DB — product/backend
+Stage 2: Fivetran → Snowflake RAW — platform team
+Stage 3: Looker on mixed raw + 3 dbt models — analytics (fragmented)
+Stage 4: N/A
+Blocker: Stage 3 — no single revenue definition</code></pre>
+                  <p class="muted">Undo: nothing to revert; keep the doc for comparison after the course.</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">Audit the Airbnb project's three raw tables and classify every downstream artefact mentioned in Section 1 into a maturity stage. Include <code>src_*</code>, <code>dim_*</code>, <code>fct_*</code>, <code>mart_fullmoon_reviews</code>, and the full-moon seed.</p>
+              <span class="console-path">complete-dbt-bootcamp-zero-to-hero/airbnb/models/</span>
+              <p class="practice-expect">A written list where raw tables are stage 2, staging and modelled layers are stage 3, and nothing is mislabeled as stage 1 or 4 unless justified.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Stage 1 (conceptual upstream): the original CSV files in the real world.</li>
+                    <li>Stage 2: <code>raw_listings</code>, <code>raw_hosts</code>, <code>raw_reviews</code> in Snowflake RAW.</li>
+                    <li>Stage 3: all dbt models &mdash; <code>src_*</code> through <code>mart_fullmoon_reviews</code>; snapshots and tests are stage 3 governance.</li>
+                    <li>Stage 3 reference: <code>seed_full_moon_dates</code> (analytics-owned calendar, not ingestion).</li>
+                    <li>Stage 4: none in the course unless you count Python sentiment models in later sections as early ML on stage 3 outputs.</li>
+                  </ol>
+                  <p class="muted">Undo: nothing to undo.</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">Sketch the dependency order for a new metric: average cleansed listing price by room type and superhost status. Which models must exist first, and which maturity stage does each belong to?</p>
+              <span class="console-path">Pen and paper or models/ sketch</span>
+              <p class="practice-expect">A small DAG showing raw → src → dim → mart or analysis, with stage labels on each node.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Stage 2: <code>raw_listings</code>, <code>raw_hosts</code> must be loaded.</li>
+                    <li>Stage 3: <code>src_listings</code>, <code>src_hosts</code> rename columns.</li>
+                    <li>Stage 3: <code>dim_listings_cleansed</code> casts <code>price</code> to numeric; <code>dim_hosts_cleansed</code> normalises host attributes.</li>
+                    <li>Stage 3: join in <code>dim_listings_w_hosts</code> or a new <code>mart_avg_price_by_room_superhost</code> with <code>GROUP BY room_type, is_superhost</code>.</li>
+                    <li>Stage 4: only if you predict price from other features &mdash; not required for this metric.</li>
+                  </ol>
+<pre data-lang="sql" data-title="Conceptual mart (not in the course repo)" data-explain="Illustrates stage 3 aggregation on cleansed dimensions — price must be numeric before AVG is meaningful."><code>SELECT
+  l.room_type,
+  h.is_superhost,
+  AVG(l.price) AS avg_listing_price
+FROM {{ ref('dim_listings_cleansed') }} AS l
+JOIN {{ ref('dim_hosts_cleansed') }} AS h
+  ON l.host_id = h.host_id
+GROUP BY 1, 2</code></pre>
+                  <p class="muted">Undo: this is a design exercise; delete any scratch file if you created one in the repo.</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">Write three organisational symptoms your current or past workplace shows, and match each to the troubleshooting playbook in the Deeper section. Propose one fix that involves dbt and one that does not.</p>
+              <span class="console-path">Self-assessment</span>
+              <p class="practice-expect">Three symptom → cause → fix chains, with fixes split between process/tooling outside dbt and model/test work inside dbt.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <p>Example symptom: dashboards disagree on active listings. Cause: stage 3 fragmentation. dbt fix: one <code>mart_active_listings</code> with <code>accepted_values</code> on status. Non-dbt fix: BI certification policy pointing at that table only.</p>
+                  <p>Example symptom: stale data despite green jobs. Cause: stage 2 loader paused. Non-dbt fix: Fivetran alert. dbt fix: source freshness test on <code>raw_reviews</code>.</p>
+                  <p>Example symptom: ML team rebuilds features weekly. Cause: no stable facts. dbt fix: tested <code>fct_reviews</code> at documented grain. Non-dbt fix: agree ML consumes only tagged marts.</p>
+                  <p class="muted">Undo: nothing to undo.</p>
+                </div>
+              </details>
+            </li>
+
+          </ol>
+        </section>
+
+        <section class="section" id="recap">
+          <h2>Recap</h2>
+          <div class="recap">
+            <ul class="checklist">
+              <li>Data maturity has four stages: collection, wrangling, analytics, machine learning. Each depends on the stage below.</li>
+              <li>Skipping a stage hides work in manual SQL and metric debates; it does not remove the work.</li>
+              <li>Stage 1 sources &mdash; app DBs, events, SaaS, files &mdash; arrive in shapes you rarely control; the Airbnb <code>raw_*</code> tables are deliberately imperfect.</li>
+              <li>Stage 2 lands raw data in the warehouse (ELT); loaders like Fivetran and Airbyte live here, not dbt.</li>
+              <li>Stage 3 is trusted analytics: modelled tables, tests, docs, single definitions for KPIs like revenue.</li>
+              <li>Stage 4 needs reliable dimensions and facts; most companies should invest in stage 3 before scaling ML.</li>
+              <li>dbt spans the top of stage 2 (sources, snapshots) and most of stage 3 (models, tests, marts).</li>
+              <li>dbt does not extract, load, orchestrate, serve BI, or train models.</li>
+              <li>The course DAG &mdash; <code>raw_*</code> → <code>src_*</code> → <code>dim_*</code> / <code>fct_*</code> → <code>mart_*</code> &mdash; is a stage 3 pipeline on stage 2 storage.</li>
+              <li>When dashboards disagree, the fix is a shared transformation layer, not a new BI licence.</li>
+              <li><a href="s04-modern-data-stack.html">Section 4</a> continues the ELT and modern data stack story from stage 2 onward.</li>
+            </ul>
+            <p style="margin-top:1rem;">
+              <button type="button" data-complete="section-02">Mark complete</button>
+            </p>
+          </div>
+        </section>
+
+      </div>
+
+      <aside class="toc" aria-label="On this page">
+        <strong>On this page</strong>
+        <ol>
+          <li><a href="#lectures">Lectures</a></li>
+          <li><a href="#maturity-pyramid">Maturity pyramid</a></li>
+          <li><a href="#stage-1-collection">Stage 1: collection</a></li>
+          <li><a href="#stage-2-wrangling">Stage 2: wrangling</a></li>
+          <li><a href="#stage-3-analytics">Stage 3: analytics</a></li>
+          <li><a href="#stage-4-ml">Stage 4: ML and AI</a></li>
+          <li><a href="#where-dbt-fits">Where dbt fits</a></li>
+          <li><a href="#deeper">Deeper detail</a></li>
+          <li><a href="#interview">Interview questions</a></li>
+          <li><a href="#practice">Hands-on practice</a></li>
+          <li><a href="#recap">Recap</a></li>
+        </ol>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<footer class="footer">The Complete dbt Bootcamp: Zero to Hero &middot; Section 2 &middot; Offline study edition</footer>
+</body>
+</html>

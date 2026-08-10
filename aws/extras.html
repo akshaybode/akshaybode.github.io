@@ -1,0 +1,1316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="DEA-C01 exam-guide topics the course does not teach in depth: file formats, compression, data modelling, open table formats, data quality, pipeline patterns, GenAI, cost optimisation, CI/CD, and disaster recovery.">
+<title>Beyond the Course — Extras | AWS Data Engineer DEA-C01 Notes</title>
+<link rel="stylesheet" href="assets/aws.css">
+<script defer src="assets/search-index.js"></script>
+<script defer src="assets/code-highlight.js"></script>
+<script defer src="assets/aws.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">Beyond the course · DEA-C01 exam guide coverage</p>
+    <h1>Beyond the Course</h1>
+    <p class="subtitle">In-scope exam topics the twenty course sections skim or skip entirely. Read this after Section 20 when you know the services — it fills the gaps between what the deck shows and what the official task statements actually test: formats, modelling, table formats, data quality, pipeline semantics, GenAI data paths, cost units, CI/CD, DR limits, and the numeric quotas scattered through scenario questions. Nothing here duplicates a lecture; it is the material you would have written in the margins if the deck had time for it.</p>
+    <div class="hero-meta">
+      <span class="chip">Exam-guide gap filler</span>
+      <span class="chip">No deck slides</span>
+      <span class="chip">Read after Section 20</span>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <nav class="pager" aria-label="Section navigation">
+    <a href="s21-exam-prep.html">← Practice Exam &amp; Exam Tips</a>
+    <a href="index.html">Course contents</a>
+    <a href="interview-prep.html">Next: Real-world interview prep →</a>
+  </nav>
+
+  <main id="main">
+    <div class="layout">
+      <div class="content">
+
+        <section class="section" id="gaps">
+          <h2>What this page covers</h2>
+          <p class="muted">Each row maps a section below to the DEA-C01 exam-guide task statement it satisfies. These topics appear repeatedly in practice exams even when the course deck never dedicates a slide to them.</p>
+          <p>Read this page after <a href="s20-security.html">Section 20</a> and alongside <a href="s21-exam-prep.html#decisions">Section 21 decision tables</a>. Cross-links below point at course sections where a service is introduced; this page adds the depth the exam guide assumes you already have.</p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Section</th><th>Exam-guide task statement (paraphrased)</th><th>Domain</th></tr></thead>
+              <tbody>
+                <tr><td><a href="#formats">File formats &amp; compression</a></td><td>Select appropriate file formats and compression for ingestion and analytics workloads</td><td>1 · 2</td></tr>
+                <tr><td><a href="#modelling">Data modelling</a></td><td>Design data models (star/snowflake, SCDs) and map them to AWS storage</td><td>2</td></tr>
+                <tr><td><a href="#table-formats">Open table formats</a></td><td>Manage schema evolution and transactional updates on data lakes</td><td>2</td></tr>
+                <tr><td><a href="#quality">Data quality &amp; observability</a></td><td>Ensure data quality and implement monitoring for pipelines</td><td>3</td></tr>
+                <tr><td><a href="#datazone">Amazon DataZone</a></td><td>Catalog, discover, share and govern data across accounts and teams</td><td>2 · 4</td></tr>
+                <tr><td><a href="#patterns">Pipeline patterns &amp; programming</a></td><td>Implement programming concepts: idempotency, SQL transforms, version control</td><td>1</td></tr>
+                <tr><td><a href="#genai">Generative AI &amp; vector stores</a></td><td>Integrate data stores with analytics and ML/GenAI workloads</td><td>2 · 3</td></tr>
+                <tr><td><a href="#cost">Cost optimisation</a></td><td>Optimise cost and performance of data platforms</td><td>3</td></tr>
+                <tr><td><a href="#cicd">CI/CD, IaC &amp; testing</a></td><td>Automate data pipeline deployment and testing</td><td>3</td></tr>
+                <tr><td><a href="#reliability">Resilience &amp; DR</a></td><td>Design for high availability, backup and disaster recovery</td><td>3 · 4</td></tr>
+                <tr><td><a href="#exam-gaps">Service limits rapid-fire</a></td><td>Apply service quotas and constraints when selecting solutions</td><td>All</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout tip"><strong>How to use this page.</strong> Skim the table once, then study the sections where your practice-test misses cluster. The <a href="#formats">formats</a> and <a href="#cost">cost</a> sections alone account for a disproportionate share of "most cost-effective" questions. Revisit <a href="#exam-gaps">service limits</a> the week before the exam — scenario distractors embed these numbers deliberately.</div>
+        </section>
+
+        <section class="section" id="formats">
+          <h2>File formats and compression</h2>
+          <p class="lead">The exam assumes you can pick a storage format from a scenario's access pattern, explain why columnar beats row for analytics, and calculate how much an Athena bill drops when you convert CSV to Snappy-compressed Parquet. The course mentions Parquet in passing; this section is the depth the exam expects.</p>
+
+          <h3>Row-oriented formats</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Format</th><th>Schema</th><th>Schema evolution</th><th>Splittable</th><th>Best engines</th><th>Exam note</th></tr></thead>
+              <tbody>
+                <tr><td><strong>CSV</strong></td><td>Header row only; types inferred</td><td>Add columns at end; reorder breaks parsers</td><td>Yes if uncompressed; GZIP blocks parallel split</td><td>Athena, Glue, Redshift COPY, Spark</td><td>Default landing format; worst for scan cost</td></tr>
+                <tr><td><strong>TSV</strong></td><td>Same as CSV, tab delimiter</td><td>Same as CSV</td><td>Same as CSV</td><td>Same as CSV</td><td>Used when data contains commas</td></tr>
+                <tr><td><strong>JSON</strong></td><td>Self-describing per record; nested objects</td><td>Flexible — new fields ignored by old readers</td><td>No — records vary in size</td><td>Athena (<code>json</code> SerDe), Glue, Lambda</td><td>Expensive to scan; good for semi-structured API payloads</td></tr>
+                <tr><td><strong>JSON Lines (NDJSON)</strong></td><td>One JSON object per line</td><td>Same as JSON</td><td>Line-delimited — splittable by line boundary</td><td>Firehose default, Glue, Spark</td><td>Preferred over single JSON array for streaming ingest</td></tr>
+                <tr><td><strong>Avro</strong></td><td>Schema embedded in file header (binary)</td><td>Strong — reader/writer schema resolution</td><td>Yes with sync markers</td><td>Kafka/MSK serializers, Glue, EMR</td><td>Exam favours Avro for schema-heavy streaming pipelines</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Columnar formats</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Format</th><th>Schema</th><th>Schema evolution</th><th>Splittable</th><th>Compression</th><th>Best engines</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Parquet</strong></td><td>In footer metadata per file</td><td>Add columns; promote types with care</td><td>Yes — row groups are split units</td><td>Snappy default; GZIP, ZSTD, LZ4</td><td>Athena, Glue, Redshift COPY/Spectrum, EMR, Spark</td></tr>
+                <tr><td><strong>ORC</strong></td><td>In file footer + stripes</td><td>Similar to Parquet</td><td>Yes — stripe-level</td><td>Snappy or ZLIB default</td><td>Athena, Hive on EMR, Redshift Spectrum</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>Columnar stores values column-by-column with encodings (dictionary, RLE, bit-packing). A query that selects three of thirty columns reads roughly one-tenth of the bytes — that is the mechanism behind Athena cost savings, not magic compression alone.</p>
+
+          <div class="analogy"><strong>Everyday analogy —</strong> Row formats are a packed moving truck: to get one box from the back, you unload everything. Columnar formats are a warehouse with aisles labelled by item type: you walk only the aisles you need.</div>
+
+          <h3>Compression codecs</h3>
+          <p>Compression applies at two levels: <strong>file-level</strong> (whole CSV.gz) and <strong>column-level</strong> inside Parquet/ORC (each column compressed independently). Exam questions often conflate them — columnar + column-level Snappy is the winning combination for Athena.</p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Codec</th><th>Splittable on row formats?</th><th>Ratio vs CPU</th><th>Typical default</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Snappy</strong></td><td>N/A (used inside Parquet/ORC)</td><td>Fast, moderate ratio (~2–3×)</td><td>Parquet on Athena, Glue, Spark</td></tr>
+                <tr><td><strong>GZIP</strong></td><td><strong>No</strong> — one split per file</td><td>Better ratio, slower CPU</td><td>Legacy CSV exports, some Firehose targets</td></tr>
+                <tr><td><strong>BZIP2</strong></td><td>Yes — block-aligned splits</td><td>High ratio, very slow</td><td>Rare on AWS; EMR/Hive legacy</td></tr>
+                <tr><td><strong>LZO</strong></td><td>Yes with indexed blocks</td><td>Between Snappy and GZIP</td><td>Older Hadoop clusters</td></tr>
+                <tr><td><strong>ZSTD</strong></td><td>N/A inside columnar; no on raw CSV</td><td>Best ratio at similar speed to GZIP</td><td>Growing default in Spark 3+ and Iceberg</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout exam"><strong>Why CSV → Snappy Parquet cuts Athena bills 80–95%.</strong> Athena charges per terabyte scanned from S3. Two independent levers apply: <em>column pruning</em> (read only referenced columns) and <em>compression</em> (fewer bytes per column). Both multiply.</div>
+
+          <h3>Worked byte calculation</h3>
+          <p>Suppose a fact table lands as uncompressed CSV totalling <strong>1 TB</strong> with <strong>20 columns</strong>. An analyst runs:</p>
+<pre data-lang="sql" data-title="Typical analytics query on wide CSV" data-explain="Selecting two of twenty columns still scans the entire CSV because row formats store all columns together per row."><code>SELECT customer_id, order_date, SUM(amount)
+FROM orders_csv
+WHERE order_date BETWEEN DATE '2025-01-01' AND DATE '2025-01-31'
+GROUP BY customer_id, order_date;</code></pre>
+          <p>On CSV, Athena reads <strong>all 20 columns</strong> for every row in every file the partition filter includes → <strong>~1 TB scanned</strong> (ignoring partition pruning for simplicity).</p>
+          <p>After CTAS to Snappy Parquet with the same data:</p>
+          <ul>
+            <li><strong>Column pruning:</strong> three columns referenced → ~3/20 of logical data → <strong>~150 GB</strong>.</li>
+            <li><strong>Snappy compression:</strong> typical 3× on numeric/date columns → <strong>~50 GB</strong>.</li>
+            <li><strong>Bill:</strong> at ~5 USD/TB, 1 TB scan ≈ 5 USD vs 50 GB ≈ 0.25 USD — a <strong>95% reduction</strong>. Even a five-column query on the same Parquet table (~25 GB) lands near 88% savings.</li>
+          </ul>
+          <p>Add <a href="s07-s3.html#partitioning">Hive-style partitions</a> on <code>order_date</code> and the scan drops to January's prefix only — another order-of-magnitude cut beyond format conversion.</p>
+
+          <h3>The small-files problem</h3>
+          <p>Thousands of files under 10 MB each destroy performance: S3 LIST operations multiply, Athena/Glue spend time opening files, and column statistics are weaker. Targets used in production and cited on the exam:</p>
+          <ul>
+            <li><strong>Target file size:</strong> 128 MB–1 GB per object after compaction.</li>
+            <li><strong>Cause:</strong> streaming micro-batches (Firehose, Kinesis → Lambda), per-file uploads, or <code>repartition(5000)</code> without coalesce.</li>
+            <li><strong>Fix:</strong> Glue job with <code>coalesce</code> or <code>repartition</code> to a sensible count, Iceberg/Delta compaction, or S3 Inventory + batch copy. See <a href="s04-glue.html#partitioning">Section 4 partitioning</a> and <a href="s03-athena.html#performance">Section 3 performance</a>.</li>
+          </ul>
+
+<pre data-lang="sql" data-title="Athena — CTAS CSV to partitioned Snappy Parquet" data-explain="One statement converts format, applies compression, partitions for pruning, and registers a new table. Run once; point dashboards at the Parquet table."><code>CREATE TABLE dea_lab.orders_parquet
+WITH (
+  format = 'PARQUET',
+  parquet_compression = 'SNAPPY',
+  external_location = 's3://dea-lab-ab-4821/staging/orders_parquet/',
+  partitioned_by = ARRAY['order_year', 'order_month']
+) AS
+SELECT
+  order_id,
+  customer_id,
+  order_date,
+  amount,
+  YEAR(order_date)  AS order_year,
+  MONTH(order_date) AS order_month
+FROM dea_lab.orders_csv;</code></pre>
+
+          <div class="callout cost"><strong>GZIP CSV is a trap.</strong> Smaller on disk but not splittable — a 500 MB .csv.gz file is processed by one Athena task. Snappy Parquet splits across row groups in parallel. "Compress the CSV with GZIP to save money" is often the wrong answer when the question allows Parquet.</div>
+
+          <h3>Which engine reads which format best</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Engine</th><th>Preferred format</th><th>Notes</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Athena (Trino/Presto)</strong></td><td>Parquet, ORC</td><td>Native column pruning; JSON via OpenX JsonSerDe</td></tr>
+                <tr><td><strong>Redshift COPY</strong></td><td>Parquet, AVRO, CSV with compression</td><td>Auto or explicit column mapping</td></tr>
+                <tr><td><strong>Redshift Spectrum</strong></td><td>Parquet, ORC on S3</td><td>Same scan economics as Athena</td></tr>
+                <tr><td><strong>Glue / Spark</strong></td><td>Parquet default sink</td><td><code>df.write.parquet()</code> with snappy</td></tr>
+                <tr><td><strong>EMR Hive</strong></td><td>ORC traditional; Parquet common</td><td>LLAP/tez benefits from columnar</td></tr>
+                <tr><td><strong>Firehose</strong></td><td>JSON Lines → Parquet/ORC conversion</td><td>Built-in record format conversion on delivery</td></tr>
+                <tr><td><strong>OpenSearch</strong></td><td>JSON documents</td><td>Not a columnar analytics store</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Schema evolution in practice</h3>
+          <p>When upstream adds a column:</p>
+          <ul>
+            <li><strong>CSV</strong> — add column at end; old files lack it → Glue/Athena reads NULL for missing.</li>
+            <li><strong>Parquet</strong> — new files carry new schema in footer; mixed schemas in one table work if column names are stable.</li>
+            <li><strong>Avro</strong> — reader resolves writer schema to reader schema; best for Kafka where producers upgrade independently.</li>
+            <li><strong>Iceberg</strong> — explicit <code>ALTER TABLE ADD COLUMN</code>; metadata tracks versions (<a href="#table-formats">open table formats</a>).</li>
+          </ul>
+          <p>The exam contrasts "fail the pipeline" with "evolve schema gracefully" — Glue crawlers with <code>updateBehavior=LOG</code> and table formats win over brittle fixed-schema CSV pipelines.</p>
+
+          <h3>Compaction job pattern (Glue)</h3>
+<pre data-lang="python" data-title="Glue — compact small Parquet files" data-explain="Read a partition, repartition to target ~256 MB files, overwrite the partition idempotently."><code>import sys
+from awsglue.utils import getResolvedOptions
+from pyspark.context import SparkContext
+from awsglue.context import GlueContext
+
+args = getResolvedOptions(sys.argv, ["TARGET_PATH", "PARTITION"])
+sc = SparkContext()
+glue = GlueContext(sc)
+spark = glue.spark_session
+
+path = f"{args['TARGET_PATH']}/{args['PARTITION']}"
+df = spark.read.parquet(path)
+
+target_files = max(1, int(df.count() * 200 / (128 * 1024 * 1024)))  # ~128 MB est.
+df.repartition(target_files).write.mode("overwrite").parquet(path)</code></pre>
+        </section>
+
+        <section class="section" id="modelling">
+          <h2>Data modelling for analytics</h2>
+          <p class="lead">The exam asks you to recognise star and snowflake schemas, explain slowly changing dimensions, and map a logical model onto Redshift distribution and sort keys. The course shows Redshift tables but never walks through dimensional modelling from first principles.</p>
+
+          <h3>Normalisation versus denormalisation</h3>
+          <p><strong>Normalisation</strong> (3NF) removes redundancy — customers live in one table, orders reference <code>customer_id</code>. It minimises storage and update anomalies; OLTP systems (RDS, DynamoDB) use it. <strong>Denormalisation</strong> duplicates data to speed reads — a wide fact table with customer attributes repeated on every row. Analytics workloads (OLAP) favour denormalisation because joins across billions of rows are expensive and scans are cheap.</p>
+
+          <h3>Star and snowflake schemas</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Element</th><th>Role</th><th>Example</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Fact table</strong></td><td>Measures at a defined grain; foreign keys to dimensions</td><td><code>fact_sales(order_id, date_key, product_key, store_key, quantity, revenue)</code></td></tr>
+                <tr><td><strong>Dimension table</strong></td><td>Descriptive context; relatively small, wide</td><td><code>dim_product(product_key, sku, name, category)</code></td></tr>
+                <tr><td><strong>Grain</strong></td><td>What one row represents</td><td>"One row per order line" — never mix grains in one fact</td></tr>
+                <tr><td><strong>Surrogate key</strong></td><td>Integer warehouse key, not the source-system natural key</td><td><code>product_key</code> instead of mutable SKU</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>A <strong>star schema</strong> has dimensions directly joined to the fact table. A <strong>snowflake schema</strong> normalises dimensions further (category → subcategory → product). Snowflake saves storage; star schema means fewer joins — Redshift and the exam usually prefer star for query simplicity.</p>
+
+          <h3>Slowly changing dimensions (Types 0–4)</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Type</th><th>Behaviour</th><th>When to use</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Type 0</strong></td><td>Never update — retain original value</td><td>Immutable attributes (date of birth)</td></tr>
+                <tr><td><strong>Type 1</strong></td><td>Overwrite in place</td><td>Correct errors; history does not matter</td></tr>
+                <tr><td><strong>Type 2</strong></td><td>New row with effective dates; current flag</td><td>Track history — "what did we believe at close?"</td></tr>
+                <tr><td><strong>Type 3</strong></td><td>Add limited prior-value column</td><td>Only need previous value, not full history</td></tr>
+                <tr><td><strong>Type 4</strong></td><td>Mini-dimension for volatile attributes</td><td>High-cardinality changes (customer segment flapping daily)</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>Type 2 is the exam favourite. When a customer's address changes, close the old row and insert a new one:</p>
+<pre data-lang="sql" data-title="Redshift — Type 2 SCD on dim_customer" data-explain="Close the current row for the natural key, then insert the new version with is_current=true. Join facts to the row that was current on the fact date."><code>-- Stage incoming change from Glue/Lambda
+CREATE TEMP TABLE stg_customer AS
+SELECT 1001 AS customer_nk, 'Jane Doe' AS name, '456 Oak St' AS address, 'CA' AS state;
+
+-- Close existing current row
+UPDATE dim_customer
+SET effective_to = CURRENT_DATE - 1,
+    is_current   = FALSE
+WHERE customer_nk = 1001
+  AND is_current  = TRUE;
+
+-- Insert new version
+INSERT INTO dim_customer (
+  customer_key, customer_nk, name, address, state,
+  effective_from, effective_to, is_current
+)
+SELECT
+  (SELECT COALESCE(MAX(customer_key), 0) + 1 FROM dim_customer),
+  customer_nk, name, address, state,
+  CURRENT_DATE, DATE '9999-12-31', TRUE
+FROM stg_customer;</code></pre>
+
+          <h3>Mapping the model to AWS</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Physical choice</th><th>Dimension tables</th><th>Fact tables</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Redshift DISTSTYLE</strong></td><td><code>DISTSTYLE ALL</code> — copy to every node</td><td><code>DISTKEY</code> on the high-cardinality join column (often <code>customer_id</code>)</td></tr>
+                <tr><td><strong>Sort key</strong></td><td>Low benefit unless large</td><td><code>SORTKEY</code> on <code>order_date</code> for range filters</td></tr>
+                <tr><td><strong>S3 / Athena</strong></td><td>Small Parquet in <code>curated/dim/</code></td><td>Partitioned Parquet in <code>curated/fact/</code> by date</td></tr>
+                <tr><td><strong>Glue Catalog</strong></td><td>One table per dimension</td><td>Partition keys match filter columns</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>Full Redshift physical design is in <a href="s10-redshift.html#distribution">Section 10 distribution</a> and <a href="s10-redshift.html#spectrum">Spectrum</a> for lake-side facts.</p>
+
+          <h3>Medallion architecture (bronze → silver → gold)</h3>
+          <div class="diagram">
+            <p class="diagram-title">Medallion layers mapped to S3 prefixes</p>
+            <div class="stack">
+              <div class="layer"><strong>Gold (curated)</strong> — star-schema tables, business metrics, BI-ready · <code>s3://bucket/curated/</code></div>
+              <div class="layer"><strong>Silver (staging)</strong> — cleaned, typed, deduplicated, conformed dimensions · <code>s3://bucket/staging/</code></div>
+              <div class="layer"><strong>Bronze (raw)</strong> — immutable source copies, schema-on-read · <code>s3://bucket/raw/</code></div>
+            </div>
+          </div>
+          <p>Each layer is a quality contract, not a technology. Bronze accepts anything; silver enforces schema and DQ rules; gold applies the dimensional model. Glue jobs or dbt/SQL move data upward; <a href="s13-analytics.html#lake-formation">Lake Formation</a> permissions often tighten on gold.</p>
+
+          <h3>Fact table grains — exam traps</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Fact name</th><th>Grain (one row =)</th><th>Common mistake</th></tr></thead>
+              <tbody>
+                <tr><td><code>fact_orders</code></td><td>One order line item</td><td>Mixing order header totals with line revenue — double-count</td></tr>
+                <tr><td><code>fact_inventory_snapshot</code></td><td>One product × warehouse × day</td><td>Using transaction grain for snapshot metrics</td></tr>
+                <tr><td><code>fact_clicks</code></td><td>One click event</td><td>Pre-aggregating before load loses drill-down</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Joining facts to Type 2 dimensions</h3>
+<pre data-lang="sql" data-title="Redshift — point-in-time join on Type 2 dim" data-explain="Join on surrogate key AND order_date between effective_from and effective_to so historical orders attach to the address that was true then."><code>SELECT
+  f.order_id,
+  f.order_date,
+  f.revenue,
+  d.name,
+  d.state
+FROM fact_orders f
+JOIN dim_customer d
+  ON f.customer_key = d.customer_key
+ AND f.order_date &gt;= d.effective_from
+ AND f.order_date &lt;  d.effective_to;</code></pre>
+
+          <h3>Snowflake versus star on AWS</h3>
+          <p>Snowflake normalises dimensions (e.g. <code>dim_product → dim_category → dim_department</code>). Fewer duplicated strings in dimensions but extra joins at query time. On <a href="s10-redshift.html">Redshift</a>, star schemas with <code>DISTSTYLE ALL</code> dimensions avoid repeated network shuffles — the exam answer for warehouse modelling is usually star + denormalised dimensions unless the question emphasises storage cost over query simplicity.</p>
+        </section>
+
+        <section class="section" id="table-formats">
+          <h2>Open table formats</h2>
+          <p class="lead">Plain Parquet files in S3 are immutable blobs — you cannot update one row or delete a GDPR record without rewriting whole files. Apache Iceberg, Hudi, and Delta Lake add a transactional metadata layer on top of Parquet so lakes behave more like warehouses.</p>
+
+          <h3>Problems they solve</h3>
+          <ul>
+            <li><strong>ACID transactions</strong> — concurrent writers do not corrupt each other.</li>
+            <li><strong>Row-level UPDATE, DELETE, MERGE</strong> — GDPR erasure, CDC upserts.</li>
+            <li><strong>Time travel</strong> — query snapshots before a bad deploy.</li>
+            <li><strong>Schema evolution</strong> — add, rename, drop columns with metadata tracking.</li>
+            <li><strong>Partition evolution</strong> — change partition layout without rewriting all history (Iceberg especially).</li>
+          </ul>
+
+          <h3>AWS support matrix</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Format</th><th>Athena</th><th>Glue 4.0+/5.0</th><th>EMR</th><th>Redshift Spectrum</th><th>Governance</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Iceberg</strong></td><td>Native DDL/DML, time travel</td><td>Full read/write, compaction jobs</td><td>Spark/Flink Iceberg libraries</td><td>Read via external tables</td><td>Lake Formation column/row filters</td></tr>
+                <tr><td><strong>Hudi</strong></td><td>Limited; often via Athena engine v3 + connectors</td><td>Glue native Hudi writer</td><td>Primary Hudi ecosystem</td><td>Read after compaction to Parquet</td><td>Lake Formation on underlying paths</td></tr>
+                <tr><td><strong>Delta Lake</strong></td><td>Via manifest integration / EMR</td><td>Glue Delta writer (Spark)</td><td>Databricks-compatible on EMR</td><td>Read compacted files</td><td>LF tags on S3 prefixes</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>For DEA-C01, <strong>Iceberg + Athena</strong> is the combination most often correct when the question mentions time travel or MERGE on a lake without spinning up Redshift.</p>
+
+          <h3>Iceberg DDL and MERGE</h3>
+<pre data-lang="sql" data-title="Athena — create Iceberg table" data-explain="Iceberg tables store metadata in the Glue Data Catalog and data files under the location. Partition spec is declared in DDL, not only by S3 paths."><code>CREATE TABLE dea_lab.events_iceberg (
+  event_id   bigint,
+  user_id    bigint,
+  event_type string,
+  event_ts   timestamp,
+  payload    string
+)
+PARTITIONED BY (day(event_ts))
+LOCATION 's3://dea-lab-ab-4821/curated/events_iceberg/'
+TBLPROPERTIES (
+  'table_type' = 'ICEBERG',
+  'format'     = 'parquet',
+  'write_compression' = 'zstd'
+);</code></pre>
+
+<pre data-lang="sql" data-title="Athena — MERGE for CDC upsert" data-explain="MERGE matches on event_id: update existing rows from the staging batch, insert new ones. Idempotent replay of the same batch yields the same result."><code>MERGE INTO dea_lab.events_iceberg t
+USING dea_lab.events_staging s
+ON t.event_id = s.event_id
+WHEN MATCHED THEN
+  UPDATE SET event_type = s.event_type,
+             event_ts   = s.event_ts,
+             payload    = s.payload
+WHEN NOT MATCHED THEN
+  INSERT (event_id, user_id, event_type, event_ts, payload)
+  VALUES (s.event_id, s.user_id, s.event_type, s.event_ts, s.payload);</code></pre>
+
+          <h3>When plain Parquet is enough</h3>
+          <div class="grid-2">
+            <div class="mini-card">
+              <h4>Parquet lake suffices</h4>
+              <ul>
+                <li>Append-only batch loads (nightly ETL)</li>
+                <li>Partition overwrite per day (<code>INSERT OVERWRITE</code>)</li>
+                <li>No row-level deletes required</li>
+                <li>Single writer per partition</li>
+              </ul>
+            </div>
+            <div class="mini-card">
+              <h4>Reach for a table format</h4>
+              <ul>
+                <li>GDPR/CCPA delete-my-data requests</li>
+                <li>CDC upserts from DMS or Debezium</li>
+                <li>Concurrent streaming + batch writers</li>
+                <li>Auditable time travel after bad deploys</li>
+              </ul>
+            </div>
+          </div>
+          <div class="callout info"><strong>Glue version matters.</strong> Iceberg/Hudi/Delta write support requires Glue 4.0 or 5.0 Spark jobs. A Glue 2.0 exam distractor cannot write Iceberg natively. See <a href="s04-glue.html#job-types">Section 4 job types</a> and <a href="s13-analytics.html#emr">Section 13 EMR</a> for Spark-heavy alternatives.</div>
+
+          <h3>Time travel query (Iceberg)</h3>
+<pre data-lang="sql" data-title="Athena — query yesterday's snapshot" data-explain="FOR TIMESTAMP AS OF reads metadata snapshot before today's bad MERGE — recovery without restoring S3 from backup."><code>SELECT event_id, payload
+FROM dea_lab.events_iceberg
+FOR TIMESTAMP AS OF TIMESTAMP '2026-08-02 23:59:00'
+WHERE user_id = 42;</code></pre>
+
+          <h3>Feature comparison</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Capability</th><th>Iceberg</th><th>Hudi</th><th>Delta Lake</th></tr></thead>
+              <tbody>
+                <tr><td>Row-level DELETE/UPDATE</td><td>Yes</td><td>Yes (copy-on-write / merge-on-read)</td><td>Yes</td></tr>
+                <tr><td>MERGE/upsert</td><td>Yes (Athena, Spark)</td><td>Yes (Spark primary)</td><td>Yes (Spark)</td></tr>
+                <tr><td>Time travel</td><td>Timestamp/snapshot ID</td><td>Instant-based</td><td>Version number</td></tr>
+                <tr><td>Hidden partition evolution</td><td>Strong</td><td>Moderate</td><td>Moderate</td></tr>
+                <tr><td>AWS first-class query</td><td>Athena SQL</td><td>Glue/EMR write; Athena read paths vary</td><td>EMR/Glue write-heavy</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>Lake Formation can govern Iceberg tables with fine-grained filters — same governance model as Hive tables in <a href="s13-analytics.html#lake-formation">Section 13</a>. When an exam mentions GDPR erasure on a data lake without loading into Redshift, the answer chain is: open table format → row-level DELETE or MERGE → Lake Formation audit trail.</p>
+        </section>
+
+        <section class="section" id="quality">
+          <h2>Data quality and observability</h2>
+          <p class="lead">Domain 3 explicitly tests ensuring data quality. AWS Glue Data Quality (built on Deequ) lets you declare rules in DQDL, run them inside Glue jobs or crawlers, and route failures to CloudWatch and EventBridge — without building a custom framework.</p>
+
+          <h3>Dimensions of data quality</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Dimension</th><th>Question it answers</th><th>Example rule</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Completeness</strong></td><td>Are required fields populated?</td><td><code>Completeness "email" &gt; 0.99</code></td></tr>
+                <tr><td><strong>Uniqueness</strong></td><td>Are keys distinct?</td><td><code>IsUnique "customer_id"</code></td></tr>
+                <tr><td><strong>Validity</strong></td><td>Do values match format/range?</td><td><code>ColumnValues "age" between 0 and 120</code></td></tr>
+                <tr><td><strong>Timeliness</strong></td><td>Did data arrive on schedule?</td><td>Freshness metric vs SLA in CloudWatch</td></tr>
+                <tr><td><strong>Consistency</strong></td><td>Do related fields agree?</td><td>Row count match between source and target</td></tr>
+                <tr><td><strong>Accuracy</strong></td><td>Does data reflect reality?</td><td>Reconciliation against source totals</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Glue Data Quality and DQDL</h3>
+          <p><strong>DQDL</strong> (Data Quality Definition Language) is a declarative ruleset attached to a Glue table or evaluated inline in an ETL script. Under the hood, AWS implements many rules with <strong>Deequ</strong> (Amazon's open-source Spark library for unit tests on data).</p>
+
+<pre data-lang="yaml" data-title="Glue Data Quality — ruleset YAML (console/API)" data-explain="Rules run against the customers table. Failed rules publish a score below 1.0 and can trigger EventBridge."><code>Rules:
+  - IsComplete "ID"
+  - IsComplete "Email"
+  - IsUnique "ID"
+  - ColumnValues "Age" between 0 and 120
+  - ColumnLength "State" = 2
+  - RowCount &gt; 10
+  - CustomSql "SELECT COUNT(*) FROM primary WHERE ID IN (SELECT ID FROM primary GROUP BY ID HAVING COUNT(*) &gt; 1)" = 0</code></pre>
+
+          <p>Results publish to:</p>
+          <ul>
+            <li><strong>Glue console</strong> — per-run quality score and rule breakdown.</li>
+            <li><strong>CloudWatch metrics</strong> — <code>Glue/DataQuality</code> namespace for alarms.</li>
+            <li><strong>EventBridge</strong> — <code>glue.dataQualityRulesetEvaluationCompleted</code> for routing failures to SNS, Lambda, or <a href="s15-app-integration.html#step-functions">Step Functions</a>.</li>
+          </ul>
+
+          <h3>EvaluateDataQuality in a Glue job</h3>
+<pre data-lang="python" data-title="Glue PySpark — inline DQ evaluation" data-explain="Evaluate rules before writing curated output. On failure, write bad rows to rejected/ and still commit good rows — quarantine pattern."><code>from awsglue.transforms import EvaluateDataQuality
+
+rules = """
+  IsComplete "ID"
+  IsUnique "ID"
+  ColumnValues "Age" between 0 and 120
+"""
+
+dq = EvaluateDataQuality.apply(
+    frame=dyf,
+    ruleset=rules,
+    publishing_options={
+        "CloudWatchMetricsEnabled": True,
+        "ResultsS3Prefix": "s3://dea-lab-ab-4821/staging/dq-results/"
+    }
+)
+
+# Split passing vs failing rows (conceptual — use DynamicFrame filters)
+good = dq.filter(lambda x: x["DataQualityEvaluationResult"] == "Passed")
+bad  = dyf.join(good, on=["ID"], how="left_anti")
+
+bad.toDF().write.mode("append").json("s3://dea-lab-ab-4821/rejected/customers/")</code></pre>
+
+          <h3>DataBrew profile jobs</h3>
+          <p><a href="s04-glue.html#databrew">AWS Glue DataBrew</a> profile jobs compute column-level statistics (null %, distinct count, histograms) without writing rules first — useful for discovery before you codify DQDL. Profiles do not block pipelines; rulesets do.</p>
+
+          <div class="callout exam"><strong>Quarantine, do not fail.</strong> Exam scenarios with "ensure bad records do not block the pipeline" → write failures to <code>rejected/</code> or a dead-letter path, alert via EventBridge, continue processing valid rows. Failing the entire job on one malformed line is the distractor.</div>
+
+          <h3>Observability beyond DQ scores</h3>
+          <ul>
+            <li><strong>Pipeline SLAs</strong> — custom CloudWatch metric when curated partition lands; alarm if empty after deadline.</li>
+            <li><strong>Row-count reconciliation</strong> — source COUNT vs target COUNT in Step Functions choice state.</li>
+            <li><strong>Freshness</strong> — S3 <code>LastModified</code> on latest partition versus expected schedule.</li>
+            <li><strong>Lineage</strong> — Glue Data Catalog lineage; exam expects awareness that impact analysis traces upstream tables.</li>
+          </ul>
+          <p>Wire alarms to <a href="s16-management.html#cloudwatch">CloudWatch dashboards</a>. Data quality without alerting is a report, not observability.</p>
+
+<pre data-lang="json" data-title="EventBridge — route DQ failure to SNS" data-explain="When Glue publishes a failed ruleset evaluation, EventBridge triggers remediation without polling the console."><code>{
+  "source": ["aws.glue"],
+  "detail-type": ["Glue Data Quality Ruleset Evaluation Completed"],
+  "detail": {
+    "Result": ["Failed"]
+  }
+}</code></pre>
+        </section>
+
+        <section class="section" id="datazone">
+          <h2>Amazon DataZone</h2>
+          <p class="lead">Amazon DataZone is a data management service for cataloguing, discovering, sharing and governing data across AWS accounts and business teams. It sits above the technical metadata in the Glue Data Catalog and adds a business-facing portal, glossary, and request/approval workflow so domain owners can publish datasets without every consumer needing direct Lake Formation grants.</p>
+
+          <h3>Core concepts</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Concept</th><th>What it is</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Domain</strong></td><td>Top-level business boundary — e.g. Marketing, Finance — owned by a domain administrator who approves publishing and subscriptions</td></tr>
+                <tr><td><strong>Data portal</strong></td><td>Web UI where analysts search the catalogue, read business descriptions, and request access to assets</td></tr>
+                <tr><td><strong>Project</strong></td><td>Workspace inside a domain where a team collaborates; members subscribe to assets and use provisioned environments</td></tr>
+                <tr><td><strong>Environment</strong></td><td>Isolated compute and storage profile (Glue, Athena, Redshift Serverless links) attached to a project for consuming subscribed data</td></tr>
+                <tr><td><strong>Business glossary</strong></td><td>Shared vocabulary — terms, definitions, stewards — linked to technical assets so "monthly active users" means the same thing everywhere</td></tr>
+                <tr><td><strong>Metadata forms</strong></td><td>Custom fields publishers fill in at registration time (data owner, retention class, PII flag)</td></tr>
+                <tr><td><strong>Publish / subscribe workflow</strong></td><td>Producer registers an asset → domain approves publication → consumer requests subscription → owner approves → Lake Formation or IAM grants are applied automatically</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="diagram">
+            <p class="diagram-title">DataZone layers — business catalogue on top of technical governance</p>
+            <div class="stack">
+              <div class="layer"><b>Data portal</b> — search, glossary, subscription requests</div>
+              <div class="layer"><b>Amazon DataZone</b> — domains, projects, publish/approve workflow</div>
+              <div class="layer"><b>Glue Data Catalog</b> — technical schema, partitions, lineage</div>
+              <div class="layer"><b>Lake Formation + IAM</b> — fine-grained permissions on S3 tables</div>
+            </div>
+          </div>
+
+          <h3>Relationship to Glue Data Catalog and Lake Formation</h3>
+          <p>DataZone does not replace the Glue Data Catalog or <a href="s13-analytics.html#lake-formation">Lake Formation</a>. Publishers register assets that point at existing Glue databases and tables (or Redshift datashares). DataZone adds business metadata, ownership, and a governed subscription path. When a subscription is approved, DataZone orchestrates the underlying Lake Formation permission grant or cross-account share — consumers never bypass the approval queue with a raw IAM policy.</p>
+          <p>Lake Formation alone enforces who can run SQL against which columns; it has no business glossary, no self-service portal, and no cross-domain publishing workflow. DataZone fills that gap for organisations adopting a <strong>data mesh</strong> — decentralised domain ownership with central interoperability standards.</p>
+
+          <h3>Data mesh and when the exam picks DataZone</h3>
+          <p>In a data mesh, each business unit owns its datasets ("data products"), publishes them with documented SLAs, and consumers discover them through a federated catalogue rather than a central ETL team copying everything into one warehouse. DataZone is AWS's managed implementation of that federated catalogue plus governance workflow.</p>
+          <div class="callout exam"><strong>DataZone versus Lake Formation alone.</strong> "Analysts need a searchable business catalogue with approval before accessing Finance tables in another account" → <strong>Amazon DataZone</strong>. "Block SELECT on the SSN column for role AnalystRole" → <strong>Lake Formation</strong> column filter. "Register technical schema and run crawlers" → <strong>Glue Data Catalog</strong>. DataZone is the answer when the scenario emphasises discovery, glossary, subscription workflow, or cross-team data sharing — not when the question is purely SQL-level permission enforcement.</div>
+        </section>
+
+        <section class="section" id="patterns">
+          <h2>Pipeline patterns and programming concepts</h2>
+          <p class="lead">Domain 1 lists programming concepts explicitly: idempotency, checkpointing, window functions, CTEs, joins, MERGE, and version control. The course demonstrates individual services; this section ties the semantics together.</p>
+
+          <h3>Delivery semantics</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Guarantee</th><th>Meaning</th><th>AWS reality</th><th>Your job</th></tr></thead>
+              <tbody>
+                <tr><td><strong>At-most-once</strong></td><td>May lose records</td><td>Rare — usually a bug</td><td>Not acceptable for billing data</td></tr>
+                <tr><td><strong>At-least-once</strong></td><td>May duplicate</td><td>Kinesis, SQS, Lambda retries, Firehose</td><td>Design idempotent sinks</td></tr>
+                <tr><td><strong>Exactly-once</strong></td><td>Neither lose nor duplicate</td><td>Managed Flink with checkpoints; Iceberg MERGE</td><td>Hard — simulate with idempotency keys</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p><strong>Idempotency</strong> means replaying the same input leaves the system in the same state: partition overwrite, <code>MERGE</code> on natural key, deterministic S3 keys (<code>date=2026-08-03/run_id=abc/</code>), DynamoDB conditional writes.</p>
+
+          <h3>Streaming concepts</h3>
+          <ul>
+            <li><strong>Checkpointing</strong> — Flink/KCL persist offsets + state so a restart continues without reprocessing from scratch (unless you reset).</li>
+            <li><strong>Watermarks</strong> — event-time progress; allow late-arriving records within a lateness bound.</li>
+            <li><strong>Late data</strong> — route to a side output or include in the next window via allowed lateness.</li>
+          </ul>
+          <p>Streaming detail lives in <a href="s06-streaming.html">Section 6</a>; the exam tests vocabulary, not Flink API trivia.</p>
+
+          <h3>Batch patterns</h3>
+          <ul>
+            <li><strong>Backfill</strong> — reprocess historical partitions after a logic fix; use Step Functions to loop dates.</li>
+            <li><strong>Partition overwrite</strong> — idempotent daily load: replace <code>year=2026/month=08/day=03/</code> entirely.</li>
+            <li><strong>Append</strong> — only when duplicates are impossible or deduplicated downstream.</li>
+          </ul>
+
+          <h3>CDC patterns</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Source</th><th>Mechanism</th><th>Target pattern</th></tr></thead>
+              <tbody>
+                <tr><td>RDS / Oracle / SQL Server</td><td><a href="s18-migration.html">AWS DMS</a> CDC tasks</td><td>Iceberg MERGE or S3 Parquet + Glue bookmark</td></tr>
+                <tr><td>DynamoDB</td><td>DynamoDB Streams → Lambda/Firehose</td><td>Aggregate to S3; MERGE on partition key</td></tr>
+                <tr><td>Self-managed DB</td><td>Debezium on MSK → S3 Tables / Glue</td><td>Avro/JSON change events; upsert in Spark</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Fan-in, fan-out, DLQs</h3>
+          <p><strong>Fan-out:</strong> one Kinesis stream → multiple consumers (enhanced fan-out in Section 6). <strong>Fan-in:</strong> many S3 prefixes → one Glue job with catalog partitions. <strong>Dead-letter queues (DLQ):</strong> SQS queue or S3 prefix for poison messages that exceed max retries. <strong>Poison pill:</strong> one bad record that crashes the parser — skip, quarantine, alert.</p>
+          <p><strong>Retry:</strong> exponential backoff with jitter (<code>sleep(base * 2^attempt + random</code>) prevents thundering herd on recovery. SQS visibility timeout must exceed Lambda processing time.</p>
+
+          <h3>SQL and Python the exam lists</h3>
+<pre data-lang="sql" data-title="Window function — running total per customer" data-explain="Window functions compute across related rows without collapsing them — common in DEA-C01 Redshift/Athena questions."><code>SELECT
+  customer_id,
+  order_date,
+  amount,
+  SUM(amount) OVER (
+    PARTITION BY customer_id
+    ORDER BY order_date
+    ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+  ) AS running_total
+FROM fact_orders;</code></pre>
+
+<pre data-lang="sql" data-title="CTE and anti-join — customers with no orders" data-explain="Anti-join (NOT EXISTS or LEFT JOIN ... WHERE NULL) finds rows in A absent from B."><code>WITH active_customers AS (
+  SELECT DISTINCT customer_id FROM fact_orders WHERE order_date &gt;= DATE '2025-01-01'
+)
+SELECT c.customer_id, c.name
+FROM dim_customer c
+LEFT JOIN active_customers a ON c.customer_id = a.customer_id
+WHERE a.customer_id IS NULL;</code></pre>
+
+          <p><strong>Git-based version control</strong> for pipeline code (Glue scripts in CodeCommit, CloudFormation/CDK for jobs and triggers) is expected — see <a href="#cicd">CI/CD section</a>. The exam contrasts ad-hoc console edits with reproducible deployments.</p>
+
+          <h3>Watermark and late-data example (conceptual Flink SQL)</h3>
+<pre data-lang="sql" data-title="Flink SQL — tumbling window with lateness" data-explain="Watermark advances event time; allowed lateness keeps windows open for straggler events — exam vocabulary for Managed Flink scenarios."><code>CREATE TABLE clicks (
+  user_id BIGINT,
+  click_ts TIMESTAMP(3),
+  WATERMARK FOR click_ts AS click_ts - INTERVAL '5' SECOND
+) WITH (...);
+
+SELECT window_start, window_end, COUNT(*)
+FROM TABLE(
+  TUMBLE(TABLE clicks, DESCRIPTOR(click_ts), INTERVAL '1' MINUTE))
+GROUP BY window_start, window_end;</code></pre>
+
+          <h3>Step Functions orchestration for backfill</h3>
+<pre data-lang="json" data-title="Step Functions — Map state over dates" data-explain="Fan-out one Glue job per day for idempotent partition overwrite backfill. Standard workflow supports up to 1 year — see exam-gaps limits."><code>{
+  "Type": "Map",
+  "ItemsPath": "$.dates",
+  "Iterator": {
+    "StartAt": "RunGlue",
+    "States": {
+      "RunGlue": {
+        "Type": "Task",
+        "Resource": "arn:aws:states:::glue:startJobRun.sync",
+        "Parameters": {
+          "JobName": "orders-etl",
+          "Arguments": {
+            "--PROCESS_DATE.$": "$"
+          }
+        },
+        "End": true
+      }
+    }
+  }
+}</code></pre>
+
+          <h3>Retry policy with jitter (Lambda pseudocode)</h3>
+<pre data-lang="python" data-title="Exponential backoff with jitter" data-explain="Prevents synchronized retries from overwhelming downstream during partial outages."><code>import random, time
+
+def call_with_retry(fn, max_attempts=5):
+    for attempt in range(max_attempts):
+        try:
+            return fn()
+        except TransientError:
+            if attempt == max_attempts - 1:
+                raise
+            base = 2 ** attempt
+            time.sleep(base + random.uniform(0, 1))</code></pre>
+        </section>
+
+        <section class="section" id="genai">
+          <h2>Generative AI and vector stores</h2>
+          <p class="lead">DEA-C01 now includes GenAI integration at the data-engineering layer: where embeddings live, how Knowledge Bases retrieve context, and what you build versus what Bedrock runs. You are not tested on transformer maths.</p>
+
+          <h3>Amazon Bedrock</h3>
+          <p>Bedrock is the managed API layer for foundation models. Data engineers care about the <strong>data plane around it</strong> — document ingestion, embedding endpoints, Knowledge Base sync, and logging invocations to CloudWatch — not fine-tuning math. Integration with <a href="s14-sagemaker.html">SageMaker</a> appears when custom models or batch transform are in scope; Bedrock is the shortcut when a pre-trained model suffices.</p>
+          <ul>
+            <li><strong>Foundation-model access</strong> — API calls to Claude, Titan, Llama, etc. without hosting weights.</li>
+            <li><strong>Model choice</strong> — trade-off latency, cost, context window, and task (embeddings vs chat).</li>
+            <li><strong>On-demand</strong> — pay per input/output token; spiky workloads.</li>
+            <li><strong>Provisioned throughput</strong> — reserved model units for steady high QPS; cheaper at scale, commitment required.</li>
+          </ul>
+
+          <h3>Knowledge Bases and RAG</h3>
+          <div class="diagram">
+            <p class="diagram-title">RAG pipeline — data engineer responsibilities highlighted</p>
+            <div class="flow">
+              <div class="node is-source"><b>Source docs</b><small>S3 · Confluence · SharePoint</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-compute pulse"><b>Chunk + embed</b><small>Lambda/Glue · Bedrock Titan Embeddings</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-store"><b>Vector index</b><small>OpenSearch k-NN · pgvector · S3 Vectors</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-serve"><b>Retrieve + generate</b><small>Knowledge Base → Bedrock model</small></div>
+            </div>
+          </div>
+          <p><strong>Retrieval-augmented generation (RAG)</strong> grounds model answers in your data. Bedrock Knowledge Bases orchestrate chunking, embedding, indexing, and retrieval — but someone must keep source S3 buckets fresh and re-sync when documents change.</p>
+
+          <h3>Vector stores on AWS</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Store</th><th>When to choose it</th></tr></thead>
+              <tbody>
+                <tr><td><strong>OpenSearch Serverless (k-NN)</strong></td><td>Default Bedrock KB vector store; hybrid text + vector search</td></tr>
+                <tr><td><strong>Aurora PostgreSQL + pgvector</strong></td><td>Transactional app already on Aurora; SQL + vectors together</td></tr>
+                <tr><td><strong>Amazon Kendra</strong></td><td>Managed enterprise search with semantic ranking; less DIY chunking</td></tr>
+                <tr><td><strong>Neptune Analytics</strong></td><td>Graph + vector for knowledge-graph RAG</td></tr>
+                <tr><td><strong>S3 Vectors</strong></td><td>Cost-optimised large-scale embedding storage (preview-era exam topic)</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>The data engineer's job in RAG</h3>
+          <ol>
+            <li><strong>Chunking</strong> — split documents (512–1024 tokens) with overlap; preserve metadata (source, page).</li>
+            <li><strong>Embedding</strong> — batch through Bedrock embedding model; store vector + pointer to chunk.</li>
+            <li><strong>Indexing</strong> — bulk load to OpenSearch/pgvector; tune HNSW parameters.</li>
+            <li><strong>Freshness</strong> — S3 event → Lambda re-embed on change; schedule full reindex weekly.</li>
+          </ol>
+          <div class="callout exam"><strong>Exam framing.</strong> "Where should embeddings be stored for Bedrock Knowledge Bases with hybrid search?" → OpenSearch Serverless. "Keep vectors next to OLTP rows?" → Aurora pgvector. The question tests store selection, not embedding dimension sizes.</div>
+
+          <h3>Chunking parameters that affect retrieval quality</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Parameter</th><th>Typical range</th><th>Trade-off</th></tr></thead>
+              <tbody>
+                <tr><td>Chunk size</td><td>256–1024 tokens</td><td>Larger = more context; smaller = precise retrieval</td></tr>
+                <tr><td>Overlap</td><td>10–20% of chunk</td><td>Reduces boundary cuts through sentences</td></tr>
+                <tr><td>Metadata</td><td>source, page, section</td><td>Enables citation and filtered retrieval</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+<pre data-lang="python" data-title="Lambda — S3 put triggers re-embed" data-explain="Data engineer pattern: on document change, chunk, embed via Bedrock, upsert vectors in OpenSearch."><code>import boto3, os
+
+bedrock = boto3.client("bedrock-runtime")
+oss = boto3.client("opensearchserverless")
+
+def handler(event, context):
+    bucket = event["Records"][0]["s3"]["bucket"]["name"]
+    key = event["Records"][0]["s3"]["object"]["key"]
+    text = load_s3_text(bucket, key)
+    for chunk in chunk_text(text, size=512, overlap=64):
+        vector = bedrock.invoke_model(
+            modelId="amazon.titan-embed-text-v2:0",
+            body={"inputText": chunk}
+        )
+        upsert_vector(doc_id=key, chunk=chunk, vector=vector)</code></pre>
+        </section>
+
+        <section class="section" id="cost">
+          <h2>Cost optimisation for data platforms</h2>
+          <p class="lead">Half of "best solution" questions are cost questions in disguise. You must know the billing unit for each service and which architectural levers actually move spend — not generic "use Spot" without context.</p>
+
+          <h3>Billing units by service</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Service</th><th>Primary billing unit</th><th>Secondary charges</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Athena</strong></td><td>Per TB scanned (10 MB minimum/query)</td><td>Spark engine: DPU-hour</td></tr>
+                <tr><td><strong>Glue</strong></td><td>Per DPU-hour (1-minute minimum)</td><td>Crawler: per object; DQ: per rule-run</td></tr>
+                <tr><td><strong>Redshift provisioned</strong></td><td>Per node-hour by instance type</td><td>Spectrum: per TB scanned; concurrency scaling</td></tr>
+                <tr><td><strong>Redshift Serverless</strong></td><td>Per RPU-second</td><td>Storage beyond included cap</td></tr>
+                <tr><td><strong>Kinesis Data Streams</strong></td><td>Per shard-hour + PUT payload units</td><td>Extended retention per GB-month</td></tr>
+                <tr><td><strong>Firehose</strong></td><td>Per GB ingested</td><td>Format conversion, Lambda transform</td></tr>
+                <tr><td><strong>DynamoDB</strong></td><td>Per WCU/RCU (provisioned) or per request unit (on-demand)</td><td>Storage GB-month, streams, backups</td></tr>
+                <tr><td><strong>S3</strong></td><td>Per GB-month by storage class</td><td>Requests, retrieval (IA/Glacier), transfer out</td></tr>
+                <tr><td><strong>Lambda</strong></td><td>Per GB-second + per request</td><td>Provisioned concurrency</td></tr>
+                <tr><td><strong>MSK</strong></td><td>Per broker-hour + storage GB-month</td><td>Data transfer, cross-AZ</td></tr>
+                <tr><td><strong>EMR</strong></td><td>EC2 instance hours for core/task (master billed)</td><td>EBS, Spot discount on task nodes</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Levers that actually move the bill</h3>
+          <ul>
+            <li><strong>Partition pruning + columnar formats</strong> — Athena/Spectrum scan cost (<a href="#formats">formats section</a>).</li>
+            <li><strong>Right-sized Redshift</strong> — resize RA3, pause dev clusters, auto-suspend Serverless.</li>
+            <li><strong>S3 lifecycle</strong> — transition raw to IA/Glacier; expire staging after N days.</li>
+            <li><strong>S3 Intelligent-Tiering</strong> — automatic tier movement for unpredictable access.</li>
+            <li><strong>Spot task nodes on EMR</strong> — fault-tolerant Spark workers, not the master.</li>
+            <li><strong>Reserved/provisioned capacity</strong> — Athena DPUs, Redshift RIs, DynamoDB reserved WCUs when baseline is steady.</li>
+            <li><strong>Compression</strong> — fewer GB stored and scanned.</li>
+          </ul>
+
+          <h3>Cost tools</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Tool</th><th>Purpose</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Cost Explorer</strong></td><td>Visualise spend by service, tag, time; find spikes</td></tr>
+                <tr><td><strong>Budgets + budget actions</strong></td><td>Alert at threshold; optionally apply IAM deny or SNS (<a href="s04-glue.html#budgets">Section 4</a>)</td></tr>
+                <tr><td><strong>Cost and Usage Report (CUR)</strong></td><td>Line-item billing export to S3/Athena for custom analysis</td></tr>
+                <tr><td><strong>Cost allocation tags</strong></td><td><code>Environment=prod</code>, <code>Team=data</code> on Glue jobs, buckets, clusters</td></tr>
+                <tr><td><strong>Compute Optimizer</strong></td><td>Rightsizing recommendations for EC2, Lambda, EBS backing EMR</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Symptom → cause → fix</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Symptom</th><th>Likely cost cause</th><th>Fix</th></tr></thead>
+              <tbody>
+                <tr><td>Athena bill spiked after launch</td><td>Full-table scan on CSV, no partitions</td><td>CTAS to Parquet; partition by filter columns</td></tr>
+                <tr><td>Glue spend up, runtime flat</td><td>DPUs over-provisioned for small files</td><td>Compact files; lower worker count; G.1X vs G.2X</td></tr>
+                <tr><td>Redshift cost high, CPU low</td><td>Over-sized cluster; no auto-pause</td><td>Resize; Serverless; scheduled pause</td></tr>
+                <tr><td>S3 storage growing forever</td><td>Raw never expired; versioning without lifecycle</td><td>Lifecycle to IA/Glacier; abort incomplete MPU</td></tr>
+                <tr><td>Kinesis cost linear with traffic</td><td>Too many shards provisioned</td><td>On-demand mode or resharding</td></tr>
+                <tr><td>DynamoDB bill surprise</td><td>On-demand hot partition or full-table scans</td><td>Provisioned with auto scaling; GSIs for queries</td></tr>
+                <tr><td>Data transfer charge</td><td>Cross-Region replication without need</td><td>Same-Region pipelines; CloudFront for egress</td></tr>
+                <tr><td>EMR cluster expensive</td><td>All on-demand core nodes</td><td>Spot task nodes; transient cluster pattern</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout cost"><strong>Scan cost is recurring.</strong> A one-time Glue CTAS job costs dollars; leaving CSV in place costs dollars on every Athena query forever. Format conversion is almost always worth the migration job.</div>
+
+          <h3>CUR query example — top Athena spend by workgroup</h3>
+<pre data-lang="sql" data-title="Athena on CUR — find expensive workgroups" data-explain="Export Cost and Usage Report to S3, register in Glue, SQL the line items. Proves who ran up the bill."><code>SELECT
+  line_item_usage_account_id,
+  resource_tags_user_workgroup AS workgroup,
+  SUM(line_item_unblended_cost) AS cost_usd
+FROM cur_db.cur_report
+WHERE line_item_product_code = 'AmazonAthena'
+  AND line_item_usage_start_date &gt;= DATE '2026-08-01'
+GROUP BY 1, 2
+ORDER BY cost_usd DESC;</code></pre>
+
+          <h3>Reserved capacity when it pays</h3>
+          <p>Buy reserved/provisioned capacity when baseline usage is <strong>steady for months</strong>: Athena processing capacity, Redshift reserved nodes, DynamoDB reserved WCUs, OpenSearch reserved instances. Spiky analytics labs and exam-account workloads stay on-demand. <a href="s03-athena.html#cost">Section 3 Athena cost</a> covers provisioned DPUs; compare break-even versus per-TB on your monthly scan volume.</p>
+        </section>
+
+        <section class="section" id="cicd">
+          <h2>CI/CD, IaC and testing for data pipelines</h2>
+          <p class="lead">Domain 3 expects automation: deploy Glue jobs and Step Functions as code, promote across environments, and test transforms before production. Console clicking is not a pipeline strategy.</p>
+
+          <h3>Git workflow on AWS</h3>
+          <div class="diagram">
+            <p class="diagram-title">Typical data-pipeline CI/CD</p>
+            <div class="flow">
+              <div class="node is-source"><b>CodeCommit / GitHub</b><small>Glue scripts · SQL · CFN</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-compute"><b>CodeBuild</b><small>unit tests · cfn-lint</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-compute pulse"><b>CodePipeline</b><small>dev → staging → prod</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-serve"><b>Deploy</b><small>Glue · Step Functions · MWAA</small></div>
+            </div>
+          </div>
+
+          <h3>IaC choices</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Tool</th><th>Strength</th><th>Data pipeline use</th></tr></thead>
+              <tbody>
+                <tr><td><strong>CloudFormation</strong></td><td>Native AWS resources; stack drift detection</td><td><code>AWS::Glue::Job</code>, crawlers, triggers</td></tr>
+                <tr><td><strong>AWS CDK</strong></td><td>Python/TS abstractions; generates CFN</td><td>Reusable constructs for standard ETL stacks</td></tr>
+                <tr><td><strong>Terraform</strong></td><td>Multi-cloud; state file</td><td><code>aws_glue_job</code>, <code>aws_sfn_state_machine</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+<pre data-lang="yaml" data-title="CloudFormation — Glue job fragment" data-explain="Job definition lives in Git; pipeline updates the stack on merge to main. Parameters inject environment-specific bucket names."><code>Parameters:
+  Environment:
+    Type: String
+    Default: dev
+  ScriptBucket:
+    Type: String
+
+Resources:
+  EtlJob:
+    Type: AWS::Glue::Job
+    Properties:
+      Name: !Sub "orders-etl-${Environment}"
+      Role: !GetAtt GlueRole.Arn
+      Command:
+        Name: glueetl
+        ScriptLocation: !Sub "s3://${ScriptBucket}/scripts/orders_etl.py"
+      DefaultArguments:
+        "--job-bookmark-option": "job-bookmark-enable"
+        "--TARGET_BUCKET": !Sub "dea-lab-${Environment}-curated"</code></pre>
+
+          <h3>Environment promotion</h3>
+          <p>Use CloudFormation parameters or SSM Parameter Store for bucket names, database names, and worker counts. <strong>Never</strong> hard-code <code>prod</code> ARNs in scripts — inject via <code>--arguments</code> at deploy time.</p>
+
+          <h3>Testing pyramid for data</h3>
+          <ul>
+            <li><strong>Unit test</strong> — pure Python function on a Spark local session or pandas fixture; mock I/O.</li>
+            <li><strong>Integration test</strong> — run Glue job against a 100-row Parquet fixture in a dev bucket; assert row counts and schemas.</li>
+            <li><strong>Production validation</strong> — DQ ruleset gates promotion; blue/green table swap.</li>
+          </ul>
+
+<pre data-lang="python" data-title="Unit test — PySpark transform" data-explain="Test business logic without AWS: build a small DataFrame, apply transform, assert output. Run in CodeBuild with pytest."><code>from pyspark.sql import SparkSession
+from orders_etl import dedupe_customers
+
+def test_dedupe_keeps_latest():
+    spark = SparkSession.builder.master("local[1]").getOrCreate()
+    df = spark.createDataFrame([
+        (1, "A", "2026-01-01"),
+        (1, "B", "2026-02-01"),
+    ], ["id", "name", "updated_at"])
+    out = dedupe_customers(df)
+    assert out.count() == 1
+    assert out.collect()[0]["name"] == "B"</code></pre>
+
+          <h3>Blue/green warehouse deploy</h3>
+          <p>Build <code>fact_orders_v2</code> alongside <code>fact_orders</code>; run reconciliation; atomically swap views or rename in a maintenance window. Redshift <code>ALTER TABLE APPEND</code> and Spectrum external tables support similar patterns without downtime reads on the old table.</p>
+
+<pre data-lang="yaml" data-title="CodePipeline — deploy Glue on merge" data-explain="Pipeline stages: Source from CodeCommit, Build runs pytest, Deploy CloudFormation change set per environment."><code>pipeline:
+  stages:
+    - name: Source
+      actions:
+        - name: Repo
+          provider: CodeCommit
+          configuration:
+            RepositoryName: data-pipelines
+            BranchName: main
+    - name: Build
+      actions:
+        - name: UnitTests
+          provider: CodeBuild
+          configuration:
+            ProjectName: glue-etl-tests
+    - name: DeployDev
+      actions:
+        - name: CFNDeploy
+          provider: CloudFormation
+          configuration:
+            StackName: glue-etl-dev
+            ParameterOverrides: '{"Environment":"dev"}'</code></pre>
+
+          <h3>AWS CodeDeploy</h3>
+          <p><strong>AWS CodeDeploy</strong> automates application deployments to EC2 instances, on-premises servers, Lambda functions, and ECS services. In a data-platform pipeline it sits alongside <strong>CodePipeline</strong> (orchestration stages) and <strong>CodeBuild</strong> (compile and test): CodeBuild produces an artifact (Glue script zip, Lambda bundle, CloudFormation template); CodePipeline invokes a deploy action that CodeDeploy executes with a chosen strategy. For Glue and EMR, deployment is usually CloudFormation or the Glue/EMR API promoting a script and job definition — CodeDeploy applies when the compute surface is Lambda, ECS/Fargate stream processors, or EC2-hosted custom runners.</p>
+
+          <h3>Deployment strategies</h3>
+          <p>Each strategy trades deployment speed, cost (duplicate infrastructure), and blast radius if the new version is bad.</p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Strategy</th><th>How it works</th><th>Cost</th><th>Risk</th></tr></thead>
+              <tbody>
+                <tr><td><strong>In-place</strong></td><td>Stop old version, install new version on the same instances — brief downtime or reduced capacity during the swap</td><td>Lowest — no duplicate fleet</td><td>Highest — all traffic hits the new build immediately; bad deploy affects everyone</td></tr>
+                <tr><td><strong>Blue/green</strong></td><td>Run old (blue) and new (green) environments in parallel; shift traffic or DNS atomically after validation</td><td>Highest — double compute until cutover</td><td>Low — instant rollback by routing back to blue</td></tr>
+                <tr><td><strong>Canary</strong></td><td>Route a small percentage of traffic to the new version first; monitor metrics; gradually increase or roll back</td><td>Medium — partial duplicate capacity during the ramp</td><td>Low — limited blast radius on the first slice</td></tr>
+                <tr><td><strong>Linear</strong></td><td>Increase traffic to the new version in fixed steps on a timer (e.g. 10% every minute) until 100%</td><td>Medium — similar to canary with predictable step timing</td><td>Low–medium — automated progression; bad metrics should trigger rollback mid-ramp</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>For <strong>Lambda</strong>, traffic shifting uses weighted aliases. CodeDeploy (or SAM/CDK deployment preferences) configure pre-set ramp shapes:</p>
+          <ul>
+            <li><code>Canary10Percent5Minutes</code> — 10% to the new version for five minutes, then the remainder if healthy.</li>
+            <li><code>Linear10PercentEvery1Minute</code> — add 10% per minute until fully shifted.</li>
+            <li><code>AllAtOnce</code> — equivalent to in-place for Lambda; fastest, no gradual validation.</li>
+          </ul>
+          <p>Pair any ramp with a <strong>CloudWatch alarm</strong> on errors or latency; CodeDeploy can <strong>automatically roll back</strong> the alias weights when the alarm enters ALARM state — the exam expects you to know rollback is alarm-driven, not manual only.</p>
+
+          <h3>Blue/green and canary for data pipelines</h3>
+          <p>Request-driven services (API Gateway → Lambda) can shift traffic percentages directly. Batch and ETL pipelines have no live traffic to split — you adapt the same ideas:</p>
+          <ul>
+            <li><strong>Dual-write</strong> — run old and new Glue job versions writing to separate prefixes (<code>curated_v1/</code> and <code>curated_v2/</code>) until reconciliation passes.</li>
+            <li><strong>Dual-read / shadow</strong> — new job writes to a staging table; compare row counts, checksums, and sample diffs against production output before cutover.</li>
+            <li><strong>Canary slice</strong> — process one partition or one tenant through the new logic while the rest stays on the old path; expand partition scope after metrics hold.</li>
+            <li><strong>Cutover</strong> — swap the Athena view, Spectrum external table location, or Redshift view to point at the validated prefix; keep the old path for quick rollback.</li>
+          </ul>
+          <p><strong>Glue and EMR job versions</strong> are deployed by promoting an S3 script and updating the job definition (or CloudFormation stack parameter) — not by HTTP traffic shifting. A new Glue job version runs on the next scheduled trigger or manual start; blue/green for Glue means two job definitions or two stacks writing to parallel outputs until you reconcile and rename.</p>
+
+          <div class="callout exam"><strong>Deployment strategy choice.</strong> "Zero-downtime Lambda with gradual validation and automatic rollback on error rate" → <strong>canary</strong> or <strong>linear</strong> alias shifting with CloudWatch alarm rollback. "Fastest deploy to a dev EC2 agent, downtime acceptable" → <strong>in-place</strong>. "Validate a new ETL output against production before switching analysts to it" → <strong>blue/green</strong> table or prefix swap with reconciliation — not Lambda traffic weights.</div>
+        </section>
+
+        <section class="section" id="reliability">
+          <h2>Resilience, backup and disaster recovery</h2>
+          <p class="lead">Data engineers own RPO/RTO targets for pipelines and stores. The exam contrasts backup-and-restore with pilot light and multi-Region active-active — mainly as cost vs recovery-time trade-offs.</p>
+
+          <h3>RPO and RTO</h3>
+          <ul>
+            <li><strong>RPO (Recovery Point Objective)</strong> — maximum acceptable data loss measured in time. Snapshot every hour → RPO ≤ 1 hour.</li>
+            <li><strong>RTO (Recovery Time Objective)</strong> — maximum downtime before service restores. Cold backup RTO is days; active-active RTO is minutes.</li>
+          </ul>
+
+          <h3>Four DR strategies</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Strategy</th><th>RTO</th><th>Cost</th><th>AWS pattern</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Backup and restore</strong></td><td>Hours–days</td><td>Lowest</td><td>S3 cross-Region replication async; restore Redshift from snapshot</td></tr>
+                <tr><td><strong>Pilot light</strong></td><td>Tens of minutes</td><td>Low</td><td>Core data replicated; compute scaled to zero until failover</td></tr>
+                <tr><td><strong>Warm standby</strong></td><td>Minutes</td><td>Medium</td><td>Smaller Redshift/ RDS replica running in DR Region</td></tr>
+                <tr><td><strong>Multi-site active-active</strong></td><td>Near zero</td><td>Highest</td><td>DynamoDB global tables, Aurora Global Database, Route 53 routing</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Cross-Region and service-native HA</h3>
+          <ul>
+            <li><strong>S3</strong> — CRR/SRR; 99.999999999% durability in-Region; versioning + MFA delete for accidental overwrite protection (<a href="s07-s3.html#versioning">Section 7</a>).</li>
+            <li><strong>Redshift</strong> — automated snapshots; snapshot copy to DR Region; RA3 with managed storage.</li>
+            <li><strong>DynamoDB</strong> — global tables for multi-Region active-active; PITR for in-Region undo.</li>
+            <li><strong>Aurora</strong> — Global Database &lt; 1 second cross-Region replication lag for DR.</li>
+          </ul>
+
+          <h3>Durability vs your responsibility</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Service</th><th>Built-in durability / HA</th><th>You still must</th></tr></thead>
+              <tbody>
+                <tr><td>S3 Standard</td><td>11 nines durability; multi-AZ</td><td>Lifecycle, replication, block public access</td></tr>
+                <tr><td>Redshift</td><td>Replicated storage on RA3; AZ failure tolerance</td><td>Snapshots, cross-Region copy, resize planning</td></tr>
+                <tr><td>DynamoDB</td><td>Multi-AZ by default; optional global tables</td><td>Backup/PITR, capacity planning, DLQ on streams</td></tr>
+                <tr><td>RDS/Aurora</td><td>Multi-AZ synchronous replica</td><td>Global DB setup, test failover runbooks</td></tr>
+                <tr><td>Glue</td><td>Serverless — AWS manages infra</td><td>Job bookmarks, idempotent writes, DLQ</td></tr>
+                <tr><td>Athena</td><td>Serverless query engine</td><td>Data lives in S3 — protect the bucket</td></tr>
+                <tr><td>Kinesis</td><td>24h default retention; multi-AZ shards</td><td>Extended retention, consumer checkpointing</td></tr>
+                <tr><td>MSK</td><td>Multi-AZ broker placement</td><td>Topic replication factor ≥ 3, monitor ISR</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout warn"><strong>Highly available ≠ backed up.</strong> S3 durability will not save you from a misconfigured lifecycle rule that deletes objects, or an application bug that overwrites good data with bad. Versioning and cross-Region replication address different failure modes than AZ redundancy.</div>
+
+          <h3>Runbook outline for Redshift snapshot restore</h3>
+          <ol>
+            <li>Identify latest automated snapshot before incident (console or <code>describe-cluster-snapshots</code>).</li>
+            <li>Restore to new cluster identifier in same or DR Region — never overwrite production in place.</li>
+            <li>Validate row counts and DQ rules on sample queries.</li>
+            <li>Update DNS/connection strings or Redshift datashare consumer to point readers at restored cluster.</li>
+            <li>Post-mortem: enable audit logging via <a href="s16-management.html#iam">IAM</a> who dropped the table.</li>
+          </ol>
+
+<pre data-lang="shell" data-title="CLI — copy snapshot to DR Region" data-explain="Cross-Region snapshot copy is the Redshift equivalent of S3 CRR for warehouse state."><code>aws redshift copy-cluster-snapshot \
+  --source-cluster-identifier prod-cluster \
+  --source-snapshot-identifier rs:prod-cluster-2026-08-03-04-00 \
+  --target-cluster-identifier prod-cluster-dr-copy \
+  --source-region us-east-1 \
+  --region us-west-2</code></pre>
+        </section>
+
+        <section class="section" id="exam-gaps">
+          <h2>Service limits the exam loves</h2>
+          <p class="lead">Scenario questions embed a constraint — item too large, query too slow, retention too short — and expect you to recognise the hard limit. Roughly twenty-five numbers worth memorising.</p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Limit</th><th>Value</th><th>Why it matters on the exam</th></tr></thead>
+              <tbody>
+                <tr><td>Athena minimum scan per query</td><td>10 MB</td><td>Tiny queries still bill; cannot "scan zero"</td></tr>
+                <tr><td>Kinesis record size</td><td>1 MB max per record</td><td>Large payloads must go to S3 with pointer in stream</td></tr>
+                <tr><td>Kinesis shard ingest (classic)</td><td>1 MB/s or 1,000 records/s</td><td>Throughput planning and hot shards</td></tr>
+                <tr><td>Firehose record size</td><td>1,000 KB (before base64)</td><td>Similar to Kinesis — offload big blobs to S3</td></tr>
+                <tr><td>DynamoDB item size</td><td>400 KB</td><td>Cannot store large documents; use S3 + reference</td></tr>
+                <tr><td>DynamoDB partition throughput (soft)</td><td>3,000 RCU / 1,000 WCU</td><td>Hot partition throttling</td></tr>
+                <tr><td>Lambda timeout</td><td>15 minutes max</td><td>Long ETL must be Glue/EMR/Step Functions</td></tr>
+                <tr><td>Lambda payload (sync invoke)</td><td>6 MB request/response</td><td>Large batches go async or S3-triggered</td></tr>
+                <tr><td>SQS message size</td><td>256 KB</td><td>Extended Client Library for larger payloads via S3</td></tr>
+                <tr><td>SQS retention</td><td>1 minute – 14 days (default 4)</td><td>Poison messages need DLQ before expiry</td></tr>
+                <tr><td>S3 object size</td><td>5 TB single PUT; multipart &gt; 5 GB</td><td>Large dataset design</td></tr>
+                <tr><td>S3 LIST performance</td><td>3,500 PUT/s per prefix; 5,500 GET/s</td><td>Prefix sharding for high QPS</td></tr>
+                <tr><td>Glue minimum billing</td><td>1 minute per job run</td><td>Micro-batches of 5-second jobs waste money</td></tr>
+                <tr><td>Glue DPU types</td><td>G.1X ≈ 4 vCPU/16 GB; G.2X double</td><td>Right-sizing workers</td></tr>
+                <tr><td>Redshift columns per table</td><td>1,600</td><td>Wide tables need JSON SUPER or vertical split</td></tr>
+                <tr><td>Redshift VARCHAR max</td><td>65,535 bytes</td><td>Text vs SUPER for semi-structured</td></tr>
+                <tr><td>EventBridge event size</td><td>256 KB</td><td>Large payloads pass S3 reference in detail</td></tr>
+                <tr><td>Step Functions Standard history</td><td>25,000 events; 1 year max duration</td><td>Long pipelines need nested workflows</td></tr>
+                <tr><td>Step Functions Express</td><td>5 minutes max; at-least-once</td><td>High-volume short orchestration</td></tr>
+                <tr><td>API Gateway timeout</td><td>29 seconds max integration</td><td>Long queries need async pattern</td></tr>
+                <tr><td>Glue crawler table limit</td><td>Millions of objects slow crawlers</td><td>Partition projection instead of crawl-all</td></tr>
+                <tr><td>CloudWatch Logs event</td><td>256 KB per event</td><td>Truncate or split large log lines</td></tr>
+                <tr><td>RDS snapshot share</td><td>Cross-account/Region restore for DR</td><td>Exam DR distractors vs live replica</td></tr>
+                <tr><td>MSK broker count</td><td>Min 2 (dev) / 3 (prod AZ)</td><td>Cost and HA trade-off</td></tr>
+                <tr><td>Athena query timeout</td><td>30 minutes default</td><td>Long jobs → Spark engine or EMR</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout exam"><strong>Pattern recognition.</strong> When a question describes a payload near a round number (250 KB event, 400 KB item, 15-minute job), the limit IS the answer — pick the service that cannot handle it or the pattern that works around it (S3 pointer, async invoke, Step Functions Map state).</div>
+
+          <h3>Quick reference — ingestion vs query limits</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Scenario in question</th><th>Limit hit</th><th>Correct pattern</th></tr></thead>
+              <tbody>
+                <tr><td>15-minute Spark job in Lambda</td><td>Lambda 15 min max</td><td>Glue job or EMR step</td></tr>
+                <tr><td>500 KB message to SQS</td><td>256 KB max</td><td>S3 payload + SQS pointer (extended client)</td></tr>
+                <tr><td>2 MB IoT event to EventBridge</td><td>256 KB event</td><td>Store in S3; pass bucket/key in detail</td></tr>
+                <tr><td>600 KB DynamoDB item</td><td>400 KB item</td><td>S3 object + metadata item</td></tr>
+                <tr><td>Hour-long orchestration</td><td>Express SF 5 min</td><td>Standard workflow or Step Functions + Glue</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>Service-specific deep dives: <a href="s06-streaming.html">Kinesis (Section 6)</a>, <a href="s09-dynamodb.html">DynamoDB (Section 9)</a>, <a href="s05-lambda.html">Lambda (Section 5)</a>, <a href="s03-athena.html">Athena (Section 3)</a>.</p>
+        </section>
+
+        <section class="section" id="interview">
+          <h2>Interview questions</h2>
+          <p class="muted">Answer each one out loud before opening it. These are drawn from the extras material — the gaps practice exams hit hardest.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+            <details class="qa">
+              <summary>Why does converting CSV to Snappy Parquet reduce Athena cost more than GZIP-compressing the CSV?<span class="qa-tag">Cost</span></summary>
+              <div class="qa-body">
+                <p>GZIP on CSV reduces bytes on disk but Athena still reads <strong>every column</strong> in every row because CSV is row-oriented. Snappy Parquet adds <strong>column pruning</strong> — a query referencing three of thirty columns reads roughly ten percent of the logical data — plus compression inside column encodings.</p>
+                <p>GZIP CSV also loses splittability unless files are small, limiting parallelism. Parquet row groups split across workers. The exam's "most cost-effective" answer is almost always columnar + partition pruning, not compression alone.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Explain Type 2 slowly changing dimension and when you would use it instead of Type 1.<span class="qa-tag">SQL</span></summary>
+              <div class="qa-body">
+                <p>Type 2 preserves history by closing the old dimension row (<code>effective_to</code>, <code>is_current=false</code>) and inserting a new row with a new surrogate key when an attribute changes. Type 1 overwrites in place.</p>
+                <p>Use Type 2 when reports must answer "what did we know at the time?" — regulatory reporting, historical revenue by store manager, any metric tied to dimension state at transaction time. Type 1 is for corrections where history does not matter.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>When would you choose Apache Iceberg over plain Parquet on S3?<span class="qa-tag">Architecture</span></summary>
+              <div class="qa-body">
+                <p>Choose Iceberg when you need <strong>row-level updates or deletes</strong> (GDPR), <strong>MERGE/upsert CDC</strong>, <strong>concurrent writers</strong>, <strong>time travel</strong> after bad deploys, or <strong>partition layout changes</strong> without rewriting terabytes of history.</p>
+                <p>Plain partitioned Parquet is fine for append-only daily batches with partition overwrite idempotency. Iceberg adds metadata overhead but unlocks warehouse semantics on the lake — Athena and Glue 4.0+ support it natively.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How does Glue Data Quality integrate with the rest of an observability stack?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>DQDL rulesets evaluate inside crawlers or ETL jobs (Deequ engine). Results expose a quality score in Glue, publish metrics to <strong>CloudWatch</strong> for alarms, and emit <strong>EventBridge</strong> events on completion. Failed rules can trigger Lambda, SNS, or Step Functions to quarantine data without stopping the entire pipeline.</p>
+                <p>DataBrew profiles complement rulesets by discovering null rates and distributions before you codify thresholds.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What is idempotency and how do you achieve it on at-least-once AWS infrastructure?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>Idempotency means running the same operation twice produces the same end state. Kinesis, SQS, and Lambda retries deliver at-least-once, so duplicates are expected.</p>
+                <p>Techniques: deterministic S3 output paths with overwrite, Iceberg/Redshift <code>MERGE</code> on natural keys, partition-level replace, DynamoDB conditional writes, deduplication on event ID in Flink. Design sinks first, not after the first duplicate incident.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Where do embeddings live in a Bedrock Knowledge Base architecture, and who keeps them fresh?<span class="qa-tag">Architecture</span></summary>
+              <div class="qa-body">
+                <p>Bedrock Knowledge Bases typically store embeddings in <strong>OpenSearch Serverless</strong> (vector index) with source documents in S3. Alternatives: Aurora pgvector, Kendra, Neptune Analytics depending on hybrid search and transactional needs.</p>
+                <p>The data engineer owns ingestion: chunk documents, call Bedrock embedding models, bulk index, and re-sync on S3 changes via EventBridge/Lambda. Bedrock orchestrates retrieval at query time; it does not watch your buckets automatically without configured sync.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>A CFO asks why Athena spend doubled after a new dashboard launched. What do you check first?<span class="qa-tag">Troubleshooting</span></summary>
+              <div class="qa-body">
+                <p>Open <strong>Cost Explorer</strong> filtered to Athena, then inspect query metrics in CloudWatch or Athena recent queries. Look for full-table scans, missing partition filters, CSV/JSON formats, and dashboards that select <code>*</code>.</p>
+                <p>Fix order: add partition predicates, convert to Parquet with column pruning, enable workgroup bytes-scanned limits, consider result reuse for identical queries. One CTAS job often pays back in the first billing cycle.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Compare backup-and-restore vs pilot light DR for a Redshift-centric warehouse.<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p><strong>Backup and restore:</strong> automated snapshots plus cross-Region copy; lowest cost; RTO hours to days while you provision a cluster and restore. Good for regulatory backup requirements.</p>
+                <p><strong>Pilot light:</strong> snapshots replicated continuously, minimal DR cluster or Serverless namespace ready to scale; RTO tens of minutes; moderate cost. Exam questions trade money vs downtime — active-active global Redshift is rare; DynamoDB/Aurora are the usual active-active examples.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What is the small-files problem and how does it hurt both performance and cost?<span class="qa-tag">Performance</span></summary>
+              <div class="qa-body">
+                <p>Thousands of files under ~10 MB force engines to open many S3 objects, increasing LIST/plan time and reducing sequential read throughput. Athena may scan less data but still slow; Glue pays DPU-minutes for overhead.</p>
+                <p>Target 128 MB–1 GB per file via compaction jobs, sensible <code>repartition</code>, or Iceberg rewrite data files. Common cause: streaming micro-batches landing every minute.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How would you deploy a Glue ETL job change safely through dev, staging and prod?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>Store scripts and CloudFormation/CDK in Git; CodePipeline runs CodeBuild pytest on transforms, deploys stacks per environment with parameterized bucket/database names. Integration test against fixture data in dev; promote artifact unchanged to staging; run DQ ruleset gate; blue/green or partition swap in prod.</p>
+                <p>Never edit the Glue console in prod directly — exam "least operational overhead" for ongoing changes still means automation, not manual clicks.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>A Kinesis consumer receives duplicate records after a deployment. Is this a bug?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p>Usually no — Kinesis delivery is at-least-once. After restarts or shard merges, consumers replay from the last checkpoint. The bug is a non-idempotent sink (blind INSERT without dedup).</p>
+                <p>Fix the sink: MERGE on event ID, dedup window in Flink, or idempotent DynamoDB write. Enhanced fan-out does not change semantics.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>DynamoDB item is 450 KB. What pattern fixes it without leaving DynamoDB?<span class="qa-tag">Exam</span></summary>
+              <div class="qa-body">
+                <p>400 KB is the hard item limit — you cannot store 450 KB in one item. Store the blob in <strong>S3</strong>, keep metadata and an S3 pointer in DynamoDB (&lt; 400 KB). Alternatively split across items with a shared partition key and sort keys — but S3 offload is the exam's usual answer for large payloads.</p>
+              </div>
+            </details>
+          </div>
+        </section>
+
+        <section class="section" id="practice">
+          <h2>Hands-on practice</h2>
+          <p class="muted">Free tier where possible. Delete everything at the end of each task.</p>
+          <ol class="practice-list">
+            <li class="practice">
+              <p class="practice-task">Convert <code>raw/customers/customers.csv</code> to Snappy Parquet with Athena CTAS, then compare bytes scanned for <code>SELECT *</code> on CSV vs <code>SELECT name, city</code> on Parquet using query statistics.</p>
+              <span class="console-path">Athena → Query editor → Create table → CTAS</span>
+              <p class="practice-expect">Parquet query shows at least 50% fewer bytes scanned for the two-column SELECT; note the 10 MB minimum on tiny datasets.</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">Console + SQL</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Create external CSV table pointing at <code>s3://dea-lab-ab-4821/raw/customers/</code>.</li>
+                    <li>Run CTAS from the <a href="#formats">formats section</a> example into <code>staging/customers_parquet/</code>.</li>
+                    <li>Run both queries; open <em>Query stats → Data scanned</em>.</li>
+                  </ol>
+<pre data-lang="sql"><code>SELECT * FROM dea_lab.customers_raw;
+SELECT name, city FROM dea_lab.customers_parquet WHERE state = 'NY';</code></pre>
+                  <p class="muted">Cleanup: drop tables if desired; keep Parquet for later sections.</p>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Create an Iceberg table in Athena, load staging rows, and run <code>MERGE</code> to upsert one changed row and insert one new row.</p>
+              <span class="console-path">Athena → Query editor · Engine v3</span>
+              <p class="practice-expect"><code>SELECT COUNT(*)</code> reflects upsert not duplicate; changed column shows new value.</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">SQL</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Create Iceberg table per <a href="#table-formats">table-formats section</a> DDL.</li>
+                    <li><code>INSERT INTO</code> three rows; mutate one row in a staging CSV table.</li>
+                    <li>Run MERGE example; verify with <code>SELECT *</code>.</li>
+                  </ol>
+<pre data-lang="sql"><code>MERGE INTO dea_lab.events_iceberg t
+USING dea_lab.events_staging s ON t.event_id = s.event_id
+WHEN MATCHED THEN UPDATE SET payload = s.payload
+WHEN NOT MATCHED THEN INSERT *;</code></pre>
+                  <p class="muted">Cleanup: drop Iceberg table and delete S3 prefix <code>curated/events_iceberg/</code>.</p>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Attach a Glue Data Quality ruleset to the customers table with completeness, uniqueness, and age-range rules; trigger an evaluation and view the score in Glue and CloudWatch.</p>
+              <span class="console-path">Glue → Data quality → Create ruleset</span>
+              <p class="practice-expect">Ruleset score &lt; 100% because row 11 duplicates row 6; CloudWatch metric appears under Glue/DataQuality.</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">Console</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Glue console → <strong>Data quality</strong> → create ruleset from <a href="#quality">DQDL example</a>.</li>
+                    <li>Associate with the customers table; run evaluation.</li>
+                    <li>Open CloudWatch → Metrics → Glue → DataQuality.</li>
+                  </ol>
+<pre data-lang="yaml"><code>Rules:
+  - IsComplete "ID"
+  - IsUnique "ID"
+  - ColumnValues "Age" between 0 and 120</code></pre>
+                  <p class="muted">Cleanup: delete ruleset association.</p>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Use Cost Explorer to find your top three services by spend last month, tag your lab bucket with <code>Project=dea-study</code>, and create a 5 USD budget filtered to that tag.</p>
+              <span class="console-path">Billing → Cost Explorer · Budgets</span>
+              <p class="practice-expect">Cost Explorer bar chart shows services; budget alert email configured at 80% forecast.</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">Console</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Activate cost allocation tag <code>Project</code> in Billing preferences (takes 24h to backfill).</li>
+                    <li>Tag S3 bucket; open Cost Explorer → Service dimension → Last month.</li>
+                    <li>Create budget with tag filter — same pattern as <a href="s04-glue.html#budgets">Section 4 budgets</a>.</li>
+                  </ol>
+                  <p class="muted">Cleanup: delete budget after lab; tags are harmless to leave.</p>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Run a Glue job unit test locally or in CodeBuild: pytest on a pure Python dedupe function using the course duplicate row scenario.</p>
+              <span class="console-path">Local terminal or CodeBuild</span>
+              <p class="practice-expect">pytest exits 0; duplicate IDs collapse to one row keeping the latest timestamp.</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">Python</span></summary>
+                <div class="qa-body">
+<pre data-lang="python"><code># customers_dedupe.py — keep max updated_at per id
+def dedupe(rows):
+    best = {}
+    for r in rows:
+        k = r["id"]
+        if k not in best or r["updated_at"] &gt; best[k]["updated_at"]:
+            best[k] = r
+    return list(best.values())</code></pre>
+                  <p class="muted">Wire into CI/CD as described in <a href="#cicd">CI/CD section</a>.</p>
+                </div>
+              </details>
+            </li>
+          </ol>
+        </section>
+
+        <section class="section" id="recap">
+          <h2>Recap</h2>
+          <div class="recap">
+            <ul class="checklist">
+              <li>Columnar Parquet + Snappy + partition pruning cuts Athena scans 80–95%; CSV GZIP alone does not enable column pruning.</li>
+              <li>Target file sizes 128 MB–1 GB; compact small files from streaming ingest.</li>
+              <li>Star schema: facts with measures at defined grain; dimensions with DISTSTYLE ALL on Redshift; facts DISTKEY + date SORTKEY.</li>
+              <li>SCD Type 2 closes old rows and inserts new versions — required when history affects metrics.</li>
+              <li>Iceberg/Hudi/Delta add ACID, MERGE, time travel; plain Parquet suffices for append-only overwrite pipelines.</li>
+              <li>Glue Data Quality + DQDL → CloudWatch + EventBridge; quarantine bad rows to rejected/ instead of failing the job.</li>
+              <li>At-least-once is the AWS default — design idempotent sinks (MERGE, partition overwrite, dedup keys).</li>
+              <li>Bedrock RAG: chunk → embed → vector index (OpenSearch/pgvector) → retrieve; engineer keeps index fresh.</li>
+              <li>Know billing units: TB scanned, DPU-hour, RPU-second, shard-hour, WCU/RCU, GB-month.</li>
+              <li>Deploy pipelines as code; test transforms with pytest; promote via parameterized stacks; use CodeDeploy canary/linear for Lambda, prefix reconciliation for Glue.</li>
+              <li>Amazon DataZone adds business catalogue and subscription workflow on top of Glue Catalog and Lake Formation — pick it for cross-team discovery, not column filters alone.</li>
+              <li>RPO/RTO drives DR strategy cost; S3 durability ≠ backup — versioning and CRR protect against logic errors.</li>
+              <li>Memorise hard limits: Athena 10 MB min scan, Kinesis 1 MB record, DynamoDB 400 KB item, Lambda 15 min, SQS 256 KB / 14-day retention.</li>
+            </ul>
+            <p style="margin-top:1rem;">
+              <button type="button" data-complete="extras">Mark complete</button>
+            </p>
+          </div>
+        </section>
+
+
+      </div>
+
+      <aside class="toc" aria-label="On this page">
+        <strong>On this page</strong>
+        <ol>
+          <li><a href="#gaps">Coverage map</a></li>
+          <li><a href="#formats">File formats</a></li>
+          <li><a href="#modelling">Data modelling</a></li>
+          <li><a href="#table-formats">Open table formats</a></li>
+          <li><a href="#quality">Data quality</a></li>
+          <li><a href="#datazone">Amazon DataZone</a></li>
+          <li><a href="#patterns">Pipeline patterns</a></li>
+          <li><a href="#genai">GenAI &amp; vectors</a></li>
+          <li><a href="#cost">Cost optimisation</a></li>
+          <li><a href="#cicd">CI/CD &amp; IaC</a></li>
+          <li><a href="#reliability">Resilience &amp; DR</a></li>
+          <li><a href="#exam-gaps">Service limits</a></li>
+          <li><a href="#interview">Interview questions</a></li>
+          <li><a href="#practice">Hands-on practice</a></li>
+          <li><a href="#recap">Recap</a></li>
+        </ol>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<footer class="footer">AWS Certified Data Engineer Associate (DEA-C01) · Extras · Offline study edition</footer>
+</body>
+</html>

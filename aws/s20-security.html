@@ -1,0 +1,876 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="DEA-C01 Section 20: AWS KMS envelope encryption and key types, Macie for S3 PII discovery, Secrets Manager versus Parameter Store, Shield tiers, and encryption at rest across data services.">
+<title>Section 20 — Security | AWS Data Engineer DEA-C01 Notes</title>
+<link rel="stylesheet" href="assets/aws.css">
+<script defer src="assets/search-index.js"></script>
+<script defer src="assets/code-highlight.js"></script>
+<script defer src="assets/aws.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">Course section 20 of 21 · AWS Certified Data Engineer Associate</p>
+    <h1>Security</h1>
+    <p class="subtitle">How KMS envelope encryption keeps terabyte-scale S3 and Redshift data encrypted without hitting the 4 KB limit, why Secrets Manager beats Parameter Store when rotation matters, how Macie finds PII before it lands in the lake, and where Shield, GuardDuty and Security Hub fit when the exam offers them as distractors.</p>
+    <div class="hero-meta">
+      <span class="chip">23 slides · ~50min</span>
+      <span class="chip">Exam domain: Data Security and Governance (18%)</span>
+      <span class="chip">Deck slides 683–705</span>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <nav class="pager" aria-label="Section navigation">
+    <a href="s19-vpc.html">← VPCs</a>
+    <a href="index.html">Course contents</a>
+    <a href="s21-exam-prep.html">Next: Practice Exam, Exam Tips &amp; Scheduling →</a>
+  </nav>
+
+  <main id="main">
+    <div class="layout">
+      <div class="content">
+
+        <section class="section" id="lectures">
+          <h2>Lectures in this section</h2>
+          <p class="muted">Each lecture links to the notes that cover it. Encryption and IAM basics from <a href="s16-management.html">Section 16</a> apply throughout.</p>
+          <ol class="lecture-list">
+            <li class="lecture">
+              <a class="lec-title" href="#kms-overview">AWS KMS overview and integration</a>
+              <span class="lec-time">~4:00</span>
+              <span class="lec-src">Slide 685</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#kms-key-types">Symmetric versus asymmetric keys</a>
+              <span class="lec-time">~3:00</span>
+              <span class="lec-src">Slide 686</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#kms-key-ownership">AWS owned, AWS managed and customer managed keys</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">Slides 687–688</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#kms-rotation">Key rotation, policies and pricing</a>
+              <span class="lec-time">~6:00</span>
+              <span class="lec-src">Slides 689–692</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#kms-multi-region">Cross-Region and cross-account KMS keys</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">Slides 693–695</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#macie">Amazon Macie — sensitive data discovery in S3</a>
+              <span class="lec-time">~4:00</span>
+              <span class="lec-src">Slide 697</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#secrets-manager">AWS Secrets Manager — rotation and replication</a>
+              <span class="lec-time">~6:00</span>
+              <span class="lec-src">Slides 699–702</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#shield">AWS Shield Standard versus Advanced</a>
+              <span class="lec-time">~3:00</span>
+              <span class="lec-src">Slides 704–705</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#encryption-services">Encryption at rest and in transit across data services</a>
+              <span class="lec-time">~6:00</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#pii-handling">PII discovery, masking and restricted access</a>
+              <span class="lec-time">~5:00</span>
+            </li>
+          </ol>
+        </section>
+
+        <section class="section" id="kms-overview">
+          <h2>AWS Key Management Service (KMS)</h2>
+          <p class="lead">AWS Key Management Service manages encryption keys used to protect data at rest across S3, EBS, RDS, Redshift, DynamoDB, Kinesis, Glue, and dozens of other services. You never store raw key material in application code — services and SDKs call KMS APIs, and CloudTrail logs every use for audit.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-685.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-685.png" alt="Course slide on KMS overview: manages encryption keys for other AWS services, integrates with S3 and databases, API calls instead of secrets in code, CloudTrail auditing, use cases for S3 encryption and database credentials." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 685</span>KMS is the encryption control plane for the data stack. Every "encrypt this bucket with a CMK" or "Redshift uses SSE-KMS" question ultimately tests whether you understand key ownership and who can call <code>Decrypt</code>.</figcaption>
+          </figure>
+
+          <h3>Envelope encryption</h3>
+          <p>KMS never encrypts more than <strong>4 KB</strong> in a single <code>Encrypt</code> call. For a multi-gigabyte S3 object or Redshift table, services use <strong>envelope encryption</strong>:</p>
+          <ol>
+            <li>KMS <code>GenerateDataKey</code> returns a plaintext data key and the same key encrypted (wrapped) under the KMS CMK.</li>
+            <li>The service encrypts the bulk data locally with the plaintext data key (AES-256), then discards the plaintext key from memory.</li>
+            <li>The encrypted data key is stored alongside the ciphertext (S3 object metadata, EBS volume header, etc.).</li>
+            <li>On decrypt, KMS <code>Decrypt</code> unwraps the data key; the service decrypts the payload locally.</li>
+          </ol>
+
+          <div class="diagram">
+            <p class="diagram-title">Envelope encryption — how large objects stay encrypted without sending terabytes through KMS</p>
+            <div class="flow">
+              <div class="node is-source"><b>Application / S3</b><small>GenerateDataKey request</small></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-store pulse"><b>KMS CMK</b><small>Returns plaintext + wrapped data key</small></div>
+            </div>
+            <div class="flow" style="margin-top:14px;">
+              <div class="node is-compute"><b>Local AES-256</b><small>Encrypt 500 GB Parquet with data key</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-store"><b>S3 object</b><small>Ciphertext + encrypted data key in metadata</small></div>
+            </div>
+            <div class="flow" style="margin-top:14px;">
+              <div class="node is-source"><b>Reader</b><small>Decrypt wrapped key via KMS</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-compute"><b>Local decrypt</b><small>Plaintext data never leaves the compute layer at rest</small></div>
+            </div>
+          </div>
+
+          <pre data-lang="shell" data-title="AWS CLI — generate a data key for envelope encryption" data-explain="Returns a 256-bit data key and the ciphertext blob wrapped under the specified CMK — the same flow S3 SSE-KMS uses internally."><code>aws kms generate-data-key \
+  --key-id alias/dea-analytics-cmk \
+  --key-spec AES_256 \
+  --encryption-context service=s3,bucket=dea-lab-ab-4821
+
+# Response includes:
+#   Plaintext        — base64 AES key (use once, then discard)
+#   CiphertextBlob   — encrypted data key stored with the object</code></pre>
+
+          <div class="callout exam"><strong>4 KB limit.</strong> If a question asks how to encrypt a 10 GB file with KMS directly, the answer is envelope encryption — not one giant <code>Encrypt</code> call. The CMK protects the data key; the data key protects the file.</div>
+
+          <h3>Request rate and caching</h3>
+          <p>KMS has a default quota of roughly <strong>5,500–30,000 requests per second</strong> per account per Region (varies by operation and can be raised). High-volume workloads that call <code>Decrypt</code> on every S3 object can throttle. Mitigations the exam mentions:</p>
+          <ul>
+            <li><strong>S3 Bucket Keys</strong> — reduce KMS calls by up to 99% for SSE-KMS buckets by using a bucket-level key.</li>
+            <li><strong>Data key caching</strong> in Glue, Redshift, and custom applications — reuse generated data keys for a bounded time/count.</li>
+            <li><strong>Request quota increase</strong> via Service Quotas console for sustained high RPS.</li>
+          </ul>
+        </section>
+
+        <section class="section" id="kms-key-types">
+          <h2>Types of KMS keys</h2>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-686.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-686.png" alt="Course slide comparing symmetric keys as default for high-volume encryption with one key for encrypt and decrypt, versus asymmetric keys using RSA or ECC key pairs for encrypt/decrypt and sign/verify." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 686</span>Symmetric AES-256 is the default for data at rest and in transit across AWS services. Asymmetric keys appear in signing scenarios and when someone needs your public key without access to the private key.</figcaption>
+          </figure>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Type</th><th>Operations</th><th>Use in data pipelines</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Symmetric (default)</strong></td><td>Same key encrypts and decrypts; AES-256</td><td>SSE-KMS on S3, RDS, Redshift, EBS, DynamoDB, Kinesis, Glue connection secrets</td></tr>
+                <tr><td><strong>Asymmetric</strong></td><td>Public key encrypts or verifies; private key decrypts or signs (RSA, ECC)</td><td>Digital signatures, TLS cert workflows, distributed signing with multi-Region keys</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="section" id="kms-key-ownership">
+          <h2>AWS owned, AWS managed and customer managed keys</h2>
+
+          <div class="slide-row">
+            <figure class="slide-fig">
+              <a href="assets/slides/slide-687.png" target="_blank" rel="noopener">
+                <img src="assets/slides/slide-687.png" alt="Course slide on AWS owned keys controlled entirely by AWS with no customer access, versus AWS managed keys created per customer but with limited policy control, auditable via CloudTrail." loading="lazy">
+              </a>
+              <figcaption><span class="slide-no">Slide 687</span>AWS owned keys (SSE-S3) never appear in your KMS console. AWS managed keys (aws/s3, aws/rds) appear but you cannot rotate or delete them on your own schedule.</figcaption>
+            </figure>
+            <figure class="slide-fig">
+              <a href="assets/slides/slide-688.png" target="_blank" rel="noopener">
+                <img src="assets/slides/slide-688.png" alt="Course slide on customer managed keys: you create own and manage with full control over policies rotation and encryption." loading="lazy">
+              </a>
+              <figcaption><span class="slide-no">Slide 688</span>Customer managed keys (CMKs) are the answer when compliance demands key policy control, cross-account grants, or manual rotation schedules you define.</figcaption>
+            </figure>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Key type</th><th>Who owns it</th><th>Visible in your KMS console</th><th>Key policy control</th><th>Rotation</th></tr></thead>
+              <tbody>
+                <tr><td><strong>AWS owned</strong></td><td>AWS (shared across customers)</td><td>No</td><td>No</td><td>AWS manages</td></tr>
+                <tr><td><strong>AWS managed</strong></td><td>AWS, per-account (alias <code>aws/service</code>)</td><td>Yes, read-only policies</td><td>Limited</td><td>Automatic yearly</td></tr>
+                <tr><td><strong>Customer managed (CMK)</strong></td><td>You</td><td>Yes, full control</td><td>Full — mandatory key policy</td><td>Enable automatic or manual</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Key policy, IAM policy and grants</h3>
+          <ul>
+            <li><strong>Key policy</strong> — resource-based policy on the CMK itself. <strong>Mandatory</strong> on every CMK. Default gives the account root full access and allows IAM policies to delegate usage.</li>
+            <li><strong>IAM policy</strong> — identity-based; grants principals <code>kms:Decrypt</code> etc. only if the key policy permits IAM delegation.</li>
+            <li><strong>Grant</strong> — temporary, fine-grained permission attached to the key for a specific principal — used heavily by AWS services (Redshift snapshot copy, cross-account S3) without editing the key policy each time.</li>
+          </ul>
+
+          <pre data-lang="json" data-title="KMS key policy — allow Glue role to use the CMK" data-explain="Resource-based policy on the CMK: account root retains admin; the Glue job role gets encrypt/decrypt/generate-data-key for S3 envelope encryption."><code>{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "EnableRoot",
+      "Effect": "Allow",
+      "Principal": { "AWS": "arn:aws:iam::123456789012:root" },
+      "Action": "kms:*",
+      "Resource": "*"
+    },
+    {
+      "Sid": "AllowGlueETL",
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "arn:aws:iam::123456789012:role/GlueETLRole"
+      },
+      "Action": [
+        "kms:Encrypt",
+        "kms:Decrypt",
+        "kms:GenerateDataKey",
+        "kms:DescribeKey"
+      ],
+      "Resource": "*"
+    }
+  ]
+}</code></pre>
+
+          <h3>CloudHSM versus KMS custom key stores</h3>
+          <p><strong>AWS CloudHSM</strong> provides dedicated FIPS 140-2 Level 3 hardware security modules you manage. <strong>KMS custom key stores</strong> back CMKs with keys stored in your CloudHSM cluster — KMS APIs stay the same but key material never leaves HSMs you control. Use when regulations require single-tenant HSMs; otherwise standard KMS CMKs suffice for most data-engineering workloads.</p>
+        </section>
+
+        <section class="section" id="kms-rotation">
+          <h2>Key rotation and pricing</h2>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-689.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-689.png" alt="Course slide on KMS key management: creating keys via console CLI or SDK with key type and policies, rotating keys by replacing backing material, and managing key policies." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 689</span>Creating, rotating and policy management are the three operational pillars. Rotation does not re-encrypt existing data — old ciphertext remains decryptable with retained key material versions.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-690.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-690.png" alt="Course slide on key rotation: automatic yearly rotation for AWS managed keys, customer responsibility to enable rotation on customer managed keys." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 690</span>On CMKs you enable automatic rotation — KMS rotates backing key material every 365 days. The key ID and ARN stay the same; previous versions remain for decrypting old ciphertext.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-691.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-691.png" alt="Course slide on KMS policies: default policies give root full access and allow IAM policies, custom policies for granular control in regulated industries." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 691</span>Custom key policies are required when you need to deny specific principals, enforce encryption context, or allow cross-account access without giving the foreign account <code>kms:*</code>.</figcaption>
+          </figure>
+
+          <h3>What rotation does and does not change</h3>
+          <ul>
+            <li><strong>Changes:</strong> the underlying cryptographic material (new backing key version each year when automatic rotation is on).</li>
+            <li><strong>Does not change:</strong> key ID, ARN, alias, or key policy. Existing encrypted data decrypts without re-encryption.</li>
+            <li><strong>Manual rotation:</strong> create a new CMK, re-encrypt data, retire the old key — only when automatic rotation is insufficient (e.g. suspected compromise).</li>
+          </ul>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-692.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-692.png" alt="Course slide on KMS pricing: one dollar per customer managed key per month, three cents per ten thousand API requests, free automatic rotation for AWS managed keys, one cent per ten thousand cross-Region requests." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 692</span>Pricing units matter for cost questions: CMK monthly fee + per-10K API calls. Cross-Region KMS use adds a surcharge. AWS managed keys have no monthly CMK fee.</figcaption>
+          </figure>
+        </section>
+
+        <section class="section" id="kms-multi-region">
+          <h2>Cross-Region and cross-account keys</h2>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-693.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-693.png" alt="Course slide on cross-region KMS: keys bound to the region where created, encrypted EBS snapshot copied to another region must be re-encrypted with a key in the destination region." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 693</span>Standard CMKs are Regional. Copying an encrypted snapshot to another Region requires specifying a destination Region KMS key — default AWS managed or your CMK in that Region.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-694.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-694.png" alt="Course slide on multi-Region KMS keys: same key material and key ID across Regions, independently managed replicas, use cases for disaster recovery and distributed signing." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 694</span>Multi-Region keys share key ID and material across Regions you replicate into. Each replica has its own key policy. Use for active-active DR and global signing — not a substitute for re-encrypting data when you simply copy snapshots.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-695.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-695.png" alt="Course slide on cross-account KMS: customer managed key shared via key policy, encrypted snapshot shared and copied into another account re-encrypted with destination account key." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 695</span>Cross-account encrypted snapshot sharing requires both snapshot permissions and a KMS key policy allowing the foreign account to <code>Decrypt</code>. The destination account often re-encrypts with its own CMK on copy.</figcaption>
+          </figure>
+
+          <div class="callout info"><strong>Multi-Region keys versus cross-Region copy.</strong> Copying an SSE-KMS S3 object to another Region uses the destination Region's key. Multi-Region keys let the <em>same key ID</em> exist in multiple Regions — useful when applications in eu-west-1 and us-east-1 must interoperate without separate key ARNs. They do not automatically re-encrypt all existing objects.</div>
+        </section>
+
+        <section class="section" id="macie">
+          <h2>Amazon Macie</h2>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-697.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-697.png" alt="Course slide on AWS Macie: ML-based discovery and classification of sensitive data and PII in S3, automated alerts, dashboard, use cases for compliance and security monitoring." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 697</span>Macie is S3-only for sensitive-data discovery. It finds PII, financial data, and credentials, and flags anomalous access — the discover step in a PII lifecycle before redaction or access restriction.</figcaption>
+          </figure>
+
+          <h3>Findings and automated discovery</h3>
+          <ul>
+            <li><strong>Sensitive data discovery jobs</strong> — scheduled or one-time scans of S3 buckets; results are <strong>findings</strong> with severity, bucket, object key, and matched identifier type.</li>
+            <li><strong>Built-in managed data identifiers</strong> — names, emails, credit cards, AWS secret keys, etc.</li>
+            <li><strong>Custom data identifiers (CDIs)</strong> — regex or keyword patterns for company-specific tokens (employee IDs, internal account numbers).</li>
+            <li><strong>Automated sensitive data discovery</strong> — continuous, account-wide sampling that prioritises buckets likely to hold sensitive data without scanning every object daily.</li>
+          </ul>
+
+          <p><strong>Routing findings:</strong> Amazon EventBridge receives Macie events; rules forward to SNS, Lambda, Security Hub, or Jira. Security Hub aggregates Macie findings with GuardDuty and Inspector for a single compliance view.</p>
+
+          <pre data-lang="json" data-title="Macie finding excerpt — S3 object with PII" data-explain="Representative finding payload shape; severity and type fields drive EventBridge routing and Security Hub import."><code>{
+  "detail-type": "Macie Finding",
+  "source": "aws.macie",
+  "detail": {
+    "type": "Policy:IAMUser/S3BucketPublic",
+    "severity": { "score": 8.0, "description": "High" },
+    "resourcesAffected": [{
+      "s3Bucket": { "name": "dea-lab-ab-4821" },
+      "s3Object": { "key": "raw/customers/customers.csv", "size": 818 }
+    }],
+    "classificationDetails": {
+      "detailedResultsLocation": {
+        "objectArn": "arn:aws:s3:::dea-lab-ab-4821/raw/customers/customers.csv"
+      },
+      "result": {
+        "customDataIdentifiers": { "detections": [] },
+        "sensitiveData": [{
+          "category": "PERSONAL_INFORMATION",
+          "detections": [{ "type": "EMAIL_ADDRESS", "count": 11 }]
+        }]
+      }
+    }
+  }
+}</code></pre>
+        </section>
+
+        <section class="section" id="secrets-manager">
+          <h2>AWS Secrets Manager</h2>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-699.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-699.png" alt="Course slide on AWS Secrets Manager: manage database credentials API keys and tokens, encrypted storage, automatic rotation, secure API retrieval, CloudTrail auditing." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 699</span>Secrets Manager stores credentials Glue, DMS, Redshift, and RDS integrations consume at runtime. Rotation updates the secret value without redeploying the job — the application always calls <code>GetSecretValue</code>.</figcaption>
+          </figure>
+
+          <h3>How data services consume secrets</h3>
+          <ul>
+            <li><strong>Glue</strong> — JDBC connections reference a Secrets Manager secret for username/password; job code can call <code>get_secret_value</code> for API tokens.</li>
+            <li><strong>DMS</strong> — source and target endpoints pull database credentials from Secrets Manager.</li>
+            <li><strong>Redshift / RDS</strong> — manage master passwords in Secrets Manager; rotation Lambda updates both the secret and the database.</li>
+            <li><strong>Lambda / EMR</strong> — retrieve secrets at cold start via SDK or environment variable resolved from Secrets Manager.</li>
+          </ul>
+
+          <pre data-lang="python" data-title="Glue job — retrieve JDBC credentials from Secrets Manager" data-explain="Typical pattern: fetch secret JSON at job start, parse username and password, open JDBC connection to RDS in a private subnet."><code>import json
+import boto3
+
+def get_rds_credentials(secret_arn: str, region: str = "us-east-1") -> dict:
+    client = boto3.client("secretsmanager", region_name=region)
+    resp = client.get_secret_value(SecretId=secret_arn)
+    return json.loads(resp["SecretString"])
+
+secret = get_rds_credentials("arn:aws:secretsmanager:us-east-1:123456789012:secret:dea/rds/analytics-AbCdEf")
+jdbc_url = "jdbc:postgresql://analytics.abc123.us-east-1.rds.amazonaws.com:5432/warehouse"
+# spark.read.jdbc(jdbc_url, "orders", properties={"user": secret["username"], "password": secret["password"]})</code></pre>
+
+          <h3>Secrets Manager versus Systems Manager Parameter Store</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Feature</th><th>Secrets Manager</th><th>SSM Parameter Store</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Automatic rotation</strong></td><td>Built-in with Lambda templates for RDS, Redshift, etc.</td><td>No native rotation — you build it</td></tr>
+                <tr><td><strong>Cost</strong></td><td>~$0.40/secret/month + API calls</td><td>Standard parameters free; Advanced $0.05/parameter/month</td></tr>
+                <tr><td><strong>Max secret size</strong></td><td>64 KB</td><td>Standard 4 KB; Advanced 8 KB</td></tr>
+                <tr><td><strong>Hierarchy</strong></td><td>Flat name + optional tags</td><td><code>/app/env/db/password</code> path hierarchy</td></tr>
+                <tr><td><strong>KMS integration</strong></td><td>Always encrypted with CMK</td><td>SecureString uses KMS; String plain text</td></tr>
+                <tr><td><strong>Cross-Region replication</strong></td><td>Native replica secrets</td><td>Manual copy or automation</td></tr>
+                <tr><td><strong>Exam pick</strong></td><td>Rotating DB credentials, cross-Region DR secrets</td><td>Config flags, non-sensitive hierarchies, large fleets of static params</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-700.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-700.png" alt="Course slide diagram on Secrets Manager cross-region replication from primary secret in Region A to replica secrets in Region B and C with option to promote replica to standalone." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 700</span>Enable replication on the primary secret, add Regions, and replicas stay in sync. Promote a replica to standalone if the primary Region fails — it becomes an independent secret.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-701.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-701.png" alt="Course slide on cross-region replication details: ARN suffix stays consistent, metadata and encrypted data replicate, automatic rotation on primary propagates to replicas." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 701</span>The secret name suffix in the ARN matches across Regions; only the Region segment differs. Rotation on the primary pushes new values to all replicas automatically.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-702.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-702.png" alt="Course slide on cross-account Secrets Manager access: attach resource policy on secret and modify KMS key policy in source account for access from another account." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 702</span>Cross-account secret access requires <strong>two</strong> policy updates: resource policy on the secret plus KMS key policy on the encryption CMK. Missing either produces AccessDenied on <code>GetSecretValue</code>.</figcaption>
+          </figure>
+        </section>
+
+        <section class="section" id="shield">
+          <h2>AWS Shield</h2>
+          <p>AWS Shield provides DDoS protection for internet-facing resources. It matters to data engineers when public ingestion endpoints (API Gateway, CloudFront-backed uploads, ALB in front of Kinesis Producer Library collectors) must stay available under attack.</p>
+
+          <div class="slide-row">
+            <figure class="slide-fig">
+              <a href="assets/slides/slide-704.png" target="_blank" rel="noopener">
+                <img src="assets/slides/slide-704.png" alt="Course slide on AWS Shield Standard: free automatic protection against common layer 3 4 and 7 DDoS attacks on CloudFront ELB and Route 53 with CloudWatch metrics." loading="lazy">
+              </a>
+              <figcaption><span class="slide-no">Slide 704</span>Shield Standard is on by default at no charge for CloudFront, Route 53, and Elastic Load Balancing. It covers the majority of volumetric and SYN flood attacks.</figcaption>
+            </figure>
+            <figure class="slide-fig">
+              <a href="assets/slides/slide-705.png" target="_blank" rel="noopener">
+                <img src="assets/slides/slide-705.png" alt="Course slide on AWS Shield Advanced: enhanced DDoS protection, cost protection against scaling charges, 24/7 DRT support, WAF custom rules, subscription pricing." loading="lazy">
+              </a>
+              <figcaption><span class="slide-no">Slide 705</span>Shield Advanced is a paid subscription with DDoS Response Team access, cost protection against attack-driven scaling bills, and tighter WAF integration — for business-critical public endpoints.</figcaption>
+            </figure>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Tier</th><th>Cost</th><th>Protection</th><th>Notable extras</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Standard</strong></td><td>Free, automatic</td><td>Common L3/L4 and some L7 attacks on supported services</td><td>CloudWatch metrics, AWS Health notifications</td></tr>
+                <tr><td><strong>Advanced</strong></td><td>Monthly subscription + data transfer</td><td>Advanced attack detection, tailored mitigations</td><td>DRT 24/7, cost protection, AWS WAF credits, detailed attack diagnostics</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout info"><strong>Deck wording on slide 704.</strong> The slide lists both layer 3/4 and layer 7 under Standard. In practice, comprehensive L7 custom rules come through AWS WAF; Shield Advanced bundles enhanced L7 with WAF. For the exam, Standard = free default; Advanced = paid premium with DRT and cost protection.</div>
+        </section>
+
+        <section class="section" id="encryption-services">
+          <h2>Encryption at rest and in transit</h2>
+          <p class="lead">Domain 4 expects you to pick the right encryption mode per service — default encryption, SSE-S3 versus SSE-KMS, TLS in transit, and when client-side encryption is warranted.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Service</th><th>At rest</th><th>In transit</th><th>Notes for pipelines</th></tr></thead>
+              <tbody>
+                <tr><td><strong>S3</strong></td><td>SSE-S3 (AWS owned), SSE-KMS (CMK), SSE-C (customer-provided key), DSSE-KMS</td><td>HTTPS (TLS) enforced by default; VPC endpoints keep traffic on AWS network</td><td>SSE-KMS + Bucket Keys for high volume; enforce <code>aws:SecureTransport</code> in bucket policy</td></tr>
+                <tr><td><strong>EBS</strong></td><td>Encrypted volumes with CMK; snapshot inherits key</td><td>N/A at block level</td><td>EMR and EC2 data nodes — enable encryption by default in the Region</td></tr>
+                <tr><td><strong>RDS / Aurora</strong></td><td>Storage encryption with AWS managed or CMK at creation time</td><td>TLS connections (<code>sslmode=require</code>)</td><td>Cannot encrypt an existing unencrypted instance in place — snapshot-copy-encrypt</td></tr>
+                <tr><td><strong>Redshift</strong></td><td>Cluster encryption with CMK; snapshot encryption</td><td>SSL to clients</td><td>SSE-KMS on UNLOAD/COPY to S3 when using CMK bucket</td></tr>
+                <tr><td><strong>DynamoDB</strong></td><td>AWS owned key by default; optional CMK per table</td><td>HTTPS API</td><td>CMK when fine-grained key policy or cross-account access needed</td></tr>
+                <tr><td><strong>Kinesis Data Streams</strong></td><td>Server-side encryption with KMS CMK</td><td>HTTPS producers/consumers; in-VPC with interface endpoint</td><td>One CMK per stream; consumers need <code>kms:Decrypt</code></td></tr>
+                <tr><td><strong>Glue Data Catalog</strong></td><td>Encrypt connection passwords and certain metadata with CMK</td><td>TLS for API calls</td><td>Security configuration attaches CMK to job bookmarks and logs</td></tr>
+                <tr><td><strong>EMR</strong></td><td>EBS encryption + optional S3 SSE-KMS on local HDFS spill</td><td>TLS for inter-node (enable in security configuration)</td><td>KMS permissions on EC2 instance profile for CMK-encrypted datasets</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Data masking and tokenisation</h3>
+          <ul>
+            <li><strong>Glue Studio / PySpark</strong> — hash, drop, or replace columns before writing curated Parquet.</li>
+            <li><strong>Glue DataBrew</strong> — visual recipes for masking emails, shuffling, numeric binning.</li>
+            <li><strong>S3 Object Lambda</strong> — transform objects on GET (redact PII in CSV/JSON at read time without duplicating data).</li>
+            <li><strong>Tokenisation</strong> — replace PII with reversible tokens stored in a separate vault (Secrets Manager or a tokenisation HSM); exam scenarios often pair irreversible hashing with Athena views for analytics-safe columns.</li>
+          </ul>
+        </section>
+
+        <section class="section" id="pii-handling">
+          <h2>PII discovery, redaction and restricted access</h2>
+
+          <div class="diagram">
+            <p class="diagram-title">PII lifecycle on AWS — from ingest to governed access</p>
+            <div class="flow">
+              <div class="node is-source"><b>Ingest</b><small>DMS · Firehose · AppFlow → S3 raw/</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-compute pulse"><b>Macie discovery</b><small>Findings → EventBridge · Security Hub</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-compute"><b>Redact / tokenise</b><small>Glue · DataBrew · Object Lambda</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-serve"><b>Restricted serve</b><small>Lake Formation cell filters · Redshift masking · FGAC</small></div>
+            </div>
+          </div>
+
+          <ul>
+            <li><strong>Discover</strong> — Macie sensitive data discovery jobs on <code>raw/</code> prefixes; CDIs for internal ID formats; route high-severity findings to SNS for quarantine.</li>
+            <li><strong>Redact before curated</strong> — Glue or DataBrew job writes masked columns to <code>curated/</code>; keep raw in a locked bucket with Lake Formation deny-by-default.</li>
+            <li><strong>Restrict at query time</strong> — <a href="s13-analytics.html#lake-formation">Lake Formation</a> cell-level security and column filters; <a href="s10-redshift.html#fgac">Redshift dynamic data masking and FGAC</a> for warehouse consumers.</li>
+            <li><strong>Audit</strong> — CloudTrail for KMS and Secrets Manager; S3 server access logging or CloudTrail data events for object-level reads of sensitive prefixes.</li>
+          </ul>
+
+          <h3>Data privacy techniques and data residency</h3>
+          <p><strong>Personally identifiable information (PII)</strong> is any data that identifies or can be used to identify a specific individual — names, email addresses, government IDs, phone numbers, IP addresses tied to a household, and financial account numbers. The notes and Macie findings often abbreviate this as PII; the exam may use either form. Discovery comes first; then you choose how to transform or restrict data before analysts or non-production systems touch it.</p>
+
+          <h3>Masking and redaction</h3>
+          <p><strong>Masking</strong> (and <strong>redaction</strong>) replaces sensitive values with a fixed pattern — asterisks, zeros, or a literal such as <code>REDACTED</code> — before data leaves a controlled environment. The operation is <strong>irreversible</strong>: the original value is discarded. Use masking for non-production copies, dashboards shown to broad internal audiences, and log output where the exact email or account number is not required. <a href="s04-glue.html#databrew">Glue DataBrew</a> recipes and Glue Studio PII transforms apply masking rules visually or in PySpark; Athena views can expose masked columns over curated tables without duplicating storage.</p>
+
+          <h3>Tokenisation</h3>
+          <p><strong>Tokenisation</strong> replaces a sensitive value with a surrogate <strong>token</strong> stored in the dataset while the original value lives in a separate secured vault (often HSM-backed or in Secrets Manager with strict IAM). Lookup is reversible only through that vault — the token alone reveals nothing. Payment card numbers are the classic exam scenario: store tokens in the lake, keep PANs in a PCI-scoped vault. Tokenisation preserves joinability on the token column without exposing the secret value in S3 or Redshift.</p>
+
+          <h3>Anonymisation versus pseudonymisation</h3>
+          <p><strong>Anonymisation</strong> removes the link to an individual irreversibly — no key exists to re-identify the person. Properly anonymised data falls outside many privacy regulations' scope because it is no longer personal data. <strong>Pseudonymisation</strong> replaces direct identifiers with a consistent surrogate key (a pseudonym) so records can still be joined across tables and re-identified when the mapping key is available. Under GDPR, pseudonymised data remains in scope because re-identification is possible with the key.</p>
+          <p><strong>Hashing with a salt</strong> is sometimes mistaken for anonymisation. An unsalted SHA-256 hash of an email is deterministic — anyone with the same email produces the same hash, so rainbow tables and known-email attacks re-identify rows. A salted hash per environment is better for matching duplicates within one system but still pseudonymisation if the salt can be recovered. True anonymisation requires techniques such as generalisation, suppression, or k-anonymity that remove or aggregate beyond recovery.</p>
+
+          <h3>Data residency and sovereignty</h3>
+          <p><strong>Data residency</strong> (and <strong>data sovereignty</strong>) requirements mandate that certain data stays in a specific geography — often an AWS Region or country. Choosing the workload Region pins primary storage location for S3, Redshift, and RDS. Residency is easy to violate accidentally: S3 cross-Region replication, cross-Region backup copies, multi-Region KMS keys, and CloudTrail log delivery to a bucket in another Region all replicate bytes outside the approved boundary.</p>
+          <ul>
+            <li><strong>Region-scoped KMS keys</strong> — standard CMKs do not leave their Region; use a CMK in the approved Region for SSE-KMS on buckets and databases that must stay local.</li>
+            <li><strong>AWS Local Zones</strong> — extend an parent Region into a metro area for latency-sensitive processing while data remains under that Region's control plane; not a substitute for choosing the correct primary Region for long-term storage.</li>
+            <li><strong>Enforcement</strong> — attach an SCP or IAM identity policy with an <code>aws:RequestedRegion</code> condition so principals cannot create or write resources outside approved Regions.</li>
+          </ul>
+
+          <pre data-lang="json" data-title="IAM — deny API calls outside approved Regions" data-explain="Explicit Deny on any action when the target Region is not in the approved list. Pair with SCP on the OU for defence in depth; identity policy alone does not stop the root user unless SCP also applies."><code>{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Sid": "DenyOutsideApprovedRegions",
+    "Effect": "Deny",
+    "Action": "*",
+    "Resource": "*",
+    "Condition": {
+      "StringNotEquals": {
+        "aws:RequestedRegion": ["eu-west-1", "eu-central-1"]
+      }
+    }
+  }]
+}</code></pre>
+
+          <h3>Which AWS service implements each technique</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Technique</th><th>AWS services</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Discover PII</strong></td><td><a href="#macie">Amazon Macie</a> — S3 content and bucket policy findings; Amazon Comprehend — entity detection (names, locations) in free text</td></tr>
+                <tr><td><strong>Mask / transform</strong></td><td>Glue DataBrew masking recipes; Glue ETL PII detection transforms; S3 Object Lambda for read-time redaction</td></tr>
+                <tr><td><strong>Restrict at query time</strong></td><td><a href="s13-analytics.html#lake-formation">Lake Formation</a> column-level and cell-level security filters; <a href="s10-redshift.html#fgac">Redshift</a> dynamic data masking and FGAC; Athena views projecting masked columns</td></tr>
+                <tr><td><strong>Tokenise</strong></td><td>Custom vault + Glue job, or third-party tokenisation integrated via API; tokens stored in curated tables, secrets in Secrets Manager</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout exam"><strong>Masking versus tokenisation versus anonymisation.</strong> "Replace credit card numbers so analysts see a surrogate but payments can still be reconciled via a vault" → <strong>tokenisation</strong>. "Dev/test copy must never recover real emails" → <strong>masking</strong> or one-way hash with no vault (not tokenisation). "Dataset must leave GDPR scope for external research" → <strong>anonymisation</strong> (irreversible), not pseudonymisation with a recoverable key. Macie discovers; it does not mask — the transform step is Glue, DataBrew, or access control.</div>
+
+          <h3>Related security services — exam distractors</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Service</th><th>What it actually does</th><th>Not this</th></tr></thead>
+              <tbody>
+                <tr><td><strong>GuardDuty</strong></td><td>Threat detection from VPC Flow Logs, CloudTrail, DNS — finds compromised credentials, crypto-mining</td><td>Not PII classification (that is Macie)</td></tr>
+                <tr><td><strong>Security Hub</strong></td><td>Aggregates findings from Macie, GuardDuty, Inspector, firewalls into compliance standards (CIS, PCI)</td><td>Not a key store or secret vault</td></tr>
+                <tr><td><strong>Inspector</strong></td><td>Scans EC2 and container images for CVEs and network exposure</td><td>Not S3 content inspection</td></tr>
+                <tr><td><strong>AWS WAF</strong></td><td>Web ACL rules on CloudFront, ALB, API Gateway — block IPs, SQLi, rate limits</td><td>Not encryption; pairs with Shield Advanced</td></tr>
+                <tr><td><strong>Amazon Detective</strong></td><td>Graph analysis of GuardDuty findings — root-cause investigation</td><td>Not preventive controls or data masking</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="section" id="deeper">
+          <h2>Deeper detail and exam edge cases</h2>
+          <p class="lead">KMS request economics, Macie scoping, Secrets Manager versus Parameter Store decision logic, and where Shield, GuardDuty, and Security Hub sit relative to encryption — the security operational layer the slides list but do not stress-test.</p>
+
+          <h3>Limits and quotas that decide answers</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Limit</th><th>Value</th><th>Adjustable?</th><th>Why it matters</th></tr></thead>
+              <tbody>
+                <tr><td>KMS direct encrypt payload</td><td>4 KB maximum</td><td>No (hard)</td><td>Forces envelope encryption for S3, Redshift, and any large payload — exam constant.</td></tr>
+                <tr><td>Customer managed CMK monthly fee</td><td>$1 per key version per month</td><td>No — reduce key count</td><td>Many per-table CMKs add up; prefer shared CMKs with encryption context.</td></tr>
+                <tr><td>KMS API requests</td><td>$0.03 per 10,000 requests (symmetric)</td><td>Yes — S3 Bucket Keys, caching, quota increase</td><td>High-volume SSE-KMS S3 or Kinesis streams hit throttling without mitigation.</td></tr>
+                <tr><td>KMS key deletion waiting period</td><td>7–30 days (mandatory)</td><td>No — choose window at schedule</td><td>Scheduled deletion is irreversible after the window — data encrypted only with that key becomes unrecoverable.</td></tr>
+                <tr><td>Imported key material expiry</td><td>Optional expiration date on import</td><td>Set at import time</td><td>Expired imported keys cannot encrypt new data; plan rotation before expiry.</td></tr>
+                <tr><td>Secrets Manager secret size</td><td>64 KB</td><td>No (hard)</td><td>Large certs or JSON bundles may need S3 reference or split secrets.</td></tr>
+                <tr><td>Secrets Manager rotation</td><td>Lambda-based; built-in templates for RDS/Redshift</td><td>Configure rotation schedule</td><td>Exam answer for "rotate DB credentials without redeploying apps".</td></tr>
+                <tr><td>Parameter Store Standard tier</td><td>Free; 4 KB per parameter</td><td>N/A</td><td>Static config without rotation — cheaper than Secrets Manager.</td></tr>
+                <tr><td>Parameter Store Advanced tier</td><td>~$0.05 per parameter per month; 8 KB</td><td>N/A</td><td>Policies and higher throughput; still no native rotation.</td></tr>
+                <tr><td>Macie sensitive data discovery</td><td>Per GB scanned + bucket evaluation charges</td><td>Yes — scope jobs to prefixes</td><td>Account-wide continuous discovery on all buckets is expensive — scope to <code>raw/</code> PII paths.</td></tr>
+                <tr><td>Shield Standard</td><td>Free, automatic on CloudFront/ELB/Route 53</td><td>N/A</td><td>Default DDoS protection — not a separate enable step.</td></tr>
+                <tr><td>Shield Advanced</td><td>~$3,000/month subscription (plus data transfer)</td><td>N/A — contract tier</td><td>DRT, cost protection against attack scaling, WAF credits — business-critical public endpoints only.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>What you actually pay for</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Billed dimension</th><th>Unit</th><th>How to spend less</th></tr></thead>
+              <tbody>
+                <tr><td>KMS CMK</td><td>$1/key/month + $0.03/10K API calls</td><td>Consolidate CMKs; enable S3 Bucket Keys; SSE-S3 where key policy control is not required.</td></tr>
+                <tr><td>KMS cross-Region calls</td><td>$0.01 per 10,000 cross-Region requests</td><td>Use multi-Region keys only when cross-Region decrypt is required; otherwise Region-local CMKs.</td></tr>
+                <tr><td>Secrets Manager</td><td>~$0.40/secret/month + $0.05/10K API calls</td><td>Parameter Store Standard for non-rotating config; one secret per logical credential, not per field.</td></tr>
+                <tr><td>Macie discovery job</td><td>Per GB scanned (varies by Region)</td><td>One-time jobs on new prefixes; CDIs for internal patterns; disable continuous discovery on non-sensitive buckets.</td></tr>
+                <tr><td>Macie bucket evaluation</td><td>Per bucket assessed for sensitivity</td><td>Limit automated discovery scope; use S3 inventory + Macie targeted jobs instead of account-wide always-on.</td></tr>
+                <tr><td>CloudHSM</td><td>~$1.60/hr per HSM instance</td><td>Reserve for regulatory single-tenant requirements; standard KMS CMKs suffice for most pipelines.</td></tr>
+                <tr><td>Shield Advanced</td><td>~$3,000/month flat subscription</td><td>Justify only for revenue-facing public APIs under active DDoS threat model.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout cost"><strong>Biggest KMS cost leak.</strong> SSE-KMS on a high-throughput Kinesis or S3 pipeline without Bucket Keys — millions of <code>Decrypt</code> calls per day at $0.03/10K adds hundreds of dollars monthly. Bucket Keys or SSE-S3 where compliance allows cuts KMS API volume by orders of magnitude.</div>
+          <div class="callout danger"><strong>Key policy without IAM is insufficient.</strong> An IAM policy granting <code>kms:Decrypt</code> fails if the CMK key policy does not trust the principal. The inverse also fails — key policy alone without IAM on the role. Both layers are required; grants add a third path for AWS services.</div>
+
+          <h3>Traps that catch people</h3>
+          <ul>
+            <li><strong>IAM alone for KMS —</strong> Customer managed keys require a key policy. IAM policies delegate only when the key policy includes <code>Enable IAM User Permissions</code> or explicit principal allow — classic AccessDenied on Glue reading SSE-KMS S3.</li>
+            <li><strong><code>kms:ViaService</code> omitted —</strong> Restricting decrypt to S3 via condition <code>"kms:ViaService": "s3.us-east-1.amazonaws.com"</code> prevents direct decrypt from a compromised role while allowing S3 envelope flow — exam advanced pattern.</li>
+            <li><strong>Deleting a CMK too quickly —</strong> Schedule deletion with minimum 7-day window; all data encrypted exclusively with that key becomes permanently unreadable after deletion completes.</li>
+            <li><strong>Multi-Region key when single-Region suffices —</strong> MRKs add complexity and cross-Region request charges. Use when the same key ID must decrypt in multiple Regions actively — not for simple snapshot copy (destination Region key is enough).</li>
+            <li><strong>Secrets Manager for static config —</strong> Non-rotating feature flags in Secrets Manager cost ~$0.40/month each; Parameter Store Standard is free for the same data.</li>
+            <li><strong>Parameter Store for rotating RDS password —</strong> No built-in rotation — you must build Lambda rotation yourself. Secrets Manager is the exam answer for automatic RDS credential rotation.</li>
+            <li><strong>Macie for threat detection —</strong> Macie classifies S3 content; GuardDuty detects anomalous API behaviour. Swapping them fails PII discovery and intrusion scenarios respectively.</li>
+            <li><strong>Inspector for S3 PII —</strong> Inspector scans EC2/ECR CVEs; it does not read S3 object contents. Macie is the S3 content scanner.</li>
+            <li><strong>Shield for encryption —</strong> Shield is DDoS protection, not encryption or WAF replacement. Advanced bundles with WAF but does not encrypt data at rest.</li>
+            <li><strong>Cross-account secret without KMS policy —</strong> Resource policy on the secret is not enough — the CMK encrypting the secret must also allow foreign account <code>kms:Decrypt</code>.</li>
+          </ul>
+
+          <h3>Troubleshooting playbook</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Symptom</th><th>Most likely cause</th><th>What to check / fix</th></tr></thead>
+              <tbody>
+                <tr><td>Glue/Athena AccessDenied on SSE-KMS S3 object</td><td>Job role missing <code>kms:Decrypt</code> or CMK key policy blocks role</td><td>IAM role policy + CMK key policy; check encryption context matches if enforced.</td></tr>
+                <tr><td>KMS ThrottlingException under load</td><td>Per-account KMS request quota exceeded</td><td>Enable S3 Bucket Keys; request quota increase; cache data keys in application.</td></tr>
+                <tr><td>Secrets Manager GetSecretValue AccessDenied cross-account</td><td>Missing secret resource policy or KMS key policy for foreign account</td><td>Both secret policy and CMK policy must allow the foreign role ARN.</td></tr>
+                <tr><td>Rotation failed in Secrets Manager</td><td>Rotation Lambda lacks VPC access to RDS or wrong security group</td><td>CloudWatch Logs for rotation Lambda; verify Lambda in same VPC/subnet as RDS with correct SG.</td></tr>
+                <tr><td>Macie job finds nothing on known PII file</td><td>Job scope excludes prefix or object below size threshold</td><td>Job S3 scope includes object key; check supported file types (CSV, JSON, Parquet, etc.).</td></tr>
+                <tr><td>Old ciphertext fails after CMK deletion</td><td>Key deleted past waiting period</td><td>Preventive: disable key instead of delete during investigation; restore from backup encrypted with active key.</td></tr>
+                <tr><td>Redshift COPY fails on KMS-encrypted S3</td><td>Cluster IAM role lacks <code>kms:Decrypt</code> on bucket CMK</td><td>Redshift role policy + CMK key policy; same pattern as Glue.</td></tr>
+                <tr><td>GuardDuty finding but no PII context</td><td>Wrong service — need Macie for content classification</td><td>Run Macie discovery on affected bucket prefix; route findings to Security Hub.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Production patterns</h3>
+          <p>Mature pipelines use a <strong>shared analytics CMK</strong> with key policy trusting Glue, Redshift, and Lambda roles via <code>kms:ViaService</code> conditions where possible. Secrets Manager holds rotating JDBC credentials referenced by Glue connections and DMS endpoints. Macie runs one-time discovery on each new <code>raw/</code> prefix before promotion to curated; continuous automated discovery is scoped to buckets tagged <code>data-class=pii</code>.</p>
+          <div class="grid-2">
+            <div class="mini-card">
+              <h4>SSE-KMS lake pattern</h4>
+              <ul>
+                <li>One CMK per environment (prod/staging); S3 Bucket Keys enabled.</li>
+                <li>Bucket policy requires <code>aws:SecureTransport</code> and SSE-KMS.</li>
+                <li>Lake Formation permissions align with CMK key policy principals.</li>
+              </ul>
+            </div>
+            <div class="mini-card">
+              <h4>Credential hygiene</h4>
+              <ul>
+                <li>Secrets Manager for RDS/Redshift with 30-day rotation.</li>
+                <li>Parameter Store hierarchy for non-secret config (<code>/dea/prod/glue/dpu</code>).</li>
+                <li>Never embed passwords in Glue scripts or container images.</li>
+              </ul>
+            </div>
+          </div>
+          <p>Anti-pattern: creating a new CMK for every S3 bucket and Glue job — $1/month each plus multiplied API calls. One CMK with encryption context distinguishing buckets is cheaper and easier to audit via CloudTrail.</p>
+          <pre data-lang="json" data-title="KMS key policy — kms:ViaService condition for S3 only" data-explain="Allows the analytics role to decrypt only when the call originates through S3 in us-east-1 — limits blast radius of a leaked role."><code>{
+  "Sid": "AllowViaS3",
+  "Effect": "Allow",
+  "Principal": {
+    "AWS": "arn:aws:iam::123456789012:role/GlueETLRole"
+  },
+  "Action": ["kms:Decrypt", "kms:GenerateDataKey"],
+  "Resource": "*",
+  "Condition": {
+    "StringEquals": {
+      "kms:ViaService": "s3.us-east-1.amazonaws.com"
+    }
+  }
+}</code></pre>
+
+          <h3>Where this fits with the rest of the exam</h3>
+          <p>Domain 4 (18%) tests encryption, secrets, and governance across every storage and compute service in the course.</p>
+          <ul>
+            <li><strong>Storage encryption:</strong> <a href="s07-s3.html">Section 7</a> (SSE-S3 vs SSE-KMS, Bucket Keys), <a href="s10-redshift.html">Section 10</a> (cluster encryption), <a href="s09-dynamodb.html">Section 9</a> (table CMK).</li>
+            <li><strong>Streaming encryption:</strong> <a href="s06-streaming.html">Section 6</a> — Kinesis SSE-KMS; consumers need matching decrypt permissions.</li>
+            <li><strong>Governance:</strong> <a href="s13-analytics.html#lake-formation">Section 13</a> — Lake Formation plus KMS for column-level access on encrypted objects.</li>
+            <li><strong>Network path to KMS:</strong> <a href="s19-vpc.html#vpc-endpoints">Section 19</a> — private subnets need KMS interface endpoint or NAT to call <code>Decrypt</code>.</li>
+            <li><strong>Audit:</strong> <a href="s16-management.html#cloudtrail">Section 16</a> — CloudTrail logs every KMS API; Macie findings feed Security Hub.</li>
+            <li><strong>Migration:</strong> <a href="s18-migration.html">Section 18</a> — Snow devices encrypt with KMS; DMS endpoints use Secrets Manager credentials.</li>
+          </ul>
+          <div class="callout exam"><strong>How the exam frames security.</strong> "Rotate credentials without code change" → Secrets Manager. "Find PII in S3" → Macie. "Encrypt large objects with KMS" → envelope encryption / SSE-KMS. "Block DDoS on public API" → Shield Standard (free) or Advanced (DRT). "Threat detection from unusual API calls" → GuardDuty, not Macie. IAM policy alone on KMS → wrong unless key policy cooperates.</div>
+        </section>
+
+        <section class="section" id="interview">
+          <h2>Interview questions</h2>
+          <p class="muted">Answer each one out loud before opening it.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+            <details class="qa">
+              <summary>Explain envelope encryption and why KMS cannot encrypt a 10 GB S3 object directly.<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>KMS <code>Encrypt</code> accepts at most <strong>4 KB</strong>. For large objects, KMS <code>GenerateDataKey</code> creates an AES-256 data key, returns it plaintext once, and also returns the data key encrypted under the CMK. S3 encrypts the object locally with the plaintext data key, stores the encrypted data key in object metadata, and discards the plaintext key.</p>
+                <p>Decrypt reverses the flow: KMS unwraps the data key, S3 decrypts the object locally. The CMK never sees the full 10 GB — only the small wrapped key material transits KMS.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>AWS owned versus AWS managed versus customer managed key — which can you delete, and which supports a custom key policy?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p><strong>AWS owned</strong> (SSE-S3): invisible, shared, no customer control, no key policy you edit. <strong>AWS managed</strong> (aws/rds, aws/s3): visible in KMS, automatic yearly rotation, limited policy control, you cannot schedule deletion — AWS owns lifecycle. <strong>Customer managed</strong>: you create, rotate, disable, schedule deletion, and write the mandatory key policy including cross-account principals.</p>
+                <p>Compliance questions asking for auditability and cross-account <code>Decrypt</code> → customer managed CMK.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What is the difference between a KMS key policy, an IAM policy and a grant?<span class="qa-tag">Security</span></summary>
+              <div class="qa-body">
+                <p>The <strong>key policy</strong> is a resource-based policy on the CMK — required on every customer managed key. It must allow the account root and typically includes <code>"Enable IAM User Permissions"</code> so IAM policies can delegate usage.</p>
+                <p>An <strong>IAM policy</strong> attaches to a role or user and lists allowed KMS actions. It works only if the key policy trusts IAM. A <strong>grant</strong> is a temporary permission on the key for a specific principal — AWS services use grants so Redshift or S3 can decrypt on your behalf without rewriting the key policy for every operation.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Secrets Manager versus SSM Parameter Store for database credentials — which do you pick?<span class="qa-tag">Exam</span></summary>
+              <div class="qa-body">
+                <p><strong>Secrets Manager</strong> when you need automatic rotation integrated with RDS/Redshift, cross-Region replication for DR, or secrets up to 64 KB. The exam's "rotate credentials without changing application code" scenario is Secrets Manager.</p>
+                <p><strong>Parameter Store</strong> for hierarchical configuration (<code>/myapp/prod/db/host</code>), high-volume static parameters, and cost sensitivity — Standard parameters are free. Build your own rotation if you choose Parameter Store.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What happens to existing ciphertext when you enable automatic key rotation on a CMK?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p>Nothing breaks. KMS retains previous backing key versions. Old S3 objects, RDS storage, and snapshots encrypted under version 1 still decrypt because KMS knows all active key material for that CMK ID. New encryptions use the latest backing key version.</p>
+                <p>Key ID, ARN, and alias stay the same. Rotation does <em>not</em> bulk re-encrypt existing data — that would require a separate re-encryption job.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Account B needs to read a secret encrypted with Account A's CMK. What policies are required?<span class="qa-tag">Architecture</span></summary>
+              <div class="qa-body">
+                <p>Two updates in Account A: (1) <strong>Secrets Manager resource policy</strong> on the secret allowing Account B's role <code>secretsmanager:GetSecretValue</code>; (2) <strong>KMS key policy</strong> on the CMK allowing the same principal <code>kms:Decrypt</code> and <code>kms:DescribeKey</code>.</p>
+                <p>Account B's role also needs an IAM policy permitting those actions on the secret ARN and key ARN. Missing the KMS policy is the common mistake — GetSecretValue fails even when the secret policy looks correct.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How does Macie differ from GuardDuty for a data compliance use case?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p><strong>Macie</strong> inspects S3 <em>content and bucket policies</em> for PII, financial data, credentials, and public exposure. Output is classification findings suitable for GDPR/PCI discovery workflows.</p>
+                <p><strong>GuardDuty</strong> analyses CloudTrail, VPC Flow Logs and DNS for <em>threat behaviour</em> — credential exfiltration, unusual API calls, mining. It does not classify column contents. Use both: Macie finds the sensitive data; GuardDuty detects if someone is stealing it.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Shield Standard versus Advanced — when is Advanced worth the subscription?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p><strong>Standard</strong> is free and always on for CloudFront, ELB, Route 53 — sufficient for most internal data platforms with no public attack surface.</p>
+                <p><strong>Advanced</strong> when a public ingestion API or partner-facing CloudFront distribution must survive sophisticated DDoS, you need 24/7 DRT engagement, cost protection against attack-driven auto scaling, or advanced WAF rule sets bundled with the subscription.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Your SSE-KMS S3 bucket triggers thousands of Lambda decryptions per second and hits KMS throttling. What mitigations exist?<span class="qa-tag">Performance</span></summary>
+              <div class="qa-body">
+                <p>Enable <strong>S3 Bucket Keys</strong> so one bucket-level key reduces per-object KMS calls. Use <strong>data key caching</strong> in Lambda if you encrypt client-side. Request a <strong>KMS quota increase</strong> via Service Quotas for sustained high RPS.</p>
+                <p>If objects are read-only after landing, consider whether SSE-S3 meets the requirement — it removes KMS from the hot path entirely, at the cost of less key policy control.</p>
+              </div>
+            </details>
+          </div>
+        </section>
+
+        <section class="section" id="practice">
+          <h2>Hands-on practice</h2>
+          <p class="muted">Free tier where possible. Delete CMKs and secrets at the end — scheduled deletion has a waiting period.</p>
+          <ol class="practice-list">
+            <li class="practice">
+              <p class="practice-task">Create a customer managed KMS key with alias <code>alias/dea-lab-study</code>, attach a key policy allowing your IAM user, and encrypt a test object in your lab bucket with SSE-KMS.</p>
+              <span class="console-path">KMS → Customer managed keys → Create → S3 → Upload → Encryption SSE-KMS</span>
+              <p class="practice-expect">S3 object properties show SSE-KMS with your CMK ARN; CloudTrail logs <code>GenerateDataKey</code>.</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">Console + CLI</span></summary>
+                <div class="qa-body">
+<pre data-lang="shell"><code>KEY_ID=$(aws kms create-key --description "DEA lab CMK" \
+  --query 'KeyMetadata.KeyId' --output text)
+aws kms create-alias --alias-name alias/dea-lab-study --target-key-id $KEY_ID
+
+aws s3 cp data/customers.csv s3://dea-lab-ab-4821/staging/test-ssekms.csv \
+  --sse aws:kms --sse-kms-key-id alias/dea-lab-study</code></pre>
+                  <p class="muted">Cleanup: schedule key deletion (7–30 day window) after removing encrypted objects.</p>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Store a JSON credential <code>{"username":"admin","password":"changeme"}</code> in Secrets Manager as <code>dea/lab/rds</code> and retrieve it with the boto3 snippet from this section.</p>
+              <span class="console-path">Secrets Manager → Store a new secret → Credentials for Amazon RDS</span>
+              <p class="practice-expect">Python script prints username without hard-coding the password in source control.</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">CLI</span></summary>
+                <div class="qa-body">
+<pre data-lang="shell"><code>aws secretsmanager create-secret --name dea/lab/rds \
+  --secret-string '{"username":"admin","password":"changeme"}'
+
+aws secretsmanager get-secret-value --secret-id dea/lab/rds \
+  --query SecretString --output text</code></pre>
+                  <p class="muted">Cleanup: Secrets Manager → delete secret → force delete without recovery if immediate.</p>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Enable a Macie sensitive data discovery job on your lab bucket's <code>raw/customers/</code> prefix and review findings for email addresses.</p>
+              <span class="console-path">Macie → Jobs → Create job → One-time → S3 bucket scope</span>
+              <p class="practice-expect">Findings list <code>EMAIL_ADDRESS</code> detections on <code>customers.csv</code> (11 rows in the sample file).</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">Console</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Enable Macie in the account (one-time free trial may apply).</li>
+                    <li><strong>Create job</strong> — scope to bucket <code>dea-lab-ab-4821</code>, include <code>raw/customers/</code>.</li>
+                    <li>Run job; open findings after completion. Macie charges per GB scanned — the sample file is tiny.</li>
+                  </ol>
+                  <p class="muted">Cleanup: disable Macie or cancel scheduled jobs if not continuing the trial.</p>
+                </div>
+              </details>
+            </li>
+          </ol>
+        </section>
+
+        <section class="section" id="recap">
+          <h2>Recap</h2>
+          <div class="recap">
+            <ul class="checklist">
+              <li>KMS envelope encryption: GenerateDataKey → encrypt locally → store wrapped key; 4 KB direct encrypt limit.</li>
+              <li>Key types: AWS owned (SSE-S3), AWS managed (aws/service), customer managed (full policy control).</li>
+              <li>Key policy is mandatory on CMKs; IAM policies and grants delegate usage.</li>
+              <li>Automatic rotation yearly on CMKs — old ciphertext still decrypts; key ID unchanged.</li>
+              <li>Pricing: ~$1/CMK/month + $0.03/10K API calls; S3 Bucket Keys reduce KMS load.</li>
+              <li>Multi-Region keys share ID/material; cross-account needs key policy + resource policy.</li>
+              <li>Macie = S3 PII/sensitive data discovery; findings → EventBridge / Security Hub.</li>
+              <li>Secrets Manager vs Parameter Store: rotation and replication → Secrets Manager; cheap config hierarchy → SSM.</li>
+              <li>Cross-account secrets need secret resource policy AND KMS Decrypt on the CMK.</li>
+              <li>Shield Standard free on CloudFront/ELB/Route 53; Advanced = DRT + cost protection + WAF.</li>
+              <li>GuardDuty = threats; Macie = content; WAF = web rules; Detective = investigation graphs.</li>
+              <li>PII flow: Macie discover → Glue/DataBrew redact → Lake Formation / Redshift FGAC restrict.</li>
+            </ul>
+            <p style="margin-top:1rem;">
+              <button type="button" data-complete="section-20">Mark complete</button>
+            </p>
+          </div>
+        </section>
+
+      </div>
+
+      <aside class="toc" aria-label="On this page">
+        <strong>On this page</strong>
+        <ol>
+          <li><a href="#lectures">Lectures</a></li>
+          <li><a href="#kms-overview">KMS overview</a></li>
+          <li><a href="#kms-key-types">Key types</a></li>
+          <li><a href="#kms-key-ownership">Key ownership</a></li>
+          <li><a href="#kms-rotation">Rotation and pricing</a></li>
+          <li><a href="#kms-multi-region">Multi-Region keys</a></li>
+          <li><a href="#macie">Macie</a></li>
+          <li><a href="#secrets-manager">Secrets Manager</a></li>
+          <li><a href="#shield">Shield</a></li>
+          <li><a href="#encryption-services">Encryption at rest</a></li>
+          <li><a href="#pii-handling">PII handling</a></li>
+          <li><a href="#deeper">Deeper detail</a></li>
+          <li><a href="#interview">Interview questions</a></li>
+          <li><a href="#practice">Hands-on practice</a></li>
+          <li><a href="#recap">Recap</a></li>
+        </ol>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<footer class="footer">AWS Certified Data Engineer Associate (DEA-C01) · Section 20 · Offline study edition</footer>
+</body>
+</html>

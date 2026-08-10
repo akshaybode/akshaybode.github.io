@@ -1,0 +1,1086 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="DEA-C01 Section 15: AWS Step Functions, EventBridge, AppFlow, MWAA, SNS, SQS and API Gateway — orchestration, event-driven pipelines, messaging patterns and the decision table the exam loves.">
+<title>Section 15 — Application Integration | AWS Data Engineer DEA-C01 Notes</title>
+<link rel="stylesheet" href="assets/aws.css">
+<script defer src="assets/search-index.js"></script>
+<script defer src="assets/code-highlight.js"></script>
+<script defer src="assets/aws.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">Course section 15 of 21 · AWS Certified Data Engineer Associate</p>
+    <h1>Application Integration</h1>
+    <p class="subtitle">How AWS services talk to each other: Step Functions for durable workflows, EventBridge for event routing, MWAA for Python DAGs, AppFlow for SaaS ingestion, SNS and SQS for decoupled messaging, and API Gateway for HTTP front doors — plus the orchestration decision table that decides among them.</p>
+    <div class="hero-meta">
+      <span class="chip">52 slides · ~75min</span>
+      <span class="chip">Exam domain: Data Ingestion and Transformation (34%)</span>
+      <span class="chip">Deck slides 508–559</span>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <nav class="pager" aria-label="Section navigation">
+    <a href="s14-sagemaker.html">← Machine Learning with SageMaker</a>
+    <a href="index.html">Course contents</a>
+    <a href="s16-management.html">Next: Management, Monitoring, and Governance →</a>
+  </nav>
+
+  <main id="main">
+    <div class="layout">
+      <div class="content">
+
+        <section class="section" id="lectures">
+          <h2>Lectures in this section</h2>
+          <p class="muted">Each lecture links to the notes that cover it. This is the largest ingestion-domain section — the worked pipeline scenario is the most exam-like content here.</p>
+          <ol class="lecture-list">
+            <li class="lecture">
+              <a class="lec-title" href="#step-functions">AWS Step Functions: state machines, states and workflow types</a>
+              <span class="lec-time">~14:00</span>
+              <span class="lec-src">Slides 509–516</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#eventbridge">Amazon EventBridge: event bus, rules and schema registry</a>
+              <span class="lec-time">~10:00</span>
+              <span class="lec-src">Slides 517–524</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#pipeline-scenario">Worked scenario: automating a retail data lake pipeline</a>
+              <span class="lec-time">~12:00</span>
+              <span class="lec-src">Slides 525–532</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#appflow">Amazon AppFlow: SaaS connectors and bi-directional sync</a>
+              <span class="lec-time">~6:00</span>
+              <span class="lec-src">Slides 533–538</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#mwaa">Amazon MWAA: managed Airflow and DAG layout</a>
+              <span class="lec-time">~6:00</span>
+              <span class="lec-src">Slides 539–541</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#sns">Amazon SNS: pub/sub, fan-out and FIFO topics</a>
+              <span class="lec-time">~8:00</span>
+              <span class="lec-src">Slides 542–547</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#sqs">Amazon SQS: queues, lifecycle and Standard vs FIFO</a>
+              <span class="lec-time">~8:00</span>
+              <span class="lec-src">Slides 548–553</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#api-gateway">Amazon API Gateway: REST, HTTP, WebSocket and endpoint types</a>
+              <span class="lec-time">~8:00</span>
+              <span class="lec-src">Slides 554–559</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#orchestration-decisions">Orchestration decision table</a>
+              <span class="lec-time">~5:00</span>
+            </li>
+          </ol>
+        </section>
+
+        <section class="section" id="step-functions">
+          <h2>AWS Step Functions</h2>
+          <p class="lead">AWS Step Functions is a serverless orchestration service. You define a <strong>state machine</strong> — a visual workflow — that coordinates Lambda functions, Glue jobs, SNS notifications and 220+ other AWS services, with built-in error handling, retries and branching.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-509.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-509.png" alt="Course slide title card for AWS Step Functions." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 509</span>Section opener for Step Functions — the orchestration service the exam pairs with EventBridge, Glue and Lambda in nearly every pipeline scenario.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-510.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-510.png" alt="Course slide on Step Functions use cases: application orchestration, data processing, microservices coordination and ML workflows via visual state machines." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 510</span>Four use-case buckets. For DEA-C01, <strong>data processing</strong> and <strong>ML workflows</strong> are the ones that appear — "orchestrate multiple services with error management" is the phrase to listen for.</figcaption>
+          </figure>
+
+          <h3>State machine terminology</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-511.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-511.png" alt="Course slide defining state machine equals workflow, state equals step, and task equals unit of work." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 511</span>Vocabulary: state machine = workflow, state = step, task = unit of work. Exam questions use these terms interchangeably.</figcaption>
+          </figure>
+
+          <h3>State types</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-512.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-512.png" alt="Course slide listing Step Functions state types: Task, Choice, Wait, Succeed, Fail, Parallel, Map and Pass." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 512</span>The eight state types. Data pipelines lean heavily on <strong>Task</strong> (run Glue/Lambda), <strong>Choice</strong> (branch on validation result), <strong>Wait</strong> (delay or wait until timestamp), and <strong>Map</strong> (fan out over an array).</figcaption>
+          </figure>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>State</th><th>What it does</th><th>Pipeline example</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Task</strong></td><td>Runs one unit of work — Lambda, Glue, SNS publish, SDK call</td><td>Invoke validation Lambda; start Glue ETL job</td></tr>
+                <tr><td><strong>Choice</strong></td><td>Branches on JSONPath conditions</td><td>If validation passes → ETL; else → Fail</td></tr>
+                <tr><td><strong>Wait</strong></td><td>Pauses for seconds or until a timestamp</td><td>Wait 60 s for crawler to finish before next step</td></tr>
+                <tr><td><strong>Parallel</strong></td><td>Runs branches concurrently, aggregates output</td><td>Validate and enrich datasets simultaneously</td></tr>
+                <tr><td><strong>Map</strong></td><td>Iterates over an array — each item runs a sub-workflow</td><td>Process each S3 prefix in a list; <strong>Distributed Map</strong> scales to millions of S3 objects</td></tr>
+                <tr><td><strong>Pass</strong></td><td>Transforms input to output without calling a service</td><td>Inject static parameters before a Glue job</td></tr>
+                <tr><td><strong>Succeed / Fail</strong></td><td>Terminal states</td><td>End workflow cleanly or mark failure for CloudWatch alarm</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-513.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-513.png" alt="Course slide stating state machines are defined in Amazon States Language ASL." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 513</span>State machines are defined in <strong>Amazon States Language (ASL)</strong> — JSON you can author in the visual editor or check into git. The exam shows ASL fragments and asks what happens next.</figcaption>
+          </figure>
+
+          <h3>Error handling, retries and integrations</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-514.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-514.png" alt="Course slide on Step Functions built-in controls: Retry, Catch, Timeouts, Parallel, Choice, Wait and Pass." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 514</span>Built-in controls per state. <strong>Retry</strong> re-attempts on transient errors with exponential backoff; <strong>Catch</strong> routes to a fallback state on permanent failure — essential for idempotent ETL.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-515.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-515.png" alt="Course slide on Step Functions AWS SDK and optimised service integrations with IAM permission requirements." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 515</span>Two integration tiers. <strong>Optimised integrations</strong> (Lambda, Glue, SNS, SQS, DynamoDB) use simplified ASL and support the <code>.sync</code> pattern — Step Functions waits until the job completes. <strong>AWS SDK integrations</strong> call any of 200+ services via the AWS SDK integration pattern.</figcaption>
+          </figure>
+
+          <div class="callout exam"><strong>The <code>.sync</code> pattern.</strong> For Glue, use <code>arn:aws:states:::glue:startJobRun.sync</code> — Step Functions polls until the job succeeds or fails, then proceeds. Without <code>.sync</code>, the workflow continues immediately after <em>starting</em> the job, which is almost never what a data pipeline wants.</div>
+
+          <h3>Standard vs Express workflows</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-516.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-516.png" alt="Course slide comparing Standard and Express Step Functions workflows on durability, logging, throughput and cost." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 516</span>Standard vs Express comparison from the deck. The table below adds duration limits and idempotency semantics the slide omits.</figcaption>
+          </figure>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Feature</th><th>Standard</th><th>Express</th></tr></thead>
+              <tbody>
+                <tr><td>Max duration</td><td>Up to 1 year</td><td>Up to 5 minutes</td></tr>
+                <tr><td>Execution rate</td><td>2,000 starts/sec (soft limit)</td><td>100,000+ starts/sec</td></tr>
+                <tr><td>State transition rate</td><td>4,000/sec</td><td>Nearly unlimited</td></tr>
+                <tr><td>Execution history</td><td>Full history in console; auditable</td><td>Not retained by default (CloudWatch Logs optional)</td></tr>
+                <tr><td>Pricing model</td><td>Per state transition — higher cost</td><td>Per execution + duration — cost-effective at volume</td></tr>
+                <tr><td>Integration depth</td><td>Full — all state types, <code>.sync</code>, Map, Parallel</td><td>Limited — fewer state types; ideal for Lambda chains</td></tr>
+                <tr><td>Delivery semantics</td><td>Exactly-once workflow execution</td><td>At-least-once — design tasks to be idempotent</td></tr>
+                <tr><td>Typical use case</td><td>Long ETL pipelines, human approval steps, audit trails</td><td>High-volume event processing, microservice orchestration</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Map state and distributed map</h3>
+          <p>The <strong>Map</strong> state iterates over a JSON array — each element runs an inline or referenced sub-workflow. For large-scale S3 fan-out (process every object in a bucket), <strong>Distributed Map</strong> reads an S3 inventory or CSV manifest and launches up to tens of thousands of concurrent sub-executions, billing only for what runs. This is the Step Functions answer when a question mentions "process millions of files in parallel".</p>
+        </section>
+
+        <section class="section" id="eventbridge">
+          <h2>Amazon EventBridge</h2>
+          <p class="lead">Amazon EventBridge is a serverless event bus. Producers publish JSON events; rules match event patterns or schedules and route copies to targets — Lambda, Step Functions, SNS, SQS, API destinations — without the producer knowing the consumer exists.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-518.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-518.png" alt="Course slide introducing EventBridge as a serverless event bus with producers, event bus, rules and targets; events are JSON objects representing state changes." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 518</span>Core components. An event is a JSON object with <code>source</code>, <code>detail-type</code> and <code>detail</code> fields. Rules filter on any of these.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-519.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-519.png" alt="Course slide diagram showing decoupled event-driven architecture with S3, EventBridge event bus, rules routing to Lambda, Step Functions and SNS." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 519</span>Decoupled architecture. S3 emits <code>Object Created</code> events to the default bus; a rule forwards matching events to Step Functions — the pattern used in the worked pipeline scenario below.</figcaption>
+          </figure>
+
+          <h3>Rules: event pattern vs schedule</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-520.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-520.png" alt="Course slide on EventBridge rule types: event pattern matching and scheduled rules with examples." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 520</span>Two rule types. <strong>Event pattern</strong> rules react to matching events (S3 upload, Glue job state change). <strong>Schedule</strong> rules use cron or rate expressions — the EventBridge replacement for CloudWatch Events scheduled rules.</figcaption>
+          </figure>
+
+          <pre data-lang="json" data-title="EventBridge rule — S3 Object Created in a prefix" data-explain="Matches when a CSV is uploaded under raw/sales/. The rule target is a Step Functions state machine ARN. Enable EventBridge notifications on the S3 bucket (bucket property notification configuration)."><code>{
+  "source": ["aws.s3"],
+  "detail-type": ["Object Created"],
+  "detail": {
+    "bucket": { "name": ["dea-lab-ab-4821"] },
+    "object": { "key": [{ "prefix": "raw/sales/" }] }
+  }
+}</code></pre>
+
+          <h3>Event bus types</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-521.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-521.png" alt="Course slide table of EventBridge event bus types: default, custom and partner buses." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 521</span>Three bus types. The <strong>default bus</strong> receives AWS service events automatically. <strong>Custom buses</strong> isolate application events. <strong>Partner buses</strong> receive SaaS events (Datadog, Zendesk, etc.).</figcaption>
+          </figure>
+
+          <h3>Schema Registry</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-523.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-523.png" alt="Course slide on EventBridge Schema Registry with schema discovery, code generation and version management." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 523</span>Schema Registry discovers event schemas from traffic, versions them, and generates code bindings (Java, Python, Go). Useful when multiple teams publish to the same bus and need contract enforcement.</figcaption>
+          </figure>
+
+          <h3>Cross-account access and resource-based policies</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-524.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-524.png" alt="Course slide on EventBridge resource-based policies for cross-account access and granular control." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 524</span>Resource-based policies on custom event buses grant cross-account <code>events:PutEvents</code>. Combine with IAM on the sender side for defence in depth — common in multi-account data lake setups.</figcaption>
+          </figure>
+
+          <h3>EventBridge Pipes and archive/replay</h3>
+          <p><strong>EventBridge Pipes</strong> connect a single source (SQS, Kinesis, DynamoDB stream) to a target with optional filtering and enrichment — a point-to-point alternative to bus + rule when you do not need fan-out. <strong>Archive and replay</strong> stores matched events for up to 90 days and lets you re-drive them through the bus — invaluable for reprocessing a bad batch without re-uploading source files.</p>
+        </section>
+
+        <section class="section" id="pipeline-scenario">
+          <h2>Worked scenario: automating a retail data lake</h2>
+          <p class="lead">The deck walks through a complete pipeline: daily retail CSV files land in S3, EventBridge triggers a Step Functions workflow, a Lambda function validates headers, a Choice state branches on the result, and a Glue ETL job transforms passing files. This is the shape of a typical DEA-C01 scenario question.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-525.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-525.png" alt="Course slide introducing the scenario overview to understand tasks and the big picture." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 525</span>Scenario overview — read the whole pipeline before choosing services. The exam presents similar multi-step stories and asks which component fills each gap.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-527.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-527.png" alt="Course slide framing the practical scenario as a simplified end-to-end demonstration." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 527</span>Framing slide. The scenario is intentionally simplified — real pipelines add DLQs, idempotent writes and partition management, but the service choices stay the same.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-528.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-528.png" alt="Course slide stating the objective: automate the data processing pipeline focused on daily retail sales." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 528</span>Objective: eliminate manual daily processing of retail sales CSV uploads and produce validated, transformed data for reporting.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-529.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-529.png" alt="Course slide workflow overview with five steps: S3 ingestion, EventBridge validation trigger, Step Functions with Lambda, Choice state branching, and Glue ETL execution." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 529</span>Five-step workflow. Note the deck's step numbering jumps — the logical order is: ingest → EventBridge trigger → Lambda validation in Step Functions → Choice branch → Glue ETL.</figcaption>
+          </figure>
+
+          <div class="diagram">
+            <p class="diagram-title">Event-driven retail pipeline (animated flow)</p>
+            <div class="flow">
+              <div class="node is-source"><b>S3</b><small>raw/sales/*.csv</small></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-compute"><b>EventBridge</b><small>Object Created rule</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-compute pulse"><b>Step Functions</b><small>Validate → Choice</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-compute"><b>Glue ETL</b><small>.sync integration</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-store"><b>Redshift</b><small>curated tables</small></div>
+            </div>
+            <div class="flow" style="margin-top:14px;">
+              <div class="node is-serve"><b>SNS</b><small>success / failure alerts</small></div>
+            </div>
+          </div>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-530.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-530.png" alt="Course slide on pipeline outcomes: automation, reduced manual overhead, quick daily reports and ensured data quality." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 530</span>Expected outcomes. Automation and data quality are the exam keywords — manual cron jobs and "Lambda polls S3 every hour" are the distractors.</figcaption>
+          </figure>
+
+          <div class="slide-row">
+            <figure class="slide-fig">
+              <a href="assets/slides/slide-531.png" target="_blank" rel="noopener">
+                <img src="assets/slides/slide-531.png" alt="Course slide implementation steps 1-4: design workflow, S3 ingestion, EventBridge rule and Step Functions state machine." loading="lazy">
+              </a>
+              <figcaption><span class="slide-no">Slide 531</span>Implementation steps 1–4: design the ASL, configure S3 uploads, create the EventBridge rule targeting Step Functions, define the state machine logic.</figcaption>
+            </figure>
+            <figure class="slide-fig">
+              <a href="assets/slides/slide-532.png" target="_blank" rel="noopener">
+                <img src="assets/slides/slide-532.png" alt="Course slide implementation steps 5-8: Lambda validation, Choice state, Glue ETL job and CloudWatch monitoring." loading="lazy">
+              </a>
+              <figcaption><span class="slide-no">Slide 532</span>Implementation steps 5–8: validation Lambda, Choice branch, Glue job on success, CloudWatch monitoring and optimisation.</figcaption>
+            </figure>
+          </div>
+
+          <h3>Lambda validation function</h3>
+          <p>The validation Lambda reads the S3 object key from the Step Functions input, downloads the first line of the CSV, and checks that expected header names (<code>order_id, product_id, quantity, price, date</code>) are present. It returns <code>{ "valid": true }</code> or <code>{ "valid": false, "reason": "..." }</code> for the Choice state.</p>
+
+          <pre data-lang="json" data-title="Step Functions ASL — crawl, Glue ETL, branch on validation failure" data-explain="Standard workflow: run a Glue crawler, start an ETL job with .sync, catch failures and publish to SNS. The Choice state after ValidateHeaders routes invalid files to a Fail state instead of ETL."><code>{
+  "Comment": "Retail sales pipeline — validate then ETL",
+  "StartAt": "ValidateHeaders",
+  "States": {
+    "ValidateHeaders": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "sales-csv-validator",
+        "Payload.$": "$"
+      },
+      "ResultSelector": { "valid.$": "$.Payload.valid", "reason.$": "$.Payload.reason" },
+      "ResultPath": "$.validation",
+      "Next": "CheckValidation"
+    },
+    "CheckValidation": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.validation.valid",
+          "BooleanEquals": true,
+          "Next": "RunCrawler"
+        }
+      ],
+      "Default": "NotifyValidationFailure"
+    },
+    "RunCrawler": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:glue:startCrawler",
+      "Parameters": { "Name": "sales-raw-crawler" },
+      "Next": "RunEtlJob",
+      "Retry": [{ "ErrorEquals": ["Glue.CrawlerRunningException"], "IntervalSeconds": 30, "MaxAttempts": 5 }]
+    },
+    "RunEtlJob": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::glue:startJobRun.sync",
+      "Parameters": { "JobName": "sales-daily-etl" },
+      "ResultPath": "$.etlResult",
+      "Next": "NotifySuccess",
+      "Catch": [{ "ErrorEquals": ["States.ALL"], "Next": "NotifyEtlFailure", "ResultPath": "$.error" }]
+    },
+    "NotifySuccess": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sns:publish",
+      "Parameters": {
+        "TopicArn": "arn:aws:sns:us-east-1:123456789012:sales-pipeline-alerts",
+        "Message": "Daily sales ETL completed successfully"
+      },
+      "End": true
+    },
+    "NotifyValidationFailure": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sns:publish",
+      "Parameters": {
+        "TopicArn": "arn:aws:sns:us-east-1:123456789012:sales-pipeline-alerts",
+        "Message.$": "States.Format('Validation failed: {}', $.validation.reason)"
+      },
+      "Next": "ValidationFailed"
+    },
+    "NotifyEtlFailure": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sns:publish",
+      "Parameters": {
+        "TopicArn": "arn:aws:sns:us-east-1:123456789012:sales-pipeline-alerts",
+        "Message": "ETL job failed — check Glue logs"
+      },
+      "Next": "EtlFailed"
+    },
+    "ValidationFailed": { "Type": "Fail", "Cause": "CSV header validation failed" },
+    "EtlFailed": { "Type": "Fail", "Cause": "Glue ETL job failed" }
+  }
+}</code></pre>
+
+          <div class="callout exam"><strong>Why EventBridge instead of S3 → Lambda directly?</strong> EventBridge decouples the trigger from the workflow, supports cross-account routing, archive/replay, and multiple targets from one rule (Step Functions + SNS audit log). S3 event notifications to Lambda work for simple cases, but the exam prefers EventBridge when the scenario mentions routing, filtering or multiple consumers.</div>
+        </section>
+
+        <section class="section" id="appflow">
+          <h2>Amazon AppFlow</h2>
+          <p class="lead">Amazon AppFlow is a fully managed SaaS integration service. It moves data between applications like Salesforce, SAP, Slack and Snowflake and AWS services like S3, Redshift and Salesforce — with a no-code UI, field mapping, encryption and event-driven triggers.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-534.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-534.png" alt="Course slide on AppFlow purpose: secure SaaS integration with no-code interface and pre-built connectors for Salesforce, Snowflake and Slack." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 534</span>AppFlow positioning. When a question mentions ingesting from <strong>Salesforce or another SaaS app</strong> without building a custom API client, AppFlow beats Lambda + API calls.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-535.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-535.png" alt="Course slide diagram showing AppFlow sources and destinations between SaaS applications and AWS services." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 535</span>Sources (SaaS) and destinations (S3, Redshift, Snowflake on AWS). Flows are one-directional or bi-directional depending on connector support.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-537.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-537.png" alt="Course slide on AppFlow features: data transformation, bi-directional sync, event-driven flows and encryption with IAM." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 537</span>Key features. <strong>Event-driven flows</strong> start on SaaS events; <strong>field mapping</strong> renames and transforms columns; <strong>validation and masking</strong> filter PII before it lands in S3.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-538.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-538.png" alt="Course slide on AppFlow use cases: analytics aggregation, customer data sync and workflow automation." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 538</span>Use cases. "Unified customer view" across Salesforce and Redshift is the classic exam scenario — AppFlow extracts CRM data on a schedule into the lake.</figcaption>
+          </figure>
+        </section>
+
+        <section class="section" id="mwaa">
+          <h2>Amazon MWAA</h2>
+          <p class="lead">Amazon Managed Workflows for Apache Airflow (MWAA) runs open-source Airflow without you managing the scheduler, workers or web server. You upload DAGs in Python to S3; MWAA picks them up and executes tasks on a schedule or trigger.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-539.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-539.png" alt="Course slide title card for Amazon MWAA managed Apache Airflow." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 539</span>MWAA section opener. Choose MWAA when the team already knows Airflow, needs complex Python DAG dependencies, or when Step Functions' ASL feels too rigid.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-540.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-540.png" alt="Course slide on MWAA key features and use cases: auto-scaling, IAM and CloudWatch integration, complex ETL and ML pipeline orchestration." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 540</span>MWAA auto-scales workers, integrates with IAM and CloudWatch, and supports complex ETL, ML pipeline and event-driven automation use cases.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-541.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-541.png" alt="Course slide on Airflow DAGs written in Python representing extract transform load task dependencies." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 541</span>DAGs (Directed Acyclic Graphs) define task dependencies in Python. Execution order: extract → transform → load. Cycles are forbidden — a task cannot depend on itself transitively.</figcaption>
+          </figure>
+
+          <h3>S3 bucket layout for MWAA</h3>
+          <ul>
+            <li><code>dags/</code> — Python DAG files. MWAA syncs this prefix continuously.</li>
+            <li><code>plugins.zip</code> — custom Airflow plugins (operators, hooks, sensors).</li>
+            <li><code>requirements.txt</code> — additional Python packages installed on workers.</li>
+          </ul>
+
+          <h3>Environment classes</h3>
+          <p>MWAA environments come in sizes (<code>mw1.small</code>, <code>mw1.medium</code>, <code>mw1.large</code>) that control scheduler and worker capacity. Larger environments run more concurrent tasks. Billing is per environment-hour plus worker usage.</p>
+
+          <div class="callout tip"><strong>MWAA vs Step Functions vs Glue Workflows.</strong> MWAA wins when the team knows Python Airflow, needs rich scheduling (backfill, SLA sensors, complex dependencies) or runs hundreds of interdependent tasks. Step Functions wins for serverless, event-triggered pipelines with minimal ops. Glue Workflows win when every step is a Glue job/crawler/trigger — native integration, no extra orchestrator.</div>
+        </section>
+
+        <section class="section" id="sns">
+          <h2>Amazon SNS</h2>
+          <p class="lead">Amazon Simple Notification Service (SNS) is a fully managed pub/sub messaging service. Publishers send messages to a <strong>topic</strong>; SNS pushes copies to every subscribed endpoint — SQS queues, Lambda functions, HTTP/S endpoints, email, SMS and mobile push.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-543.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-543.png" alt="Course slide introducing SNS as pub/sub with topics and subscribers including SQS, Lambda, HTTP and email." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 543</span>SNS push model — messages are pushed to subscribers immediately. Contrast with SQS where consumers poll. High throughput, many subscribers.</figcaption>
+          </figure>
+
+          <h3>Standard vs FIFO topics</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-544.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-544.png" alt="Course slide comparing SNS standard topics for high throughput and FIFO topics for ordered exactly-once delivery with message grouping." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 544</span>Standard topics: high throughput, at-least-once, unordered. FIFO topics: strict ordering, exactly-once, deduplication — must pair with SQS FIFO queues.</figcaption>
+          </figure>
+
+          <h3>A2A vs A2P messaging</h3>
+          <div class="slide-row">
+            <figure class="slide-fig">
+              <a href="assets/slides/slide-545.png" target="_blank" rel="noopener">
+                <img src="assets/slides/slide-545.png" alt="Course slide on SNS application-to-application fan-out pattern with publishers, SNS topic and service provider subscribers." loading="lazy">
+              </a>
+              <figcaption><span class="slide-no">Slide 545</span><strong>A2A (application-to-application):</strong> the fan-out pattern — one event publishes to SNS, which fans out to SQS queues, Lambda and Firehose in parallel.</figcaption>
+            </figure>
+            <figure class="slide-fig">
+              <a href="assets/slides/slide-546.png" target="_blank" rel="noopener">
+                <img src="assets/slides/slide-546.png" alt="Course slide on SNS application-to-person messaging via mobile push, SMS and email with filter policies." loading="lazy">
+              </a>
+              <figcaption><span class="slide-no">Slide 546</span><strong>A2P (application-to-person):</strong> SMS, email and mobile push to humans. Filter policies let each subscriber receive only matching messages.</figcaption>
+            </figure>
+          </div>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-547.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-547.png" alt="Course slide on SNS publish methods: topic publish and direct publish to a specific endpoint." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 547</span>Two publish modes. <strong>Topic publish</strong> broadcasts to all subscribers. <strong>Direct publish</strong> targets one endpoint (mobile push token) without a topic.</figcaption>
+          </figure>
+
+          <h3>SNS-to-SQS fan-out</h3>
+          <div class="diagram">
+            <p class="diagram-title">SNS fan-out to multiple SQS queues</p>
+            <div class="flow">
+              <div class="node is-source"><b>Publisher</b><small>S3 · Lambda · App</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-compute pulse"><b>SNS Topic</b><small>sales-events</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-store"><b>SQS</b><small>analytics queue</small></div>
+            </div>
+            <div class="flow" style="margin-top:14px;">
+              <div class="node is-store"><b>SQS</b><small>audit queue</small></div>
+              <div class="node is-compute"><b>Lambda</b><small>real-time queue</small></div>
+            </div>
+          </div>
+
+          <pre data-lang="json" data-title="SQS queue policy — allow SNS to send messages" data-explain="Each SQS queue subscribed to an SNS topic needs a resource policy granting sns.amazonaws.com permission to sqs:SendMessage, scoped to the topic ARN. Without this policy, subscriptions silently fail to deliver."><code>{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Sid": "AllowSNSToSend",
+    "Effect": "Allow",
+    "Principal": { "Service": "sns.amazonaws.com" },
+    "Action": "sqs:SendMessage",
+    "Resource": "arn:aws:sqs:us-east-1:123456789012:analytics-queue",
+    "Condition": {
+      "ArnEquals": {
+        "aws:SourceArn": "arn:aws:sns:us-east-1:123456789012:sales-events"
+      }
+    }
+  }]
+}</code></pre>
+        </section>
+
+        <section class="section" id="sqs">
+          <h2>Amazon SQS</h2>
+          <p class="lead">Amazon Simple Queue Service (SQS) is a fully managed message queuing service. Producers send messages to a queue; consumers poll, process and explicitly delete. SQS decouples components so a slow consumer never blocks the producer.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-549.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-549.png" alt="Course slide introducing SQS as fully managed message queuing for decoupling microservices and asynchronous processing." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 549</span>SQS pull model. Messages persist up to 14 days (configurable retention). Consumers scale independently by adding more pollers.</figcaption>
+          </figure>
+
+          <h3>Message lifecycle</h3>
+          <div class="slide-row">
+            <figure class="slide-fig">
+              <a href="assets/slides/slide-550.png" target="_blank" rel="noopener">
+                <img src="assets/slides/slide-550.png" alt="Course slide diagram showing SQS message lifecycle with producers sending messages A through E to a distributed queue consumed by consumers." loading="lazy">
+              </a>
+              <figcaption><span class="slide-no">Slide 550</span>Messages arrive in the queue. Multiple consumers can poll, but each message is delivered to one consumer at a time.</figcaption>
+            </figure>
+            <figure class="slide-fig">
+              <a href="assets/slides/slide-551.png" target="_blank" rel="noopener">
+                <img src="assets/slides/slide-551.png" alt="Course slide showing consumer must delete message after processing; message A being processed while B through E wait." loading="lazy">
+              </a>
+              <figcaption><span class="slide-no">Slide 551</span>After processing, the consumer must <strong>DeleteMessage</strong>. Until then, the message is invisible to other consumers (visibility timeout). If not deleted in time, it reappears — at-least-once delivery.</figcaption>
+            </figure>
+          </div>
+
+          <h3>Visibility timeout, long polling and DLQ</h3>
+          <ul>
+            <li><strong>Visibility timeout:</strong> After a consumer receives a message, it is hidden for this period (default 30 s, max 12 hours). Set it longer than your processing time.</li>
+            <li><strong>Long polling:</strong> <code>WaitTimeSeconds</code> up to 20 — reduces empty responses and cost vs short polling in a tight loop.</li>
+            <li><strong>Dead-letter queue (DLQ):</strong> After <code>maxReceiveCount</code> failed processing attempts, the message moves to a DLQ for inspection — essential for poison-pill handling.</li>
+            <li><strong>Extended client:</strong> Payloads over 256 KB store the body in S3; the SQS message carries an S3 pointer. The open-source Amazon SQS Extended Client Library handles this transparently.</li>
+          </ul>
+
+          <h3>Standard vs FIFO queues</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-552.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-552.png" alt="Course slide comparing SQS Standard queues for high throughput and FIFO queues for ordering and exactly-once processing." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 552</span>Standard vs FIFO from the deck. The table below adds throughput numbers and deduplication behaviour.</figcaption>
+          </figure>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Feature</th><th>Standard</th><th>FIFO</th></tr></thead>
+              <tbody>
+                <tr><td>Ordering</td><td>Best-effort (no guarantee)</td><td>Strict FIFO within a message group</td></tr>
+                <tr><td>Throughput</td><td>Nearly unlimited</td><td>300 msg/sec per API (3,000 with batching)</td></tr>
+                <tr><td>Deduplication</td><td>None — duplicates possible</td><td>Content-based or deduplication ID — no duplicates in a 5-minute window</td></tr>
+                <tr><td>Delivery guarantee</td><td>At-least-once</td><td>Exactly-once processing</td></tr>
+                <tr><td>Queue name</td><td>Any name</td><td>Must end in <code>.fifo</code></td></tr>
+                <tr><td>Use case</td><td>High throughput, order irrelevant — log ingestion, image processing</td><td>Order critical — financial transactions, inventory updates</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-553.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-553.png" alt="Course slide comparing SQS and Kinesis Data Streams on decoupling, retention, scaling and ordering." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 553</span>SQS vs Kinesis (<a href="s06-streaming.html">Section 6</a>). SQS decouples components with per-message ack; Kinesis streams records for replay with shard ordering. Choose SQS for task queues; Kinesis for real-time analytics and replay.</figcaption>
+          </figure>
+
+          <pre data-lang="python" data-title="boto3 — SQS receive and delete loop" data-explain="Long-poll for messages, process, then delete. If processing fails, do not delete — the message returns after visibility timeout for retry or DLQ routing."><code>import boto3
+
+sqs = boto3.client("sqs", region_name="us-east-1")
+queue_url = "https://sqs.us-east-1.amazonaws.com/123456789012/analytics-queue"
+
+while True:
+    resp = sqs.receive_message(
+        QueueUrl=queue_url,
+        MaxNumberOfMessages=10,
+        WaitTimeSeconds=20,          # long polling
+        VisibilityTimeout=60,
+    )
+    for msg in resp.get("Messages", []):
+        body = msg["Body"]
+        receipt_handle = msg["ReceiptHandle"]
+        try:
+            process(body)            # your business logic
+            sqs.delete_message(QueueUrl=queue_url, ReceiptHandle=receipt_handle)
+        except Exception:
+            pass                     # message reappears after visibility timeout</code></pre>
+        </section>
+
+        <section class="section" id="api-gateway">
+          <h2>Amazon API Gateway</h2>
+          <p class="lead">Amazon API Gateway is a fully managed service for creating, publishing and securing HTTP APIs at scale. It sits in front of Lambda, HTTP backends, AWS services and mock integrations — handling authentication, throttling, caching and usage plans.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-554.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-554.png" alt="Course slide title card for Amazon API Gateway." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 554</span>API Gateway section opener. The exam tests REST vs HTTP vs WebSocket and endpoint types more than advanced mapping templates.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-555.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-555.png" alt="Course slide on API Gateway REST and WebSocket APIs for CRUD operations and real-time communication." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 555</span><strong>REST APIs</strong> — full feature set, API keys, request validation, WAF. <strong>WebSocket APIs</strong> — persistent two-way connections for chat and live dashboards.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-556.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-556.png" alt="Course slide on HTTP APIs as lower-latency lower-cost RESTful APIs with OIDC, OAuth 2.0 and CORS support." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 556</span><strong>HTTP APIs</strong> — cheaper and lower latency than REST APIs; built-in JWT authorisers (OIDC/OAuth 2.0) and CORS. Pick HTTP API unless you need usage plans, API keys or request validation.</figcaption>
+          </figure>
+
+          <h3>Integration types</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-557.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-557.png" alt="Course slide on API Gateway integrations: Lambda, DynamoDB, S3, HTTP endpoints, mock and AWS proxy integration." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 557</span>Integration options. <strong>AWS proxy</strong> passes the full request as JSON to Lambda. <strong>HTTP integration</strong> forwards to any URL. <strong>Mock</strong> returns a static response for testing.</figcaption>
+          </figure>
+
+          <h3>Throttling, quotas and usage plans</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-558.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-558.png" alt="Course slide on API Gateway throttling, quotas and rate limiting with usage plans and API keys." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 558</span>Traffic control layers. <strong>Throttling</strong> limits requests per second (account-level 10,000 RPS default, burst 5,000). <strong>Usage plans</strong> tie API keys to per-client quotas — the monetisation pattern for exposing data APIs.</figcaption>
+          </figure>
+
+          <h3>API caching</h3>
+          <p>REST and HTTP APIs can cache responses at the stage level. Enable caching on a stage, set a cache cluster size (0.5 GB to 237 GB), and mark method-level cache keys — API Gateway returns cached responses for identical requests without invoking the backend. Default TTL is 300 seconds (max 3,600). Edge-optimised endpoints cache at CloudFront edge locations; regional endpoints cache within the region. Use caching when the same read-heavy query (e.g. a dashboard API over curated data) is requested repeatedly — it reduces Lambda invocations and backend load. Do not cache responses that vary per user unless the cache key includes the authorisation header or a user-specific path parameter.</p>
+
+          <h3>Endpoint types</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-559.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-559.png" alt="Course slide on API Gateway endpoint types: edge-optimised with CloudFront, regional without CloudFront, and private within VPC." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 559</span>Three endpoint types. <strong>Edge-optimised</strong> — CloudFront distribution, lowest latency globally. <strong>Regional</strong> — no CloudFront, lowest latency within one region. <strong>Private</strong> — accessible only via VPC endpoint (PrivateLink), never exposed to the public internet.</figcaption>
+          </figure>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Endpoint type</th><th>URL pattern</th><th>Best for</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Edge-optimised</strong></td><td><code>abc123.execute-api.amazonaws.com</code></td><td>Global clients; CloudFront caches responses</td></tr>
+                <tr><td><strong>Regional</strong></td><td><code>abc123.execute-api.us-west-2.amazonaws.com</code></td><td>Same-region clients; you manage your own CloudFront if needed</td></tr>
+                <tr><td><strong>Private</strong></td><td><code>vpce-…execute-api…amazonaws.com</code></td><td>Internal microservices inside a VPC only</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="section" id="orchestration-decisions">
+          <h2>Orchestration decision table</h2>
+          <p class="lead">The exam repeatedly asks which orchestrator fits a scenario. Use this table as your tie-breaker — the qualifier in the question (<em>least operational overhead</em>, <em>complex dependencies</em>, <em>event-driven</em>) picks the row.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Orchestrator</th><th>Good at</th><th>Cost model</th><th>Visibility / retry</th><th>Ops overhead</th></tr></thead>
+              <tbody>
+                <tr>
+                  <td><strong>Step Functions</strong></td>
+                  <td>Visual ASL workflows, error handling, <code>.sync</code> on Glue/Lambda, human approval, audit trail</td>
+                  <td>Per state transition (Standard) or per execution + duration (Express)</td>
+                  <td>Full execution history; built-in Retry/Catch</td>
+                  <td>Low — serverless</td>
+                </tr>
+                <tr>
+                  <td><strong>EventBridge</strong></td>
+                  <td>Event routing, filtering, scheduling, fan-out to many targets, cross-account, archive/replay</td>
+                  <td>Per million events published</td>
+                  <td>CloudWatch metrics per rule; no built-in retry on targets (use DLQ on SQS target)</td>
+                  <td>Lowest — no workflow state</td>
+                </tr>
+                <tr>
+                  <td><strong>MWAA (Airflow)</strong></td>
+                  <td>Complex Python DAGs, backfill, SLA sensors, hundreds of interdependent tasks, ML pipelines</td>
+                  <td>Per environment-hour + worker capacity</td>
+                  <td>Airflow UI with task logs; retries configured per task</td>
+                  <td>Medium — managed but you maintain DAGs, plugins, requirements</td>
+                </tr>
+                <tr>
+                  <td><strong>Glue Workflows</strong></td>
+                  <td>Sequences of Glue crawlers, jobs and triggers — all Glue, nothing else</td>
+                  <td>Glue DPU-hours only</td>
+                  <td>Glue console workflow graph; job-level retries</td>
+                  <td>Low — when every step is already Glue</td>
+                </tr>
+                <tr>
+                  <td><strong>Lambda chaining</strong></td>
+                  <td>Two or three simple steps, no branching, low volume</td>
+                  <td>Per invocation + duration</td>
+                  <td>CloudWatch Logs per function; manual retry logic</td>
+                  <td>Low initially; becomes unmaintainable beyond ~3 steps</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout exam"><strong>Typical combos.</strong> EventBridge triggers Step Functions (event → orchestration). SNS fans out to SQS queues (one event → many async workers). Step Functions calls Glue with <code>.sync</code> (orchestration → transform). MWAA DAG invokes Glue operators (Python-native ETL schedule). Do not chain more than three Lambdas when Step Functions is available.</div>
+        </section>
+
+        <section class="section" id="deeper">
+          <h2>Deeper detail and exam edge cases</h2>
+          <p class="lead">Billing meters, hard limits, and integration traps for Step Functions, EventBridge, messaging, and API front doors — the operational detail scenario questions assume when they say "least operational overhead" or "exactly-once".</p>
+
+          <h3>Limits and quotas that decide answers</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Limit</th><th>Value</th><th>Adjustable?</th><th>Why it matters</th></tr></thead>
+              <tbody>
+                <tr><td>Step Functions Standard max duration</td><td>1 year</td><td>No (hard)</td><td>Long ETL with Glue <code>.sync</code> and human approval → Standard.</td></tr>
+                <tr><td>Step Functions Express max duration</td><td>5 minutes</td><td>No (hard)</td><td>High-volume sub-five-minute chains; cannot wrap a long Glue job.</td></tr>
+                <tr><td>Step Functions execution payload</td><td>256 KB state input/output per transition</td><td>Workaround — store large data in S3, pass pointer in state</td><td>Passing full CSV contents in JSON fails; use S3 keys.</td></tr>
+                <tr><td>Step Functions Standard delivery</td><td>Exactly-once workflow execution</td><td>N/A (semantics)</td><td>Retries do not double-charge side effects if tasks are idempotent.</td></tr>
+                <tr><td>Step Functions Express delivery</td><td>At-least-once — tasks may run more than once</td><td>N/A</td><td>Design Express steps idempotent; duplicates on retry.</td></tr>
+                <tr><td>Map state concurrency</td><td>Inline Map up to 40 concurrent iterations (default); Distributed Map scales to tens of thousands</td><td>Yes — set MaxConcurrency</td><td>"Millions of S3 objects" → Distributed Map with inventory manifest.</td></tr>
+                <tr><td>EventBridge event size</td><td>256 KB per event</td><td>No (hard)</td><td>Large payloads go in S3; event carries metadata only.</td></tr>
+                <tr><td>EventBridge failed delivery retry</td><td>Up to 24 hours with exponential backoff</td><td>Configure DLQ on target</td><td>After retry window, events go to DLQ or drop — set DLQ for audit.</td></tr>
+                <tr><td>SQS message size</td><td>256 KB max body</td><td>Extended Client Library → S3 pointer</td><td>Large JSON payloads need S3 + pointer pattern.</td></tr>
+                <tr><td>SQS Standard throughput</td><td>Unlimited (soft)</td><td>N/A</td><td>At-least-once, best-effort ordering.</td></tr>
+                <tr><td>SQS FIFO throughput</td><td>300 msg/s (3,000 with batching); 30,000 with high-throughput mode</td><td>Yes — enable HT FIFO</td><td>Strict ordering per message group ID costs throughput.</td></tr>
+                <tr><td>SQS message retention</td><td>1 minute to 14 days (default 4 days)</td><td>Yes — queue setting</td><td>Longer retention buffers downstream outages.</td></tr>
+                <tr><td>SNS FIFO topics</td><td>Must subscribe FIFO SQS queues only</td><td>No (pairing rule)</td><td>Standard queue + FIFO topic is invalid.</td></tr>
+                <tr><td>MWAA scale-to-zero</td><td>Not supported — environment bills while created</td><td>No</td><td>Scheduler + workers run 24×7 at environment size.</td></tr>
+                <tr><td>API Gateway integration timeout</td><td>29 seconds by default</td><td>Yes for Regional REST and HTTP APIs — quota increase to 900 s</td><td>Long Glue/Athena work should still be async — Step Functions <code>.sync</code> or SQS worker.</td></tr>
+                <tr><td>API Gateway account throttle</td><td>10,000 requests/s default (5,000 burst)</td><td>Yes — limit increase request</td><td>Usage plans cap per API key below account ceiling.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout info"><strong>The 29-second timeout is no longer absolute.</strong> AWS made the API Gateway integration timeout adjustable in 2024: Regional REST APIs and HTTP APIs can be raised as far as 900 seconds through a quota increase. The exam and most course material still treat 29 seconds as the ceiling, and the async pattern is still the right architecture, so answer 29 seconds unless a question explicitly mentions the raised quota.</div>
+
+          <h3>What you actually pay for</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Billed dimension</th><th>Unit</th><th>How to spend less</th></tr></thead>
+              <tbody>
+                <tr><td>Step Functions Standard</td><td>Per state transition</td><td>Combine states; avoid tight Retry loops; use Express for high-volume short flows.</td></tr>
+                <tr><td>Step Functions Express</td><td>Per execution + duration (memory × GB-seconds)</td><td>Keep workflows under 5 minutes; idempotent steps tolerate at-least-once.</td></tr>
+                <tr><td>EventBridge custom events</td><td>Per million events published</td><td>Filter at source; use Pipes for point-to-point instead of duplicate rules.</td></tr>
+                <tr><td>EventBridge Scheduler</td><td>Per million invocations</td><td>One-off and cron schedules — compare with rate rules on the bus for recurring patterns.</td></tr>
+                <tr><td>SQS</td><td>Per million requests (send/receive/delete)</td><td>Long polling reduces empty receives; batch send/receive.</td></tr>
+                <tr><td>SNS</td><td>Per million publishes + per subscription delivery</td><td>Filter policies on subscriptions so queues only receive relevant events.</td></tr>
+                <tr><td>MWAA environment</td><td>Environment-hour by size (mw1.small/medium/large)</td><td>Right-size environment; delete dev environments when not in use — no pause.</td></tr>
+                <tr><td>MWAA workers / scheduler</td><td>Included in environment pricing tier; scales with size</td><td>Reduce concurrent DAG tasks; avoid oversized mw1.large for small teams.</td></tr>
+                <tr><td>AppFlow</td><td>Per flow run + per GB processed</td><td>Schedule flows; filter fields at source; avoid full-table sync when incremental connector supports it.</td></tr>
+                <tr><td>API Gateway REST</td><td>Per million requests (higher than HTTP API)</td><td>HTTP API when JWT auth suffices; REST only for usage plans and WAF.</td></tr>
+                <tr><td>API Gateway HTTP</td><td>Lower per-request cost than REST</td><td>Default for Lambda proxy integrations without API keys.</td></tr>
+                <tr><td>Cross-AZ data transfer</td><td>Per GB between AZs</td><td>Co-locate Lambda, SQS, and consumers in same AZ where possible.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout cost"><strong>Biggest waste in this section.</strong> An MWAA environment left running after a proof-of-concept bills environment-hours continuously with no scale-to-zero — often more than the entire Step Functions pipeline it replaced. Delete dev environments or use Step Functions for intermittent orchestration.</div>
+          <div class="callout danger"><strong>Express at-least-once duplicates.</strong> A non-idempotent Lambda in an Express workflow can insert duplicate rows on retry. Standard gives exactly-once workflow semantics but costs more per transition — pick semantics first, price second.</div>
+
+          <h3>Traps that catch people</h3>
+          <ul>
+            <li><strong>Express for long Glue jobs —</strong> Express caps at five minutes. A Glue ETL job needs Standard with <code>.sync</code> or an async pattern with callbacks.</li>
+            <li><strong>256 KB state payload —</strong> Embedding query results in Step Functions state fails. Store in S3; pass bucket/key in JSON.</li>
+            <li><strong>Standard vs Express retry semantics —</strong> Express may deliver twice; payment or inventory side effects need idempotency keys.</li>
+            <li><strong>Visibility timeout too short —</strong> Lambda still processing when timeout expires → duplicate invocations. Set visibility ≥ 6× Lambda timeout for event-source mappings.</li>
+            <li><strong>FIFO throughput without high-throughput mode —</strong> 300 messages/s per queue surprises teams at peak. Enable batching or high-throughput FIFO.</li>
+            <li><strong>SNS FIFO to Standard SQS —</strong> Subscription fails or behaves incorrectly. Pair FIFO topic with FIFO queue.</li>
+            <li><strong>API Gateway sync call to Athena —</strong> the default 29-second integration timeout kills long queries. Return 202 and poll, or use Step Functions.</li>
+            <li><strong>EventBridge without DLQ —</strong> After 24-hour retry window, failed deliveries disappear. Attach SQS DLQ to targets for poison events.</li>
+            <li><strong>MWAA plugin/version drift —</strong> Unpinned <code>requirements.txt</code> breaks DAG imports on MWAA upgrade. Pin provider package versions.</li>
+            <li><strong>AppFlow connector limits —</strong> Not every SaaS field or object is supported. Validate connector docs before promising full CRM replication.</li>
+            <li><strong>Chaining Lambdas instead of Step Functions —</strong> Three+ Lambdas in sequence loses audit trail, retry logic, and error routing — exam prefers Step Functions.</li>
+            <li><strong>HTTP API for monetised data API —</strong> Usage plans and API keys require REST API, not HTTP API.</li>
+          </ul>
+
+          <h3>Troubleshooting playbook</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Symptom</th><th>Most likely cause</th><th>What to check / fix</th></tr></thead>
+              <tbody>
+                <tr><td>Step Functions execution <code>States.DataLimitExceeded</code></td><td>State payload &gt; 256 KB</td><td>Write large output to S3; pass URI in state; use ResultSelector to trim fields.</td></tr>
+                <tr><td>Glue step never waited for completion</td><td>Missing <code>.sync</code> on integration ARN</td><td>Use <code>arn:aws:states:::glue:startJobRun.sync</code>; check execution event history.</td></tr>
+                <tr><td>SQS messages processed twice</td><td>Visibility timeout &lt; processing time</td><td>Increase <code>VisibilityTimeout</code>; extend heartbeat; tune Lambda timeout.</td></tr>
+                <tr><td>Messages in DLQ</td><td>Poison message or repeated handler exceptions</td><td>Inspect DLQ body; fix handler; redrive after fix; check <code>maxReceiveCount</code> on redrive policy.</td></tr>
+                <tr><td>EventBridge rule never fires</td><td>Pattern mismatch or wrong bus</td><td>Event archive/sample; test pattern in console; confirm custom vs default bus.</td></tr>
+                <tr><td>MWAA DAG import error</td><td>Plugin or Python dependency failure</td><td>MWAA environment error logs in CloudWatch; validate <code>requirements.txt</code> and <code>plugins.zip</code>.</td></tr>
+                <tr><td>AppFlow run partial data</td><td>Connector throttling or field mapping error</td><td>AppFlow run history; reduce batch size; check Salesforce API limits.</td></tr>
+                <tr><td>API Gateway 504 Gateway Timeout</td><td>Backend exceeds 29 s</td><td>Async pattern: SQS + worker; Step Functions; reduce query scope.</td></tr>
+                <tr><td>API 429 Too Many Requests</td><td>Stage or account throttle</td><td>CloudWatch <code>Count</code> metric with <code>Throttle</code>; raise limit or usage plan quota.</td></tr>
+                <tr><td>Distributed Map stuck</td><td>S3 inventory manifest stale or wrong prefix</td><td>Verify manifest bucket/key; IAM on state machine role for S3 List/Get.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Production patterns</h3>
+          <p>Event-driven lake ingestion: S3 Object Created → EventBridge rule on the default bus → Step Functions Standard with Lambda validation, Choice branch, Glue <code>.sync</code>, and SNS failure notification. Fan-out to multiple teams uses EventBridge → SNS → filtered SQS queues per consumer. Scheduled batch uses EventBridge Scheduler or rate rules; complex Python DAGs with backfill stay on MWAA.</p>
+          <div class="grid-2">
+            <div class="mini-card">
+              <h4>Serverless orchestration</h4>
+              <ul>
+                <li>Step Functions Standard for durable ETL with <code>Retry</code>/<code>Catch</code> and Map over prefixes.</li>
+                <li>Distributed Map + S3 inventory for million-object backfills.</li>
+                <li>Express for high-volume validation chains under five minutes.</li>
+              </ul>
+            </div>
+            <div class="mini-card">
+              <h4>Decoupled workers</h4>
+              <ul>
+                <li>SNS filter policies → multiple SQS queues.</li>
+                <li>FIFO queues when ordering per entity ID matters.</li>
+                <li>DLQ + redrive after fixing poison payloads.</li>
+              </ul>
+            </div>
+          </div>
+          <p>Anti-pattern: synchronous API Gateway → Lambda → Glue for multi-minute transforms. API Gateway times out at 29 seconds; the client sees 504 while work continues orphaned. Pattern: API returns job ID, Step Functions or SQS worker runs the transform, client polls status.</p>
+          <div class="diagram">
+            <p class="diagram-title">Event-driven ETL trigger</p>
+            <div class="flow">
+              <div class="node is-source"><b>S3 upload</b><small>raw/sales/</small></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-store"><b>EventBridge</b><small>pattern rule</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-compute pulse"><b>Step Functions</b><small>Standard · .sync</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-serve"><b>Glue ETL</b><small>curated/</small></div>
+            </div>
+          </div>
+<pre data-lang="json" data-title="SQS redrive policy — route poison messages to DLQ" data-explain="After maxReceiveCount failed receives, SQS moves the message to the dead-letter queue for inspection without blocking the main queue."><code>{
+  "deadLetterTargetArn": "arn:aws:sqs:us-east-1:123456789012:dea-etl-dlq",
+  "maxReceiveCount": 3
+}</code></pre>
+
+          <h3>Where this fits with the rest of the exam</h3>
+          <p>Section 15 is the glue between ingestion, transform, and ops services. Almost every pipeline scenario in Domain 1 routes through at least one service here — the exam tests whether you pick orchestration, messaging, or HTTP entry correctly.</p>
+          <ul>
+            <li><a href="s04-glue.html#workflows">Section 4 — Glue Workflows</a>: Native Glue-only orchestration without Step Functions — compare when every step is Glue versus mixed Lambda/Glue.</li>
+            <li><a href="s05-lambda.html">Section 5 — Lambda</a>: Lambda integrates with API Gateway, SQS, EventBridge, and Step Functions — timeout and idempotency limits apply everywhere.</li>
+            <li><a href="s06-streaming.html#kinesis-data-streams">Section 6 — Kinesis</a>: EventBridge Pipes can connect streams to targets; contrast with Firehose direct delivery.</li>
+            <li><a href="s02-data-ingestion.html">Section 2 — Data Ingestion</a>: AppFlow complements batch S3 landing for SaaS sources.</li>
+            <li><a href="s16-management.html#cloudwatch">Section 16 — CloudWatch</a>: Alarms on Step Functions <code>ExecutionsFailed</code>, SQS <code>ApproximateAgeOfOldestMessage</code>, API Gateway 5xx.</li>
+            <li><a href="s14-sagemaker.html">Section 14 — SageMaker</a>: SageMaker Pipelines for ML-native steps; Step Functions when mixing Glue, Lambda, and approval gates.</li>
+          </ul>
+          <div class="callout exam"><strong>How the exam frames orchestration.</strong> "Durable multi-hour ETL with audit trail" → Step Functions Standard. "High-volume sub-five-minute event routing" → Express. "Team knows Airflow, complex DAG backfill" → MWAA. "Salesforce to S3 least ops" → AppFlow. "Decouple producers from consumers with optional filtering" → SNS + SQS, not direct Lambda invoke. "Expose curated data via HTTP with API keys" → API Gateway REST with usage plans.</div>
+        </section>
+
+        <section class="section" id="interview">
+          <h2>Interview questions</h2>
+          <p class="muted">Answer each one out loud before opening it.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+            <details class="qa">
+              <summary>When would you choose Step Functions Standard over Express?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p>Choose <strong>Standard</strong> when the workflow runs longer than five minutes, needs a full audit trail of every state transition, requires complex state types (Map, Parallel, nested workflows), or must be exactly-once durable — typical ETL pipelines with Glue <code>.sync</code>, human approval gates and SNS notifications on failure. Choose <strong>Express</strong> for high-volume, sub-five-minute event processing where cost per execution matters more than history retention.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Explain the difference between EventBridge and SNS.<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p><strong>EventBridge</strong> is an event bus with content-based filtering — rules match on JSON event patterns and route to targets. It supports scheduled rules, schema registry, archive/replay and cross-account buses. <strong>SNS</strong> is a pub/sub notification service — publishers send to a topic and all subscribers receive a copy with optional filter policies. EventBridge is for application integration and event routing; SNS is for fan-out notifications and decoupling publishers from multiple consumers. They are often combined: EventBridge rule → SNS topic → multiple SQS queues.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What does the Choice state do in Step Functions and when do you use a Wait state?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p><strong>Choice</strong> evaluates JSONPath conditions and routes to different next states — no task is executed. Use it after validation steps ("if valid → ETL, else → Fail"). <strong>Wait</strong> pauses the workflow for a fixed number of seconds or until a timestamp — use it to throttle downstream calls, wait for an external system, or delay before retrying a dependency that is not ready.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How does SNS-to-SQS fan-out work and what policy is required?<span class="qa-tag">Architecture</span></summary>
+              <div class="qa-body">
+                <p>Subscribe each SQS queue to the SNS topic. When a message is published, SNS delivers a copy to every subscribed queue. Each queue needs a <strong>resource-based policy</strong> allowing <code>sns.amazonaws.com</code> to call <code>sqs:SendMessage</code>, with an <code>aws:SourceArn</code> condition matching the topic ARN. Consumers poll their queue independently — classic decoupled microservices pattern.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Standard SQS vs FIFO — a payment processing system needs strict ordering per account. Which queue type?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p><strong>FIFO</strong>. Standard queues offer best-effort ordering — two debits for the same account could be processed out of order. FIFO guarantees strict ordering within a message group (use <code>account_id</code> as the message group ID) and exactly-once processing with deduplication. Accept the throughput limit (300 msg/sec, 3,000 batched) or shard across multiple FIFO queues by account range.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What is the visibility timeout and what happens if your Lambda processing takes longer than it?<span class="qa-tag">Troubleshooting</span></summary>
+              <div class="qa-body">
+                <p>When a consumer receives a message, it becomes invisible to other consumers for the visibility timeout period. If the consumer does not delete it before the timeout expires, the message becomes visible again and another consumer may pick it up — resulting in duplicate processing. Set visibility timeout to at least six times the Lambda timeout (AWS recommendation for Lambda-SQS integration) or use partial batch failure reporting.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>When would you pick MWAA over Step Functions for a data pipeline?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>Pick <strong>MWAA</strong> when the team already uses Airflow, the DAG has complex Python dependencies and backfill requirements, or you need Airflow-specific features (SLA sensors, branching operators, hundreds of tasks with intricate dependencies). Pick <strong>Step Functions</strong> when the pipeline is event-triggered, serverless, has fewer than ~20 steps, and the team prefers visual ASL over Python DAGs — lower ops overhead and no environment to size.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>AppFlow vs Lambda calling the Salesforce API — how do you decide?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p><strong>AppFlow</strong> when you need a managed connector with field mapping, scheduling, bi-directional sync, encryption and no code — especially for recurring Salesforce → S3/Redshift loads. <strong>Lambda + API</strong> when you need custom transformation logic mid-stream, real-time reaction to individual records, or a SaaS source AppFlow does not support. The exam almost always prefers AppFlow for "least operational overhead" SaaS ingestion.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>API Gateway REST vs HTTP API — when is REST still the right choice?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p><strong>HTTP APIs</strong> are cheaper and faster for straightforward Lambda/HTTP proxy integrations with JWT auth. Choose <strong>REST APIs</strong> when you need API keys with usage plans (monetisation), request validation against a model, AWS WAF integration, or private API with resource policies. WebSocket APIs are a separate choice for persistent connections.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What is EventBridge Pipes and how does it differ from an event bus rule?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p><strong>Pipes</strong> connect one specific source (SQS, Kinesis, DynamoDB stream, MQ) directly to one target with optional filtering and enrichment — point-to-point, no bus. A <strong>bus rule</strong> matches events from potentially many producers and fans out to multiple targets. Use Pipes when a single stream feeds a single processor with enrichment; use bus + rules when many event types need routing to different consumers.</p>
+              </div>
+            </details>
+          </div>
+        </section>
+
+        <section class="section" id="practice">
+          <h2>Hands-on practice</h2>
+          <p class="muted">Free tier where possible. Delete everything at the end of each task.</p>
+          <ol class="practice-list">
+            <li class="practice">
+              <p class="practice-task">Create a Step Functions Standard state machine with two states: invoke a Lambda that validates <code>data/customers.csv</code> headers, then a Choice state that succeeds or fails based on the result. Trigger it manually from the console.</p>
+              <span class="console-path">Step Functions → State machines → Create state machine</span>
+              <p class="practice-expect">Executions show green for valid headers, red with Cause "CSV header validation failed" when you test with a bad file.</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">Console</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Create a Lambda <code>csv-validator</code> that reads an S3 key from the event and returns <code>{"valid": true/false}</code>.</li>
+                    <li>Create a Standard state machine using the ASL from the pipeline scenario (ValidateHeaders → CheckValidation only).</li>
+                    <li>Start execution with input <code>{"bucket": "dea-lab-…", "key": "raw/customers/customers.csv"}</code>.</li>
+                  </ol>
+                  <p class="muted">Cleanup: delete the state machine and Lambda function.</p>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Create an EventBridge rule that matches S3 Object Created events under <code>raw/</code> in your lab bucket and targets the Step Functions state machine from task 1.</p>
+              <span class="console-path">EventBridge → Rules → Create rule</span>
+              <p class="practice-expect">Uploading a file to <code>raw/test/</code> automatically starts a Step Functions execution.</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">Console</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>On the S3 bucket, enable <strong>EventBridge notifications</strong> (Properties → Event notifications).</li>
+                    <li>EventBridge → Create rule → event pattern → AWS services → S3 → Object Created → filter prefix <code>raw/</code>.</li>
+                    <li>Target: Step Functions state machine → select yours → create a role.</li>
+                  </ol>
+                  <p class="muted">Cleanup: disable the rule and delete it.</p>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Create an SNS topic, two SQS queues subscribed to it, and verify fan-out by publishing one message and receiving it in both queues.</p>
+              <span class="console-path">SNS → Topics → Create topic → Add subscribers</span>
+              <p class="practice-expect">Both queues receive the same message body after one SNS publish.</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">Console + CLI</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Create topic <code>lab-fanout</code>.</li>
+                    <li>Create queues <code>analytics-queue</code> and <code>audit-queue</code>.</li>
+                    <li>Subscribe both queues — SNS prompts to set the SQS access policy automatically.</li>
+                    <li>Publish a test message; poll each queue with the boto3 snippet from the SQS section.</li>
+                  </ol>
+<pre data-lang="shell"><code>aws sns publish --topic-arn arn:aws:sns:us-east-1:123456789012:lab-fanout \
+  --message "fan-out test"</code></pre>
+                  <p class="muted">Cleanup: delete subscriptions, queues and topic.</p>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Create an HTTP API in API Gateway that integrates with a Lambda function returning a JSON health check. Invoke it from curl.</p>
+              <span class="console-path">API Gateway → Create API → HTTP API → Integrations → Lambda</span>
+              <p class="practice-expect"><code>curl $API_ENDPOINT/health</code> returns <code>{"status": "ok"}</code>.</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">Console</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Create a Lambda <code>health-check</code> returning <code>{"statusCode": 200, "body": "{\"status\": \"ok\"}"}</code>.</li>
+                    <li>API Gateway → HTTP API → Add integration → Lambda → route <code>GET /health</code>.</li>
+                    <li>Deploy to <code>$default</code> stage; copy the invoke URL.</li>
+                  </ol>
+                  <p class="muted">Cleanup: delete the API and Lambda.</p>
+                </div>
+              </details>
+            </li>
+          </ol>
+        </section>
+
+        <section class="section" id="recap">
+          <h2>Recap</h2>
+          <div class="recap">
+            <ul class="checklist">
+              <li>Step Functions: state machine = workflow; Task, Choice, Wait, Map, Parallel; ASL is JSON.</li>
+              <li>Standard = durable, auditable, up to 1 year; Express = high volume, ≤5 min, at-least-once.</li>
+              <li>Glue integration: <code>arn:aws:states:::glue:startJobRun.sync</code> waits for job completion.</li>
+              <li>EventBridge: event bus + rules (pattern or schedule); default, custom and partner buses; archive/replay.</li>
+              <li>Pipeline pattern: S3 → EventBridge → Step Functions → Lambda validate → Choice → Glue ETL → SNS alert.</li>
+              <li>AppFlow: no-code SaaS → AWS (Salesforce, Slack → S3/Redshift); field mapping and event-driven flows.</li>
+              <li>MWAA: managed Airflow; DAGs in <code>dags/</code>, <code>plugins.zip</code>, <code>requirements.txt</code> on S3.</li>
+              <li>SNS = push pub/sub fan-out; SQS = pull queue; SNS-to-SQS needs queue resource policy.</li>
+              <li>SQS Standard = high throughput, at-least-once; FIFO = ordered, exactly-once, 300–3,000 msg/sec.</li>
+              <li>API Gateway: REST (full features) vs HTTP (cheaper) vs WebSocket; edge / regional / private endpoints.</li>
+              <li>Orchestration pick: Step Functions (serverless workflows), EventBridge (routing), MWAA (Python DAGs), Glue Workflows (Glue-only).</li>
+            </ul>
+            <p style="margin-top:1rem;">
+              <button type="button" data-complete="section-15">Mark complete</button>
+            </p>
+          </div>
+        </section>
+
+      </div>
+
+      <aside class="toc" aria-label="On this page">
+        <strong>On this page</strong>
+        <ol>
+          <li><a href="#lectures">Lectures</a></li>
+          <li><a href="#step-functions">Step Functions</a></li>
+          <li><a href="#eventbridge">EventBridge</a></li>
+          <li><a href="#pipeline-scenario">Pipeline scenario</a></li>
+          <li><a href="#appflow">AppFlow</a></li>
+          <li><a href="#mwaa">MWAA</a></li>
+          <li><a href="#sns">SNS</a></li>
+          <li><a href="#sqs">SQS</a></li>
+          <li><a href="#api-gateway">API Gateway</a></li>
+          <li><a href="#orchestration-decisions">Orchestration decisions</a></li>
+          <li><a href="#deeper">Deeper detail</a></li>
+          <li><a href="#interview">Interview questions</a></li>
+          <li><a href="#practice">Hands-on practice</a></li>
+          <li><a href="#recap">Recap</a></li>
+        </ol>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<footer class="footer">AWS Certified Data Engineer Associate (DEA-C01) · Section 15 · Offline study edition</footer>
+</body>
+</html>

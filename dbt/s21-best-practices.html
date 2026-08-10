@@ -1,0 +1,1197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="dbt bootcamp Section 21: recommended project structure, naming conventions, the dbt style guide, analytics code review, adoption playbook, and anti-patterns grounded in the Airbnb course project.">
+<title>Section 21 — Best Practices | The Complete dbt Bootcamp Notes</title>
+<link rel="stylesheet" href="assets/dbt.css">
+<script defer src="assets/search-index.js"></script>
+<script defer src="assets/code-highlight.js"></script>
+<script defer src="assets/dbt.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">Course section 21 of 22 · The Complete dbt Bootcamp: Zero to Hero</p>
+    <h1>Best Practices</h1>
+    <p class="subtitle">How experienced analytics teams structure dbt projects, name models and columns, write reviewable SQL, and introduce dbt without boiling the ocean. Every convention is grounded in the Airbnb project you built across Sections&nbsp;6&ndash;20 &mdash; and in dbt Labs&rsquo; own &ldquo;How we structure our dbt projects&rdquo; guide.</p>
+    <div class="hero-meta">
+      <span class="chip">6 lectures · ~30min</span>
+      <span class="chip">project structure and conventions</span>
+      <span class="chip">adoption playbook</span>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <nav class="pager" aria-label="Section navigation">
+    <a href="s20-poweruser-fusion-ai.html">← Power User, Fusion and AI</a>
+    <a href="index.html">Course contents</a>
+    <a href="s22-certification.html">Next: Certification Exam Prep →</a>
+  </nav>
+
+  <main id="main">
+    <div class="layout">
+      <div class="content">
+
+        <section class="section" id="lectures">
+          <h2>Lectures in this section</h2>
+          <ol class="lecture-list">
+            <li class="lecture">
+              <a class="lec-title" href="#project-structure">Recommended project structure</a>
+              <span class="lec-time">~6:00</span>
+              <span class="lec-src">airbnb/models/ · dbt Labs structure guide</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#naming-conventions">Naming conventions</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">models/src/ · dim/ · fct/ · mart/</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#style-guide">The dbt style guide</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">int_host_performance.sql · poweruser branch</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#code-review">Code review for analytics</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">.github/workflows/ · schema.yml</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#adoption-playbook">Introducing dbt to a company with none</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">course-resources.md · migration patterns</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#anti-patterns">Anti-patterns and fixes</a>
+              <span class="lec-time">~4:00</span>
+              <span class="lec-src">synthesis · community patterns</span>
+            </li>
+          </ol>
+          <p class="muted">This section has no dedicated lesson-script lines. It synthesises what the course built and what dbt Labs recommends for real teams. Read it after Sections&nbsp;7&ndash;20, when you have the full Airbnb project in front of you.</p>
+        </section>
+
+        <section class="section" id="project-structure">
+          <h2>Recommended project structure</h2>
+          <p class="lead">dbt Labs&rsquo; canonical layout separates models into layers: staging (light transforms on raw sources), intermediate (reusable logic that is not yet a mart), and marts (dimensions, facts, and department-specific datasets). The Airbnb course project follows this pattern almost exactly &mdash; with <code>src_</code> where many teams use <code>stg_</code>, and an <code>intermediate/</code> folder that appears on the power-user branch.</p>
+
+          <h3>The three-layer model</h3>
+          <p>Each layer has one job. Staging reads from sources and renames columns. Intermediate joins and aggregates when the logic is shared by multiple downstream models. Marts answer business questions at a defined grain. When you open a pull request, the folder path tells the reviewer what kind of change they are looking at before they read a line of SQL.</p>
+
+          <div class="diagram">
+            <p class="diagram-title">Staging to intermediate to marts in the Airbnb DAG</p>
+            <div class="dag">
+              <div class="dag-col">
+                <p class="dag-label">Sources</p>
+                <div class="node is-source"><b>raw_listings</b></div>
+                <div class="node is-source"><b>raw_hosts</b></div>
+                <div class="node is-source"><b>raw_reviews</b></div>
+              </div>
+              <div class="dag-col">
+                <p class="dag-label">Staging (src_)</p>
+                <div class="node is-model"><b>src_listings</b></div>
+                <div class="node is-model"><b>src_hosts</b></div>
+                <div class="node is-model"><b>src_reviews</b></div>
+              </div>
+              <div class="dag-col">
+                <p class="dag-label">Dimensions &amp; facts</p>
+                <div class="node is-mart"><b>dim_listings_cleansed</b></div>
+                <div class="node is-mart"><b>dim_hosts_cleansed</b></div>
+                <div class="node is-mart"><b>fct_reviews</b></div>
+              </div>
+              <div class="dag-col">
+                <p class="dag-label">Marts</p>
+                <div class="node is-mart pulse"><b>mart_fullmoon_reviews</b></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Layer</th><th>Folder</th><th>Prefix</th><th>Materialization in Airbnb</th><th>Responsibility</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Staging</strong></td><td><code>models/src/</code></td><td><code>src_</code></td><td>Ephemeral (inlined as CTEs)</td><td>One model per raw table; rename columns; no joins across sources</td></tr>
+                <tr><td><strong>Intermediate</strong></td><td><code>models/intermediate/</code></td><td><code>int_</code></td><td>Table (power-user branch)</td><td>Reusable joins and aggregates not yet at mart grain</td></tr>
+                <tr><td><strong>Dimensions</strong></td><td><code>models/dim/</code></td><td><code>dim_</code></td><td>Table (default); view where overridden</td><td>Entity at one grain: listing, host, listing-with-host</td></tr>
+                <tr><td><strong>Facts</strong></td><td><code>models/fct/</code></td><td><code>fct_</code></td><td>Incremental</td><td>Events or transactions at event grain</td></tr>
+                <tr><td><strong>Marts</strong></td><td><code>models/mart/</code></td><td><code>mart_</code></td><td>Incremental (microbatch)</td><td>Department or use-case specific datasets</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout info"><strong><code>src_</code> versus <code>stg_</code>.</strong> dbt Labs&rsquo; public guide uses <code>stg_</code> and a <code>staging/</code> folder. The course uses <code>src_</code> and <code>models/src/</code>. Both are valid; what matters is consistency within a project. When you join a team, adopt their prefix rather than renaming everything to match a blog post.</div>
+
+          <h3>The Airbnb project on disk</h3>
+          <p>The finished course project (main branch) organises models by layer. Supporting assets &mdash; macros, tests, snapshots, seeds, analyses &mdash; sit at the project root alongside <code>dbt_project.yml</code>, which sets folder-level defaults for materialization and tags.</p>
+
+          <div class="filetree">
+            <ul>
+              <li><span class="dir">airbnb/</span>
+                <ul>
+                  <li><span class="file">dbt_project.yml</span> <span class="note">folder defaults: src ephemeral, dim table, fct tagged</span></li>
+                  <li><span class="dir">models/</span>
+                    <ul>
+                      <li><span class="file">sources.yml</span> <span class="note">AIRBNB.RAW sources + freshness</span></li>
+                      <li><span class="file">schema.yml</span> <span class="note">tests, docs, contracts, versions</span></li>
+                      <li><span class="file">dashboards.yml</span> <span class="note">exposures</span></li>
+                      <li><span class="dir">src/</span>
+                        <ul>
+                          <li><span class="file">src_listings.sql</span></li>
+                          <li><span class="file">src_hosts.sql</span></li>
+                          <li><span class="file">src_reviews.sql</span></li>
+                        </ul>
+                      </li>
+                      <li><span class="dir">dim/</span>
+                        <ul>
+                          <li><span class="file">dim_listings_cleansed.sql</span></li>
+                          <li><span class="file">dim_hosts_cleansed.sql</span></li>
+                          <li><span class="file">dim_hosts_cleansed_v2.sql</span></li>
+                          <li><span class="file">dim_listings_w_hosts.sql</span></li>
+                          <li><span class="file">dim_long_term_listings.py</span></li>
+                          <li><span class="file">dim_fullmoon.py</span></li>
+                          <li><span class="file">dim_review_sentiment.py</span></li>
+                        </ul>
+                      </li>
+                      <li><span class="dir">fct/</span>
+                        <ul>
+                          <li><span class="file">fct_reviews.sql</span></li>
+                        </ul>
+                      </li>
+                      <li><span class="dir">mart/</span>
+                        <ul>
+                          <li><span class="file">mart_fullmoon_reviews.sql</span></li>
+                          <li><span class="file">unit_tests.yml</span></li>
+                        </ul>
+                      </li>
+                    </ul>
+                  </li>
+                  <li><span class="dir">macros/</span> <span class="note">generate_schema_name, logging, generic test helpers</span></li>
+                  <li><span class="dir">tests/</span> <span class="note">singular + generic tests</span></li>
+                  <li><span class="dir">snapshots/</span> <span class="note">YAML snapshot definitions</span></li>
+                  <li><span class="dir">seeds/</span> <span class="note">seed_full_moon_dates.csv</span></li>
+                  <li><span class="dir">analyses/</span> <span class="note">ad hoc SQL, not materialised</span></li>
+                  <li><span class="dir">selectors.yml</span></li>
+                </ul>
+              </li>
+            </ul>
+          </div>
+
+          <p>On the <code>poweruser</code> branch, the project adds an intermediate layer and more marts &mdash; the pattern dbt Labs recommends once a project outgrows direct dim-to-mart joins:</p>
+
+          <div class="filetree">
+            <ul>
+              <li><span class="dir">models/</span>
+                <ul>
+                  <li><span class="dir">intermediate/</span> <span class="new">← poweruser branch</span>
+                    <ul>
+                      <li><span class="file">int_host_performance.sql</span></li>
+                    </ul>
+                  </li>
+                  <li><span class="dir">mart/</span>
+                    <ul>
+                      <li><span class="file">mart_listing_performance.sql</span> <span class="new">← poweruser branch</span></li>
+                    </ul>
+                  </li>
+                  <li><span class="dir">legacy/</span>
+                    <ul>
+                      <li><span class="file">legacy_int_host_performance.sql</span></li>
+                      <li><span class="file">legacy_mart_listing_performance.sql</span></li>
+                    </ul>
+                  </li>
+                </ul>
+              </li>
+            </ul>
+          </div>
+
+          <h3>One folder per source system in staging</h3>
+          <p>When a company loads data from Salesforce, Stripe, and an internal Postgres app, staging typically gets three subfolders: <code>models/staging/salesforce/</code>, <code>models/staging/stripe/</code>, <code>models/staging/postgres_app/</code>. The Airbnb project is small enough that all three raw tables share one source (<code>airbnb</code> in <code>sources.yml</code>) and one staging folder (<code>models/src/</code>). The principle is the same: a reader should know which upstream system a staging model touches from its path alone.</p>
+
+          <p>Staging models in the course read exactly one source table each:</p>
+
+<pre data-lang="sql" data-title="models/src/src_listings.sql" data-explain="Classic staging: source() in an import CTE, rename columns in the final SELECT, no business logic beyond aliasing."><code>WITH raw_listings AS (
+        SELECT * FROM {{ source('airbnb', 'listings') }}
+)
+SELECT 
+   id AS listing_id,
+   listing_url,
+   name AS listing_name,
+   room_type,
+   minimum_nights,
+   host_id,
+   price AS price_str,
+   created_at,
+   updated_at
+FROM raw_listings</code></pre>
+
+          <p>Downstream dimensions own cleansing and type coercion. <code>dim_listings_cleansed</code> casts price strings to numbers and normalises minimum nights &mdash; work that belongs out of staging so every consumer gets the same rules.</p>
+
+          <h3>Folder-level config in dbt_project.yml</h3>
+          <p>Structure is not only directories. The project file encodes defaults so individual models stay short:</p>
+
+<pre data-lang="yaml" data-title="dbt_project.yml" data-explain="Folder-level materialization means src models are ephemeral without repeating config in every file; dim models default to table unless overridden."><code>models:
+  airbnb:
+    +materialized: view
+    dim:
+      +materialized: table
+    src:
+      +materialized: ephemeral
+    fct:
+      +tags: ['fact']
+data_tests:
+  +store_failures: true
+  +schema: _test_failures</code></pre>
+
+          <p><code>dim_listings_cleansed</code> overrides the dim-folder default back to <code>view</code> in its own config block &mdash; a pattern you will see when a model&rsquo;s access pattern differs from siblings in the same folder. See <a href="s08-materializations.html">Section&nbsp;8</a> for when to override folder defaults.</p>
+
+          <div class="analogy"><strong>Everyday analogy &mdash;</strong> staging, intermediate, and marts are like prep, cooking, and plating in a restaurant kitchen. Prep washes and chops; cooking combines ingredients; plating is what the customer sees. You do not serve raw carrots because someone skipped prep.</div>
+
+          <h3>Non-model directories and their roles</h3>
+          <p>A mature dbt project is more than <code>models/</code>. The Airbnb repo places each resource type where dbt expects it, which keeps parse times predictable and lets new contributors find tests, seeds, and snapshots without asking.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Directory</th><th>Purpose</th><th>Airbnb contents</th></tr></thead>
+              <tbody>
+                <tr><td><code>models/</code></td><td>All transformation SQL/Python</td><td>src, dim, fct, mart layers + YAML</td></tr>
+                <tr><td><code>macros/</code></td><td>Reusable Jinja/SQL functions</td><td><code>generate_schema_name</code>, generic test helpers</td></tr>
+                <tr><td><code>tests/</code></td><td>Singular tests and custom generic tests</td><td><code>consistent_created_at.sql</code>, <code>tests/generic/</code></td></tr>
+                <tr><td><code>seeds/</code></td><td>Small CSV reference data</td><td><code>seed_full_moon_dates.csv</code></td></tr>
+                <tr><td><code>snapshots/</code></td><td>SCD Type 2 history on mutable sources</td><td><code>raw_listings_snapshot.yml</code></td></tr>
+                <tr><td><code>analyses/</code></td><td>Compiled but not materialised SQL</td><td><code>full_moon_no_sleep.sql</code></td></tr>
+                <tr><td><code>assets/</code></td><td>Static files for docs site</td><td><code>input_schema.png</code> (referenced in docs)</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>Keeping YAML close to models is a team choice. The course uses a central <code>schema.yml</code> for dimensions and facts plus separate <code>sources.yml</code> and <code>dashboards.yml</code>. Larger teams sometimes split YAML one file per domain folder (<code>models/finance/_finance__models.yml</code>) to reduce merge conflicts. Either works if naming is consistent.</p>
+
+          <h3>Verifying structure with the CLI</h3>
+          <p>After reorganising folders, use <code>dbt ls</code> to confirm every model appears in the DAG with the expected resource type and tags. This catches files placed outside <code>model-paths</code> or parse errors that silently exclude models.</p>
+
+          <div class="terminal">
+            <p class="term-head">dbt ls — list models by layer</p>
+            <pre class="term-body"><span class="tt-cmd">dbt ls --resource-type model --output name</span>
+<span class="tt-dim">14:05:01  Running with dbt=1.11.12</span>
+<span class="tt-ok">dim_hosts_cleansed</span>
+<span class="tt-ok">dim_hosts_cleansed_v2</span>
+<span class="tt-ok">dim_listings_cleansed</span>
+<span class="tt-ok">dim_listings_w_hosts</span>
+<span class="tt-ok">fct_reviews</span>
+<span class="tt-ok">mart_fullmoon_reviews</span>
+<span class="tt-ok">src_hosts</span>
+<span class="tt-ok">src_listings</span>
+<span class="tt-ok">src_reviews</span>
+<span class="tt-dim">14:05:02  Completed successfully</span></pre>
+          </div>
+
+          <p>Prefix conventions make this list self-documenting: everything starting with <code>src_</code> is staging, <code>dim_</code> dimensions, and so on. If a new file appears without a prefix — say <code>listings_clean.sql</code> — it fails the convention check in review even if the SQL is correct.</p>
+        </section>
+
+        <section class="section" id="naming-conventions">
+          <h2>Naming conventions</h2>
+          <p class="lead">Prefixes tell you the layer; suffixes tell you the grain or variant. The Airbnb project uses <code>src_</code>, <code>dim_</code>, <code>fct_</code>, and <code>mart_</code> consistently. Column names follow snake_case with semantic suffixes for keys and booleans.</p>
+
+          <h3>Model prefixes</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Prefix</th><th>Example from Airbnb</th><th>Meaning</th></tr></thead>
+              <tbody>
+                <tr><td><code>src_</code> (or <code>stg_</code>)</td><td><code>src_reviews</code></td><td>Staging: one-to-one with a source table, light cleanup only</td></tr>
+                <tr><td><code>int_</code></td><td><code>int_host_performance</code></td><td>Intermediate: joins/aggregates shared by multiple marts</td></tr>
+                <tr><td><code>dim_</code></td><td><code>dim_hosts_cleansed</code></td><td>Dimension: descriptive entity at stable grain</td></tr>
+                <tr><td><code>fct_</code></td><td><code>fct_reviews</code></td><td>Fact: measurable event or transaction</td></tr>
+                <tr><td><code>mart_</code></td><td><code>mart_fullmoon_reviews</code></td><td>Mart: use-case or team-specific output</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Singular versus plural table names</h3>
+          <p>dbt Labs recommends <strong>plural</strong> model names for entities that represent collections: <code>customers</code>, <code>orders</code>, <code>order_items</code>. The course project uses a mix &mdash; <code>dim_listings_cleansed</code> (plural entity), <code>fct_reviews</code> (plural), <code>mart_fullmoon_reviews</code> (plural). What matters is picking one rule and applying it in code review.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Convention</th><th>Example</th><th>When teams choose it</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Plural entities</strong></td><td><code>dim_listings_cleansed</code></td><td>Matches warehouse table naming; reads naturally in <code>FROM dim_listings</code></td></tr>
+                <tr><td><strong>Singular entities</strong></td><td><code>dim_listing_cleansed</code></td><td>Emphasises one row = one listing; common in Kimball-style naming</td></tr>
+                <tr><td><strong>Suffix for purpose</strong></td><td><code>dim_listings_w_hosts</code></td><td>When the model is a variant or join of a base dimension</td></tr>
+                <tr><td><strong>Version suffix</strong></td><td><code>dim_hosts_cleansed_v2</code></td><td>Explicit version file alongside YAML versioning (Section&nbsp;19)</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Column naming patterns</h3>
+          <p>Consistent column names let analysts join across marts without a data dictionary open on a second monitor. The Airbnb models demonstrate the usual patterns:</p>
+
+          <ul>
+            <li><strong>Primary and foreign keys</strong> &mdash; <code>listing_id</code>, <code>host_id</code>, <code>review_id</code> (surrogate key generated in <code>fct_reviews</code> via <code>dbt_utils.generate_surrogate_key</code>).</li>
+            <li><strong>Booleans</strong> &mdash; prefix with <code>is_</code> or <code>has_</code>: <code>is_superhost</code> in dimensions, <code>is_full_moon</code> in <code>mart_fullmoon_reviews</code>, <code>host_is_superhost</code> when disambiguating joined columns in <code>dim_listings_w_hosts</code>.</li>
+            <li><strong>Timestamps</strong> &mdash; <code>created_at</code>, <code>updated_at</code>, <code>review_date</code> for event time; align with <code>event_time</code> config on incremental models.</li>
+            <li><strong>Raw versus cleansed</strong> &mdash; keep the raw string as <code>price_str</code> in staging; expose the typed column as <code>price</code> only after cleansing in the dimension.</li>
+          </ul>
+
+<pre data-lang="sql" data-title="models/fct/fct_reviews.sql" data-explain="Surrogate key column ends in _id; boolean filter uses IS NOT NULL on review_text; incremental filter uses review_date aligned with event_time config."><code>{{
+  config(
+    materialized = 'incremental',
+    on_schema_change='fail',
+    event_time='review_date'
+    )
+}}
+
+WITH src_reviews AS (
+  SELECT * FROM {{ ref('src_reviews') }}
+)
+SELECT 
+  {{ dbt_utils.generate_surrogate_key(['listing_id', 'review_date', 'reviewer_name', 'review_text']) }} as review_id,
+  *
+FROM src_reviews
+WHERE review_text is not null
+{% if is_incremental() %}
+  {% if var("start_date", False) and var("end_date", False) %}
+    {{ log('Loading ' ~ this ~ ' incrementally (start_date: ' ~ var("start_date") ~ ', end_date: ' ~ var("end_date") ~ ')', info=True) }}
+    AND review_date &gt;= '{{ var("start_date") }}'
+    AND review_date &lt; '{{ var("end_date") }}'
+  {% else %}
+    AND review_date &gt; (select max(review_date) from {{ this }})
+    {{ log('Loading ' ~ this ~ ' incrementally (all missing dates)', info=True)}}
+  {% endif %}
+{% endif %}</code></pre>
+
+          <div class="callout tip"><strong>Rename at the earliest stable layer.</strong> If <code>id</code> becomes <code>listing_id</code>, do it in staging so every downstream model uses the same name. Renaming again in a mart confuses lineage and breaks tests that reference column names.</div>
+
+          <h3>Files outside models/</h3>
+          <p>Naming extends beyond SQL models:</p>
+          <ul>
+            <li><strong>Sources</strong> &mdash; source name <code>airbnb</code>, table names <code>listings</code>, <code>hosts</code>, <code>reviews</code> (logical names); identifiers point at <code>raw_listings</code> etc.</li>
+            <li><strong>Seeds</strong> &mdash; descriptive CSV names: <code>seed_full_moon_dates.csv</code>.</li>
+            <li><strong>Snapshots</strong> &mdash; <code>raw_listings_snapshot.yml</code> mirrors the source table name.</li>
+            <li><strong>Singular tests</strong> &mdash; named after the rule: <code>dim_listings_minimum_nights.sql</code>, <code>consistent_created_at.sql</code>.</li>
+            <li><strong>Macros</strong> &mdash; verb or behaviour: <code>generate_schema_name</code>, <code>select_positive_values</code>.</li>
+          </ul>
+
+          <h3>Source naming in sources.yml</h3>
+          <p>Logical source and table names should read naturally in <code>source()</code> calls. The identifier maps to the physical warehouse table when names differ:</p>
+
+<pre data-lang="yaml" data-title="models/sources.yml" data-explain="Source name airbnb matches the business system; table name listings is the logical name; identifier raw_listings is the actual Snowflake table."><code>sources:
+  - name: airbnb
+    schema: raw
+    tables:
+      - name: listings
+        identifier: raw_listings
+      - name: hosts
+        identifier: raw_hosts
+      - name: reviews
+        identifier: raw_reviews
+        config:
+          loaded_at_field: date
+          freshness:
+            warn_after: {count: 1, period: hour}</code></pre>
+
+          <p>In SQL, the call is <code>{{ source('airbnb', 'listings') }}</code> — not <code>source('raw', 'raw_listings')</code>. Decoupling logical names from physical names lets you rename warehouse tables without rewriting every staging model, as long as you update the identifier once.</p>
+
+          <h3>Disambiguating joined column names</h3>
+          <p>When two entities share column semantics, prefix with the entity name in join models. <code>dim_listings_w_hosts</code> exposes <code>host_is_superhost</code> instead of a bare <code>is_superhost</code> that could refer to either side of the join:</p>
+
+<pre data-lang="sql" data-title="models/dim/dim_listings_w_hosts.sql" data-explain="Listing grain preserved; host columns prefixed or aliased to avoid ambiguity in downstream SELECT lists."><code>WITH
+l AS (
+    SELECT * FROM {{ ref('dim_listings_cleansed') }}
+),
+h AS (
+    SELECT * FROM {{ ref('dim_hosts_cleansed', v=2) }}
+)
+SELECT 
+    l.listing_id,
+    l.listing_name,
+    l.room_type,
+    l.minimum_nights,
+    l.price,
+    l.host_id,
+    h.host_name,
+    h.is_superhost AS host_is_superhost,
+    l.created_at,
+    GREATEST(l.updated_at, h.updated_at) AS updated_at
+FROM l
+LEFT JOIN h ON (h.host_id = l.host_id)</code></pre>
+        </section>
+
+        <section class="section" id="style-guide">
+          <h2>The dbt style guide</h2>
+          <p class="lead">dbt Labs publishes a SQL style guide; most teams adopt a subset and enforce it in pull request review (often with SQLFluff, as on the power-user branch). The goals are readability, predictable structure, and diffs that show logic changes rather than formatting noise.</p>
+
+          <h3>SQL formatting rules</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Rule</th><th>Do</th><th>Avoid</th></tr></thead>
+              <tbody>
+                <tr><td>Keywords</td><td>Uppercase <code>SELECT</code>, <code>FROM</code>, <code>WHERE</code></td><td>Mixed case <code>Select From where</code></td></tr>
+                <tr><td>Indentation</td><td>4 spaces per level; align column lists</td><td>Tabs mixed with spaces</td></tr>
+                <tr><td>Trailing commas</td><td>Leading commas in column lists (team preference) or trailing on prior line</td><td>Inconsistent comma placement across files</td></tr>
+                <tr><td>Line length</td><td>Break long <code>CASE</code> and <code>JOIN</code> clauses onto new lines</td><td>200-character single lines</td></tr>
+                <tr><td>Explicit columns</td><td>List columns in final SELECT</td><td><code>SELECT *</code> in production models</td></tr>
+                <tr><td>Aliases</td><td><code>AS</code> keyword for column aliases</td><td>Implicit aliases without <code>AS</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>CTE naming: import, logical, final</h3>
+          <p>The community convention divides CTEs into three groups:</p>
+
+          <ol>
+            <li><strong>Import CTEs</strong> &mdash; one per upstream relation, usually named after the model: <code>src_listings AS (SELECT * FROM {{ ref('src_listings') }})</code>.</li>
+            <li><strong>Logical CTEs</strong> &mdash; business steps with descriptive names: <code>host_listing_metrics</code>, <code>dominant_room_type_calc</code>.</li>
+            <li><strong>Final</strong> &mdash; either a CTE named <code>final</code> or a terminal <code>SELECT</code> with no further CTEs after it.</li>
+          </ol>
+
+          <p>The power-user model <code>int_host_performance.sql</code> is the course&rsquo;s best example of logical CTEs with a documented grain comment:</p>
+
+<pre data-lang="sql" data-title="models/intermediate/int_host_performance.sql (poweruser branch)" data-explain="Import CTEs (dim_hosts, dim_listings) feed logical CTEs (host_listing_metrics, dominant_room_type_calc); final SELECT declares one row per host_id grain."><code>{{
+  config(
+    materialized = 'table'
+  )
+}}
+WITH dim_hosts AS (
+  SELECT
+    host_id,
+    host_name,
+    is_superhost,
+    created_at
+  FROM {{ ref('dim_hosts_cleansed') }}
+),
+
+dim_listings AS (
+  SELECT
+    listing_id,
+    room_type,
+    price,
+    minimum_nights,
+    host_id
+  FROM {{ ref('dim_listings_cleansed') }}
+),
+
+host_listing_metrics AS (
+  SELECT
+    h.host_id,
+    h.host_name,
+    h.is_superhost,
+    h.created_at,
+    COUNT(DISTINCT dl.listing_id) AS total_listings,
+    ROUND(AVG(dl.price), 2) AS avg_listing_price
+    /* … additional aggregates … */
+  FROM dim_hosts h
+  LEFT JOIN dim_listings dl ON h.host_id = dl.host_id
+  GROUP BY h.host_id, h.host_name, h.is_superhost, h.created_at
+),
+
+dominant_room_type_calc AS (
+  SELECT
+    host_id,
+    CASE
+      WHEN entire_home_count &gt;= private_room_count THEN 'Entire home/apt'
+      /* … */
+    END AS dominant_room_type
+  FROM host_listing_metrics
+)
+
+SELECT
+  h.host_id,
+  h.host_name,
+  h.total_listings,
+  h.avg_listing_price,
+  d.dominant_room_type
+FROM host_listing_metrics h
+LEFT JOIN dominant_room_type_calc d ON h.host_id = d.host_id</code></pre>
+
+          <div class="callout warn"><strong>Short aliases in small models are acceptable.</strong> <code>dim_listings_w_hosts</code> uses <code>l</code> and <code>h</code> for brevity in a two-table join. That is fine at this size. In a ten-CTE model, prefer full names so reviewers can trace columns without scrolling.</div>
+
+          <h3>One model, one grain</h3>
+          <p>Every model should answer: &ldquo;What does one row represent?&rdquo; If you cannot state it in one sentence, split the model.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Model</th><th>Grain (one row per…)</th></tr></thead>
+              <tbody>
+                <tr><td><code>src_listings</code></td><td>listing in the raw source</td></tr>
+                <tr><td><code>dim_listings_cleansed</code></td><td>listing (cleansed attributes)</td></tr>
+                <tr><td><code>dim_listings_w_hosts</code></td><td>listing with host attributes joined</td></tr>
+                <tr><td><code>fct_reviews</code></td><td>review event (surrogate <code>review_id</code>)</td></tr>
+                <tr><td><code>int_host_performance</code></td><td>host (aggregated listing metrics)</td></tr>
+                <tr><td><code>mart_fullmoon_reviews</code></td><td>review enriched with full-moon flag</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>Mixing grains &mdash; for example listing-level and host-level columns in the same table without a clear primary grain &mdash; causes double-counting in BI tools. Aggregations in Looker, Tableau, or Metabase assume uniform grain unless the semantic layer says otherwise.</p>
+
+          <h3>Jinja and config placement</h3>
+          <p>Put <code>{{ config(...) }}</code> at the top of the file. Keep business logic in SQL; use Jinja for environment-dependent behaviour (incremental filters, variables), not for logic that belongs in a macro. The course&rsquo;s incremental pattern in <code>fct_reviews</code> is the upper bound of acceptable inline Jinja for many teams &mdash; beyond that, extract a macro.</p>
+
+          <h3>Staging versus cleansing: where each transform belongs</h3>
+          <p>The style guide is also about responsibility boundaries. Compare staging and dimension for hosts:</p>
+
+<pre data-lang="sql" data-title="models/src/src_hosts.sql" data-explain="Staging only renames and passes through; NVL on host_name belongs in the dimension, not here."><code>WITH raw_hosts AS (
+    SELECT * FROM {{ source('airbnb', 'hosts') }}
+)
+SELECT
+    id AS host_id,
+    name AS host_name,
+    is_superhost,
+    created_at,
+    updated_at
+FROM raw_hosts</code></pre>
+
+<pre data-lang="sql" data-title="models/dim/dim_hosts_cleansed.sql" data-explain="Business rule (default anonymous name) lives in the dimension layer where tests and docs attach to the cleansed entity."><code>{{
+  config(
+    materialized = 'table' 
+    )
+}} 
+WITH src_hosts AS (
+    SELECT * FROM {{ ref('src_hosts') }}
+)
+SELECT
+    host_id,
+    NVL(host_name, 'Anonymous') AS host_name,
+    is_superhost,
+    created_at,
+    updated_at
+FROM src_hosts</code></pre>
+
+          <p>If <code>NVL(host_name, 'Anonymous')</code> lived in staging, every downstream model would inherit the default whether it wanted it or not. Keeping staging pure makes intermediate models flexible — some marts might need raw nulls for a data-quality report.</p>
+
+          <h3>SQLFluff and automated formatting</h3>
+          <p>The power-user branch adds <code>.sqlfluff</code> configuration so formatting is checked automatically rather than debated in every PR comment thread. SQLFluff does not replace human review for grain and logic, but it eliminates diff noise from comma placement and keyword casing. Teams typically run it in pre-commit hooks alongside <code>dbt parse</code>.</p>
+
+          <div class="callout info"><strong>BigQuery and Databricks formatting.</strong> SQLFluff dialect must match your warehouse. Snowflake-specific casts like <code>:: NUMBER</code> in <code>dim_listings_cleansed</code> fail lint under a BigQuery dialect — another reason to keep warehouse-specific casts in the dimension layer where they are explicit, not scattered through staging.</div>
+        </section>
+
+        <section class="section" id="code-review">
+          <h2>Code review for analytics</h2>
+          <p class="lead">A dbt pull request is a software change with warehouse consequences. Reviewers check correctness, but also operability: Will this run in CI? Does it break downstream exposures? Did the author add tests and docs?</p>
+
+          <h3>What a good dbt PR review checks</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Check</th><th>Why it matters</th><th>Airbnb example</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Tests added or updated</strong></td><td>Catches regressions before production</td><td><code>unique</code> + <code>not_null</code> on <code>listing_id</code> in <code>schema.yml</code></td></tr>
+                <tr><td><strong>Docs updated</strong></td><td>Catalog stays trustworthy</td><td><code>description:</code> on models and columns; <code>{% doc %}</code> blocks in <code>docs.md</code></td></tr>
+                <tr><td><strong>Naming consistent</strong></td><td>Layer and grain obvious from file path</td><td>New model in correct folder with <code>dim_</code>/<code>fct_</code> prefix</td></tr>
+                <tr><td><strong><code>ref()</code> and <code>source()</code>, not hardcoded schemas</strong></td><td>Preserves DAG and environment isolation</td><td><code>{{ ref('dim_hosts_cleansed', v=2) }}</code> in <code>dim_listings_w_hosts</code></td></tr>
+                <tr><td><strong>No <code>SELECT *</code> in marts</strong></td><td>Schema changes propagate silently</td><td><code>fct_reviews</code> lists explicit columns after surrogate key</td></tr>
+                <tr><td><strong>Materialization appropriate</strong></td><td>Cost and freshness trade-offs</td><td>Incremental on <code>fct_reviews</code>; ephemeral staging</td></tr>
+                <tr><td><strong>Incremental logic correct</strong></td><td>Silent row loss or duplicates</td><td><code>event_time</code> + filter on <code>review_date</code></td></tr>
+                <tr><td><strong>YAML valid for current dbt version</strong></td><td>Parse failures block CI</td><td><code>data_tests:</code> with <code>arguments:</code> nesting</td></tr>
+                <tr><td><strong>Downstream impact considered</strong></td><td>Breaking column renames break BI</td><td>Version bump for <code>dim_hosts_cleansed</code> instead of silent change</td></tr>
+                <tr><td><strong>CI scope reasonable</strong></td><td>Slim CI runs changed nodes + parents</td><td>Reference workflow in <a href="s19-production.html">Section&nbsp;19</a></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Review workflow in practice</h3>
+          <p>A typical analytics-engineering team workflow mirrors backend engineering:</p>
+
+          <div class="diagram">
+            <p class="diagram-title">Pull request flow for a dbt model change</p>
+            <div class="flow">
+              <div class="node is-compute"><b>Branch + edit</b><small>models/dim/…</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-compute"><b>dbt build --select state:modified+</b><small>slim CI</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-test pulse"><b>Peer review</b><small>SQL + YAML + tests</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-mart"><b>Merge + prod job</b><small>orchestrated dbt run</small></div>
+            </div>
+          </div>
+
+          <p>Reviewers read the compiled SQL in <code>target/compiled/</code> when Jinja obscures the final query. They confirm relationship tests point at the model version consumers use &mdash; the course deliberately uses <code>ref('dim_hosts_cleansed', v=2)</code> after introducing model versions.</p>
+
+<pre data-lang="yaml" data-title="models/schema.yml (excerpt)" data-explain="A reviewer verifies tests exist on primary keys and foreign keys before approving a dimension change."><code>  - name: dim_listings_cleansed
+    description: Cleansed table which contains Airbnb listings.
+    data_tests:
+      - minimum_row_count:
+          arguments:
+            min_row_count: 1000
+    columns:
+      - name: listing_id
+        data_tests:
+          - unique
+          - not_null
+      - name: host_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_hosts_cleansed')
+                field: host_id</code></pre>
+
+          <div class="callout danger"><strong>Approving without running tests.</strong> SQL that compiles can still fail uniqueness checks or relationship tests. CI must run <code>dbt build</code> or at least <code>dbt test</code> on the modified subgraph. A green compile alone is not sufficient.</div>
+
+          <h3>Questions reviewers ask out loud</h3>
+          <ul>
+            <li>What grain is this model? Did we document it?</li>
+            <li>If this column disappears, who breaks &mdash; check exposures in <code>dashboards.yml</code>.</li>
+            <li>Is this logic duplicated elsewhere? Should it be a macro or intermediate model?</li>
+            <li>Will full refresh on this incremental model be acceptable in production?</li>
+            <li>Does <code>on_schema_change</code> match how we handle additive columns?</li>
+          </ul>
+
+          <h3>PR description template for analytics</h3>
+          <p>Good analytics PRs state intent in prose because SQL diffs rarely explain <em>why</em>. A minimal template teams reuse:</p>
+
+          <ul>
+            <li><strong>Context</strong> — ticket link, stakeholder request, or metric definition change.</li>
+            <li><strong>Grain</strong> — one sentence on what a row represents.</li>
+            <li><strong>Backfill</strong> — whether production needs <code>--full-refresh</code> or a one-time script.</li>
+            <li><strong>Validation</strong> — row counts, key metrics compared to legacy, screenshots from dev schema.</li>
+            <li><strong>Downstream</strong> — exposures, dashboards, reverse-ETL jobs affected.</li>
+          </ul>
+
+          <div class="terminal">
+            <p class="term-head">dbt build in CI — slim selection</p>
+            <pre class="term-body"><span class="tt-cmd">dbt build --select state:modified+ --defer --state ./previous_manifest</span>
+<span class="tt-dim">09:12:01  Running with dbt=1.11.12</span>
+<span class="tt-dim">09:12:04  1 of 4 START sql table model DEV.dim_hosts_cleansed_v2 .......... [RUN]</span>
+<span class="tt-ok">09:12:06  1 of 4 OK created sql table model DEV.dim_hosts_cleansed_v2 ......... [SUCCESS 1 in 2.1s]</span>
+<span class="tt-dim">09:12:06  2 of 4 START test not_null_dim_hosts_cleansed_v2_host_id ........... [RUN]</span>
+<span class="tt-ok">09:12:07  2 of 4 PASS not_null_dim_hosts_cleansed_v2_host_id ................. [PASS in 0.8s]</span>
+<span class="tt-ok">09:12:09  Completed successfully</span></pre>
+          </div>
+
+          <p>Reference workflows in the course repo are guarded with <code>if: github.repository != ...</code> — copy patterns from Section&nbsp;19&rsquo;s reference production repo rather than enabling them blindly on a fork.</p>
+        </section>
+
+        <section class="section" id="adoption-playbook">
+          <h2>Introducing dbt to a company with none</h2>
+          <p class="lead">Teams fail dbt adoption when they treat it as a big-bang migration. The pattern that works: prove value on one vertical slice, then expand layer by layer with tests and docs from day one.</p>
+
+          <h3>Migration order that works</h3>
+          <ol>
+            <li><strong>Pick one business question end to end.</strong> Example: &ldquo;How many reviews per listing last month?&rdquo; Map raw tables, one staging model per source, one mart that answers the question.</li>
+            <li><strong>Get staging running first.</strong> Mirror the course: <code>sources.yml</code> + ephemeral <code>src_</code> models. Analysts can validate row counts against legacy SQL.</li>
+            <li><strong>Add tests early, not late.</strong> <code>not_null</code> and <code>unique</code> on primary keys from the first merged PR. Tests are how you earn trust with stakeholders who saw pipelines break silently before.</li>
+            <li><strong>Introduce dimensions and facts.</strong> Move cleansing out of staging into <code>dim_</code> models; add <code>fct_</code> for events. Match materializations to access patterns (see Section&nbsp;8).</li>
+            <li><strong>Wire CI when the second contributor appears.</strong> Slim CI on pull requests; full nightly build. Section&nbsp;19 patterns apply even before production deployment.</li>
+            <li><strong>Migrate legacy SQL incrementally.</strong> Park old scripts in <code>legacy/</code> (as on the power-user branch) until each is replaced by a tested model, then delete.</li>
+            <li><strong>Add orchestration last.</strong> Cron or Dagster/Airflow once models stabilise &mdash; Section&nbsp;18. Orchestrating chaos just runs broken jobs on a schedule.</li>
+          </ol>
+
+          <div class="diagram">
+            <p class="diagram-title">Adoption timeline: avoid boiling the ocean</p>
+            <div class="stack">
+              <div class="layer"><b>Week 1–2</b> · one source · staging + sources.yml · row-count parity checks</div>
+              <div class="layer"><b>Week 3–4</b> · first dim/fct · primary key tests · docs generation</div>
+              <div class="layer"><b>Month 2</b> · first mart · BI cutover for one dashboard</div>
+              <div class="layer"><b>Month 3+</b> · CI · incremental models · retire legacy scripts</div>
+            </div>
+          </div>
+
+          <h3>Organisational prerequisites</h3>
+          <div class="grid-2">
+            <div class="mini-card">
+              <h4>You need</h4>
+              <ul>
+                <li>Raw data already in the warehouse (EL done)</li>
+                <li>Git repository and branch protection</li>
+                <li>Dev schemas or targets per analyst</li>
+                <li>One person accountable for merge quality</li>
+              </ul>
+            </div>
+            <div class="mini-card">
+              <h4>You do not need on day one</h4>
+              <ul>
+                <li>dbt Cloud (Core + CI works)</li>
+                <li>Every dashboard migrated</li>
+                <li>Perfect folder structure</li>
+                <li>Custom macros and packages</li>
+              </ul>
+            </div>
+          </div>
+
+          <p>The course itself follows this arc: Section&nbsp;6 setup, Section&nbsp;7 first models, Section&nbsp;9 sources, Section&nbsp;11 tests, Section&nbsp;19 production. Section&nbsp;21 is the explicit map of what you were doing implicitly.</p>
+
+          <div class="callout tip"><strong>Socialise lineage early.</strong> Generate docs (<a href="s14-documentation.html">Section&nbsp;14</a>) after the first three models. Stakeholders who see a DAG understand why staging must exist before marts &mdash; and why the migration takes weeks, not days.</div>
+
+          <h3>Parallel run with legacy SQL</h3>
+          <p>During migration, run dbt models and legacy scripts side by side. Compare row counts and key metrics daily. The course&rsquo;s singular test <code>consistent_created_at.sql</code> is the kind of cross-model rule you write when proving parity. Decommission legacy only when tests pass consistently for a full business cycle (often a month for finance metrics).</p>
+
+          <h3>Stakeholder communication during adoption</h3>
+          <p>Engineers feel progress when models compile; executives feel progress when a dashboard they trust still matches yesterday. Bridge the gap with visible artifacts:</p>
+
+          <ul>
+            <li><strong>Weekly parity report</strong> — row counts for three key tables: legacy SQL versus dbt marts.</li>
+            <li><strong>Published lineage</strong> — share the docs site URL after Section&nbsp;14 setup so analysts see where metrics originate.</li>
+            <li><strong>Named owners</strong> — one DRI per mart folder in CODEOWNERS; questions route to a person, not a channel.</li>
+            <li><strong>Explicit cutover dates</strong> — &ldquo;Finance dashboard switches to <code>mart_fullmoon_reviews</code> on 1 September&rdquo; prevents two definitions running indefinitely.</li>
+          </ul>
+
+          <h3>Roles and responsibilities</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Role</th><th>Owns</th><th>Does not own</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Analytics engineer</strong></td><td>dbt models, tests, docs, CI</td><td>EL tooling, warehouse admin (usually)</td></tr>
+                <tr><td><strong>Data engineer</strong></td><td>Ingestion, orchestration infra, raw schema</td><td>Business metric definitions in marts</td></tr>
+                <tr><td><strong>Analyst</strong></td><td>Dashboards, ad hoc analyses folder</td><td>Production mart logic without review</td></tr>
+                <tr><td><strong>Platform / DevOps</strong></td><td>Profiles, secrets, prod job scheduling</td><td>Model SQL content</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>When nobody owns merge quality, conventions erode within weeks. The first analytics engineer is often part-time reviewer until a second hire shares the load.</p>
+        </section>
+
+        <section class="section" id="anti-patterns">
+          <h2>Anti-patterns and fixes</h2>
+          <p class="lead">Most failed dbt projects are not tooling failures. They are convention failures: one giant model, logic trapped in the BI layer, no tests, ad hoc scripts beside the project, hardcoded database names. The table below maps common mistakes to fixes grounded in what the Airbnb project does instead.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Anti-pattern</th><th>Symptom</th><th>Fix</th><th>Airbnb contrast</th></tr></thead>
+              <tbody>
+                <tr>
+                  <td><strong>Giant single model</strong></td>
+                  <td>One 800-line SQL file; impossible to test or reuse</td>
+                  <td>Split into staging → intermediate → mart; one grain per model</td>
+                  <td><code>src_*</code> → <code>dim_*</code> → <code>fct_reviews</code> → <code>mart_fullmoon_reviews</code></td>
+                </tr>
+                <tr>
+                  <td><strong>Business logic in BI tool</strong></td>
+                  <td>Same KPI defined differently in three dashboards</td>
+                  <td>Move definitions into dbt marts; BI reads columns only</td>
+                  <td>Price cleansing in <code>dim_listings_cleansed</code>, not in Looker</td>
+                </tr>
+                <tr>
+                  <td><strong>No tests</strong></td>
+                  <td>Broken feeds discovered by executives</td>
+                  <td><code>unique</code>, <code>not_null</code>, relationships on keys; singular tests for rules</td>
+                  <td><code>schema.yml</code> + <code>tests/</code> from Section&nbsp;11 onward</td>
+                </tr>
+                <tr>
+                  <td><strong>Ad hoc SQL scripts alongside dbt</strong></td>
+                  <td>Two sources of truth; nobody knows which ran last</td>
+                  <td>Move logic into models or <code>analyses/</code>; delete scripts after parity</td>
+                  <td><code>analyses/full_moon_no_sleep.sql</code> for exploration only</td>
+                </tr>
+                <tr>
+                  <td><strong>Hardcoded environment references</strong></td>
+                  <td>Dev laptop queries prod; CI writes to wrong schema</td>
+                  <td><code>ref()</code>, <code>source()</code>, <code>target.schema</code>, <code>generate_schema_name</code></td>
+                  <td>No <code>AIRBNB.DEV.</code> literals in model SQL after Section&nbsp;9</td>
+                </tr>
+                <tr>
+                  <td><strong>Staging joins sources</strong></td>
+                  <td>Cannot rerun one source; lineage wrong</td>
+                  <td>One staging model per source table; join in intermediate</td>
+                  <td>Three separate <code>src_</code> models, join in <code>dim_listings_w_hosts</code></td>
+                </tr>
+                <tr>
+                  <td><strong><code>SELECT *</code> in production</strong></td>
+                  <td>New upstream column breaks mart or duplicates grain</td>
+                  <td>Explicit column lists; contracts on critical models</td>
+                  <td><code>dim_listings_cleansed</code> lists each column; contract on hosts v2</td>
+                </tr>
+                <tr>
+                  <td><strong>Skipping docs</strong></td>
+                  <td>Analysts Slack engineers for column meanings</td>
+                  <td>Descriptions in YAML; publish <code>dbt docs generate</code></td>
+                  <td><code>overview.md</code>, <code>docs.md</code>, column descriptions in <code>schema.yml</code></td>
+                </tr>
+                <tr>
+                  <td><strong>Full refresh everything daily</strong></td>
+                  <td>Warehouse bill spikes; runtimes miss SLA</td>
+                  <td>Incremental facts; microbatch where appropriate; slim CI</td>
+                  <td><code>fct_reviews</code> incremental; <code>mart_fullmoon_reviews</code> microbatch</td>
+                </tr>
+                <tr>
+                  <td><strong>Package sprawl</strong></td>
+                  <td>Macro behaviour unclear; upgrade breaks project</td>
+                  <td>Pin versions in <code>packages.yml</code>; wrap package macros in project macros</td>
+                  <td><code>dbt_utils</code> 1.3.3, <code>dbt_expectations</code> 0.10.10 pinned</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout cost"><strong>Most expensive anti-pattern:</strong> a full-table incremental fact run with <code>--full-refresh</code> in production because nobody documented the incremental predicate. One mistaken flag rebuilds months of reviews and burns warehouse credits. Lock full refresh behind manual approval.</div>
+
+          <h3>When ad hoc analyses are fine</h3>
+          <p>Not every query belongs in the DAG. The <code>analyses/</code> folder holds SQL that compiles with <code>ref()</code> but never materialises &mdash; perfect for one-off investigations. The rule: if leadership will ask for the same number next quarter, promote it to a mart with tests.</p>
+
+          <h3>Mart configuration patterns from the course</h3>
+          <p><code>mart_fullmoon_reviews</code> demonstrates several best practices in one file: it reads from a fact not raw sources, uses microbatch incremental for time-bounded rebuilds, and overrides schema to isolate marts from dev dimensions:</p>
+
+<pre data-lang="sql" data-title="models/mart/mart_fullmoon_reviews.sql" data-explain="Mart reads fct_reviews via ref(); microbatch config controls batch windows; custom schema keeps mart tables grouped for BI grants."><code>{{ config(
+  materialized = 'incremental',
+  incremental_strategy='microbatch',
+  event_time='review_date',
+  begin='2009-06-20',
+  batch_size='year',
+  full_refresh=false,
+  tags = ['fact'],
+  schema='mart'
+) }}
+
+WITH fct_reviews AS (
+    SELECT * FROM {{ ref('fct_reviews') }}
+),
+full_moon_dates AS (
+    SELECT * FROM {{ ref('seed_full_moon_dates') }}
+)
+SELECT
+  r.*,
+  CASE
+    WHEN fm.full_moon_date IS NULL THEN 'not full moon'
+    ELSE 'full moon'
+  END AS is_full_moon
+FROM fct_reviews r
+LEFT JOIN full_moon_dates fm
+  ON (TO_DATE(r.review_date) = DATEADD(DAY, 1, fm.full_moon_date))</code></pre>
+
+          <p>A reviewer seeing this file should immediately note: grain unchanged from <code>fct_reviews</code> (one row per review), enrichment only adds <code>is_full_moon</code>, and the join to a seed is appropriate because calendar data is small and version-controlled.</p>
+
+          <h3>Tags and selectors for convention enforcement</h3>
+          <p>The project tags facts with <code>fact</code> in <code>dbt_project.yml</code> and defines selectors in <code>selectors.yml</code> for common run patterns. Tags let CI run <code>dbt build --select tag:fact</code> after fact-layer changes without rebuilding every dimension. See <a href="s17-selectors-commands.html">Section&nbsp;17</a> for selector syntax on dbt 1.11 versus 1.12.</p>
+        </section>
+
+        <section class="section" id="deeper">
+          <h2>Deeper detail and edge cases</h2>
+          <p class="lead">Convention guides rarely cover monorepos, multi-project warehouses, or what happens when staging must be a view on BigQuery but ephemeral on Snowflake. This block adds the operational detail for teams scaling beyond the course project.</p>
+
+          <h3>Version notes</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Behaviour</th><th>Before</th><th>Now</th><th>Version</th></tr></thead>
+              <tbody>
+                <tr><td>YAML test key</td><td><code>tests:</code></td><td><code>data_tests:</code></td><td>1.8+ (deprecated old key)</td></tr>
+                <tr><td>Generic test arguments</td><td>Top-level under test name</td><td>Nested under <code>arguments:</code></td><td>1.8+</td></tr>
+                <tr><td>Snapshot definition</td><td><code>{% snapshot %}</code> SQL blocks</td><td>YAML with <code>relation:</code> + <code>config:</code></td><td>1.9+</td></tr>
+                <tr><td>Hard deletes in snapshots</td><td><code>invalidate_hard_deletes: true</code></td><td><code>hard_deletes: invalidate</code></td><td>1.9+</td></tr>
+                <tr><td>Model versions</td><td>Separate files only</td><td><code>versions:</code> block in schema.yml + <code>ref(..., v=2)</code></td><td>1.5+</td></tr>
+                <tr><td>Microbatch incremental</td><td>Not available</td><td><code>incremental_strategy: microbatch</code> + <code>event_time</code></td><td>1.9+</td></tr>
+                <tr><td>Unit tests</td><td>Not available</td><td>YAML <code>unit_tests:</code> with mocked inputs</td><td>1.8+</td></tr>
+                <tr><td>Selector CLI flag</td><td><code>--selector name</code></td><td><code>-s selector:name</code> also supported</td><td>1.12+</td></tr>
+                <tr><td>Project name constraint</td><td>Looser</td><td>Lowercase letters, numbers, underscores only</td><td>1.0+</td></tr>
+                <tr><td>dbt Fusion (preview)</td><td>dbt Core only</td><td>Optional Fusion CLI for faster parse/compile</td><td>2025 preview</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>What it costs to run</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>What runs</th><th>Where the cost lands</th><th>How to spend less</th></tr></thead>
+              <tbody>
+                <tr><td>Ephemeral staging (<code>src_</code>)</td><td>Parent model query (inlined CTE)</td><td>Keep staging thin; persist only if reused by many heavy branches</td></tr>
+                <tr><td>Table dimensions full rebuild</td><td>Full scan of upstream + table write</td><td>Dev with <code>--select</code>; consider incremental dims at scale</td></tr>
+                <tr><td>View dimensions (<code>dim_listings_cleansed</code>)</td><td>Every consumer query re-executes logic</td><td>Switch to table if BI hammers the same view hourly</td></tr>
+                <tr><td>Incremental fact append</td><td>Scan new dates + insert</td><td>Tight incremental predicate; avoid accidental full refresh</td></tr>
+                <tr><td>Relationship tests</td><td>Join across two full tables per test</td><td>Test keys only; reduce cross-schema relationships in dev</td></tr>
+                <tr><td><code>store_failures: true</code></td><td>Extra tables written on failure</td><td>Enable in dev/CI; consider disabling for noisy warn tests in prod</td></tr>
+                <tr><td>Docs generate</td><td>Local compile + catalog queries</td><td>Run on merge, not every local save</td></tr>
+                <tr><td>Python models (dim sentiment)</td><td>Warehouse Python runtime</td><td>Reserve for logic SQL cannot express; not default pattern</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout cost"><strong>Biggest waste in mature projects:</strong> relationship and uniqueness tests scanning billion-row facts on every CI run without slim selection. Use <code>state:modified+</code> and tag-based test jobs so PR CI tests the subgraph, not the entire warehouse.</div>
+
+          <h3>Traps that catch people</h3>
+          <ul>
+            <li><strong>Renaming models without aliases —</strong> changing <code>dim_listings_cleansed</code> to <code>dim_listings</code> creates a new node; downstream <code>ref()</code> calls break unless you use <code>alias</code> config during transition.</li>
+            <li><strong>Folder defaults ignored —</strong> a model in <code>models/dim/</code> becomes a table even if you forgot to add config, because <code>dbt_project.yml</code> sets <code>dim: +materialized: table</code>. Surprises teams expecting view defaults.</li>
+            <li><strong>Ephemeral staging in BI —</strong> analysts cannot <code>SELECT</code> from <code>src_listings</code> directly. Point them at dimensions or temporarily materialise staging as views for debugging.</li>
+            <li><strong>Intermediate layer skipped too long —</strong> copying the same join into three marts means three places to fix bugs. Extract <code>int_</code> when the second mart needs the same logic.</li>
+            <li><strong>Plural/singular drift —</strong> <code>host</code> versus <code>hosts</code> across models breaks auto-generated relationship tests and confuses semantic layers.</li>
+            <li><strong>Hardcoded <code>schema=</code> in model config —</strong> bypasses <code>generate_schema_name</code> and breaks multi-env deployments from Section&nbsp;19.</li>
+            <li><strong>Tests on ephemeral models —</strong> dbt cannot query ephemeral relations directly; test downstream tables that materialise the logic.</li>
+            <li><strong>Legacy folder never deleted —</strong> <code>legacy/</code> models still parse and may run if someone executes <code>dbt run</code> without selection. Exclude via tags or remove when migration completes.</li>
+            <li><strong>Over-nesting folders —</strong> <code>models/marts/marketing/finance/...</code> deeper than three levels makes <code>dbt ls</code> output hard to scan. Prefer flat layer folders with long descriptive names.</li>
+            <li><strong>Confusing analyses with models —</strong> analyses do not run in production DAGs; promoting to a mart requires tests and materialization choice.</li>
+          </ul>
+
+          <h3>Troubleshooting playbook</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Symptom</th><th>Most likely cause</th><th>What to check / fix</th></tr></thead>
+              <tbody>
+                <tr><td>New model lands in wrong schema</td><td>Custom <code>schema</code> config or macro override</td><td>Read <code>macros/generate_schema_name.sql</code>; check <code>target.name</code></td></tr>
+                <tr><td><code>dbt run</code> builds unexpected models</td><td>No selector; legacy tags included</td><td><code>dbt ls --select model_name+</code> before run</td></tr>
+                <tr><td>CI passes locally fails</td><td>Different target, missing env vars, defer state stale</td><td>Compare <code>dbt debug</code> output; refresh manifest artifact</td></tr>
+                <tr><td>Relationship test fails after host version bump</td><td>Test still points at v1</td><td>Update <code>ref('dim_hosts_cleansed', v=2)</code> in YAML and SQL</td></tr>
+                <tr><td>Duplicate rows in mart</td><td>Grain drift or join fan-out</td><td>Assert <code>unique</code> on mart key; inspect join keys in compiled SQL</td></tr>
+                <tr><td>Staging changes do not appear in dim</td><td>Ephemeral inline cache misconception</td><td>Rebuild downstream with <code>dbt run --select dim_listings_cleansed+</code></td></tr>
+                <tr><td>Parse error after package upgrade</td><td>Breaking change in package macro</td><td>Pin prior version in <code>packages.yml</code>; read package changelog</td></tr>
+                <tr><td>Docs site missing new model</td><td>Model in parse-excluded path or disabled</td><td><code>dbt ls --resource-type model</code>; check <code>enabled: false</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Production patterns</h3>
+          <p>Large organisations often split one warehouse into multiple dbt projects: a <code>staging</code> project per source system and a <code>marts</code> project that reads staging via cross-project <code>ref</code> (dbt Mesh) or published views. The Airbnb repo is a single project because it is a teaching artifact; do not assume one repo scales to fifty sources without boundaries.</p>
+
+          <p>Enforce conventions with automation: SQLFluff in pre-commit (power-user branch), required CODEOWNERS on <code>models/mart/</code>, and CI gates that fail when <code>select *</code> appears in changed files. The human-readable style guide becomes worthless if nothing checks it.</p>
+
+          <div class="grid-2">
+            <div class="mini-card">
+              <h4>Pattern: staging as views on BigQuery</h4>
+              <p>BigQuery nested views perform well for moderate depth. Teams materialise staging as views instead of ephemeral so analysts can inspect intermediate layers in the console.</p>
+            </div>
+            <div class="mini-card">
+              <h4>Anti-pattern: mart reads raw directly</h4>
+              <p><code>mart_*</code> selecting from <code>source()</code> skips tests on staging and dims. Any raw schema change breaks the mart with no intermediate failure signal.</p>
+            </div>
+          </div>
+
+<pre data-lang="sql" data-title="macros/generate_schema_name.sql (pattern)" data-explain="Production teams centralise schema naming so dev and prod targets stay isolated without hardcoded database names in models."><code>{% macro generate_schema_name(custom_schema_name, node) -%}
+    {%- set default_schema = target.schema -%}
+    {%- if custom_schema_name is none -%}
+        {{ default_schema }}
+    {%- else -%}
+        {{ custom_schema_name | trim }}
+    {%- endif -%}
+{%- endmacro %}</code></pre>
+
+          <h3>Certification pointers</h3>
+          <p>The certification exam treats project structure and best practices as first-class topics: layer naming, when to use staging versus marts, why <code>ref()</code> matters for environments, and what belongs in tests versus docs. Expect scenario questions (&ldquo;A colleague merges this SQL — what is wrong?&rdquo;) showing hardcoded schemas or missing tests.</p>
+
+          <ul>
+            <li><a href="s07-models.html">Section&nbsp;7</a> &mdash; foundational staging and dimension patterns this section formalises.</li>
+            <li><a href="s11-tests.html">Section&nbsp;11</a> &mdash; tests are part of best practice, not an optional extra; exam assumes you declare them in YAML.</li>
+            <li><a href="s14-documentation.html">Section&nbsp;14</a> &mdash; docs completeness is a review criterion the exam mirrors.</li>
+            <li><a href="s19-production.html">Section&nbsp;19</a> &mdash; environments, CI, and schema macros complete the adoption story.</li>
+            <li><a href="s20-poweruser-fusion-ai.html">Section&nbsp;20</a> &mdash; intermediate layer and SQLFluff on the power-user branch.</li>
+          </ul>
+
+          <div class="callout exam"><strong>Certification:</strong> know the difference between staging (source-aligned, light transforms) and marts (business-aligned, consumer-ready). The exam often lists five model names and asks which breaks the staging rule.</div>
+        </section>
+
+        <section class="section" id="interview">
+          <h2>Interview questions</h2>
+          <p class="muted">Answer each one out loud before opening it.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+
+            <details class="qa">
+              <summary>Why does dbt Labs recommend a staging layer between raw sources and marts?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>Staging isolates the rest of the project from raw schema quirks: renamed columns, type casts deferred to later layers, and one-to-one mapping with source tables. When Fivetran adds a column or renames a field, you fix one staging model instead of every downstream mart.</p>
+                <p>In the Airbnb project, <code>src_listings</code> reads <code>source('airbnb', 'listings')</code> and exposes <code>listing_id</code> and <code>price_str</code>. Dimensions never touch <code>RAW.RAW_LISTINGS</code> directly after sources are declared.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What is the difference between an intermediate model and a dimension?<span class="qa-tag">Modelling</span></summary>
+              <div class="qa-body">
+                <p>An intermediate model (<code>int_</code>) holds reusable logic that is not yet meant for BI consumption — often joins and aggregates at a grain that multiple marts need. A dimension (<code>dim_</code>) describes a business entity at a stable grain and is intended for analysis.</p>
+                <p><code>int_host_performance</code> aggregates listings per host for internal metrics; <code>dim_hosts_cleansed</code> describes host attributes one row per host without portfolio aggregates unless that is the defined entity.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>When would you use ephemeral staging versus staging as views?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p>Ephemeral staging (the course default) inlines into downstream queries — no extra object, no extra storage, but not queryable on its own. Staging as views creates inspectable objects analysts can browse, at the cost of an extra view layer in every query plan.</p>
+                <p>Choose ephemeral on Snowflake when staging is simple and only dbt models consume it. Choose views on BigQuery or when debugging staging frequently. Postgres projects sometimes hit query-length limits with deep ephemeral chains.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What does "one model one grain" mean in practice?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>Every model's output rows must represent the same unit — one listing, one review, one host-day, etc. If a model mixes listing-level and host-level facts without a bridge, BI tools double-count when aggregating.</p>
+                <p><code>fct_reviews</code> is one row per review (via surrogate <code>review_id</code>). <code>dim_listings_w_hosts</code> is one row per listing with host attributes joined — not one row per host.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What should you look for when reviewing a dbt pull request?<span class="qa-tag">Production</span></summary>
+              <div class="qa-body">
+                <p>Check tests on new keys and relationships, docs on models and columns, naming aligned with layer prefixes, <code>ref()</code>/<code>source()</code> instead of hardcoded schemas, appropriate materialization, and incremental logic that cannot silently drop rows. Confirm CI ran against the modified subgraph.</p>
+                <p>Also scan for exposures and downstream dashboards affected by column renames — the course uses model versions for breaking host column changes instead of silent edits.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How would you introduce dbt to a team that only runs ad hoc SQL today?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>Start with one end-to-end pipeline: sources.yml, staging models, one mart answering a real business question. Add primary-key tests on the first merge. Run legacy SQL in parallel until counts match, then expand layer by layer. Do not migrate every dashboard before proving one slice.</p>
+                <p>Introduce git, dev schemas, and CI when a second contributor appears — matching the course arc from Section&nbsp;6 through Section&nbsp;19.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Why is SELECT * discouraged in production dbt models?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p><code>SELECT *</code> passes through new upstream columns automatically. That sounds convenient but breaks explicit contracts, hides grain changes, and can introduce duplicate column names after joins. Schema drift surfaces in production instead of at compile time.</p>
+                <p>Explicit column lists make diffs readable in review and enable enforced contracts — as on <code>dim_hosts_cleansed</code> v2 in the course.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What is wrong with putting business logic in the BI tool instead of dbt?<span class="qa-tag">Modelling</span></summary>
+              <div class="qa-body">
+                <p>The same metric gets defined differently in each dashboard; there is no version control, test, or lineage for BI-calculated fields. When the definition changes, someone must find every workbook manually.</p>
+                <p>Centralising logic in marts — price parsing in <code>dim_listings_cleansed</code>, full-moon flag in <code>mart_fullmoon_reviews</code> — gives one tested definition analysts consume uniformly.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How do import CTEs differ from logical CTEs in the dbt style guide?<span class="qa-tag">SQL</span></summary>
+              <div class="qa-body">
+                <p>Import CTEs pull from {{ ref() }} or {{ source() }} — typically one CTE per upstream relation, often named after that relation. Logical CTEs encode business steps: aggregations, CASE logic, fan-out joins with descriptive names like <code>host_listing_metrics</code>.</p>
+                <p>The final SELECT should read as a thin composition of logical CTEs so reviewers grasp the pipeline top to bottom without parsing nested subqueries.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>When should you add an int_ layer instead of joining directly in a mart?<span class="qa-tag">Performance</span></summary>
+              <div class="qa-body">
+                <p>Add intermediate when two or more marts need the same non-trivial join or aggregation, when the logic is complex enough to warrant its own tests, or when build time improves by persisting an expensive step once.</p>
+                <p>The power-user branch introduces <code>int_host_performance</code> before <code>mart_listing_performance</code> — the pattern you would follow when host metrics feed multiple downstream datasets.</p>
+              </div>
+            </details>
+
+          </div>
+        </section>
+
+        <section class="section" id="practice">
+          <h2>Hands-on practice</h2>
+          <p class="muted">Run these from the <code>airbnb</code> folder with your virtualenv active.</p>
+          <ol class="practice-list">
+
+            <li class="practice">
+              <p class="practice-task">Audit the project structure: list every model by layer (src, dim, fct, mart) and write one sentence stating each model's grain. Confirm staging models reference only <code>source()</code>, not other staging models joined together.</p>
+              <span class="console-path">airbnb/models/</span>
+              <p class="practice-expect">A table with four layers and grain sentences; staging models each depend on a single source table.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Run <code>dbt ls --resource-type model --output name</code> from the airbnb folder.</li>
+                    <li>Group output: <code>src_*</code> (3), <code>dim_*</code> (6+ including Python models), <code>fct_reviews</code>, <code>mart_fullmoon_reviews</code>.</li>
+                    <li>Open each <code>src_</code> file — verify only <code>source('airbnb', …)</code> appears in the FROM clause.</li>
+                    <li>Example grains: <code>src_listings</code> = one row per raw listing; <code>fct_reviews</code> = one row per review.</li>
+                  </ol>
+                  <p class="muted">Undo: no warehouse changes — read-only exercise.</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">Refactor check: open <code>dim_listings_w_hosts.sql</code> and verify it uses <code>ref()</code> with the correct host version. Add a comment at the top documenting the model grain. Run the model and its relationship tests.</p>
+              <span class="console-path">airbnb/models/dim/dim_listings_w_hosts.sql</span>
+              <p class="practice-expect"><code>dbt build --select dim_listings_w_hosts</code> succeeds; relationship tests on <code>dim_listings_cleansed</code> still pass.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Confirm the host CTE uses <code>{{ ref('dim_hosts_cleansed', v=2) }}</code>.</li>
+                    <li>Add a one-line comment: <code>-- grain: one row per listing with host attributes</code>.</li>
+                    <li>Run <code>dbt build --select dim_listings_w_hosts</code>.</li>
+                    <li>Run <code>dbt test --select dim_listings_cleansed</code> to confirm relationships still valid.</li>
+                  </ol>
+<pre data-lang="shell"><code>dbt build --select dim_listings_w_hosts
+dbt test --select dim_listings_cleansed</code></pre>
+                  <p class="muted">Undo: remove the comment line if desired; no schema impact from comments alone.</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">Simulate a code review: create a deliberately bad model <code>models/mart/mart_bad_practice.sql</code> that selects from a hardcoded schema, uses <code>SELECT *</code>, and has no YAML entry. Run <code>dbt compile</code>, then fix all three issues — move to <code>ref()</code>, list columns explicitly, add a minimal entry to <code>schema.yml</code> with <code>not_null</code> on the grain key.</p>
+              <span class="console-path">airbnb/models/mart/mart_bad_practice.sql</span>
+              <p class="practice-expect">After fixes, <code>dbt build --select mart_bad_practice</code> passes and the model appears in <code>dbt docs generate</code> output with a description.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Create the bad model referencing <code>AIRBNB.RAW.RAW_REVIEWS</code> with <code>SELECT *</code>.</li>
+                    <li>Observe compile succeeds but breaks environment portability — fix with <code>{{ ref('fct_reviews') }}</code> and explicit columns.</li>
+                    <li>Add to <code>schema.yml</code>: model name, description, <code>not_null</code> on <code>review_id</code>.</li>
+                    <li>Run <code>dbt build --select mart_bad_practice</code>.</li>
+                  </ol>
+<pre data-lang="sql" data-title="models/mart/mart_bad_practice.sql (fixed)" data-explain="Uses ref(), explicit columns, answers a simple grain — one row per review with listing id only for practice."><code>{{
+  config(materialized='view')
+}}
+SELECT
+  review_id,
+  listing_id,
+  review_date
+FROM {{ ref('fct_reviews') }}</code></pre>
+                  <p class="muted">Undo: <code>dbt run-operation drop_dev_schemas</code> or drop the view manually; delete <code>mart_bad_practice.sql</code> and remove its schema.yml block.</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">Compare ephemeral staging cost: run <code>dbt compile --select dim_listings_cleansed</code> and inspect <code>target/compiled/airbnb/models/dim/dim_listings_cleansed.sql</code>. Confirm <code>src_listings</code> logic is inlined as a CTE rather than referenced as a separate relation.</p>
+              <span class="console-path">target/compiled/airbnb/models/dim/dim_listings_cleansed.sql</span>
+              <p class="practice-expect">Compiled SQL contains a CTE with listing column renames from staging; no <code>FROM dev.src_listings</code> as a standalone table.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Run <code>dbt compile --select dim_listings_cleansed</code>.</li>
+                    <li>Open the compiled file under <code>target/compiled/...</code>.</li>
+                    <li>Search for <code>listing_id</code> aliases from staging — they appear inside a WITH clause, not as a separate schema-qualified table name for src_listings.</li>
+                  </ol>
+                  <p class="muted">Undo: no changes made.</p>
+                </div>
+              </details>
+            </li>
+
+          </ol>
+        </section>
+
+        <section class="section" id="recap">
+          <h2>Recap</h2>
+          <div class="recap">
+            <ul class="checklist">
+              <li>Structure models in layers: staging (<code>src_</code> or <code>stg_</code>) → optional intermediate (<code>int_</code>) → dimensions/facts (<code>dim_</code>/<code>fct_</code>) → marts (<code>mart_</code>).</li>
+              <li>The Airbnb project uses <code>models/src/</code>, <code>dim/</code>, <code>fct/</code>, <code>mart/</code> with folder-level materialization defaults in <code>dbt_project.yml</code>.</li>
+              <li>Staging: one model per source table; rename columns; no cross-source joins.</li>
+              <li>Prefixes encode layer; column names use <code>_id</code> for keys and <code>is_</code>/<code>has_</code> for booleans.</li>
+              <li>SQL style: import CTEs → logical CTEs → final SELECT; avoid <code>SELECT *</code> in production models.</li>
+              <li>Every model declares one grain — state it in docs or comments.</li>
+              <li>PR review checks tests, docs, naming, <code>ref()</code>/<code>source()</code>, materialization, and incremental safety.</li>
+              <li>Adopt dbt incrementally: one vertical slice, tests early, legacy parallel run, CI when team grows.</li>
+              <li>Anti-patterns: god models, BI-layer logic, no tests, ad hoc scripts, hardcoded schemas, daily full refreshes without cause.</li>
+              <li>Power-user branch adds <code>intermediate/</code> and <code>mart_listing_performance</code> — the scaling pattern for shared logic.</li>
+              <li><code>analyses/</code> is for exploration; recurring metrics belong in tested marts.</li>
+              <li>Enforce conventions with SQLFluff, CODEOWNERS, and slim CI — structure only works if review catches drift.</li>
+            </ul>
+            <p style="margin-top:1rem;">
+              <button type="button" data-complete="section-21">Mark complete</button>
+            </p>
+          </div>
+        </section>
+
+      </div>
+
+      <aside class="toc" aria-label="On this page">
+        <strong>On this page</strong>
+        <ol>
+          <li><a href="#lectures">Lectures</a></li>
+          <li><a href="#project-structure">Project structure</a></li>
+          <li><a href="#naming-conventions">Naming conventions</a></li>
+          <li><a href="#style-guide">Style guide</a></li>
+          <li><a href="#code-review">Code review</a></li>
+          <li><a href="#adoption-playbook">Adoption playbook</a></li>
+          <li><a href="#anti-patterns">Anti-patterns</a></li>
+          <li><a href="#deeper">Deeper detail</a></li>
+          <li><a href="#interview">Interview questions</a></li>
+          <li><a href="#practice">Hands-on practice</a></li>
+          <li><a href="#recap">Recap</a></li>
+        </ol>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<footer class="footer">The Complete dbt Bootcamp: Zero to Hero · Section 21 · Offline study edition</footer>
+</body>
+</html>

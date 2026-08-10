@@ -1,0 +1,1381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="dbt bootcamp Section 8: view, table, ephemeral and incremental materializations, folder defaults in dbt_project.yml, is_incremental(), full refresh, incremental strategies, and dim_listings_w_hosts.">
+<title>Section 8 — Materializations | The Complete dbt Bootcamp Notes</title>
+<link rel="stylesheet" href="assets/dbt.css">
+<script defer src="assets/search-index.js"></script>
+<script defer src="assets/code-highlight.js"></script>
+<script defer src="assets/dbt.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">Course section 8 of 22 · The Complete dbt Bootcamp: Zero to Hero</p>
+    <h1>Materializations</h1>
+    <p class="subtitle">How dbt turns a <code>SELECT</code> into something your warehouse can query: the four materializations, folder-level defaults in <code>dbt_project.yml</code>, overriding them in a model file, building an incremental fact on <code>fct_reviews</code>, and joining dimensions into <code>dim_listings_w_hosts</code>.</p>
+    <div class="hero-meta">
+      <span class="chip">8 lectures · ~40min</span>
+      <span class="chip">view table ephemeral incremental</span>
+      <span class="chip">dbt config</span>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <nav class="pager" aria-label="Section navigation">
+    <a href="s07-models.html">← Models</a>
+    <a href="index.html">Course contents</a>
+    <a href="s09-seeds-sources.html">Next: Seeds and Sources →</a>
+  </nav>
+
+  <main id="main">
+    <div class="layout">
+      <div class="content">
+
+        <section class="section" id="lectures">
+          <h2>Lectures in this section</h2>
+          <ol class="lecture-list">
+            <li class="lecture">
+              <a class="lec-title" href="#what-materializations-are">What materializations are and why they matter</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">course-resources.md · Materializations</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#view-materialization">View materialization</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">models/dim/dim_listings_cleansed.sql</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#table-materialization">Table materialization and folder defaults</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">dbt_project.yml · models/dim/</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#ephemeral-materialization">Ephemeral materialization and CTE inlining</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">models/src/ · dbt_project.yml</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#incremental-models">Incremental models</a>
+              <span class="lec-time">~6:00</span>
+              <span class="lec-src">models/fct/fct_reviews.sql</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#full-refresh">Full refresh</a>
+              <span class="lec-time">~4:00</span>
+              <span class="lec-src">course-resources.md · Incremental Models</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#incremental-strategies">Incremental strategies (reference)</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">docs.getdbt.com · incremental-strategy</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#dim-listings-w-hosts">dim_listings_w_hosts and dropping stale views</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">models/dim/dim_listings_w_hosts.sql</span>
+            </li>
+          </ol>
+          <p class="muted">Section 7 introduced models and <code>ref()</code>. This section decides <em>how</em> each model is stored in the warehouse. Every choice here affects build time, query cost, and whether downstream models can see intermediate results.</p>
+        </section>
+
+        <section class="section" id="what-materializations-are">
+          <h2>What materializations are</h2>
+          <p class="lead">A materialization is dbt's answer to one question: after this model's <code>SELECT</code> runs, what object should exist in the warehouse? dbt wraps your SQL in the appropriate DDL &mdash; <code>CREATE VIEW</code>, <code>CREATE TABLE AS</code>, an incremental merge, or nothing at all for ephemeral &mdash; and manages rebuilds on subsequent runs.</p>
+
+          <p>You declare a materialization with the <code>{{ config() }}</code> macro at the top of a model file, or with folder-level defaults in <code>dbt_project.yml</code>. If you set neither, dbt defaults to <code>view</code>.</p>
+
+          <div class="diagram">
+            <p class="diagram-title">dbt compiles a model SELECT into warehouse DDL based on materialization</p>
+            <div class="flow">
+              <div class="node is-model"><b>models/fct/fct_reviews.sql</b><small>SELECT + Jinja</small></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-compute"><b>dbt compile</b><small>config + ref() + is_incremental()</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-store pulse"><b>CREATE … AS (SELECT …)</b><small>view · table · incremental · inline CTE</small></div>
+            </div>
+          </div>
+
+          <h3>The four materializations at a glance</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Materialization</th><th>Object in warehouse</th><th>Rebuilt when</th><th>Typical use</th></tr></thead>
+              <tbody>
+                <tr><td><code>view</code></td><td>A view (virtual, no stored rows)</td><td>Replaced on every <code>dbt run</code> that selects the model</td><td>Light transforms queried occasionally; staging layers in dev</td></tr>
+                <tr><td><code>table</code></td><td>A physical table</td><td>Drop-and-recreate (or truncate-and-insert, adapter-dependent) on every run</td><td>Dimensions, marts, anything dashboards hit repeatedly</td></tr>
+                <tr><td><code>ephemeral</code></td><td>Nothing &mdash; logic is inlined as a CTE in downstream models</td><td>Recompiled into parent SQL every run</td><td>Staging models you never query directly</td></tr>
+                <tr><td><code>incremental</code></td><td>A table that grows over time</td><td>First run builds the full table; later runs append or merge new rows only</td><td>Large append-only facts like reviews</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout info"><strong>Warehouse differences.</strong> On Snowflake, a <code>table</code> model typically uses <code>CREATE OR REPLACE TABLE … AS SELECT</code>. BigQuery uses <code>CREATE OR REPLACE TABLE</code> as well. Postgres and Redshift behave similarly. The exact DDL is adapter-specific; dbt abstracts it so your model file stays the same. Ephemeral inlining works identically on every adapter because it happens at compile time, before SQL reaches the warehouse.</div>
+
+          <h3>Four materializations as design choices</h3>
+          <div class="grid-2">
+            <div class="mini-card">
+              <h4>view</h4>
+              <p>Defers compute to query time. dbt runs a lightweight <code>CREATE OR REPLACE VIEW</code>. Best when data is small, logic changes often, or few consumers read the model directly.</p>
+            </div>
+            <div class="mini-card">
+              <h4>table</h4>
+              <p>Pays compute at build time and stores rows. Every <code>dbt run</code> rebuilds the whole relation unless you later switch to incremental. Best for dimensions and marts that dashboards hit on every refresh.</p>
+            </div>
+            <div class="mini-card">
+              <h4>ephemeral</h4>
+              <p>No warehouse object. SQL is pasted into parents as a CTE. Best for staging and private intermediate logic that should never appear in a schema browser or BI tool.</p>
+            </div>
+            <div class="mini-card">
+              <h4>incremental</h4>
+              <p>A table that grows. First run is a full load; later runs process a subset you define with <code>is_incremental()</code> and a strategy. Best for large append-mostly facts like reviews, events, or logs.</p>
+            </div>
+          </div>
+
+          <p>Materialization is separate from folder naming. A file in <code>models/fct/</code> is not automatically incremental &mdash; it inherits the project default (<code>view</code>) until you set folder or model config. That is why <code>fct_reviews</code> carries an explicit <code>{{ config(materialized='incremental') }}</code> block even though it lives in the fact folder.</p>
+
+          <h3>How the Airbnb project assigns materializations</h3>
+          <p>The course sets sensible defaults once in <code>dbt_project.yml</code>, then overrides individual models where the default is wrong. That pattern scales: folder defaults for the common case, explicit <code>config()</code> for exceptions.</p>
+
+          <div class="filetree">
+            <ul>
+              <li><span class="dir">airbnb/</span>
+                <ul>
+                  <li><span class="file">dbt_project.yml</span> <span class="new">← folder defaults for materializations</span></li>
+                  <li><span class="dir">models/</span>
+                    <ul>
+                      <li><span class="dir">src/</span> <span class="note">ephemeral (folder default)</span></li>
+                      <li><span class="dir">dim/</span> <span class="note">table (folder default); dim_listings_cleansed overrides to view</span></li>
+                      <li><span class="dir">fct/</span> <span class="note">fct_reviews is incremental (model config)</span></li>
+                    </ul>
+                  </li>
+                </ul>
+              </li>
+            </ul>
+          </div>
+
+          <div class="diagram">
+            <p class="diagram-title">Airbnb model layers and their materializations</p>
+            <div class="dag">
+              <div class="dag-col">
+                <p class="dag-label">Sources</p>
+                <div class="node is-source"><b>raw_listings</b></div>
+                <div class="node is-source"><b>raw_reviews</b></div>
+                <div class="node is-source"><b>raw_hosts</b></div>
+              </div>
+              <div class="dag-col">
+                <p class="dag-label">Staging (ephemeral)</p>
+                <div class="node is-model"><b>src_listings</b><small>ephemeral</small></div>
+                <div class="node is-model"><b>src_reviews</b><small>ephemeral</small></div>
+                <div class="node is-model"><b>src_hosts</b><small>ephemeral</small></div>
+              </div>
+              <div class="dag-col">
+                <p class="dag-label">Dimensions (table / view)</p>
+                <div class="node is-mart"><b>dim_listings_cleansed</b><small>view</small></div>
+                <div class="node is-mart"><b>dim_hosts_cleansed</b><small>table</small></div>
+              </div>
+              <div class="dag-col">
+                <p class="dag-label">Facts</p>
+                <div class="node is-store"><b>fct_reviews</b><small>incremental</small></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="section" id="view-materialization">
+          <h2>View materialization</h2>
+          <p class="lead">A view stores no data. dbt runs <code>CREATE OR REPLACE VIEW … AS (your SELECT)</code> and the warehouse executes your logic fresh every time someone queries the view. Build time is cheap; query time is not.</p>
+
+          <p>The <code>dim/</code> folder defaults to <code>table</code> in this project, but <code>dim_listings_cleansed</code> overrides that to <code>view</code>. The instructor's reasoning: listings are small enough that a full rebuild is fast, and a view keeps dev iterations instant while you are still changing the cleansing logic in <a href="s07-models.html">Section&nbsp;7</a>.</p>
+
+<pre data-lang="sql" data-title="models/dim/dim_listings_cleansed.sql" data-explain="Overrides the dim/ folder default of table with view. event_time is used later for --sample in dbt 1.10+."><code>{{
+  config(
+    materialized = 'view',
+    event_time='created_at'
+  )
+}}
+WITH src_listings AS (
+    SELECT * FROM {{ ref('src_listings') }}
+)
+SELECT
+  listing_id,
+  listing_name,
+  room_type,
+  CASE
+    WHEN minimum_nights = 0 THEN 1
+    ELSE minimum_nights
+  END AS minimum_nights,
+  host_id,
+  REPLACE(
+    price_str,
+    '$'
+  ) :: NUMBER(
+    10,
+    2
+  ) AS price,
+  created_at,
+  updated_at
+FROM
+  src_listings</code></pre>
+
+          <p>Because <code>src_listings</code> is ephemeral, the compiled SQL for <code>dim_listings_cleansed</code> inlines the staging CTE rather than reading a <code>SRC_LISTINGS</code> relation. You can verify this by opening <code>target/compiled/airbnb/models/dim/dim_listings_cleansed.sql</code> after <code>dbt compile</code>.</p>
+
+          <div class="terminal">
+            <p class="term-head">dbt run --select dim_listings_cleansed</p>
+            <pre class="term-body"><span class="tt-cmd">dbt run --select dim_listings_cleansed</span>
+<span class="tt-dim">09:14:02  Running with dbt=1.11.12</span>
+<span class="tt-dim">09:14:04  1 of 1 START sql view model DEV.dim_listings_cleansed ................ [RUN]</span>
+<span class="tt-ok">09:14:05  1 of 1 OK created sql view model DEV.dim_listings_cleansed ........... [SUCCESS 1 in 0.89s]</span>
+<span class="tt-ok">09:14:05  Completed successfully</span></pre>
+          </div>
+
+          <p>Notice the log line says <code>sql view model</code>. dbt always tells you which materialization ran. If you expected a table and see <code>view</code>, your config precedence is wrong &mdash; see <a href="#config-precedence">Config precedence</a> below.</p>
+
+          <h3>When to choose view</h3>
+          <ul>
+            <li>The model is small or the upstream data is small, so recomputing on read is acceptable.</li>
+            <li>You are iterating on logic in development and want fast <code>dbt run</code> cycles.</li>
+            <li>Few consumers query the model directly; most traffic goes through a downstream table or mart.</li>
+            <li>You want always-fresh results without managing incremental watermarks.</li>
+          </ul>
+
+          <h3>When view is the wrong choice</h3>
+          <ul>
+            <li>A BI dashboard hits this model on every page load and the underlying join is expensive.</li>
+            <li>The model sits ten layers deep in a chain of views &mdash; the warehouse may re-scan sources repeatedly.</li>
+            <li>You need to run tests or snapshots against a stable relation name with predictable row counts at build time.</li>
+          </ul>
+
+          <div class="callout cost"><strong>Views defer cost to query time.</strong> Building <code>dim_listings_cleansed</code> as a view costs almost nothing. But every <code>SELECT * FROM dim_listings_cleansed</code> re-executes the full pipeline including inlined ephemeral CTEs. If Tableau refreshes hourly against a view stacked on views, you pay that compute on every refresh.</div>
+
+          <h3>What the compiled view looks like</h3>
+          <p>After <code>dbt compile --select dim_listings_cleansed</code>, open <code>target/compiled/airbnb/models/dim/dim_listings_cleansed.sql</code>. Because <code>src_listings</code> is ephemeral, the output is one query with nested CTEs &mdash; no reference to a <code>SRC_LISTINGS</code> table:</p>
+
+<pre data-lang="sql" data-title="target/compiled/airbnb/models/dim/dim_listings_cleansed.sql (conceptual)" data-explain="Ephemeral parents are expanded before the view DDL is generated. This is what Snowflake executes when the view is queried."><code>WITH raw_listings AS (
+    SELECT * FROM AIRBNB.RAW.RAW_LISTINGS
+),
+src_listings AS (
+    SELECT
+        id AS listing_id,
+        name AS listing_name,
+        …
+    FROM raw_listings
+)
+SELECT
+    listing_id,
+    listing_name,
+    room_type,
+    …
+FROM src_listings</code></pre>
+
+          <p>On BigQuery and Databricks the shape is the same; only the raw source reference changes to your project's source or hard-coded table name until <a href="s09-seeds-sources.html">Section&nbsp;9</a> introduces <code>source()</code> for <code>src_reviews</code>.</p>
+
+          <h3>Verifying the object type in Snowflake</h3>
+          <p>After a successful run, confirm the relation is a view, not a table:</p>
+
+<pre data-lang="sql" data-title="Snowflake worksheet" data-explain="SHOW commands reflect what dbt actually created — useful when config precedence surprises you."><code>SHOW VIEWS LIKE 'DIM_LISTINGS_CLEANSED' IN SCHEMA AIRBNB.DEV;
+-- or
+SELECT table_type FROM AIRBNB.INFORMATION_SCHEMA.TABLES
+WHERE table_schema = 'DEV' AND table_name = 'DIM_LISTINGS_CLEANSED';</code></pre>
+
+          <p>Expected result: <code>VIEW</code>. If you see <code>BASE TABLE</code>, the folder default won over your model config or the override was removed from the SQL file.</p>
+
+          <div class="callout exam"><strong>Certification:</strong> know that dbt's default materialization is <code>view</code>, and that a model-level <code>{{ config() }}</code> overrides folder and project defaults. <code>dim_listings_cleansed</code> is the canonical example in this course.</div>
+        </section>
+
+        <section class="section" id="table-materialization">
+          <h2>Table materialization</h2>
+          <p class="lead">A table materialization persists rows physically. dbt rebuilds the entire table on every run (unless you later switch to incremental). Query time is fast because the work already happened at build time.</p>
+
+          <h3>Folder defaults in dbt_project.yml</h3>
+          <p>Rather than repeating <code>{{ config(materialized='table') }}</code> in every dimension file, the project sets folder-level defaults. Models under <code>models/dim/</code> inherit <code>table</code> automatically.</p>
+
+<pre data-lang="yaml" data-title="dbt_project.yml" data-explain="Project-wide default is view; dim/ and src/ folders override. The + prefix means apply to all models in that folder."><code>models:
+  airbnb:
+    +grants:
+      select: ["transform", "reporter"]
+    +post-hook:
+      - "INSERT INTO {{ target.schema }}.audit_log VALUES ('{{ this }}', CURRENT_TIMESTAMP)"
+    +materialized: view
+    dim:
+      +materialized: table
+    src:
+      +materialized: ephemeral
+    fct:
+      +tags: ['fact']</code></pre>
+
+          <p>The hierarchy here is deliberate. Project default: everything is a <code>view</code> unless you say otherwise. Staging (<code>src/</code>): ephemeral, because nobody should query staging directly. Dimensions (<code>dim/</code>): table, because dimensions are joined constantly and should be fast to read. Facts (<code>fct/</code>): no materialization set at folder level &mdash; <code>fct_reviews</code> sets its own config inline.</p>
+
+          <p><code>dim_hosts_cleansed</code> inherits the folder default and builds as a table:</p>
+
+<pre data-lang="sql" data-title="models/dim/dim_hosts_cleansed.sql" data-explain="No materialized config needed — dim/ folder default is table. NVL cleanses null host names."><code>{{
+  config(
+    materialized = 'table'
+    )
+}}
+WITH src_hosts AS (
+    SELECT
+        *
+    FROM
+        {{ ref('src_hosts') }}
+)
+SELECT
+    host_id,
+    NVL(
+        host_name,
+        'Anonymous'
+    ) AS host_name,
+    is_superhost,
+    created_at,
+    updated_at
+FROM
+    src_hosts</code></pre>
+
+          <div class="terminal">
+            <p class="term-head">dbt run --select dim_hosts_cleansed</p>
+            <pre class="term-body"><span class="tt-cmd">dbt run --select dim_hosts_cleansed</span>
+<span class="tt-dim">09:18:11  Running with dbt=1.11.12</span>
+<span class="tt-dim">09:18:13  1 of 1 START sql table model DEV.dim_hosts_cleansed ................. [RUN]</span>
+<span class="tt-ok">09:18:16  1 of 1 OK created sql table model DEV.dim_hosts_cleansed ............ [SUCCESS 1 in 2.41s]</span>
+<span class="tt-ok">09:18:16  Completed successfully</span></pre>
+          </div>
+
+          <p>The log reports <code>sql table model</code> and takes longer than the view because Snowflake scans <code>src_hosts</code> (inlined ephemeral CTE), writes all rows, and runs the post-hook that inserts into <code>audit_log</code>.</p>
+
+          <h3>Grants and post-hooks ride along</h3>
+          <p>Folder configs are not limited to materialization. The same <code>models: airbnb:</code> block grants <code>SELECT</code> to the <code>transform</code> and <code>reporter</code> roles and appends an audit row after every model build. These apply to every model unless overridden &mdash; another reason to centralise defaults in <code>dbt_project.yml</code>.</p>
+
+          <div class="callout tip"><strong>Start as view, promote to table.</strong> A common team convention is to default new models to <code>view</code>, measure which ones are slow or heavily queried, and promote only those to <code>table</code> or <code>incremental</code>. The course inverts that for <code>dim/</code> because dimensions are always join targets, but the principle holds for marts and one-off analyses.</div>
+
+          <h3>Why dim/ defaults to table but one dimension stays a view</h3>
+          <p>The instructor sets <code>dim/</code> to <code>table</code> because dimensions are join targets: BI tools, wide tables like <code>dim_listings_w_hosts</code>, and fact models all read them repeatedly. Materialising once at build time keeps downstream queries fast.</p>
+
+          <p><code>dim_listings_cleansed</code> is the exception because listings cleansing logic was still evolving in <a href="s07-models.html">Section&nbsp;7</a>. A view makes every <code>dbt run</code> cheap while you iterate on the <code>CASE</code> and <code>REPLACE</code> expressions. Once the logic stabilises, many teams would promote it to table &mdash; the course keeps it as view to demonstrate overrides.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Model</th><th>Materialization</th><th>Why</th></tr></thead>
+              <tbody>
+                <tr><td><code>dim_listings_cleansed</code></td><td><code>view</code> (file override)</td><td>Fast iteration; small dataset; inlined ephemeral staging</td></tr>
+                <tr><td><code>dim_hosts_cleansed</code></td><td><code>table</code> (folder default)</td><td>Joined often; stable cleansing; post-hook audit row</td></tr>
+                <tr><td><code>dim_listings_w_hosts</code></td><td><code>table</code> (folder default)</td><td>Wide convenience table for consumers; persists join result</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Table rebuild mechanics on Snowflake</h3>
+          <p>When dbt builds a table model on Snowflake, the adapter typically runs <code>CREATE OR REPLACE TABLE … AS (SELECT …)</code>. The entire previous table is replaced atomically. There is no in-place update of rows &mdash; a "table" materialization always reprocesses every row in your <code>SELECT</code> on every run.</p>
+
+          <p>That is the key motivation for incremental facts: if <code>fct_reviews</code> were a table, each nightly run would scan all of <code>raw_reviews</code> and rewrite every review row even when only a handful of new reviews arrived. On Postgres or Redshift the DDL wording differs slightly, but the full-rebuild semantics are the same.</p>
+
+          <div class="terminal">
+            <p class="term-head">dbt run --select dim_listings_w_hosts</p>
+            <pre class="term-body"><span class="tt-cmd">dbt run --select dim_listings_w_hosts</span>
+<span class="tt-dim">09:22:01  Running with dbt=1.11.12</span>
+<span class="tt-dim">09:22:03  1 of 1 START sql table model DEV.dim_listings_w_hosts ............... [RUN]</span>
+<span class="tt-ok">09:22:06  1 of 1 OK created sql table model DEV.dim_listings_w_hosts .......... [SUCCESS 1 in 2.88s]</span>
+<span class="tt-ok">09:22:06  Completed successfully</span></pre>
+          </div>
+
+          <p>The post-hook from <code>dbt_project.yml</code> fires after the table is created, inserting one row into <code>audit_log</code> with the model name and timestamp. That hook runs regardless of materialization type &mdash; views, tables, and incrementals all get an audit entry in this project.</p>
+        </section>
+
+        <section class="section" id="ephemeral-materialization">
+          <h2>Ephemeral materialization</h2>
+          <p class="lead">Ephemeral models never become warehouse objects. dbt inlines their SQL as a <code>WITH</code> clause (a CTE) inside every downstream model that references them via <code>ref()</code>. There is nothing to <code>SELECT FROM</code> in Snowflake, nothing to document as a separate node in the catalog, and nothing to test with a direct <code>ref()</code> in a singular test.</p>
+
+          <p>The <code>src/</code> folder holds staging models &mdash; thin renames and casts on raw sources. The instructor materializes them as ephemeral because staging is an implementation detail; analysts should query dimensions and facts, not staging.</p>
+
+<pre data-lang="sql" data-title="models/src/src_listings.sql" data-explain="Same pattern as src_reviews: read raw, rename columns. Folder default ephemeral means dbt never runs CREATE for this file."><code>WITH raw_listings AS (
+    SELECT
+        *
+    FROM
+        AIRBNB.RAW.RAW_LISTINGS
+)
+SELECT
+    id AS listing_id,
+    name AS listing_name,
+    listing_url,
+    room_type,
+    minimum_nights,
+    host_id,
+    price AS price_str,
+    created_at,
+    updated_at
+FROM
+    raw_listings</code></pre>
+
+<pre data-lang="sql" data-title="models/src/src_reviews.sql" data-explain="Staging reads from a source (Section 9) and renames columns. Ephemeral folder default means no CREATE statement runs."><code>WITH raw_reviews AS (
+    SELECT
+        *
+    FROM
+        {{ source('airbnb', 'reviews') }}
+)
+SELECT
+    listing_id,
+    DATE AS review_date,
+    reviewer_name,
+    comments AS review_text,
+    sentiment AS review_sentiment
+FROM
+    raw_reviews</code></pre>
+
+          <p>When <code>fct_reviews</code> calls <code>{{ ref('src_reviews') }}</code>, dbt does not generate <code>FROM DEV.SRC_REVIEWS</code>. It pastes the entire <code>src_reviews</code> query as a named CTE in the compiled output.</p>
+
+          <div class="diagram">
+            <p class="diagram-title">Ephemeral src_reviews inlined into fct_reviews at compile time</p>
+            <div class="flow">
+              <div class="node is-model"><b>src_reviews</b><small>ephemeral · no relation</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-compute"><b>dbt compile</b><small>CTE inlining</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-store pulse"><b>fct_reviews</b><small>incremental table · one compiled query</small></div>
+            </div>
+          </div>
+
+          <h3>What dbt generates</h3>
+          <p>Conceptually, the compiled incremental model looks like this (simplified):</p>
+
+<pre data-lang="sql" data-title="target/compiled/.../fct_reviews.sql (conceptual)" data-explain="Ephemeral parents become WITH clauses. The incremental wrapper adds INSERT/MERGE logic around the final SELECT."><code>WITH raw_reviews AS (
+    SELECT * FROM AIRBNB.RAW.RAW_REVIEWS
+),
+src_reviews AS (
+    SELECT
+        listing_id,
+        DATE AS review_date,
+        reviewer_name,
+        comments AS review_text,
+        sentiment AS review_sentiment
+    FROM raw_reviews
+)
+-- incremental logic wraps the SELECT below
+SELECT … FROM src_reviews WHERE review_text IS NOT NULL …</code></pre>
+
+          <h3>Benefits of ephemeral staging</h3>
+          <ul>
+            <li><strong>Cleaner warehouse.</strong> Your dev schema contains business-ready tables (<code>dim_*</code>, <code>fct_*</code>), not fifteen copies of lightly renamed raw columns.</li>
+            <li><strong>No stale staging tables.</strong> A table staging layer can fall behind if someone runs <code>dbt run --select dim_listings_cleansed</code> without rebuilding staging first. Ephemeral staging is always current because it compiles into the parent.</li>
+            <li><strong>Lineage still works.</strong> The DAG shows <code>src_reviews → fct_reviews</code> even though no <code>SRC_REVIEWS</code> object exists.</li>
+          </ul>
+
+          <h3>Drawbacks and limits</h3>
+          <ul>
+            <li><strong>Cannot query directly.</strong> <code>SELECT * FROM src_reviews</code> fails &mdash; there is no such relation. Debug by compiling and reading the parent, or temporarily switch to <code>view</code>.</li>
+            <li><strong>Cannot singular-test in isolation.</strong> A test file that says <code>FROM {{ ref('src_reviews') }}</code> compiles, but you are really testing whichever model inlines it. Errors may point at the downstream file, not staging.</li>
+            <li><strong>Repeated work.</strong> If five table models all <code>ref()</code> the same ephemeral model, the warehouse may execute that CTE's logic five times on five separate builds. Usually acceptable for cheap staging; painful for heavy transforms.</li>
+            <li><strong>Compilation size.</strong> Deep chains of ephemeral models produce very long compiled SQL. Rarely a problem for staging; can hit query-length limits if abused for complex intermediate layers.</li>
+          </ul>
+
+          <div class="callout warn"><strong>If you previously built src models as views, drop them.</strong> Switching a model from <code>view</code> to <code>ephemeral</code> does not remove the old view. Snowflake keeps serving the stale view if something still references it by name. See <a href="#dropping-views">Dropping stale views</a>.</div>
+
+          <h3>What happens when you try to query an ephemeral model</h3>
+          <p>Ephemeral models appear in the DAG and in <code>dbt docs</code>, but they have no relation in the warehouse. Running ad-hoc SQL against them fails:</p>
+
+          <div class="terminal">
+            <p class="term-head">Snowflake · SELECT from ephemeral staging</p>
+            <pre class="term-body"><span class="tt-cmd">SELECT * FROM AIRBNB.DEV.SRC_REVIEWS LIMIT 10;</span>
+<span class="tt-err">SQL compilation error: Object 'AIRBNB.DEV.SRC_REVIEWS' does not exist or not authorized.</span></pre>
+          </div>
+
+          <p>That error is expected after <code>src/</code> is configured as ephemeral. To inspect staging data, either query the downstream model that inlines it (e.g. <code>fct_reviews</code>), read <code>target/compiled/</code>, or temporarily override one staging file to <code>view</code> for debugging and revert before committing.</p>
+
+          <h3>When ephemeral hurts: shared heavy transforms</h3>
+          <p>Suppose you refactor a complex 200-line transformation into <code>int_bookings_enriched</code> as ephemeral, and five mart models each <code>ref()</code> it. On a full <code>dbt run</code>, dbt builds five separate compiled queries, each inlining the full 200 lines. The warehouse executes that logic five times.</p>
+
+          <p>The fix is to materialise shared heavy logic once as a <code>table</code> or <code>incremental</code> intermediate in an <code>intermediate/</code> folder, and keep only thin staging as ephemeral. The course keeps staging ephemeral because renaming raw columns is cheap; the pattern breaks if you push business logic into ephemeral layers referenced by many parents.</p>
+
+          <div class="diagram">
+            <p class="diagram-title">One ephemeral parent referenced by many table children duplicates work</p>
+            <div class="dag">
+              <div class="dag-col">
+                <p class="dag-label">Ephemeral</p>
+                <div class="node is-model pulse"><b>int_heavy_logic</b><small>inlined 5×</small></div>
+              </div>
+              <div class="dag-col">
+                <p class="dag-label">Tables</p>
+                <div class="node is-mart"><b>mart_a</b></div>
+                <div class="node is-mart"><b>mart_b</b></div>
+                <div class="node is-mart"><b>mart_c</b></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="section" id="incremental-models">
+          <h2>Incremental models</h2>
+          <p class="lead">Incremental materialization is for large, append-heavy tables where rebuilding from scratch every run is too slow or too expensive. The first run creates the table; subsequent runs process only new or changed rows, controlled by your SQL and the <code>{% if is_incremental() %}</code> block.</p>
+
+          <p><code>raw_reviews</code> is the largest table in the Airbnb dataset and grows over time. <code>fct_reviews</code> is the course's incremental fact: it filters null review text, adds a surrogate key, and on incremental runs appends rows with <code>review_date</code> newer than the current maximum.</p>
+
+<pre data-lang="sql" data-title="models/fct/fct_reviews.sql" data-explain="Incremental fact: on_schema_change fail stops the run if columns drift. is_incremental() adds a watermark filter on subsequent runs."><code>{{
+  config(
+    materialized = 'incremental',
+    on_schema_change='fail',
+    event_time='review_date'
+    )
+}}
+
+WITH src_reviews AS (
+  SELECT * FROM {{ ref('src_reviews') }}
+)
+SELECT
+  {{ dbt_utils.generate_surrogate_key(['listing_id', 'review_date', 'reviewer_name', 'review_text']) }} as review_id,
+  *
+FROM src_reviews
+WHERE review_text is not null
+{% if is_incremental() %}
+  {% if var("start_date", False) and var("end_date", False) %}
+    {{ log('Loading ' ~ this ~ ' incrementally (start_date: ' ~ var("start_date") ~ ', end_date: ' ~ var("end_date") ~ ')', info=True) }}
+    AND review_date &gt;= '{{ var("start_date") }}'
+    AND review_date &lt; '{{ var("end_date") }}'
+  {% else %}
+    AND review_date &gt; (select max(review_date) from {{ this }})
+    {{ log('Loading ' ~ this ~ ' incrementally (all missing dates)', info=True)}}
+  {% endif %}
+{% endif %}</code></pre>
+
+          <p>The course script shows a simpler version without the surrogate key and variable window &mdash; that is the shape to learn first:</p>
+
+<pre data-lang="sql" data-title="models/fct/fct_reviews.sql (course script baseline)" data-explain="The instructor types this version in the video before later additions. Same incremental watermark pattern."><code>{{
+  config(
+    materialized = 'incremental',
+    on_schema_change='fail'
+    )
+}}
+WITH src_reviews AS (
+  SELECT * FROM {{ ref('src_reviews') }}
+)
+SELECT * FROM src_reviews
+WHERE review_text is not null
+
+{% if is_incremental() %}
+  AND review_date &gt; (select max(review_date) from {{ this }})
+{% endif %}</code></pre>
+
+          <h3>How is_incremental() works</h3>
+          <p><code>is_incremental()</code> is a dbt macro that returns <code>true</code> when:</p>
+          <ol>
+            <li>The model is configured as <code>incremental</code>.</li>
+            <li>The target relation already exists in the warehouse.</li>
+            <li>You are not running with <code>--full-refresh</code>.</li>
+          </ol>
+          <p>On the very first run, the macro returns <code>false</code>, so the watermark filter is skipped and dbt loads all historical reviews. Every run after that adds only rows newer than the current max date.</p>
+
+          <p><code>{{ this }}</code> refers to the relation dbt is building &mdash; the existing incremental table on incremental runs. The subquery <code>(SELECT MAX(review_date) FROM {{ this }})</code> becomes something like <code>(SELECT MAX(review_date) FROM AIRBNB.DEV.FCT_REVIEWS)</code> at compile time.</p>
+
+          <h3>on_schema_change</h3>
+          <p>The config <code>on_schema_change='fail'</code> tells dbt to stop rather than silently guess if your <code>SELECT</code> produces different columns than the existing table. Alternatives:</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Value</th><th>Behaviour when columns differ</th></tr></thead>
+              <tbody>
+                <tr><td><code>ignore</code></td><td>Continue; new columns dropped, missing columns filled with null</td></tr>
+                <tr><td><code>fail</code></td><td>Raise an error and stop the run</td></tr>
+                <tr><td><code>append_new_columns</code></td><td>Add new columns to the target table</td></tr>
+                <tr><td><code>sync_all_columns</code></td><td>Add new columns and remove ones no longer in the SELECT</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p><code>fail</code> is the safe default for production facts. You want to know explicitly when someone adds a column, not discover it weeks later when a dashboard breaks.</p>
+
+          <h3>Demonstrating incremental load</h3>
+          <p>Query existing reviews for listing 3176:</p>
+
+<pre data-lang="sql" data-title="Snowflake worksheet" data-explain="Baseline row count before inserting a new raw review."><code>SELECT * FROM "AIRBNB"."DEV"."FCT_REVIEWS" WHERE listing_id=3176;</code></pre>
+
+          <p>Insert a new row into raw data:</p>
+
+<pre data-lang="sql" data-title="Snowflake worksheet" data-explain="Simulates a new review arriving in the source table after the last dbt run."><code>INSERT INTO "AIRBNB"."RAW"."RAW_REVIEWS"
+VALUES (3176, CURRENT_TIMESTAMP(), 'Zoltan', 'excellent stay!', 'positive');</code></pre>
+
+          <p>Run the incremental model:</p>
+
+          <div class="terminal">
+            <p class="term-head">dbt run --select fct_reviews</p>
+            <pre class="term-body"><span class="tt-cmd">dbt run --select fct_reviews</span>
+<span class="tt-dim">09:32:08  Running with dbt=1.11.12</span>
+<span class="tt-dim">09:32:10  1 of 1 START sql incremental model DEV.fct_reviews ................. [RUN]</span>
+<span class="tt-ok">09:32:14  1 of 1 OK created sql incremental model DEV.fct_reviews ............ [SUCCESS 1 in 3.87s]</span>
+<span class="tt-ok">09:32:14  Completed successfully</span></pre>
+          </div>
+
+          <p>Re-query listing 3176 &mdash; the new review appears. dbt did not rebuild the entire fact table; it appended rows matching the incremental predicate.</p>
+
+          <div class="callout danger"><strong>Incremental logic is your responsibility.</strong> dbt provides the wrapper DDL and <code>is_incremental()</code>; it does not automatically know which rows are new. A missing or wrong watermark silently skips data or duplicates rows depending on your unique keys and strategy.</div>
+
+          <h3>The {{ this }} macro in incremental models</h3>
+          <p><code>{{ this }}</code> resolves to the relation dbt is currently building &mdash; the schema-qualified name of the incremental table in the active target. In dev that is something like <code>AIRBNB.DEV.FCT_REVIEWS</code>. You use it inside incremental branches to read from the existing table:</p>
+
+          <ul>
+            <li><code>SELECT MAX(review_date) FROM {{ this }}</code> &mdash; watermark for append-only loads</li>
+            <li><code>DELETE FROM {{ this }} WHERE date = …</code> &mdash; custom patterns (advanced; prefer strategy config)</li>
+            <li><code>{{ log('Loading ' ~ this ~ ' incrementally', info=True) }}</code> &mdash; logging which relation is being updated</li>
+          </ul>
+
+          <p>On first run, the table does not exist yet, so dbt skips the incremental branch entirely. On later runs, the table exists and <code>is_incremental()</code> returns true, so the watermark subquery runs against the populated table.</p>
+
+          <h3>Late-arriving and backdated rows</h3>
+          <p>The watermark <code>review_date &gt; MAX(review_date)</code> assumes review dates always move forward in time. If a source system backfills a review with an older <code>review_date</code> than the current max, that row never loads on incremental runs.</p>
+
+          <p>Fixes depend on the business case:</p>
+          <ul>
+            <li>Switch to <code>merge</code> on <code>review_id</code> and widen the filter to include a lookback window (e.g. last 7 days).</li>
+            <li>Use a source ingestion timestamp (<code>_loaded_at</code>) as the watermark instead of business event time.</li>
+            <li>Run a periodic <code>--full-refresh</code> in a controlled window to catch stragglers.</li>
+          </ul>
+
+          <p>The course dataset is append-only with monotonic dates, so the simple max-date pattern is sufficient for learning. Production pipelines almost always hit late data within the first month.</p>
+
+          <h3>Variable window for orchestrators (later in the course)</h3>
+          <p>The finished <code>fct_reviews.sql</code> in the repo supports optional <code>start_date</code> and <code>end_date</code> variables so an orchestrator can pass a batch window instead of relying on max-date alone. That pattern appears in <a href="s18-orchestration.html">Section&nbsp;18</a>:</p>
+
+<pre data-lang="shell" data-title="Terminal" data-explain="Orchestrators pass explicit date windows for backfills or partitioned runs."><code>dbt run --select fct_reviews --vars '{start_date: "2024-02-15 00:00:00", end_date: "2024-03-15 23:59:59"}'</code></pre>
+
+          <p>When both variables are set, the model logs the window and filters <code>review_date</code> into that range. When they are unset, it falls back to the max-date watermark. This is the hand-rolled precursor to <code>incremental_strategy='microbatch'</code> introduced later for <code>mart_fullmoon_reviews</code>.</p>
+
+          <h3>event_time on incremental models</h3>
+          <p>The repo config includes <code>event_time='review_date'</code>. In dbt 1.10+, this enables <code>dbt run --sample</code> to build a subset of recent rows in dev without scanning full history. It also pairs with microbatch incrementals in later sections. Setting <code>event_time</code> does not change incremental behaviour by itself &mdash; your <code>is_incremental()</code> block still controls what loads.</p>
+        </section>
+
+        <section class="section" id="full-refresh">
+          <h2>Full refresh</h2>
+          <p class="lead">A full refresh rebuilds incremental models from scratch, ignoring existing data and treating the run as if the table did not exist. Use it after logic changes, backfills, or recovering from bad data.</p>
+
+          <div class="terminal">
+            <p class="term-head">dbt run --full-refresh</p>
+            <pre class="term-body"><span class="tt-cmd">dbt run --full-refresh</span>
+<span class="tt-dim">09:40:01  Running with dbt=1.11.12</span>
+<span class="tt-warn">09:40:01  Full refresh mode enabled. All incremental models will be rebuilt from scratch.</span>
+<span class="tt-dim">09:40:05  1 of 12 START sql incremental model DEV.fct_reviews ................. [RUN]</span>
+<span class="tt-ok">09:40:22  1 of 12 OK created sql incremental model DEV.fct_reviews ........... [SUCCESS 1 in 16.4s]</span>
+<span class="tt-ok">09:41:08  Completed successfully</span></pre>
+          </div>
+
+          <p>You can scope full refresh to one model:</p>
+
+<pre data-lang="shell" data-title="Terminal" data-explain="Rebuild only fct_reviews without touching other incrementals."><code>dbt run --select fct_reviews --full-refresh</code></pre>
+
+          <p>During full refresh, <code>is_incremental()</code> returns <code>false</code>, so the watermark clause is omitted and every row from <code>src_reviews</code> that passes the <code>WHERE</code> filter is loaded.</p>
+
+          <h3>Full refresh scoped to one model versus the whole project</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Command</th><th>What rebuilds</th><th>When to use</th></tr></thead>
+              <tbody>
+                <tr><td><code>dbt run --full-refresh</code></td><td>Every incremental model in the project</td><td>Major logic change affecting all facts; rare in prod</td></tr>
+                <tr><td><code>dbt run --select fct_reviews --full-refresh</code></td><td>Only <code>fct_reviews</code></td><td>Fix one fact after watermark bug or schema change</td></tr>
+                <tr><td><code>dbt build --select fct_reviews --full-refresh</code></td><td>Model plus its tests</td><td>Rebuild and validate in one command (<a href="s11-tests.html">Section&nbsp;11</a>)</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>Non-incremental models (views, tables, ephemeral) ignore <code>--full-refresh</code> &mdash; a table model always fully rebuilds anyway. The flag only changes behaviour for models configured as <code>incremental</code>.</p>
+
+          <h3>What dbt does internally on full refresh</h3>
+          <p>Adapter behaviour varies slightly, but on Snowflake dbt typically drops or truncates the existing incremental table, then runs the model SQL without the incremental filter &mdash; equivalent to a first run. Row counts after full refresh should match a fresh <code>SELECT COUNT(*)</code> from the filtered source query.</p>
+
+          <p>Compare counts before and after to validate:</p>
+
+<pre data-lang="sql" data-title="Snowflake worksheet" data-explain="After full refresh, fct_reviews row count should match filtered src logic."><code>SELECT COUNT(*) FROM "AIRBNB"."DEV"."FCT_REVIEWS";
+-- expect roughly all non-null review_text rows from raw_reviews</code></pre>
+
+          <h3>When you need full refresh</h3>
+          <ul>
+            <li>You changed the incremental filter logic and need to reprocess history.</li>
+            <li>A bug wrote duplicate or corrupt rows and you need a clean slate.</li>
+            <li>You added a column and set <code>on_schema_change='fail'</code> &mdash; sometimes a full refresh is the intentional fix after updating the model.</li>
+            <li>You promoted code from dev to prod and want the prod table built consistently.</li>
+          </ul>
+
+          <div class="callout cost"><strong>Full refresh on a large incremental model is the most expensive single command in many projects.</strong> <code>fct_reviews</code> is manageable in the course dataset; in production a fact with billions of rows can take hours and scan the entire source table. Guard prod with <code>full_refresh: false</code> in the model config if casual rebuilds must be blocked.</div>
+        </section>
+
+        <section class="section" id="incremental-strategies">
+          <h2>Incremental strategies</h2>
+          <p class="lead">The <code>incremental_strategy</code> config tells the adapter how to merge new rows into the existing table. If you omit it, dbt picks a default for your warehouse &mdash; on Snowflake that is typically <code>merge</code> when a <code>unique_key</code> is set, otherwise <code>append</code>.</p>
+
+          <p>The course mentions strategies as reference material. Official documentation:
+            <a href="https://docs.getdbt.com/docs/build/incremental-strategy">docs.getdbt.com/docs/build/incremental-strategy</a>.</p>
+
+          <h3>Merge strategy example</h3>
+          <p>When rows can arrive twice for the same business key (late-arriving updates, reprocessed extracts), append is wrong &mdash; you need merge semantics keyed on a unique identifier:</p>
+
+<pre data-lang="sql" data-title="models/fct/fct_reviews.sql (merge variant)" data-explain="merge + unique_key upserts rows with the same review_id instead of duplicating them."><code>{{
+  config(
+    materialized='incremental',
+    incremental_strategy='merge',
+    unique_key='review_id'
+  )
+}}
+WITH src_reviews AS (
+  SELECT * FROM {{ ref('src_reviews') }}
+)
+SELECT * FROM src_reviews
+WHERE review_text is not null
+
+{% if is_incremental() %}
+  AND review_date &gt; (select max(review_date) from {{ this }})
+{% endif %}</code></pre>
+
+          <h3>Strategy reference</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Strategy</th><th>What it does</th><th>Needs unique_key</th><th>Typical warehouse</th></tr></thead>
+              <tbody>
+                <tr><td><code>append</code></td><td>Insert new rows only; never updates existing</td><td>No</td><td>All (default without unique_key on many adapters)</td></tr>
+                <tr><td><code>merge</code></td><td>Upsert: update matching keys, insert new keys</td><td>Yes</td><td>Snowflake, BigQuery, Databricks, Postgres</td></tr>
+                <tr><td><code>delete+insert</code></td><td>Delete rows matching a subset, then insert from staging</td><td>Often yes</td><td>Snowflake, Redshift</td></tr>
+                <tr><td><code>insert_overwrite</code></td><td>Replace entire partitions touched by new data</td><td>Partition config</td><td>BigQuery, Spark</td></tr>
+                <tr><td><code>microbatch</code></td><td>Process fixed time batches using <code>event_time</code></td><td>Batch config</td><td>dbt 1.9+; used later for <code>mart_fullmoon_reviews</code> in <a href="s09-seeds-sources.html">Section&nbsp;9</a></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>The timestamp watermark in <code>fct_reviews</code> (<code>review_date &gt; MAX(review_date)</code>) pairs naturally with <code>append</code> because reviews are insert-only in this dataset. If reviews could be edited in place, you would switch to <code>merge</code> on <code>review_id</code> and widen the incremental filter.</p>
+
+          <div class="callout info"><strong>Microbatch arrives in Section 9.</strong> dbt 1.9 introduced <code>incremental_strategy='microbatch'</code> with <code>event_time</code> on the model config. The course applies it to <code>mart_fullmoon_reviews</code>. The manual <code>var('start_date')</code> / <code>var('end_date')</code> pattern in the current <code>fct_reviews.sql</code> is the hand-rolled predecessor of that feature.</div>
+
+          <h3>Choosing a strategy in practice</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Source behaviour</th><th>Recommended strategy</th><th>Config you need</th></tr></thead>
+              <tbody>
+                <tr><td>Insert-only events with monotonic timestamp</td><td><code>append</code> (default without unique_key on Snowflake)</td><td>Watermark in <code>is_incremental()</code> block</td></tr>
+                <tr><td>Rows can update in place for same business key</td><td><code>merge</code></td><td><code>unique_key='review_id'</code></td></tr>
+                <tr><td>Replace entire daily partition</td><td><code>delete+insert</code> or <code>insert_overwrite</code></td><td>Partition column + adapter support</td></tr>
+                <tr><td>Fixed time batches from orchestrator</td><td><code>microbatch</code></td><td><code>event_time</code>, batch window config</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>On Databricks and BigQuery, default strategies and supported options differ slightly from Snowflake. Always check the adapter docs for your warehouse before copying a Snowflake merge config into another platform.</p>
+
+          <h3>delete+insert and insert_overwrite (reference)</h3>
+          <p><code>delete+insert</code> removes rows from the target that match a condition, then inserts the staging result. Useful when you reload a sliding window (e.g. last 3 days of mutable data) without rebuilding the entire table. <code>insert_overwrite</code> replaces whole partitions on adapters that support partition-level overwrite (common on BigQuery). Neither appears in the course Airbnb project, but interviewers often ask how they differ from merge.</p>
+        </section>
+
+        <section class="section" id="dim-listings-w-hosts">
+          <h2>dim_listings_w_hosts</h2>
+          <p class="lead">Not every model needs a new materialization decision. <code>dim_listings_w_hosts</code> is a convenience dimension that joins listings to hosts so downstream consumers and BI tools query one wide table instead of repeating the join.</p>
+
+          <p>It inherits the <code>dim/</code> folder default: <code>table</code>. No explicit <code>config()</code> block is required unless you want to override.</p>
+
+          <p>The instructor types this version in the Section 8 lecture (before model versioning in <a href="s19-production.html">Section&nbsp;19</a>):</p>
+
+<pre data-lang="sql" data-title="models/dim/dim_listings_w_hosts.sql (course script)" data-explain="Section 8 lecture version: ref dim_hosts_cleansed without version suffix."><code>WITH
+l AS (
+    SELECT
+        *
+    FROM
+        {{ ref('dim_listings_cleansed') }}
+),
+h AS (
+    SELECT *
+    FROM {{ ref('dim_hosts_cleansed') }}
+)
+
+SELECT
+    l.listing_id,
+    l.listing_name,
+    l.room_type,
+    l.minimum_nights,
+    l.price,
+    l.host_id,
+    h.host_name,
+    h.is_superhost as host_is_superhost,
+    l.created_at,
+    GREATEST(l.updated_at, h.updated_at) as updated_at
+FROM l
+LEFT JOIN h ON (h.host_id = l.host_id)</code></pre>
+
+          <p>The finished repo file adds <code>ref('dim_hosts_cleansed', v=2)</code> once model versioning is introduced. The join pattern is identical &mdash; only the host dimension version changes.</p>
+
+<pre data-lang="sql" data-title="models/dim/dim_listings_w_hosts.sql" data-explain="Joins cleansed listings and hosts. updated_at is the GREATEST of both source timestamps."><code>WITH
+l AS (
+    SELECT
+        *
+    FROM
+        {{ ref('dim_listings_cleansed') }}
+),
+h AS (
+    SELECT *
+    FROM {{ ref('dim_hosts_cleansed', v=2) }}
+    -- We are only adding the `, v=2` part at the Model Versioning section
+)
+
+SELECT
+    l.listing_id,
+    l.listing_name,
+    l.room_type,
+    l.minimum_nights,
+    l.price,
+    l.host_id,
+    h.host_name,
+    h.is_superhost as host_is_superhost,
+    l.created_at,
+    GREATEST(l.updated_at, h.updated_at) as updated_at
+FROM l
+LEFT JOIN h ON (h.host_id = l.host_id)</code></pre>
+
+          <p>In the Section 8 lecture the instructor uses <code>{{ ref('dim_hosts_cleansed') }}</code> without a version. By the end of the course, model versioning (<a href="s19-production.html">Section&nbsp;19</a>) introduces <code>dim_hosts_cleansed_v2</code>, and the join model switches to <code>ref('dim_hosts_cleansed', v=2)</code>. The join pattern itself does not change &mdash; only which version of the host dimension you read.</p>
+
+          <div class="diagram">
+            <p class="diagram-title">dim_listings_w_hosts combines a view and a table</p>
+            <div class="flow">
+              <div class="node is-mart"><b>dim_listings_cleansed</b><small>view</small></div>
+              <span class="arrow">+</span>
+              <div class="node is-mart"><b>dim_hosts_cleansed</b><small>table</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-store pulse"><b>dim_listings_w_hosts</b><small>table</small></div>
+            </div>
+          </div>
+
+          <p>Because <code>dim_listings_cleansed</code> is a view, building <code>dim_listings_w_hosts</code> executes the listings logic at build time and persists the result. Consumers of the wide table pay no view penalty.</p>
+
+          <h3>Build order and dependencies</h3>
+          <p>dbt builds <code>dim_listings_w_hosts</code> only after its parents exist. The DAG for this model is:</p>
+
+          <div class="diagram">
+            <p class="diagram-title">Build order for dim_listings_w_hosts</p>
+            <div class="flow">
+              <div class="node is-model"><b>src_listings</b><small>ephemeral</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-mart"><b>dim_listings_cleansed</b><small>view</small></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-model"><b>src_hosts</b><small>ephemeral</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-mart"><b>dim_hosts_cleansed</b><small>table</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-store pulse"><b>dim_listings_w_hosts</b><small>table</small></div>
+            </div>
+          </div>
+
+          <p>Running <code>dbt run --select dim_listings_w_hosts+</code> builds this model and everything downstream. Running <code>dbt run --select +dim_listings_w_hosts</code> builds all upstream dependencies first &mdash; the pattern from <a href="s07-models.html">Section&nbsp;7</a> still applies; materialization only changes what DDL runs at each node.</p>
+
+          <p><code>GREATEST(l.updated_at, h.updated_at)</code> gives downstream consumers a single "last changed" timestamp for the joined row. If either side updates, the wide table reflects the newer of the two on the next build.</p>
+
+          <div class="terminal">
+            <p class="term-head">dbt run --select dim_listings_w_hosts</p>
+            <pre class="term-body"><span class="tt-cmd">dbt run --select dim_listings_w_hosts</span>
+<span class="tt-dim">09:48:02  Running with dbt=1.11.12</span>
+<span class="tt-dim">09:48:04  1 of 1 START sql table model DEV.dim_listings_w_hosts ............... [RUN]</span>
+<span class="tt-ok">09:48:07  1 of 1 OK created sql table model DEV.dim_listings_w_hosts .......... [SUCCESS 1 in 2.95s]</span>
+<span class="tt-ok">09:48:07  Completed successfully</span></pre>
+          </div>
+        </section>
+
+        <section class="section" id="dropping-views">
+          <h2>Dropping stale views after ephemeral</h2>
+          <p class="lead">Materialization changes are not always clean. If you first built <code>src_listings</code>, <code>src_hosts</code>, and <code>src_reviews</code> as views &mdash; the default before folder config was applied &mdash; those views remain in Snowflake after you switch the folder to ephemeral. dbt stops maintaining them, but they still exist and can confuse anyone browsing the schema.</p>
+
+          <p>The instructor drops them manually once:</p>
+
+<pre data-lang="sql" data-title="Snowflake worksheet" data-explain="Remove orphaned views that are no longer managed by dbt after switching src/ to ephemeral."><code>DROP VIEW AIRBNB.DEV.SRC_HOSTS;
+DROP VIEW AIRBNB.DEV.SRC_LISTINGS;
+DROP VIEW AIRBNB.DEV.SRC_REVIEWS;</code></pre>
+
+          <p>This is a one-time cleanup, not part of every run. After dropping, only objects dbt currently materializes appear in <code>DEV</code>.</p>
+
+          <h3>Why the old views existed</h3>
+          <p>Early in the course, before folder defaults were applied, staging models built as views (the dbt default). The log would have shown <code>START sql view model DEV.src_reviews</code>. After changing <code>dbt_project.yml</code> to set <code>src: +materialized: ephemeral</code>, the next run stopped creating or replacing those views &mdash; but Snowflake never drops objects automatically. Anyone browsing the schema still sees <code>SRC_*</code> and may assume they are current.</p>
+
+          <p>The same issue appears when changing a model from <code>view</code> to <code>table</code> or renaming a model: the old object persists until dropped. dbt tracks models by name in <code>target/manifest.json</code>; orphaned relations are outside that manifest.</p>
+
+          <div class="callout tip"><strong>Verify with dbt ls and your warehouse.</strong> Run <code>dbt ls --resource-type model</code> to see what dbt knows about, then compare to <code>SHOW VIEWS IN SCHEMA AIRBNB.DEV</code>. Anything in Snowflake but not in dbt's manifest is a candidate for manual drop.</div>
+        </section>
+
+        <section class="section" id="comparison-table">
+          <h2>Materialization comparison</h2>
+          <p class="lead">Use this table when choosing or reviewing materializations in code review. No row is universally correct &mdash; the right choice depends on table size, query patterns, and mutability.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Materialization</th><th>Build cost</th><th>Query cost</th><th>Storage</th><th>Can query directly</th><th>Can test directly</th><th>Best for</th></tr></thead>
+              <tbody>
+                <tr><td><code>view</code></td><td>Low</td><td>High (recompute every query)</td><td>None</td><td>Yes</td><td>Yes</td><td>Thin transforms, dev iteration, rarely queried layers</td></tr>
+                <tr><td><code>table</code></td><td>High (full rebuild)</td><td>Low</td><td>Full copy of rows</td><td>Yes</td><td>Yes</td><td>Dimensions, marts, heavily queried models</td></tr>
+                <tr><td><code>ephemeral</code></td><td>Inlined into parents</td><td>Paid by parent builds/queries</td><td>None</td><td>No</td><td>Indirectly</td><td>Staging, private intermediate logic</td></tr>
+                <tr><td><code>incremental</code></td><td>Medium after first run</td><td>Low</td><td>Grows over time</td><td>Yes</td><td>Yes</td><td>Large append-mostly facts</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="analogy"><strong>Everyday analogy —</strong> a view is a recipe taped to the fridge: cheap to update, but someone cooks from scratch every dinner. A table is meal prep in the freezer: effort upfront, fast later. Ephemeral is a prep step written inside another recipe, never stored on its own. Incremental is a freezer you only add today's leftovers to, not a full re-cook.</div>
+
+          <h3>Quick decision checklist</h3>
+          <p>When reviewing a pull request or designing a new model, walk through these questions in order:</p>
+          <ol>
+            <li>Will anyone query this model directly in SQL or BI? If no, consider <code>ephemeral</code>.</li>
+            <li>Is the dataset large and append-heavy? If yes, consider <code>incremental</code>.</li>
+            <li>Is the model queried frequently with expensive logic? If yes, prefer <code>table</code> over <code>view</code>.</li>
+            <li>Is the dataset small and logic still changing? If yes, <code>view</code> is fine for now.</li>
+            <li>Does the model need a stable relation for tests or snapshots? If yes, not <code>ephemeral</code>.</li>
+          </ol>
+
+          <p>The Airbnb project applies this checklist: staging is ephemeral (not queried directly), dimensions are mostly tables (joined often), listings cleansing stays a view during early iteration, and reviews are incremental (large and growing).</p>
+        </section>
+
+        <section class="section" id="config-precedence">
+          <h2>Config precedence</h2>
+          <p class="lead">When the same setting appears in multiple places, dbt resolves it in a fixed order. The most specific config wins. Misunderstanding this order is the main reason a model builds as the wrong materialization.</p>
+
+          <h3>Order of precedence (highest wins)</h3>
+          <ol>
+            <li><strong>Config in the model SQL file</strong> &mdash; the <code>{{ config(materialized='view') }}</code> block at the top of <code>dim_listings_cleansed.sql</code> beats everything below.</li>
+            <li><strong>Config on a specific model in <code>dbt_project.yml</code></strong> &mdash; e.g. naming one model under <code>models: airbnb: dim: dim_listings_cleansed: +materialized: table</code> (not used in this project, but supported).</li>
+            <li><strong>Folder-level config in <code>dbt_project.yml</code></strong> &mdash; <code>dim: +materialized: table</code> applies to every file in <code>models/dim/</code> unless overridden by (1) or (2).</li>
+            <li><strong>Project-level config in <code>dbt_project.yml</code></strong> &mdash; <code>models: airbnb: +materialized: view</code> is the default for all models in the project.</li>
+            <li><strong>dbt defaults</strong> &mdash; if nothing above sets materialization, dbt uses <code>view</code>.</li>
+          </ol>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Model</th><th>Folder default</th><th>Model file config</th><th>Effective materialization</th></tr></thead>
+              <tbody>
+                <tr><td><code>src_reviews</code></td><td><code>src/ → ephemeral</code></td><td>none</td><td><code>ephemeral</code></td></tr>
+                <tr><td><code>dim_hosts_cleansed</code></td><td><code>dim/ → table</code></td><td><code>table</code> (explicit, redundant)</td><td><code>table</code></td></tr>
+                <tr><td><code>dim_listings_cleansed</code></td><td><code>dim/ → table</code></td><td><code>view</code></td><td><code>view</code> (file wins)</td></tr>
+                <tr><td><code>fct_reviews</code></td><td><code>fct/ → view</code> (project default)</td><td><code>incremental</code></td><td><code>incremental</code></td></tr>
+                <tr><td><code>dim_listings_w_hosts</code></td><td><code>dim/ → table</code></td><td>none</td><td><code>table</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>You can inspect the resolved config without running the model:</p>
+
+<pre data-lang="shell" data-title="Terminal" data-explain="Prints the fully merged config for one model after all precedence rules apply."><code>dbt compile --select fct_reviews
+# then inspect target/compiled/... or use:
+dbt ls --select fct_reviews --output json</code></pre>
+
+          <div class="callout exam"><strong>Certification:</strong> expect a question that lists four config locations and asks which wins. Remember: model file &gt; project YAML for that model &gt; folder YAML &gt; project-wide YAML &gt; dbt default.</div>
+
+          <h3>Where each config lives in the Airbnb project</h3>
+          <div class="stack">
+            <div class="layer"><strong>1. Model SQL file</strong> &mdash; <code>{{ config(materialized='view') }}</code> in <code>dim_listings_cleansed.sql</code>; <code>materialized='incremental'</code> in <code>fct_reviews.sql</code></div>
+            <div class="layer"><strong>2. Model-specific YAML</strong> &mdash; not used in this course, but supported: <code>models: airbnb: dim: dim_listings_cleansed: +materialized: table</code></div>
+            <div class="layer"><strong>3. Folder YAML</strong> &mdash; <code>dim: +materialized: table</code>, <code>src: +materialized: ephemeral</code> in <code>dbt_project.yml</code></div>
+            <div class="layer"><strong>4. Project YAML</strong> &mdash; <code>models: airbnb: +materialized: view</code> applies to all models without a more specific rule</div>
+            <div class="layer"><strong>5. dbt default</strong> &mdash; <code>view</code> if nothing above is set</div>
+          </div>
+
+          <p>The <code>+</code> prefix in <code>dbt_project.yml</code> means "apply this config to all models under this key". Without <code>+</code>, dbt treats the key as a subfolder path. The project name (<code>airbnb</code>) must match the <code>name:</code> field in <code>dbt_project.yml</code> &mdash; a common copy-paste error in multi-project repos is nesting config under the wrong project key so folder defaults silently never apply.</p>
+
+          <h3>Config in profiles.yml does not set materialization</h3>
+          <p><code>profiles.yml</code> controls connection targets (account, role, warehouse, schema, threads). It never sets <code>materialized</code>. Certification questions sometimes mix the two files: if a model builds as a view when you expected a table, look at <code>dbt_project.yml</code> and the model file, not <code>profiles.yml</code>.</p>
+
+          <div class="callout info"><strong>dbt_project.yml vs packages.</strong> Materialization defaults belong in your project's <code>dbt_project.yml</code>. Installed packages (e.g. <code>dbt_utils</code>) have their own project configs; your folder defaults do not override models inside packages unless you add a config block for that package name.</div>
+        </section>
+
+        <section class="section" id="deeper">
+          <h2>Deeper detail and edge cases</h2>
+          <p class="lead">Operational detail the videos skip: version-specific incremental behaviour, warehouse billing implications, the failure modes teams hit in their first incremental model, and how production projects standardise materialization choices.</p>
+
+          <h3>Version notes</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Behaviour</th><th>Before</th><th>Now</th><th>Version</th></tr></thead>
+              <tbody>
+                <tr><td>Default incremental strategy (Snowflake)</td><td><code>append</code> common</td><td><code>merge</code> when <code>unique_key</code> set</td><td>1.5+</td></tr>
+                <tr><td><code>on_schema_change</code> options</td><td><code>ignore</code>, <code>fail</code>, <code>sync_all_columns</code></td><td>Added <code>append_new_columns</code></td><td>1.1</td></tr>
+                <tr><td>Microbatch incremental</td><td>Manual date variables</td><td><code>incremental_strategy='microbatch'</code> + <code>event_time</code></td><td>1.9</td></tr>
+                <tr><td><code>--sample</code> for dev runs</td><td>Not available</td><td>Sample recent <code>event_time</code> rows</td><td>1.10</td></tr>
+                <tr><td><code>event_time</code> on models</td><td>Not used</td><td>Enables sampling and microbatch</td><td>1.10</td></tr>
+                <tr><td>Incremental predicates config</td><td>SQL only</td><td><code>incremental_predicates</code> for merge optimisation</td><td>1.5+</td></tr>
+                <tr><td><code>full_refresh: false</code></td><td>Not available</td><td>Blocks accidental <code>--full-refresh</code></td><td>1.0+</td></tr>
+                <tr><td>Python models materialization</td><td>Table only</td><td>Table (incremental support adapter-specific)</td><td>1.3+</td></tr>
+                <tr><td>Iceberg / lakehouse tables</td><td>N/A</td><td><code>table_format: iceberg</code> on supported adapters</td><td>1.8+</td></tr>
+                <tr><td><code>incremental_strategy merge</code> default</td><td>Manual strategy required</td><td>Snowflake defaults to merge when <code>unique_key</code> set</td><td>1.5+</td></tr>
+                <tr><td><code>dbt run --sample</code></td><td>Not available</td><td>Requires <code>event_time</code> on model</td><td>1.10</td></tr>
+                <tr><td>Custom materializations</td><td>Rare in Core</td><td>Still supported via plugins; not on certification exam</td><td>—</td></tr>
+                <tr><td><code>contracts</code> on materialized views</td><td>N/A</td><td>Model contracts apply to tables/incrementals; views limited</td><td>1.5+</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>What it costs to run</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>What runs</th><th>Where the cost lands</th><th>How to spend less</th></tr></thead>
+              <tbody>
+                <tr><td><code>view</code> model build</td><td>Almost free &mdash; metadata only</td><td>Do not stack views for heavy marts; materialise instead</td></tr>
+                <tr><td>Query against a view</td><td>Every consumer pays full upstream compute</td><td>Materialise hot paths as tables</td></tr>
+                <tr><td><code>table</code> full rebuild</td><td>Scan all inputs + rewrite all rows each run</td><td>Switch to incremental when runtime exceeds SLA</td></tr>
+                <tr><td><code>ephemeral</code> chain</td><td>Cost folded into each parent build; duplicated if many parents</td><td>Keep ephemeral cheap; materialise shared heavy transforms once</td></tr>
+                <tr><td>Incremental append run</td><td>Scan source since watermark + append to target</td><td>Tighten incremental filter; cluster/partition on watermark column</td></tr>
+                <tr><td><code>merge</code> incremental</td><td>Scan source + join to target on unique key</td><td>Ensure <code>unique_key</code> is indexed/clustered in warehouse</td></tr>
+                <tr><td><code>--full-refresh</code></td><td>Same as full table rebuild for every incremental selected</td><td>Scope with <code>--select</code>; set <code>full_refresh: false</code> in prod</td></tr>
+                <tr><td>Post-hook audit inserts</td><td>One extra write per model (this project's pattern)</td><td>Acceptable for audit; remove from dev if noisy</td></tr>
+                <tr><td><code>dbt compile</code> only</td><td>Free (no warehouse)</td><td>Use to inspect ephemeral inlining before paying for a run</td></tr>
+                <tr><td>Incremental with loose watermark</td><td>Scans more source rows than necessary</td><td>Tighten filter; add clustering on watermark column in Snowflake</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout cost"><strong>The biggest waste here is table materialization on a fact that should be incremental.</strong> If <code>fct_reviews</code> were a table, every nightly run would scan all of <code>raw_reviews</code> and rewrite millions of rows. Incremental runs cost proportional to new data only &mdash; that is the entire point of the section.</div>
+
+          <h3>Traps that catch people</h3>
+          <ul>
+            <li><strong>Assuming ephemeral creates a relation —</strong> <code>SELECT * FROM src_reviews</code> fails with "object does not exist". Ephemeral models only exist in compiled SQL. Debug via <code>target/compiled/</code> or temporarily set <code>materialized='view'</code>.</li>
+            <li><strong>Forgetting to drop old views —</strong> after switching <code>src/</code> to ephemeral, orphaned views linger in the schema. Analysts query stale data from the abandoned view while dbt builds correct data through a different path.</li>
+            <li><strong>Incremental without a watermark —</strong> if you omit <code>{% if is_incremental() %}</code> logic, every run reprocesses all source rows. With append strategy you duplicate rows; with merge you overwrite expensively.</li>
+            <li><strong>Wrong MAX() column —</strong> <code>MAX(review_date)</code> assumes dates always move forward. Backdated source rows never load. Use a source ingestion timestamp or switch to merge on a stable key.</li>
+            <li><strong>Config in the wrong folder key —</strong> putting <code>+materialized: table</code> under <code>models:</code> instead of <code>models: airbnb:</code> silently fails to apply in multi-project repos. Match the project name from <code>dbt_project.yml</code>.</li>
+            <li><strong>Expecting folder config to retroactively drop objects —</strong> changing dim from view to table leaves the old view until you drop it or rename the model. dbt creates the new object; cleanup is manual.</li>
+            <li><strong>Testing ephemeral models directly —</strong> singular tests against <code>ref('src_reviews')</code> compile but test downstream behaviour. Failures may reference the wrong file line.</li>
+            <li><strong>Full refresh in production CI —</strong> a pipeline that passes <code>--full-refresh</code> on every merge rebuilds all incrementals nightly. Runtime and cost explode by the second month.</li>
+            <li><strong>on_schema_change='ignore' in prod —</strong> new columns silently disappear from the target. Use <code>fail</code> or <code>append_new_columns</code> intentionally, not by accident.</li>
+            <li><strong>Stacking views ten deep —</strong> each query scans through every layer. Materialise at least one layer in the middle as a table.</li>
+            <li><strong>Changing materialization without full refresh —</strong> switching <code>fct_reviews</code> from table to incremental against an existing table can fail if column types or names differ. Drop the old relation or full-refresh once after the change.</li>
+            <li><strong>Merge without unique_key —</strong> on Snowflake, merge strategy requires a stable key. Omitting <code>unique_key</code> falls back to append or errors depending on adapter version.</li>
+          </ul>
+
+          <h3>Troubleshooting playbook</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Symptom</th><th>Most likely cause</th><th>What to check / fix</th></tr></thead>
+              <tbody>
+                <tr><td>Log says <code>view model</code> but you expected table</td><td>Model file or folder config overrides</td><td>Check <code>{{ config() }}</code> in the SQL file; check <code>dbt_project.yml</code> folder keys; see <a href="#config-precedence">precedence table</a></td></tr>
+                <tr><td><code>Object 'SRC_REVIEWS' does not exist</code></td><td>Model is ephemeral</td><td>Expected behaviour; query the downstream table or compile the parent</td></tr>
+                <tr><td>Incremental run inserts 0 rows but source has new data</td><td>Watermark ahead of new rows, or wrong filter</td><td>Compare <code>MAX(review_date)</code> in target to raw source; inspect compiled SQL in <code>target/compiled/</code></td></tr>
+                <tr><td>Duplicate rows in incremental fact</td><td>Append strategy without deduplication</td><td>Add <code>unique_key</code> and <code>incremental_strategy='merge'</code></td></tr>
+                <tr><td><code>Compilation Error</code> in parent, logic looks fine in child</td><td>Ephemeral inlining hides the real file</td><td>Open compiled SQL for the parent model; search for the CTE name</td></tr>
+                <tr><td><code>on_schema_change='fail'</code> after adding a column</td><td>Target table schema mismatch</td><td>Alter table, change config to <code>append_new_columns</code>, or <code>--full-refresh</code></td></tr>
+                <tr><td>Stale data in DEV.SRC_* views</td><td>Orphan views after ephemeral switch</td><td><code>DROP VIEW</code> as in <a href="#dropping-views">dropping views</a>; verify with <code>dbt ls</code></td></tr>
+                <tr><td><code>--full-refresh</code> refused</td><td><code>full_refresh: false</code> in config</td><td>Intentional prod guard; remove config temporarily in controlled environment</td></tr>
+                <tr><td>Build slow after materializing staging as tables</td><td>Extra full rebuilds of large staging tables</td><td>Switch <code>src/</code> back to ephemeral if staging is not queried directly</td></tr>
+                <tr><td>View and table with same name after config change</td><td>Object type changed but old object remains</td><td>Drop old object manually; Snowflake allows view/table name collision only across types</td></tr>
+                <tr><td>Incremental model runs fast but row count wrong</td><td>Filter excludes rows silently</td><td>Run source query without incremental block; compare to target count</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Production patterns</h3>
+          <p>Mature teams document a materialization decision tree in the project README: staging ephemeral, dimensions table (or view in dev-only schemas), facts incremental when row count or run time crosses a threshold, marts table. Code review checks that any deviation from the tree is justified in the PR description.</p>
+
+          <div class="grid-2">
+            <div class="mini-card">
+              <h4>Convention that scales</h4>
+              <p>Folder defaults in <code>dbt_project.yml</code> match the decision tree. Overrides in model files require a comment explaining why. CI runs <code>dbt compile</code> on every PR so config merges are validated before merge.</p>
+            </div>
+            <div class="mini-card">
+              <h4>Anti-pattern: everything incremental</h4>
+              <p>Small dimensions do not benefit from incremental complexity. An incremental model needs watermark logic, handles schema changes, and is harder to backfill. A 10,000-row dimension should stay a table.</p>
+            </div>
+          </div>
+
+          <div class="diagram">
+            <p class="diagram-title">Production materialization decision flow</p>
+            <div class="flow">
+              <div class="node is-model"><b>New model</b><small>Will analysts query it directly?</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-model"><b>No</b><small>ephemeral if cheap staging</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-model"><b>Yes · large · append</b><small>incremental</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-store pulse"><b>Else</b><small>table or view by query frequency</small></div>
+            </div>
+          </div>
+
+<pre data-lang="yaml" data-title="dbt_project.yml (production-style excerpt)" data-explain="Reusable pattern: explicit folder defaults, full_refresh blocked on critical facts."><code>models:
+  airbnb:
+    +materialized: view
+    src:
+      +materialized: ephemeral
+    dim:
+      +materialized: table
+    fct:
+      +materialized: incremental
+      fct_reviews:
+        +full_refresh: false</code></pre>
+
+          <h3>Certification pointers</h3>
+          <p>Materializations are the most-tested topic on the dbt Analytics Engineering certification exam. Know all four types, what object each creates, and the trade-offs. Expect distinction questions: view vs table cost profile, when ephemeral is appropriate, what <code>is_incremental()</code> returns on first run vs subsequent runs vs full refresh.</p>
+
+          <ul>
+            <li><a href="s07-models.html">Section 7</a> — <code>ref()</code> and the DAG are prerequisites; materializations wrap the same SELECT models.</li>
+            <li><a href="s09-seeds-sources.html">Section 9</a> — <code>src_reviews</code> switches from hard-coded raw tables to <code>source()</code>; materialization behaviour stays the same.</li>
+            <li><a href="s10-snapshots.html">Section 10</a> — snapshots solve slowly changing dimensions; incrementals solve append-only facts. The exam loves comparing them.</li>
+            <li><a href="s19-production.html">Section 19</a> — model versions and <code>full_refresh: false</code> in prod CI.</li>
+            <li><a href="s22-certification.html">Section 22</a> — practice exam with materialization-heavy questions.</li>
+          </ul>
+
+          <div class="callout exam"><strong>Certification:</strong> memorise configuration precedence (config precedence) and the four materializations cold. Fill-in-the-blank questions ask for exact config keys like <code>materialized</code>, <code>incremental_strategy</code>, and <code>on_schema_change</code>. Write them by hand while studying, not just read them.</div>
+        </section>
+
+        <section class="section" id="interview">
+          <h2>Interview questions</h2>
+          <p class="muted">Answer each one out loud before opening it.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+
+            <details class="qa">
+              <summary>What are the four dbt materializations and what warehouse object does each create?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p><code>view</code> creates a view &mdash; a stored query, no persisted rows. <code>table</code> creates a physical table rebuilt on each run. <code>ephemeral</code> creates nothing; SQL is inlined as CTEs in downstream models. <code>incremental</code> creates a table that on first run loads all data and on later runs adds or merges only new/changed rows according to your logic and strategy.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>When would you choose a view over a table, and when would you reject a view?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p>Choose a view when the transform is cheap, the data is small, you want always-fresh results, or you are still iterating in development. Reject a view when many consumers query the model frequently, the underlying logic is expensive, or you have long chains of views that re-scan sources on every query. Views shift cost from build time to query time.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Explain ephemeral materialization and one reason staging is often ephemeral.<span class="qa-tag">Modelling</span></summary>
+              <div class="qa-body">
+                <p>Ephemeral models never become database objects. dbt inlines them as <code>WITH</code> clauses wherever <code>ref()</code> is called. Staging is often ephemeral because it is thin renaming on raw data that nobody should query directly; inlining keeps the warehouse clean and guarantees staging logic is never stale relative to downstream models.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What does is_incremental() return on the first run, on a normal second run, and during --full-refresh?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>First run: <code>false</code>, because the target table does not exist yet &mdash; dbt performs a full load. Normal subsequent runs: <code>true</code>, so your watermark filter applies and only new rows process. With <code>--full-refresh</code>: <code>false</code>, because dbt drops or truncates and rebuilds, intentionally ignoring incremental logic.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Your incremental model ran successfully but inserted zero rows. How do you debug it?<span class="qa-tag">Troubleshooting</span></summary>
+              <div class="qa-body">
+                <p>Check whether source data actually has rows newer than <code>MAX(watermark_column)</code> in the target table. Inspect the compiled SQL in <code>target/compiled/</code> to confirm the incremental branch compiled. Verify you did not accidentally pass <code>--full-refresh</code> combined with a filter that excludes everything. Run the source query and watermark subquery manually in a worksheet and compare counts.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What is the difference between append and merge incremental strategies?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p>Append inserts new rows only and never updates existing ones &mdash; duplicates appear if the same business key arrives twice. Merge requires a <code>unique_key</code> and upserts: matching keys update, new keys insert. Use append for insert-only streams with a reliable watermark; use merge when rows can change or arrive late for the same key.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Describe config precedence for materialized in dbt.<span class="qa-tag">Certification</span></summary>
+              <div class="qa-body">
+                <p>Most specific wins: config block in the model SQL file beats a model-specific entry in <code>dbt_project.yml</code>, which beats folder-level config in <code>dbt_project.yml</code>, which beats project-wide config under <code>models: project_name:</code>, which beats dbt's default of <code>view</code>. <code>dim_listings_cleansed</code> is the course example: folder says table, file says view, view wins.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Why drop SRC_LISTINGS, SRC_HOSTS, and SRC_REVIEWS views after switching src/ to ephemeral?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p>Those views were created when staging was materialized as views. Changing folder config to ephemeral stops dbt from maintaining them, but Snowflake does not auto-drop them. They become orphaned objects that can mislead analysts and even serve stale data if queried directly. Drop once manually and verify the schema matches what dbt now manages.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>When is --full-refresh appropriate in production?<span class="qa-tag">Production</span></summary>
+              <div class="qa-body">
+                <p>When incremental logic changed and history must be reprocessed, after data corruption, when promoting a breaking schema change, or during a controlled backfill. It is not appropriate on every scheduled run. Production models often set <code>full_refresh: false</code> to prevent accidental full rebuilds from CI or a mistyped command.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What does on_schema_change='fail' protect you from?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>It stops the run if your model's SELECT produces a different column set than the existing incremental table. Without it, dbt might ignore new columns or fill missing ones with nulls, and dashboards break silently. <code>fail</code> forces an explicit decision: alter the table, change config to <code>append_new_columns</code>, or full refresh.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Can you run dbt tests directly against an ephemeral model?<span class="qa-tag">Testing</span></summary>
+              <div class="qa-body">
+                <p>Not meaningfully in isolation. Ephemeral models have no warehouse relation, so schema tests that expect a table or view cannot target them the way they target <code>dim_hosts_cleansed</code>. Singular tests that <code>ref()</code> an ephemeral model compile, but they execute against the compiled query context of that ref, which often means you are testing staging logic embedded in a downstream model. Teams test staging indirectly through downstream models or temporarily switch staging to <code>view</code> during development.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Why materialize fct_reviews as incremental instead of table?<span class="qa-tag">Cost</span></summary>
+              <div class="qa-body">
+                <p><code>raw_reviews</code> is the largest table in the project and grows over time. A table materialization would scan and rewrite every review on each run. Incremental runs process only rows newer than the current watermark (or a passed date window), so runtime and warehouse cost scale with new data, not total history. That is the standard pattern for append-heavy fact tables in production.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What SQL does dbt send to the warehouse for an ephemeral model during dbt run?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>None. Ephemeral models are skipped at run time as independent nodes. dbt inlines their SQL into each downstream model that references them and runs the parent's materialization DDL instead. You will never see <code>START sql ephemeral model</code> in the log because there is no ephemeral execution step.</p>
+              </div>
+            </details>
+
+          </div>
+        </section>
+
+        <section class="section" id="practice">
+          <h2>Hands-on practice</h2>
+          <p class="muted">Run these from the <code>airbnb</code> folder with your virtualenv active.</p>
+          <ol class="practice-list">
+
+            <li class="practice">
+              <p class="practice-task">Confirm effective materializations: run <code>dim_listings_cleansed</code>, <code>dim_hosts_cleansed</code>, and <code>fct_reviews</code>, and record whether dbt reports view, table, or incremental for each.</p>
+              <span class="console-path">airbnb/ · terminal</span>
+              <p class="practice-expect">Log lines show <code>view</code> for listings, <code>table</code> for hosts, <code>incremental</code> for reviews.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li><code>cd airbnb</code></li>
+                    <li><code>dbt run --select dim_listings_cleansed dim_hosts_cleansed fct_reviews</code></li>
+                    <li>Read the <code>START sql … model</code> line for each &mdash; the word after <code>sql</code> is the materialization.</li>
+                  </ol>
+                  <p class="muted">Undo: nothing to undo; this only builds models.</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">Prove incremental append works: note row count for listing 3176, insert a new raw review, run <code>fct_reviews</code>, verify the new row appears.</p>
+              <span class="console-path">Snowflake worksheet · airbnb/ terminal</span>
+              <p class="practice-expect">Row count for listing 3176 increases by one after incremental run.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li><code>SELECT COUNT(*) FROM "AIRBNB"."DEV"."FCT_REVIEWS" WHERE listing_id=3176;</code></li>
+                    <li>Insert: <code>INSERT INTO "AIRBNB"."RAW"."RAW_REVIEWS" VALUES (3176, CURRENT_TIMESTAMP(), 'YourName', 'practice review', 'positive');</code></li>
+                    <li><code>dbt run --select fct_reviews</code></li>
+                    <li>Re-run the count query &mdash; should increase by 1.</li>
+                  </ol>
+                  <p class="muted">Undo: delete the test row from <code>RAW_REVIEWS</code> and run <code>dbt run --select fct_reviews --full-refresh</code> if you want a clean fact table.</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">Inspect ephemeral inlining: compile <code>fct_reviews</code> and find the inlined <code>src_reviews</code> CTE in the compiled output.</p>
+              <span class="console-path">airbnb/target/compiled/</span>
+              <p class="practice-expect">Compiled file contains a <code>WITH</code> chain including raw/staging logic, not <code>FROM DEV.SRC_REVIEWS</code>.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li><code>dbt compile --select fct_reviews</code></li>
+                    <li>Open <code>target/compiled/airbnb/models/fct/fct_reviews.sql</code></li>
+                    <li>Search for <code>src_reviews</code> &mdash; it appears as a CTE name, not a schema-qualified table.</li>
+                    <li>Confirm there is no relation reference to <code>SRC_REVIEWS</code> as a stored object.</li>
+                  </ol>
+                  <p class="muted">Undo: nothing to undo.</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">Override folder default: temporarily add <code>{{ config(materialized='view') }}</code> to <code>dim_hosts_cleansed.sql</code>, run it, confirm the log says view, then revert.</p>
+              <span class="console-path">airbnb/models/dim/dim_hosts_cleansed.sql</span>
+              <p class="practice-expect">dbt log reports <code>sql view model</code> while the override is in place.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Add config block with <code>materialized='view'</code> at top of file.</li>
+                    <li><code>dbt run --select dim_hosts_cleansed</code> &mdash; log should say view.</li>
+                    <li>Remove the config block (or restore <code>table</code>).</li>
+                    <li><code>dbt run --select dim_hosts_cleansed</code> &mdash; log should say table again.</li>
+                    <li>If a stray view remains, <code>DROP VIEW AIRBNB.DEV.DIM_HOSTS_CLEANSED</code> before rebuilding as table.</li>
+                  </ol>
+                  <p class="muted">Undo: revert file to <code>materialized='table'</code> and rebuild.</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">Run a full refresh on <code>fct_reviews</code> only, compare total row count before and after, and confirm the log warns about full refresh mode.</p>
+              <span class="console-path">airbnb/ · Snowflake worksheet</span>
+              <p class="practice-expect">Row count unchanged after full refresh (same source data); log includes full refresh warning; runtime longer than incremental append.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li><code>SELECT COUNT(*) FROM "AIRBNB"."DEV"."FCT_REVIEWS";</code> &mdash; record the number.</li>
+                    <li><code>dbt run --select fct_reviews --full-refresh</code></li>
+                    <li>Confirm log line: <code>Full refresh mode enabled</code> or model rebuild without incremental filter.</li>
+                    <li>Re-run count query &mdash; should match (unless source data changed).</li>
+                  </ol>
+                  <p class="muted">Undo: nothing required if counts match; the table is in a consistent state.</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">Build <code>dim_listings_w_hosts</code>, query five rows, and verify host names appear via the join from <code>dim_hosts_cleansed</code>.</p>
+              <span class="console-path">airbnb/models/dim/dim_listings_w_hosts.sql · Snowflake worksheet</span>
+              <p class="practice-expect">Table exists in DEV; sample rows show <code>host_name</code> and <code>host_is_superhost</code> populated for listings with matching hosts.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Ensure upstream models exist: <code>dbt run --select +dim_listings_w_hosts</code></li>
+                    <li>Query: <code>SELECT listing_id, listing_name, host_name, host_is_superhost FROM "AIRBNB"."DEV"."DIM_LISTINGS_W_HOSTS" LIMIT 5;</code></li>
+                    <li>NULL host names indicate listings whose <code>host_id</code> has no match in hosts (LEFT JOIN behaviour).</li>
+                  </ol>
+                  <p class="muted">Undo: <code>dbt run --select dim_listings_w_hosts</code> is idempotent; drop table only if you need a clean slate.</p>
+                </div>
+              </details>
+            </li>
+
+          </ol>
+        </section>
+
+        <section class="section" id="recap">
+          <h2>Recap</h2>
+          <div class="recap">
+            <ul class="checklist">
+              <li>Materialization controls what dbt builds in the warehouse: view, table, ephemeral, or incremental.</li>
+              <li>Default is <code>view</code> if nothing else is configured.</li>
+              <li>Folder defaults in <code>dbt_project.yml</code>: project <code>view</code>, <code>src/ ephemeral</code>, <code>dim/ table</code>.</li>
+              <li><code>dim_listings_cleansed</code> overrides the dim folder to <code>view</code> with an explicit <code>{{ config() }}</code> block.</li>
+              <li>Ephemeral models inline as CTEs; no relation exists to query directly.</li>
+              <li>After switching staging to ephemeral, drop orphaned <code>SRC_*</code> views manually.</li>
+              <li><code>fct_reviews</code> is incremental with <code>on_schema_change='fail'</code> and a <code>review_date</code> watermark.</li>
+              <li><code>is_incremental()</code> is false on first run and during <code>--full-refresh</code>.</li>
+              <li><code>--full-refresh</code> rebuilds incremental models from scratch.</li>
+              <li><code>incremental_strategy</code> controls append vs merge vs partition replace; pair merge with <code>unique_key</code>.</li>
+              <li><code>dim_listings_w_hosts</code> joins listings and hosts as a table in <code>dim/</code>.</li>
+              <li>Config precedence: model file &gt; project YAML (specific) &gt; folder YAML &gt; project default &gt; dbt default.</li>
+            </ul>
+            <p style="margin-top:1rem;">
+              <button type="button" data-complete="section-08">Mark complete</button>
+            </p>
+          </div>
+        </section>
+
+      </div>
+
+      <aside class="toc" aria-label="On this page">
+        <strong>On this page</strong>
+        <ol>
+          <li><a href="#lectures">Lectures</a></li>
+          <li><a href="#what-materializations-are">What materializations are</a></li>
+          <li><a href="#view-materialization">View</a></li>
+          <li><a href="#table-materialization">Table</a></li>
+          <li><a href="#ephemeral-materialization">Ephemeral</a></li>
+          <li><a href="#incremental-models">Incremental</a></li>
+          <li><a href="#full-refresh">Full refresh</a></li>
+          <li><a href="#incremental-strategies">Incremental strategies</a></li>
+          <li><a href="#dim-listings-w-hosts">dim_listings_w_hosts</a></li>
+          <li><a href="#dropping-views">Dropping stale views</a></li>
+          <li><a href="#comparison-table">Comparison table</a></li>
+          <li><a href="#config-precedence">Config precedence</a></li>
+          <li><a href="#deeper">Deeper detail</a></li>
+          <li><a href="#interview">Interview questions</a></li>
+          <li><a href="#practice">Hands-on practice</a></li>
+          <li><a href="#recap">Recap</a></li>
+        </ol>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<footer class="footer">The Complete dbt Bootcamp: Zero to Hero · Section 8 · Offline study edition</footer>
+</body>
+</html>

@@ -1,0 +1,1001 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Real-world Snowflake interview scenarios with worked answers: long-running queries, credit overruns, failed loads, broken pipelines, dropped tables, access incidents, sharing, architecture decisions and migrations.">
+<title>Real-World Interview Scenarios | Snowflake COF-C03 Course Notes</title>
+<link rel="stylesheet" href="assets/snowflake.css">
+<script defer src="assets/search-index.js"></script>
+<script defer src="assets/sql-glossary.js"></script>
+<script defer src="assets/sql-highlight.js"></script>
+<script defer src="assets/snowflake.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">Final round · Scenario interviews</p>
+    <h1>Real-World Interview Scenarios</h1>
+    <p class="subtitle">Every section page has interview questions about its own material. This page is the other half of the interview: the open-ended, "here is what happened on Tuesday, what would you do" questions that a hiring manager uses to find out whether you have actually run Snowflake or only read about it.</p>
+    <div class="hero-meta">
+      <span class="chip">93 scenarios</span>
+      <span class="chip">11 rounds</span>
+      <span class="chip">Last verified: 28 Jul 2026</span>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <nav class="pager" aria-label="Section navigation">
+    <a href="extras.html">&larr; Extras</a>
+    <a href="../index.html">Course contents</a>
+    <a href="source-coverage.html">Source coverage manifest &rarr;</a>
+  </nav>
+
+  <main id="main">
+    <div class="layout">
+      <div class="content">
+
+        <section class="section" id="framework">
+          <h2>How to answer a scenario question</h2>
+          <p class="lead">Scenario questions are not really about the answer. The interviewer already knows how to fix a spilling query; what they want to see is whether you diagnose before you act, whether you know where the evidence lives, and whether you think about cost and blast radius rather than reaching for a bigger warehouse.</p>
+
+          <p>Almost every operational scenario in a Snowflake interview can be answered with the same four-beat structure. Use it out loud and you will sound like someone who has been on call.</p>
+
+          <ol class="checklist">
+            <li><strong>Contain.</strong> Say what you would do in the first two minutes to stop the bleeding — cancel the query, suspend the warehouse, revoke the grant, pause the task. State it explicitly even when it is obvious, because a lot of candidates skip straight to root cause and never mention the customer waiting.</li>
+            <li><strong>Diagnose with evidence.</strong> Name the view or screen you would open. <code>QUERY_HISTORY</code>, the Query Profile, <code>WAREHOUSE_LOAD_HISTORY</code>, <code>COPY_HISTORY</code>, <code>ACCESS_HISTORY</code>. Naming the source is what separates experience from theory.</li>
+            <li><strong>Fix, cheapest first.</strong> Offer the smallest change that solves the problem, then the next one up. Rewriting a predicate is free; a clustering key is a permanent credit line. Interviewers notice which one you reach for.</li>
+            <li><strong>Prevent.</strong> Finish with the guardrail — a resource monitor, a statement timeout, a test, an alert. This is the beat most candidates forget and the one that reads as seniority.</li>
+          </ol>
+
+          <div class="callout info">
+            <strong>Say the trade-off out loud.</strong> There is rarely one right answer to these questions, and the interviewer usually knows it. "I would size up first because we are five minutes from a board meeting, then fix the predicate properly tomorrow" is a much stronger answer than either option on its own.
+          </div>
+
+          <div class="callout warn">
+            <strong>Know where the numbers come from.</strong> <code>SNOWFLAKE.ACCOUNT_USAGE</code> is retained for about a year but lags by roughly 45 minutes to 3 hours depending on the view, so it is useless during a live incident. For anything happening right now, use the <code>INFORMATION_SCHEMA</code> table functions or the Query History page in Snowsight, which are current but only reach back 7 days (14 for some views). Mixing these two up mid-answer is a common tell.
+          </div>
+        </section>
+
+        <section class="section" id="performance">
+          <h2>Round 1 &mdash; Slow and long-running queries</h2>
+          <p class="muted">The most-asked scenario family in every Snowflake interview. Try to answer before opening.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+
+            <details class="qa">
+              <summary>A query that normally finishes in two minutes has been running for 45 minutes. Walk me through what you do.<span class="qa-tag">Flagship</span></summary>
+              <div class="qa-body">
+                <p>I work through it in the same order every time: is it running or waiting, is it doing more work than usual, and is the work being done badly.</p>
+                <p><strong>First, find it and decide whether to kill it.</strong> Snowsight's Query History, filtered to running queries, or the table function if I am in a worksheet:</p>
+<pre><code>SELECT query_id, user_name, warehouse_name, execution_status,
+       total_elapsed_time/1000       AS elapsed_secs,
+       queued_overload_time/1000     AS queued_secs,
+       bytes_spilled_to_local_storage,
+       bytes_spilled_to_remote_storage
+FROM   TABLE(information_schema.query_history_by_warehouse(
+               warehouse_name =&gt; 'REPORTING_WH',
+               result_limit   =&gt; 100))
+WHERE  execution_status = 'RUNNING'
+ORDER  BY elapsed_secs DESC;</code></pre>
+                <p>If it is blocking a business deadline and I can rerun it later, I cancel it with <code>SYSTEM$CANCEL_QUERY('&lt;query_id&gt;')</code> rather than let it burn credits while I investigate. Cancelling is safe: Snowflake rolls back the statement.</p>
+                <p><strong>Second, separate queuing from execution.</strong> If <code>queued_overload_time</code> is most of the elapsed time, the query is not slow — the warehouse is saturated. Sizing up will not help; adding clusters or moving the workload to its own warehouse will. Check <code>WAREHOUSE_LOAD_HISTORY</code> to confirm.</p>
+                <p><strong>Third, open the Query Profile.</strong> I look for four things in this order:</p>
+                <ul>
+                  <li><em>Partitions scanned versus partitions total.</em> If it is scanning everything, pruning has failed — usually a function wrapped around the filter column, a leading-wildcard <code>LIKE</code>, an implicit cast, or a genuinely unclustered table.</li>
+                  <li><em>Spilling.</em> Bytes spilled to local storage means the warehouse ran out of memory; spilling to remote storage is far worse and usually the single biggest cause of a 20x slowdown. That is the one case where sizing up is the correct fix, because a larger warehouse has proportionally more memory.</li>
+                  <li><em>An exploding join.</em> A join node emitting far more rows than it consumed means a duplicate key or a missing join condition. This is a data problem, not a warehouse problem.</li>
+                  <li><em>The most expensive node's percentage.</em> If one node is 90% of the time, that is where the whole conversation goes.</li>
+                </ul>
+                <p><strong>Fourth, ask what changed.</strong> A query that was fine last week and is terrible today has usually had its input volume grow, lost its result-cache hit because someone added <code>CURRENT_TIMESTAMP()</code>, been pointed at a bigger warehouse's workload, or had a clustering key silently stop matching the new query pattern. I compare today's profile with a historical run of the same <code>query_hash</code>.</p>
+                <p><strong>Finally, prevent.</strong> Set <code>STATEMENT_TIMEOUT_IN_SECONDS</code> on the warehouse or role so a runaway query dies on its own next time, and if this is a shared warehouse, give the offending workload its own so it cannot starve everyone else.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How do you tell the difference between a query that is queued and a query that is slow, and why does it matter?<span class="qa-tag">Diagnosis</span></summary>
+              <div class="qa-body">
+                <p>In <code>QUERY_HISTORY</code>, <code>total_elapsed_time</code> is the wall clock the user experienced, and it decomposes into queueing components (<code>queued_provisioning_time</code>, <code>queued_repair_time</code>, <code>queued_overload_time</code>) plus <code>execution_time</code>. If <code>queued_overload_time</code> dominates, the warehouse had no free slots.</p>
+                <p>It matters because the two problems have opposite fixes. Slow execution is fixed by a bigger warehouse or better SQL; queuing is fixed by <em>more</em> warehouses or more clusters, and sizing up can even make queuing worse by encouraging more concurrent work onto the same warehouse. A candidate who says "I would size it up" to every performance question fails on exactly this distinction.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>The same dashboard query is fast for you and slow for a business user. What is going on?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p>Almost always the result cache. My run hit it and theirs did not. The result cache only serves a query when the SQL text matches exactly, the underlying data has not changed, the query contains no non-deterministic functions, and the role has the necessary privileges on all referenced objects — so a different role can legitimately miss a cache another role hits.</p>
+                <p>The other common causes are a different warehouse (theirs is X-Small, mine is Large), a warm warehouse cache for me and a cold resume for them, or a row access policy that makes their version of the query scan differently. I would compare the two <code>query_id</code>s side by side in Query History rather than guess.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>A table is 4 TB and every query on it does a full scan. What do you do, in what order?<span class="qa-tag">Cost</span></summary>
+              <div class="qa-body">
+                <p>Cheapest first, always. I start by reading the actual predicates: if the filters are wrapped in functions (<code>WHERE TO_DATE(event_ts) = ...</code>) or cast implicitly, pruning is disabled and rewriting the SQL fixes it for free.</p>
+                <p>If the predicates are clean and still scanning everything, I look at how the data arrived. Data loaded in natural order is usually well clustered on the load timestamp already, so filtering on a different column is the real issue. Then I choose between three paid options based on the access pattern:</p>
+                <ul>
+                  <li><strong>Clustering key</strong> when queries filter on a low-to-medium cardinality column with range predicates. Ongoing reclustering credits, so it needs to earn its keep.</li>
+                  <li><strong>Search optimization service</strong> when queries are highly selective point lookups on high-cardinality columns. Storage and maintenance cost, but no reclustering churn.</li>
+                  <li><strong>Materialized view</strong> when one expensive aggregate is queried repeatedly over a stable subset.</li>
+                </ul>
+                <p>I would validate with <code>SYSTEM$CLUSTERING_INFORMATION</code> before and after rather than assuming, and I would not cluster a table this size without checking that the reclustering cost is smaller than the scan cost it saves.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Query Profile shows 40 GB spilled to remote storage. What does that mean and how do you fix it?<span class="qa-tag">Diagnosis</span></summary>
+              <div class="qa-body">
+                <p>The operation needed more memory than the warehouse had. Snowflake first spills to local SSD, and when that fills too, it spills to remote object storage, which is orders of magnitude slower. Remote spilling is the clearest signal in the whole profile that the warehouse is undersized for the work.</p>
+                <p>Two fixes. Size up — doubling the warehouse doubles memory as well as threads, and a query that spills often gets <em>cheaper</em> on a larger warehouse because it finishes more than twice as fast for twice the per-second rate. Or reduce the memory footprint: filter earlier, drop the columns you do not need, avoid an unnecessary <code>ORDER BY</code> on a huge intermediate, or fix a join that is exploding row counts. For genuinely memory-hungry Snowpark or ML work, a Snowpark-optimized warehouse gives more memory per node than the equivalent standard size.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Your team wants to add a clustering key to every large table. How do you respond?<span class="qa-tag">Judgement</span></summary>
+              <div class="qa-body">
+                <p>I would push back and ask for evidence per table. Clustering is not free: automatic reclustering consumes serverless credits continuously, and on a table with heavy DML it can cost more than the queries it accelerates. It only pays off when the table is large, the queries consistently filter or join on the key, and the current clustering depth is genuinely bad.</p>
+                <p>My rule of thumb is to measure first with <code>SYSTEM$CLUSTERING_INFORMATION</code>, only consider tables in the multi-terabyte range, cluster on at most three or four columns ordered from lowest to highest cardinality, and never cluster a table that is rewritten in full on every load — in that case the load order is the clustering key.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Overnight batch used to finish at 6am and now finishes at 9am. Nothing in the code changed. Where do you look?<span class="qa-tag">Scenario</span></summary>
+              <div class="qa-body">
+                <p>I would build a time series rather than look at one run. Pull the last 30 days from <code>ACCOUNT_USAGE.QUERY_HISTORY</code> grouped by <code>query_hash</code>, and plot elapsed time, bytes scanned and partitions scanned per night. That immediately tells me whether every step degraded slightly (data growth) or one step fell off a cliff (a plan change, a new join key skew, a clustering key that stopped matching).</p>
+                <p>Then I check contention: did another workload start using the same warehouse? <code>WAREHOUSE_LOAD_HISTORY</code> and <code>WAREHOUSE_EVENTS_HISTORY</code> show queuing and cluster behaviour over the window. Finally I check whether a table it reads is now a view over something much larger, or whether someone changed <code>AUTO_SUSPEND</code> so every step pays a cold-cache penalty.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Users complain the BI tool is slow at 9am every day but fine by 10. What is your fix?<span class="qa-tag">Scenario</span></summary>
+              <div class="qa-body">
+                <p>That shape is concurrency, not query complexity — everyone opens their dashboard at the start of the day. The fix is a multi-cluster warehouse in auto-scale mode with <code>MIN_CLUSTER_COUNT = 1</code> and a max of two or three, so extra clusters spin up for the morning peak and shut down afterwards. I would use the <code>STANDARD</code> scaling policy so it adds clusters eagerly rather than making users wait.</p>
+                <p>Supporting moves: give BI its own warehouse so ETL cannot starve it, keep <code>AUTO_SUSPEND</code> generous enough (a few minutes) that the warehouse cache survives between dashboard refreshes, and check whether the dashboards can hit the result cache — identical queries from many users are exactly what it is for. If the same heavy aggregate is behind every tile, a materialized view or a small pre-aggregated table pays for itself quickly.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Would you ever solve a performance problem by making the warehouse smaller?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p>Yes, for cost-performance rather than raw latency. Snowflake bills per second by size, so a query that does not parallelise — a single-threaded UDF, a tiny lookup, a load of one small file — costs four times as much on a Large as on a Small and finishes at the same time. Downsizing those workloads is free money.</p>
+                <p>It is also the right answer when an oversized warehouse is encouraging people to run everything on it. Splitting one Large into two Smalls by workload can reduce both cost and queuing, because each workload gets its own cache and cannot block the other.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How would you find the ten most expensive queries in the account this month, and what would you do with the list?<span class="qa-tag">SQL</span></summary>
+              <div class="qa-body">
+                <p>Credits are not on <code>QUERY_HISTORY</code> directly, so I approximate by execution time weighted by warehouse size, or use the <code>QUERY_ATTRIBUTION_HISTORY</code> view where available. A workable first pass:</p>
+<pre><code>SELECT query_hash,
+       ANY_VALUE(query_text)              AS sample_sql,
+       COUNT(*)                            AS runs,
+       SUM(total_elapsed_time)/1000/60     AS total_minutes,
+       AVG(partitions_scanned)             AS avg_parts_scanned,
+       SUM(bytes_spilled_to_remote_storage) AS remote_spill
+FROM   snowflake.account_usage.query_history
+WHERE  start_time &gt;= DATE_TRUNC('month', CURRENT_DATE())
+  AND  warehouse_size IS NOT NULL
+GROUP  BY query_hash
+ORDER  BY total_minutes DESC
+LIMIT  10;</code></pre>
+                <p>Grouping by <code>query_hash</code> rather than <code>query_id</code> is the important part: the biggest cost is usually a cheap query run 40,000 times, not one monster. Then I triage the list into "fix the SQL", "cache or materialise it", and "does this need to run at all", in that order.</p>
+              </div>
+            </details>
+
+          </div>
+        </section>
+
+        <section class="section" id="cost">
+          <h2>Round 2 &mdash; Cost, credits and the bill</h2>
+          <p class="muted">Cost questions are where interviewers separate engineers from administrators. Know what is and is not chargeable.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+
+            <details class="qa">
+              <summary>Finance says the Snowflake bill tripled last month. You have one day to explain it. What do you do?<span class="qa-tag">Flagship</span></summary>
+              <div class="qa-body">
+                <p>I would answer the question in three layers, because the bill has three components and they behave completely differently.</p>
+                <p><strong>Split the total first.</strong> Compute, storage and data transfer, from <code>ACCOUNT_USAGE.METERING_DAILY_HISTORY</code>. That single query usually ends the investigation, because a tripled bill is nearly always compute and the service type column tells you which kind.</p>
+<pre><code>SELECT usage_date, service_type, SUM(credits_used) AS credits
+FROM   snowflake.account_usage.metering_daily_history
+WHERE  usage_date &gt;= DATEADD(day, -60, CURRENT_DATE())
+GROUP  BY 1, 2
+ORDER  BY 1, 3 DESC;</code></pre>
+                <p><strong>Attribute the compute.</strong> <code>WAREHOUSE_METERING_HISTORY</code> gives credits per warehouse per hour, which localises it to a team if warehouses are named by team. Serverless features bill separately — Snowpipe, tasks, automatic clustering, materialized view maintenance, search optimization, replication and Cortex each have their own <code>*_HISTORY</code> view, and they are the usual culprits behind a mysterious increase because nobody is watching them.</p>
+                <p><strong>Explain the delta, not the total.</strong> Compare the same query for the previous month and report the difference by warehouse and service type. Typical findings: someone set <code>AUTO_SUSPEND</code> to zero or removed it, a multi-cluster warehouse had <code>MIN_CLUSTER_COUNT</code> raised above one so it never scales to nothing, a clustering key was added to a high-churn table, a task started failing and retrying, a dev warehouse was resized to X-Large and left there, or a new Cortex or Document AI workload went live.</p>
+                <p>Then the guardrails: resource monitors with notify-and-suspend thresholds per warehouse, budgets for account-level spend, tags on warehouses and databases so attribution is automatic next time, and a weekly alert on credit growth. I would also be honest that resource monitors do not cap serverless, storage or Cortex spend — budgets and alerts are what cover those.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What does Snowflake actually charge for?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>Three things. <strong>Compute</strong> — virtual warehouse credits billed per second with a 60-second minimum each time a warehouse resumes, plus serverless compute for Snowpipe, tasks, reclustering, materialized view maintenance, search optimization, replication and Cortex. <strong>Storage</strong> — a flat rate per terabyte per month on compressed data, covering active bytes plus Time Travel plus Fail-safe plus stage files. <strong>Data transfer</strong> — egress when data leaves the region or cloud.</p>
+                <p>The nuance interviewers listen for: cloud services compute is only charged when it exceeds 10% of the daily warehouse credits, which is why metadata-only queries such as <code>SELECT COUNT(*)</code> or a <code>DESCRIBE</code> are usually free, and why result-cache hits cost nothing.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>A resource monitor is set to suspend at 100% but the account still overspent. How?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p>Resource monitors only govern virtual warehouse credits. They do not cover serverless compute (Snowpipe, tasks, automatic clustering, materialized views, search optimization, replication), storage, data transfer, or Cortex usage. If the overspend came from a runaway Snowpipe or a clustering key on a churning table, the monitor never saw it.</p>
+                <p>The other two explanations are that the monitor was created but never assigned to any warehouse, or that the action was <code>NOTIFY</code> rather than <code>SUSPEND</code>. Also worth saying: <code>SUSPEND</code> lets running queries finish, only <code>SUSPEND_IMMEDIATE</code> kills them, and monitors are evaluated on an interval so a very fast burn can overshoot. For the categories monitors miss, budgets and alerts are the right tool.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Storage costs are climbing but nobody is loading new data. Explain it.<span class="qa-tag">Scenario</span></summary>
+              <div class="qa-body">
+                <p>Storage is active bytes plus Time Travel plus Fail-safe plus staged files, so several things can grow with no new data arriving. The usual causes are a table with a long <code>DATA_RETENTION_TIME_IN_DAYS</code> being fully rewritten every night, which keeps a complete historical copy per day; internal stages full of files nobody removed after loading; dropped tables still sitting in Time Travel and then Fail-safe for seven more days; and clones whose parents have since been rewritten, so the shared micro-partitions are no longer shared.</p>
+                <p>I would query <code>TABLE_STORAGE_METRICS</code> and compare <code>active_bytes</code>, <code>time_travel_bytes</code>, <code>failsafe_bytes</code> and <code>retained_for_clone_bytes</code> per table. The fixes follow directly: switch churn-heavy staging tables to transient (no Fail-safe, one day of Time Travel maximum), shorten retention where it is not needed, use <code>PURGE = TRUE</code> or <code>REMOVE</code> on stages, and use <code>TRUNCATE</code> or <code>INSERT OVERWRITE</code> rather than drop-and-recreate.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How would you cut 30% off a Snowflake bill without breaking anything?<span class="qa-tag">Cost</span></summary>
+              <div class="qa-body">
+                <p>I would go after idle and waste before touching workloads. In rough order of effort-to-saving: set <code>AUTO_SUSPEND</code> to 60 seconds on everything except BI warehouses that benefit from a warm cache; find warehouses that are oversized for what they run and drop a size; consolidate the long tail of near-idle warehouses; convert staging and scratch tables to transient and cut Time Travel on them to zero or one day; delete abandoned clones and stage files; and turn off clustering, search optimization or materialized views that are no longer earning their maintenance cost.</p>
+                <p>Only then do I look at the top-10 queries by total runtime and rewrite the worst offenders. Throughout, I would tag warehouses and databases by team so the saving is attributable, and I would put a budget in place so the gain does not quietly erode.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>A dev left an X-Large warehouse running over a long weekend. Whose fault is it and what changes?<span class="qa-tag">Judgement</span></summary>
+              <div class="qa-body">
+                <p>It is a systems failure, not a person failure, and saying that is part of the answer. Any warehouse that a human can create should have <code>AUTO_SUSPEND</code> set by policy — Snowflake will happily let you create one with auto-suspend disabled, and that is the actual bug.</p>
+                <p>Concretely: set <code>AUTO_SUSPEND</code> and <code>STATEMENT_TIMEOUT_IN_SECONDS</code> defaults, attach a resource monitor to the dev warehouse with a monthly quota and a suspend action, restrict <code>CREATE WAREHOUSE</code> to a small set of roles, and cap the size developers can create by provisioning warehouses centrally rather than granting the privilege. Then an alert on any warehouse running more than N hours continuously.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Why might a query that scans one row still cost a meaningful amount?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p>Because you pay for warehouse time, not rows. If the warehouse was suspended, resuming it triggers the 60-second minimum billing, so a one-row lookup on an X-Large costs a full minute of X-Large credits. Run a hundred of those a day on an oversized warehouse and it adds up.</p>
+                <p>The fix is to route small lookups to a small warehouse, or to a serverless path where possible, and to keep a modest warehouse warm rather than resuming a large one repeatedly.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Your manager asks for per-team cost attribution. How do you deliver it?<span class="qa-tag">Scenario</span></summary>
+              <div class="qa-body">
+                <p>Object tags plus <code>ACCOUNT_USAGE</code>. I would define a <code>cost_center</code> tag and apply it to warehouses, databases and roles, then join <code>TAG_REFERENCES</code> to <code>WAREHOUSE_METERING_HISTORY</code> to allocate compute, and to <code>TABLE_STORAGE_METRICS</code> for storage.</p>
+                <p>The honest caveat, which is the part interviewers want: tagging is not retrospective, so this only works from the day the tags go on. If teams share warehouses, warehouse-level attribution is a guess — the cleaner design is one warehouse per team per workload type, named consistently, which makes attribution a naming convention rather than a project. Where available, <code>QUERY_ATTRIBUTION_HISTORY</code> gives per-query credit attribution and can split a shared warehouse by user or role.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Is it cheaper to run a query on an X-Small for 60 minutes or a Large for 8 minutes?<span class="qa-tag">Cost</span></summary>
+              <div class="qa-body">
+                <p>Do the arithmetic out loud: X-Small is 1 credit per hour, so 60 minutes is 1 credit. Large is 8 credits per hour, so 8 minutes is about 1.07 credits. Near enough identical — which is the whole point of Snowflake's pricing model. If a workload parallelises perfectly, size is cost-neutral and you should pick the larger warehouse for the better user experience.</p>
+                <p>The interesting part is where it breaks. If the work does not parallelise, the Large finishes in 40 minutes rather than 8 and costs five times as much. If the query is spilling to remote storage, the Large may finish in under 8 minutes and cost <em>less</em>. So the real answer is: measure it on both, and remember the 60-second minimum makes very short queries disproportionately expensive on big warehouses.</p>
+              </div>
+            </details>
+
+          </div>
+        </section>
+
+        <section class="section" id="loading">
+          <h2>Round 3 &mdash; Loading failures</h2>
+          <p class="muted">Everything here has a specific view behind it. Name the view.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+
+            <details class="qa">
+              <summary>The nightly load reported success but the table has no new rows. What happened?<span class="qa-tag">Flagship</span></summary>
+              <div class="qa-body">
+                <p>Almost certainly load metadata. <code>COPY INTO</code> records every file it has already ingested into a table and skips it on subsequent runs, and that metadata is kept for 64 days. If the upstream system rewrote the same filenames with new content, or the job re-staged yesterday's files, Snowflake considers them loaded and returns a successful <code>COPY</code> with zero rows.</p>
+                <p>I would confirm rather than assume, using <code>COPY_HISTORY</code>:</p>
+<pre><code>SELECT file_name, status, row_count, row_parsed,
+       first_error_message, last_load_time
+FROM   TABLE(information_schema.copy_history(
+               table_name  =&gt; 'SALES.PUBLIC.ORDERS',
+               start_time  =&gt; DATEADD(hour, -24, CURRENT_TIMESTAMP())));</code></pre>
+                <p>A status of <code>LOAD_SKIPPED</code> confirms it. The tactical fix is <code>FORCE = TRUE</code>, but that risks duplicates, so the real fix is to make filenames unique per batch (a timestamp or run id in the path) and to load from a dated prefix rather than a flat folder. The other candidates worth mentioning: the <code>COPY</code> pointed at an empty prefix because a date variable resolved wrongly, or a pattern regex that matched nothing.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>A COPY INTO fails on row 4,000,000 of a 5-million-row file. What are the options?<span class="qa-tag">Scenario</span></summary>
+              <div class="qa-body">
+                <p>The behaviour depends on <code>ON_ERROR</code>, which defaults to <code>ABORT_STATEMENT</code> for bulk loads — so the whole statement rolls back and nothing lands. The options are <code>CONTINUE</code> (load the good rows, skip the bad), <code>SKIP_FILE</code> (abandon that file, keep the others), <code>SKIP_FILE_&lt;n&gt;</code> or <code>SKIP_FILE_&lt;n&gt;%</code> (tolerate a threshold), and <code>ABORT_STATEMENT</code>.</p>
+                <p>Which one I choose depends on the data contract. For financial data I keep <code>ABORT_STATEMENT</code> and fix the source, because a partial load is worse than no load. For clickstream I use <code>CONTINUE</code> and route rejects somewhere visible. Either way I would first run <code>VALIDATION_MODE = RETURN_ERRORS</code> to see all the bad rows without loading anything, and I would say that a 5-million-row single file is itself the problem — splitting into 100–250 MB compressed files parallelises the load and limits the blast radius of one bad file.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Snowpipe silently stopped loading files three days ago. How do you debug it?<span class="qa-tag">Diagnosis</span></summary>
+              <div class="qa-body">
+                <p>Start with the pipe itself: <code>SELECT SYSTEM$PIPE_STATUS('my_pipe')</code> returns the execution state, pending file count and, crucially, <code>lastReceivedMessageTimestamp</code> and <code>lastForwardedMessageTimestamp</code>. If messages stopped arriving, the problem is the cloud notification, not Snowflake — an expired SQS subscription, a changed bucket event configuration, or IAM permissions revoked on the storage integration.</p>
+                <p>If messages are arriving but nothing loads, the pipe may be paused (someone ran <code>ALTER PIPE ... SET PIPE_EXECUTION_PAUSED = TRUE</code>, or ownership transferred, which pauses it), or every file is erroring. Snowpipe defaults to <code>ON_ERROR = SKIP_FILE</code>, so bad files disappear quietly — that is exactly how a pipe "silently" stops delivering data. <code>COPY_HISTORY</code> and <code>VALIDATE_PIPE_LOAD</code> show those failures. For recovery I would use <code>ALTER PIPE ... REFRESH</code> to pick up files staged while it was broken, remembering it only looks back seven days.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Duplicate rows appeared in a target table after a load retry. How do you prevent recurrence?<span class="qa-tag">Scenario</span></summary>
+              <div class="qa-body">
+                <p>First establish which retry did it — <code>COPY_HISTORY</code> plus the metadata columns will usually show the same filename loaded twice, meaning someone used <code>FORCE = TRUE</code> or the file was re-staged under a new name. Then dedupe with a window function into a new table and swap.</p>
+                <p>Prevention is a design change, not a setting. I would load into a staging table and <code>MERGE</code> into the target on a natural or hash key so retries are idempotent, keep filenames unique and immutable, and add a post-load count reconciliation between source and target that fails the pipeline loudly. If the source genuinely has no key, a hash of the row plus the file name works.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>A CSV loads fine into a VARCHAR staging table but fails going into the typed table. How do you find the offending rows?<span class="qa-tag">SQL</span></summary>
+              <div class="qa-body">
+                <p>That is the classic reason for a two-step load, and the answer is to test each cast with the <code>TRY_</code> family, which returns <code>NULL</code> instead of raising:</p>
+<pre><code>SELECT *
+FROM   stg_orders
+WHERE  TRY_TO_NUMBER(amount)      IS NULL AND amount      IS NOT NULL
+   OR  TRY_TO_DATE(order_date, 'YYYY-MM-DD') IS NULL AND order_date IS NOT NULL;</code></pre>
+                <p>Typical culprits are thousands separators, currency symbols, European decimal commas, empty strings that should be <code>NULL</code> (fix with <code>EMPTY_FIELD_AS_NULL</code> and <code>NULL_IF</code>), and dates in a different format from the file format's <code>DATE_FORMAT</code>. If I were loading directly, <code>VALIDATION_MODE = RETURN_ALL_ERRORS</code> gives the same information without a staging table.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>You need to load 10 TB from S3 as fast as possible. How do you approach it?<span class="qa-tag">Scenario</span></summary>
+              <div class="qa-body">
+                <p>File layout matters more than warehouse size. I want many roughly equal files of 100–250 MB compressed, because each thread takes one file and one huge file cannot be parallelised. Then I size the warehouse to the file count — each node handles eight files concurrently, so throwing a 4X-Large at 20 files wastes most of it.</p>
+                <p>Beyond that: use a storage integration rather than inline credentials, keep the warehouse in the same region as the bucket to avoid egress and latency, load into a transient staging table to avoid Fail-safe on data you are about to transform, and consider several parallel <code>COPY</code> statements against different prefixes on separate warehouses. I would validate on a 1% sample first with <code>VALIDATION_MODE</code> rather than discover a format problem 9 TB in.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>The business wants data available within seconds of it being produced. What do you propose?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>First I would challenge the requirement, politely — "seconds" often means "not tomorrow", and micro-batching every minute is dramatically simpler and cheaper than true streaming. If it genuinely needs seconds, Snowpipe is not the answer either: it is file-driven and typically lands data in around a minute.</p>
+                <p>The right tool is Snowpipe Streaming, where a client writes rows into a channel through the SDK or the Kafka connector in streaming mode, with no files and no stage. It gives second-level latency and ordered delivery within a channel via offset tokens. I would pair it with dynamic tables for downstream transformation so the whole chain has a declared freshness target rather than a hand-built task DAG.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>An external table's queries return stale data. Why?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p>External tables read metadata about the files in the stage, and that metadata has to be refreshed. If <code>AUTO_REFRESH</code> is off, or the notification integration behind it has broken, new files in the bucket are invisible until someone runs <code>ALTER EXTERNAL TABLE ... REFRESH</code>.</p>
+                <p>The other possibility is partition pruning on a partitioned external table: if the partition expression is derived from <code>metadata$filename</code> and the upstream system changed its path convention, new files fall outside every partition and are effectively ignored.</p>
+              </div>
+            </details>
+
+          </div>
+        </section>
+
+        <section class="section" id="pipelines">
+          <h2>Round 4 &mdash; Pipelines and orchestration</h2>
+          <p class="muted">Streams, tasks, dynamic tables and the failure modes nobody documents.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+
+            <details class="qa">
+              <summary>A stream that has fed a task reliably for months is suddenly empty, and the task is not firing. What is wrong?<span class="qa-tag">Flagship</span></summary>
+              <div class="qa-body">
+                <p>Two different failures look identical from the outside, so I would check both.</p>
+                <p><strong>The stream may be stale.</strong> A stream's offset must stay inside the source table's Time Travel retention window. If the table has one day of retention and nothing consumed the stream for a day and a half, the offset falls off the end and the stream becomes permanently stale — <code>SELECT SYSTEM$STREAM_GET_TABLE_TIMESTAMP</code> and the <code>STALE</code> and <code>STALE_AFTER</code> columns in <code>SHOW STREAMS</code> confirm it. Recovery is to recreate the stream and backfill the gap manually, which is why this is a genuine incident and not a quick fix.</p>
+                <p><strong>Or the task is suspended.</strong> Tasks auto-suspend after a configured number of consecutive failures, and a task whose owner role lost a privilege will fail every run. <code>TASK_HISTORY</code> shows the state and the error. Also remember that a resumed child task does nothing unless the root is resumed, and a task gated on <code>SYSTEM$STREAM_HAS_DATA</code> reports success while skipping — so "the task ran fine" and "nothing happened" are compatible.</p>
+                <p>Prevention: set the source table's retention longer than the maximum tolerable consumer outage, monitor stream staleness proactively rather than discovering it, and alert on task failures instead of relying on someone noticing missing rows.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How do you make a Snowflake pipeline idempotent?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>Every step has to be safe to run twice. In practice: land raw files with unique immutable names and rely on load metadata rather than <code>FORCE</code>; transform into staging tables that are fully rebuilt each run with <code>INSERT OVERWRITE</code> or <code>CREATE OR REPLACE</code>; apply changes to the target with <code>MERGE</code> on a stable key rather than <code>INSERT</code>; and make deletes soft where possible.</p>
+                <p>The subtle part is streams: reading a stream inside a transaction advances its offset when the transaction commits, so if the downstream write fails after the read, you lose the changes. Consuming the stream and writing the target in the <em>same</em> transaction is what makes the pattern exactly-once.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>When would you choose a dynamic table over a stream plus a task?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p>Dynamic tables when I can express the result as a query and I care about freshness rather than execution order. I declare a <code>TARGET_LAG</code> and Snowflake works out the refresh schedule, the incremental logic and the dependency graph between chained dynamic tables. Far less code and far fewer failure modes.</p>
+                <p>Streams plus tasks when I need imperative control — calling a stored procedure, doing something non-deterministic, hitting an external function, branching, or applying a complex merge that cannot be written as a single declarative query. I would also stay with tasks where a construct in my query forces a dynamic table into full refresh, which quietly turns a cheap incremental pipeline into an expensive rebuild.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>A task DAG has one slow branch holding everything up. How do you restructure it?<span class="qa-tag">Scenario</span></summary>
+              <div class="qa-body">
+                <p>First measure with <code>TASK_HISTORY</code> to find where the time actually goes, because the perceived bottleneck is often a child waiting on a parent that finished long ago. Then the structural options: split independent branches so they no longer share a root, give the slow branch its own warehouse so it stops competing, or convert it to a serverless task and let Snowflake size it.</p>
+                <p>If the slow step is genuinely slow SQL, that becomes a performance problem and I would profile it. If it is slow because it processes everything each run, converting it to a stream-driven incremental step or a dynamic table is the real fix. I would also check the schedule is not overlapping itself — a task that takes longer than its interval skips runs, which looks like a stall.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How do you get alerted when a pipeline breaks, without a third-party tool?<span class="qa-tag">Ops</span></summary>
+              <div class="qa-body">
+                <p>Snowflake alerts plus a notification integration. An alert runs a condition query on a schedule and fires an action when it returns rows, and <code>SYSTEM$SEND_EMAIL</code> delivers to verified addresses. So I write a condition over <code>TASK_HISTORY</code> for failures in the last hour, or over <code>COPY_HISTORY</code> for load errors, or a freshness check that the target table's max timestamp is within tolerance.</p>
+                <p>I would add that freshness and row-count checks catch more real incidents than error alerts do, because the worst pipeline failures succeed technically and deliver nothing. Data metric functions give a declarative way to attach those checks to the table itself.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Two tasks write to the same table and you are seeing lost updates. What is happening?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p>Snowflake gives you ACID transactions, but concurrent <code>MERGE</code> or <code>UPDATE</code> statements against overlapping rows serialise at the partition level and the later writer can overwrite the earlier one's view of the data — a classic read-modify-write race, not a Snowflake bug.</p>
+                <p>The fixes are to serialise the writers (chain them in one DAG rather than scheduling both), to partition the work so each writer owns a disjoint key range, or to make the merge condition idempotent and include a version or timestamp so an older update cannot overwrite a newer one.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How would you implement slowly changing dimension type 2 in Snowflake?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>A stream on the source table to capture changes, then a <code>MERGE</code> that closes the current row and inserts a new one. The merge sets <code>valid_to</code> and <code>is_current = FALSE</code> on the matched open row, and a second insert writes the new version with <code>valid_from = CURRENT_TIMESTAMP()</code> and <code>is_current = TRUE</code>. Because <code>MERGE</code> cannot both update and insert the same target row in one pass, the standard trick is to union the source with itself so the change appears twice, once for the close and once for the insert.</p>
+                <p>I would compare row hashes rather than column-by-column so that no-op updates do not create versions, and drive the whole thing from a task gated on <code>SYSTEM$STREAM_HAS_DATA</code>. Worth saying that Time Travel is not a substitute for SCD2 — it is an operational safety net with a short window, not a modelling technique.</p>
+              </div>
+            </details>
+
+          </div>
+        </section>
+
+        <section class="section" id="recovery">
+          <h2>Round 5 &mdash; Recovery and disaster</h2>
+          <p class="muted">The "someone dropped the production table" family. Stay calm and know the retention windows.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+
+            <details class="qa">
+              <summary>Someone ran an UPDATE without a WHERE clause on a production table 20 minutes ago. What do you do?<span class="qa-tag">Flagship</span></summary>
+              <div class="qa-body">
+                <p><strong>Contain first.</strong> Stop anything else writing to the table and find the offending statement's <code>query_id</code> in Query History. That id is what makes the recovery exact rather than approximate.</p>
+                <p><strong>Verify before restoring.</strong> Time Travel lets me read the table as it was immediately before that statement, so I check the data is what I expect <em>before</em> I overwrite anything:</p>
+<pre><code>SELECT COUNT(*) FROM orders BEFORE (STATEMENT =&gt; '01b2c3d4-...');</code></pre>
+                <p><strong>Restore.</strong> The safest route is to clone the pre-damage state to a new table, reconcile it, then swap:</p>
+<pre><code>CREATE TABLE orders_restored CLONE orders BEFORE (STATEMENT =&gt; '01b2c3d4-...');
+-- reconcile, then:
+ALTER TABLE orders        SWAP WITH orders_restored;</code></pre>
+                <p>Cloning is zero-copy so this costs almost nothing and, unlike an in-place overwrite, it leaves the damaged version available if the reconciliation surfaces a surprise. If writes continued after the bad update, I cannot simply revert — I have to merge the good post-incident changes back in, which is why containment comes first.</p>
+                <p><strong>Prevent.</strong> Revoke direct DML on production tables from humans, require changes through reviewed code, and consider a transaction-scoped workflow where destructive statements run inside an explicit <code>BEGIN</code> with a verification query before <code>COMMIT</code>.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>A table was dropped nine days ago and Time Travel is one day. Can you get it back?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p>Not by myself. Once Time Travel expires, a permanent table's data enters Fail-safe for seven days, and Fail-safe is not user-accessible — only Snowflake Support can attempt recovery, on a best-effort basis measured in hours or days. At nine days, even Fail-safe has passed for a table with one day of retention (1 + 7 = 8), so the honest answer is that the data is gone and the conversation moves to what backup should have existed.</p>
+                <p>The follow-up worth volunteering: transient and temporary tables have <em>no</em> Fail-safe at all, so for them the Time Travel window is the entire safety net. And if the table were still inside its window, <code>UNDROP TABLE</code> would restore it — unless someone had created a new table with the same name, in which case you must rename the new one first because <code>UNDROP</code> restores to the original name.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How would you design backup and recovery for a Snowflake warehouse holding regulated data?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>I would layer it. Time Travel set deliberately per table — up to 90 days on Enterprise for the tables that matter, one day for staging — and <code>MIN_DATA_RETENTION_TIME_IN_DAYS</code> at account level so nobody can lower it below policy. Fail-safe underneath that for permanent tables, understood as Snowflake's safety net rather than my backup.</p>
+                <p>On top: periodic zero-copy clones as named restore points (cheap, instant, and they only cost storage as the parent diverges), and database replication to a secondary region with failover groups for regional outage. For true archival I would unload to cloud storage in an open format on a retention schedule, because that is the only copy that survives losing the Snowflake account itself.</p>
+                <p>Then the part people forget: rehearse the restore. A recovery plan nobody has executed is a hypothesis.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Your primary region has an outage. Walk me through failover.<span class="qa-tag">Scenario</span></summary>
+              <div class="qa-body">
+                <p>This only works if it was set up in advance. With Business Critical, I would have replication and failover groups configured to a secondary account in another region, replicating databases plus account objects such as users, roles, warehouses and integrations — replicating data alone leaves you with a database nobody can log into.</p>
+                <p>Failover itself is <code>ALTER FAILOVER GROUP ... PRIMARY</code> in the secondary account, which promotes it. The operational reality is what I would emphasise: client connection strings have to point at the new account URL, which is why client redirect with a connection object matters; and the recovery point is bounded by the replication schedule, so anything written since the last refresh is lost. Afterwards, failing back is a deliberate exercise, not automatic.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>A developer cloned production to test last month and storage has quietly grown. Explain the mechanism.<span class="qa-tag">Cost</span></summary>
+              <div class="qa-body">
+                <p>A clone is zero-copy at creation: it references the same micro-partitions and adds no storage. Cost appears as the two diverge. Every change to either the clone or the original writes new micro-partitions, and the old ones must be retained as long as some object still references them.</p>
+                <p>So a clone of a table that is fully rewritten nightly holds onto a complete extra copy within days. <code>TABLE_STORAGE_METRICS</code> exposes this as <code>retained_for_clone_bytes</code>. The fix is lifecycle policy: name clones with an owner and a date, and drop them on a schedule.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How do you recover a single row deleted three hours ago from a 2 TB table without disturbing anything else?<span class="qa-tag">SQL</span></summary>
+              <div class="qa-body">
+                <p>Read the past and insert just that row back — no restore required:</p>
+<pre><code>INSERT INTO orders
+SELECT *
+FROM   orders BEFORE (OFFSET =&gt; -60*60*3)
+WHERE  order_id = 987654
+  AND  order_id NOT IN (SELECT order_id FROM orders);</code></pre>
+                <p>Time Travel queries read historical micro-partitions, so this is cheap and touches nothing else. I would run the <code>SELECT</code> alone first to confirm the row is the one I want, and use <code>BEFORE (STATEMENT =&gt; ...)</code> instead of a time offset if I can find the delete in Query History, since that is exact rather than approximate.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What is the difference between UNDROP, Time Travel and Fail-safe, in one answer?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>They are three points on the same timeline. <strong>Time Travel</strong> is the user-accessible window — 0 to 90 days depending on edition and table type — during which you can query, clone or restore historical data yourself. <strong><code>UNDROP</code></strong> is one operation within that window, specifically for objects that were dropped rather than modified. <strong>Fail-safe</strong> is the seven days <em>after</em> Time Travel expires, available only for permanent objects, recoverable only by Snowflake Support, and not something you can plan around.</p>
+                <p>The examinable details: Standard edition caps Time Travel at one day, transient and temporary tables have a maximum of one day and no Fail-safe, and you pay storage for all three.</p>
+              </div>
+            </details>
+
+          </div>
+        </section>
+
+        <section class="section" id="security">
+          <h2>Round 6 &mdash; Security, access and governance</h2>
+          <p class="muted">Answer these as though the auditor is in the room, because sometimes they are.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+
+            <details class="qa">
+              <summary>An analyst can see a table they should not. How do you investigate and remediate?<span class="qa-tag">Flagship</span></summary>
+              <div class="qa-body">
+                <p><strong>Establish the path first.</strong> Privileges in Snowflake are inherited up the role hierarchy, so the grant is rarely on the role they used. I would work out every role they can activate and every privilege each inherits:</p>
+<pre><code>SHOW GRANTS TO USER "analyst_name";
+SHOW GRANTS TO ROLE analyst_role;
+SELECT * FROM snowflake.account_usage.grants_to_roles
+WHERE  granted_on = 'TABLE' AND name = 'SALARIES' AND deleted_on IS NULL;</code></pre>
+                <p>The usual causes are a role granted to a role granted to <code>PUBLIC</code>, a future grant on the schema that quietly covered new tables, ownership left with a role that everyone inherits, or secondary roles letting them combine privileges from a role they did not explicitly assume.</p>
+                <p><strong>Then establish impact.</strong> <code>ACCESS_HISTORY</code> tells me whether they actually read it and which columns, which is the question compliance will ask. <code>QUERY_HISTORY</code> gives the statements.</p>
+                <p><strong>Remediate and prevent.</strong> Revoke the specific grant, not the role, unless the role itself is wrong. Then fix the structural cause: never grant on <code>PUBLIC</code>, use functional roles built from access roles so grants are auditable, review future grants when creating schemas, and put a masking policy on the sensitive columns so that even an over-broad grant does not expose values.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Design an access model for a company with three teams and a regulated data domain.<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>I would use the access-role and functional-role pattern. For each schema, create access roles carrying a single level of privilege — <code>SALES_RAW_R</code>, <code>SALES_RAW_RW</code> — and grant object privileges only to those. Then create functional roles that match job titles — <code>ANALYST_SALES</code>, <code>ENGINEER_PLATFORM</code> — and build them by granting the access roles they need. Users only ever get functional roles.</p>
+                <p>That separation means adding a new dataset is one grant to an access role, and onboarding a person is one grant to a functional role. Object ownership sits with <code>SYSADMIN</code> or a role beneath it so nothing is orphaned; <code>USERADMIN</code> manages users and roles; <code>SECURITYADMIN</code> manages grants; <code>ACCOUNTADMIN</code> is used by two named people with MFA and nothing else.</p>
+                <p>For the regulated domain I would add masking policies on the sensitive columns keyed off <code>CURRENT_ROLE()</code>, row access policies driven by a mapping table for territory or entity restrictions, tags to mark the columns as PII so they can be discovered and reported, and <code>ACCESS_HISTORY</code>-based reporting for the auditor.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>You are locked out after applying a network policy. What now?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p>Snowflake blocks you from activating a network policy that excludes your own current IP, which prevents the most obvious version of this. But you can still lock out everyone else — for example by allow-listing only the office range when half the company is remote, or by having your own IP change afterwards.</p>
+                <p>If it happens, another <code>ACCOUNTADMIN</code> connecting from a permitted address can alter or unset the policy. If nobody can get in, it is a Snowflake Support ticket. Prevention is the real answer: apply new policies to a single test user first, keep a break-glass <code>ACCOUNTADMIN</code> whose access path is separate, and stage the rollout rather than applying at account level in one go.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>An auditor asks who accessed customer PII in the last six months. What do you give them?<span class="qa-tag">Governance</span></summary>
+              <div class="qa-body">
+                <p><code>SNOWFLAKE.ACCOUNT_USAGE.ACCESS_HISTORY</code>, which records the base objects and columns each query touched, including indirect access through views. That last point is what makes it the right view rather than <code>QUERY_HISTORY</code>: a query against a view that exposes a PII column shows up as access to the underlying column.</p>
+                <p>I would join it to tag references so the report is "who read anything tagged PII" rather than a hand-maintained list of columns, and note the constraints honestly: <code>ACCESS_HISTORY</code> requires Enterprise edition, retains a year, and lags by up to about three hours. If the account is younger than the audit window or the feature was enabled late, I say so rather than producing a report that looks complete and is not.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How do you give a contractor access to production data for two weeks?<span class="qa-tag">Scenario</span></summary>
+              <div class="qa-body">
+                <p>The design goal is that access expires whether or not anyone remembers. I would create a dedicated functional role scoped to exactly the objects needed, ideally over secure views rather than base tables, apply masking policies so PII is redacted for that role regardless of what they query, and give them their own user with key-pair or SSO authentication and MFA rather than a shared account.</p>
+                <p>Snowflake does not expire grants natively, so I would implement the expiry: a scheduled task that revokes the role and disables the user on the end date, plus a resource monitor on their dedicated warehouse so the engagement has a cost ceiling. I would also record the justification, because the auditor will ask why the grant existed rather than whether it was removed.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Marketing wants to analyse customer emails but must not see the addresses. How?<span class="qa-tag">Governance</span></summary>
+              <div class="qa-body">
+                <p>A masking policy on the column, applied conditionally by role:</p>
+<pre><code>CREATE MASKING POLICY email_mask AS (val STRING) RETURNS STRING -&gt;
+  CASE WHEN CURRENT_ROLE() IN ('PII_READER') THEN val
+       ELSE SHA2(val)
+  END;</code></pre>
+                <p>Hashing rather than blanking is deliberate: marketing can still join, group and count distinct customers without ever seeing an address. If they need the domain for segmentation, mask to <code>'***@' || SPLIT_PART(val,'@',2)</code> instead. Policies are attached to the column, so they apply to every view and every query path, which is what makes this stronger than building a "safe" view and hoping nobody queries the base table.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Why should service accounts not use passwords, and what do you use instead?<span class="qa-tag">Security</span></summary>
+              <div class="qa-body">
+                <p>Passwords for service accounts end up in configuration files, cannot take MFA, are rarely rotated, and are shared between people. Key-pair authentication replaces them: the private key lives in the client's secret store, Snowflake holds only the public key, and <code>RSA_PUBLIC_KEY_2</code> allows rotation with no downtime — set the new key as the second key, roll clients over, then promote it.</p>
+                <p>I would pair that with a network policy restricting the service user to known egress addresses, a role scoped to precisely what the job needs, and an authentication policy that forbids password login for that user. OAuth is the alternative where the client supports it.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How would you detect that someone is exfiltrating data?<span class="qa-tag">Security</span></summary>
+              <div class="qa-body">
+                <p>The signals are all in <code>ACCOUNT_USAGE</code>. Large or unusual <code>COPY INTO &lt;location&gt;</code> unloads, especially to an external stage created recently; <code>GET</code> activity against internal stages; queries returning very large result sets to a client; a user's <code>rows_produced</code> jumping far above their baseline; logins from new IP ranges or countries in <code>LOGIN_HISTORY</code>; and new shares or listings appearing.</p>
+                <p>I would build baseline-versus-today alerts rather than fixed thresholds, and pair detection with prevention: restrict who can create external stages and integrations, use <code>STORAGE_ALLOWED_LOCATIONS</code> so unloads can only go to approved buckets, enforce network policies, and switch on the Trust Center scanners for account-level misconfiguration.</p>
+              </div>
+            </details>
+
+          </div>
+        </section>
+
+        <section class="section" id="sharing">
+          <h2>Round 7 &mdash; Sharing and collaboration</h2>
+          <p class="muted">Data sharing questions are really questions about who pays and what leaks.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+
+            <details class="qa">
+              <summary>A partner needs daily access to a slice of your data. They are not on Snowflake. What do you propose?<span class="qa-tag">Flagship</span></summary>
+              <div class="qa-body">
+                <p>My first choice is still secure data sharing, via a reader account. I create the share over a secure view that exposes only the agreed rows and columns, provision a reader account for them, and they query it in Snowsight with no infrastructure of their own. No files, no scheduled extract, no stale copy, and revocation is immediate.</p>
+                <p>The trade-off I would raise unprompted is cost: I own the reader account, so I pay for their compute, and I need a resource monitor on it before I hand over the URL. If their volume is unpredictable or they want the data inside their own systems, the alternative is a scheduled unload to a cloud bucket they own, which is cheaper for me but reintroduces copies, latency and the question of how I revoke access to data already delivered.</p>
+                <p>If they are willing to get their own Snowflake account, that is strictly better than either — a direct share costs me nothing but the storage I already pay for.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Who pays for what in a data share?<span class="qa-tag">Cost</span></summary>
+              <div class="qa-body">
+                <p>The provider pays for storage, because there is only one copy of the data and it belongs to them. The consumer pays for the compute they use to query it, using their own warehouses. Nothing is copied, which is why a share is instant regardless of data volume and why the consumer sees provider updates immediately.</p>
+                <p>The exception is a reader account: it belongs to the provider, so the provider pays the consumer's compute too. That is the detail interviewers probe, and it is the reason reader accounts need a resource monitor from day one.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>You shared a view and the consumer gets an error. Why?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p>Standard views cannot be shared — only secure views, secure materialized views and secure UDFs. Beyond the permission model, the reason is information leakage: a standard view's definition is visible and the query optimiser can push predicates down in ways that let a consumer infer rows they cannot see. <code>CREATE SECURE VIEW</code> hides the definition and disables those optimisations.</p>
+                <p>The other common cause is that the share grants access to the view but not <code>USAGE</code> on the database and schema containing it, or the view references an object in a database that is not part of the share — a share cannot cross database boundaries.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>The consumer is in a different cloud region. Does sharing still work?<span class="qa-tag">Scenario</span></summary>
+              <div class="qa-body">
+                <p>Not directly. Secure data sharing is metadata pointing at storage, so both accounts must be in the same region on the same cloud provider. To share across regions or clouds you replicate the database to an account in the consumer's region and share from there.</p>
+                <p>That changes the economics materially, which is the point of the question: replication means a real second copy, so you pay storage twice plus replication compute plus egress, and the consumer sees data as fresh as your last refresh rather than live. For a Marketplace listing, cross-region reach is handled by publishing to auto-fulfilment regions, which does the same replication under the covers.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Two companies want to match customer overlap without either seeing the other's list. What do you suggest?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>A data clean room. Both parties share data into an environment where only approved, pre-agreed queries can run, and only aggregate results above a minimum threshold are returned — so each side learns the size of the overlap without either seeing the other's rows.</p>
+                <p>Under the hood it is built from the primitives already covered: secure sharing so no data moves, secure views and row access policies to constrain what can be selected, and stored procedures or approved query templates so the consumer cannot write arbitrary SQL. Snowflake packages this so you do not have to hand-roll it, but knowing what it is made of is what the question is testing.</p>
+              </div>
+            </details>
+
+          </div>
+        </section>
+
+        <section class="section" id="design">
+          <h2>Round 8 &mdash; Architecture and design decisions</h2>
+          <p class="muted">Open-ended by nature. State your assumptions, then commit to a recommendation.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+
+            <details class="qa">
+              <summary>Design the warehouse topology for a company with ETL, BI and data science workloads.<span class="qa-tag">Flagship</span></summary>
+              <div class="qa-body">
+                <p>Separate warehouses per workload, because they have genuinely different shapes and the whole point of Snowflake's architecture is that separating them costs nothing extra.</p>
+                <ul>
+                  <li><strong>ETL</strong> — a single-cluster warehouse sized to the batch, <code>AUTO_SUSPEND</code> at 60 seconds because there is no interactive user to keep the cache warm for. Size is driven by whether the loads spill, not by data volume.</li>
+                  <li><strong>BI</strong> — a multi-cluster auto-scale warehouse with min 1 and max 3, standard scaling policy, and a longer <code>AUTO_SUSPEND</code> (5&ndash;10 minutes) so the warehouse cache survives between dashboard interactions. Concurrency is the constraint here, not size.</li>
+                  <li><strong>Data science</strong> — its own warehouse so exploratory queries cannot starve the dashboards, likely Snowpark-optimized if there is real ML work, with a resource monitor because ad-hoc usage is the least predictable.</li>
+                  <li><strong>Ad-hoc / admin</strong> — a small warehouse for everyone else, so no one has a reason to borrow another team's.</li>
+                </ul>
+                <p>Then the governance layer: consistent naming that encodes team and workload so cost attribution is free, resource monitors on every warehouse, statement timeouts set at the warehouse level, and a rule that new warehouses are provisioned centrally rather than created ad hoc.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How would you structure databases and schemas for a medallion architecture?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>I would put the layers in separate databases rather than separate schemas — <code>RAW</code>, <code>CURATED</code>, <code>ANALYTICS</code> — because database is the boundary for cloning, replication, sharing and most grants, and you want those operations to be layer-aligned. Inside each, schemas by source system in raw and by business domain in the upper layers.</p>
+                <p>Table types follow the layer: raw landing tables transient with short Time Travel (the files still exist, so Fail-safe is paying twice for the same insurance), curated and analytics permanent with meaningful retention. Access follows too: engineers write to raw and curated, analysts read analytics only, and nobody queries raw directly in production.</p>
+                <p>I would also make dev and prod separate databases in the same account with identical schema names, so promoting code is a database swap rather than a rewrite, and use zero-copy clones to create dev environments from prod on demand.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Should you model in star schema, or load everything wide and denormalised?<span class="qa-tag">Judgement</span></summary>
+              <div class="qa-body">
+                <p>Snowflake handles joins well, so the old "denormalise because joins are expensive" argument is much weaker than it was on older platforms — and micro-partition pruning works better on narrower tables. I would default to a star schema for the analytics layer because it is comprehensible, maintainable and what BI tools expect.</p>
+                <p>Where I would denormalise is at the serving edge: a wide, pre-joined table behind a heavily used dashboard, maintained as a dynamic table so it stays fresh without hand-written pipeline code. That gives the performance of denormalisation without giving up the modelled layer underneath it. The trade-off I would name is that every denormalised copy is another thing that can drift.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>When would you use a transient table, and what is the risk?<span class="qa-tag">Cost</span></summary>
+              <div class="qa-body">
+                <p>Whenever the data can be regenerated from something else: raw landing tables where the source files still exist, intermediate transformation steps, and anything rebuilt on every run. Transient tables have no Fail-safe and a Time Travel maximum of one day, which cuts storage cost substantially on high-churn tables.</p>
+                <p>The risk is exactly that missing safety net. If someone truncates a transient table and the upstream files have been purged, there is no Fail-safe and no Support ticket that recovers it. So the rule is: transient only where the regeneration path is real and tested, not where it is theoretical.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How do you manage dev, test and production environments in Snowflake?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>Two defensible patterns, and I would pick based on the regulatory position. <strong>Separate accounts</strong> per environment give the hardest isolation, independent resource monitors and no chance of a dev query touching prod, at the cost of needing replication or shares to move data between them. <strong>Separate databases</strong> in one account are simpler and let you clone prod to dev instantly, but isolation is only as strong as your RBAC.</p>
+                <p>Either way: everything defined as code in Git, deployed through a pipeline rather than by hand, with Snowflake's Git integration and <code>EXECUTE IMMEDIATE FROM</code> if I want the repository visible from inside Snowflake. Zero-copy clones give each developer a realistic dataset in seconds, and masking policies mean cloned production data in dev is not a data-protection incident.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Snowflake or a lakehouse on open table formats? Argue both sides.<span class="qa-tag">Judgement</span></summary>
+              <div class="qa-body">
+                <p>The honest answer is that the distinction has narrowed. Snowflake's case is operational simplicity — no clusters to tune, strong governance, mature RBAC, sharing and Time Travel — and total cost of ownership that includes the engineers you do not need to hire. The lakehouse case is open storage you control, no vendor lock-in on the data itself, and freedom to point any engine at the same files.</p>
+                <p>What makes this a good answer in 2026 is Iceberg tables, which let you have both: the data sits in your own object storage in an open format, while Snowflake provides the query engine and governance. I would frame the decision around who else needs to read the data, how much platform engineering capacity the organisation actually has, and whether the workload is predictable enough for reserved capacity to matter.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>The business wants sub-second lookups on a Snowflake table for an application. Is that the right tool?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p>Usually no, and saying so is the right answer. Snowflake is an analytical engine: micro-partitions, columnar storage and no traditional indexes mean single-row lookups carry overhead that an OLTP database does not have, and a suspended warehouse adds resume latency on top.</p>
+                <p>If it must be Snowflake, the tools are the search optimization service for selective point lookups, a warehouse kept warm, and the result cache for repeated identical queries. Hybrid tables (Unistore) are the purpose-built answer, giving row storage with primary keys and enforced constraints for operational access patterns alongside analytical tables. But if the requirement is thousands of single-row reads per second, a transactional database in front of Snowflake is the honest recommendation.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How would you decide between a materialized view, a dynamic table and a scheduled table rebuild?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p>I would decide on query complexity and freshness. A <strong>materialized view</strong> is the narrowest: single table, no joins, limited aggregations, maintained automatically and transparently substituted into queries by the optimiser. Use it when one expensive aggregate over one big table is hit constantly.</p>
+                <p>A <strong>dynamic table</strong> handles joins and multi-step chains, refreshes to a declared <code>TARGET_LAG</code>, and manages its own dependency graph. That is my default for derived datasets. A <strong>scheduled rebuild</strong> — a task running <code>CREATE OR REPLACE</code> or <code>INSERT OVERWRITE</code> — is what I fall back to when the logic is imperative, non-deterministic, or when a full refresh is genuinely cheaper than incremental maintenance on a table that turns over completely anyway.</p>
+              </div>
+            </details>
+
+          </div>
+        </section>
+
+        <section class="section" id="migration">
+          <h2>Round 9 &mdash; Migration and modernisation</h2>
+          <p class="muted">Common for consultancy and platform roles. They want a plan, not a tool list.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+
+            <details class="qa">
+              <summary>You are migrating an on-premises warehouse to Snowflake. How do you plan it?<span class="qa-tag">Flagship</span></summary>
+              <div class="qa-body">
+                <p>I would sequence it so that value arrives before the migration finishes, because a big-bang cutover that slips is how these programmes die.</p>
+                <ol class="checklist">
+                  <li><strong>Inventory and rank.</strong> Catalogue tables, jobs, reports and consumers, and rank by business value against migration difficulty. A surprising proportion of legacy objects have no consumers at all — finding those early is the cheapest win available.</li>
+                  <li><strong>Land the data first.</strong> Bulk export to cloud storage, then <code>COPY INTO</code> raw tables. Keep types simple on landing and cast in a curated layer, so a type mismatch does not fail the extract.</li>
+                  <li><strong>Convert the logic.</strong> Stored procedures become Snowflake Scripting or Snowpark; proprietary SQL dialect gets translated; anything relying on indexes, hints or explicit distribution keys gets deleted rather than translated, because those concepts do not exist here.</li>
+                  <li><strong>Run in parallel and reconcile.</strong> Both systems produce the same reports for a period, with automated row-count and checksum comparison. This is the phase everyone under-budgets and the one that actually earns trust.</li>
+                  <li><strong>Cut over by consumer, then decommission.</strong> Move reports in waves, and only switch off the legacy system when nothing has queried it for an agreed period.</li>
+                </ol>
+                <p>Throughout: build the cost guardrails on day one, not at the end. Migrated workloads that ran on fixed on-premises hardware have no habit of caring about credits.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What legacy patterns do you have to unlearn when moving to Snowflake?<span class="qa-tag">Judgement</span></summary>
+              <div class="qa-body">
+                <p>Indexes, statistics management, vacuum and analyse jobs, manual distribution and sort keys, and capacity planning for peak concurrency — none of them exist. Teams that carry those habits over end up building clustering keys everywhere as an index substitute and paying for it.</p>
+                <p>The bigger mental shift is that compute is elastic and disposable. On-premises you shape workloads to fit one fixed cluster; here you give each workload its own warehouse and size it independently. And you stop avoiding <code>SELECT</code> on large tables out of fear, but start caring about which columns you touch, because storage is columnar.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How do you validate that a migrated table matches the source?<span class="qa-tag">SQL</span></summary>
+              <div class="qa-body">
+                <p>Three levels, cheapest first. Row counts per partition or load date; aggregate checksums per column (sums for numerics, <code>COUNT(DISTINCT)</code> and a hash aggregate for strings); and then a full row-level hash comparison for the tables that matter, using <code>HASH_AGG</code> or <code>MD5</code> over a canonical concatenation of the columns.</p>
+                <p>The traps worth naming: floating-point sums differ across engines, so compare rounded; <code>NULL</code> handling and empty-string semantics differ, especially coming from Oracle; character set and trailing-whitespace differences produce hash mismatches on data that is logically identical; and time zones will bite you unless both sides are normalised to UTC first.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Stakeholders expect Snowflake to be cheaper than the system it replaced. It is not. What do you do?<span class="qa-tag">Scenario</span></summary>
+              <div class="qa-body">
+                <p>I would separate three things before defending or conceding anything: has usage genuinely grown (people run more queries when queries are fast), is the workload badly configured, and was the original comparison sound (a fixed on-premises cost that ignored hardware refresh, licensing and staff is not a fair baseline).</p>
+                <p>Then I bring evidence — credits by warehouse and by team, the top workloads by cost, and the specific waste I can remove. In my experience the recoverable waste is idle warehouses, oversized warehouses, unnecessary Fail-safe on staging data, and a handful of queries running far more often than anyone realises. I would commit to a specific reduction target with a date rather than argue about the baseline.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How do you handle a source system that has no reliable change tracking?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>If there is a trustworthy modified timestamp, incremental extraction on that with a safety overlap and an idempotent <code>MERGE</code>. If there is not, the options are full extracts compared against the previous snapshot using row hashes to derive the changes, or log-based change data capture from the source database's transaction log via a connector.</p>
+                <p>I would be explicit about the cost of each: full snapshots are simple and robust but expensive and slow as the table grows; hash comparison shifts the cost into Snowflake, which is usually the cheaper place for it; log-based CDC is the correct long-term answer but needs cooperation from whoever owns the source. Whichever I pick, deletes are the part that gets missed — a source that never tells you about deletions needs a periodic full reconciliation regardless.</p>
+              </div>
+            </details>
+
+          </div>
+        </section>
+
+        <section class="section" id="ways-of-working">
+          <h2>Round 10 &mdash; Ways of working</h2>
+          <p class="muted">Behavioural questions with a Snowflake angle. Answer with a real example if you have one.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+
+            <details class="qa">
+              <summary>Tell me about a time you broke production.<span class="qa-tag">Behavioural</span></summary>
+              <div class="qa-body">
+                <p>Answer it straight, with a real incident, and spend most of the time on the response rather than the mistake. Structure: what you did, how it was detected, what you did in the first ten minutes, how it was resolved, and what changed permanently as a result.</p>
+                <p>What the interviewer is grading is whether you detected it yourself or a user did, whether you escalated early, and whether the fix was systemic. "I now always double-check" is a weak ending; "we added a pre-merge check that would have caught it, and a freshness alert that would have caught it in five minutes rather than four hours" is the ending they want. Never blame a colleague, and never claim you have not broken anything.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>A stakeholder insists on a design you think is wrong. How do you handle it?<span class="qa-tag">Behavioural</span></summary>
+              <div class="qa-body">
+                <p>Find out what they actually need before arguing about the design — very often the request is a solution they have already chosen for a problem they have not explained. Once the underlying requirement is on the table, quantify the trade-off in terms they care about: cost per month, hours of engineering, risk of the thing they are worried about.</p>
+                <p>If they still disagree and it is reversible, I would build their version, instrument it and let the data settle it. If it is irreversible or a compliance risk, I escalate — explicitly and in writing, without drama. Interviewers are checking that you can disagree without either capitulating or becoming an obstacle.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How do you document a data platform so people actually use the docs?<span class="qa-tag">Behavioural</span></summary>
+              <div class="qa-body">
+                <p>Put the documentation where the work happens rather than in a separate wiki that rots. Column and table comments in Snowflake itself, visible in Snowsight and queryable from <code>INFORMATION_SCHEMA</code>; tags for classification; a data dictionary generated from metadata rather than maintained by hand.</p>
+                <p>Then a short, human-written layer for the things metadata cannot express: why the model looks like this, what the known caveats are, and who to ask. I would keep that in the same repository as the code so it is reviewed alongside changes, and I would treat "someone asked a question in Slack" as a documentation bug.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>You inherit an undocumented Snowflake account. What are your first steps?<span class="qa-tag">Scenario</span></summary>
+              <div class="qa-body">
+                <p>I would spend the first week reading metadata rather than changing anything. Where the money goes (<code>WAREHOUSE_METERING_HISTORY</code>, <code>METERING_DAILY_HISTORY</code>), what actually gets queried (<code>QUERY_HISTORY</code> grouped by table and by user, which usually reveals that a minority of objects carry all the traffic), who has access to what (<code>GRANTS_TO_ROLES</code>, and specifically anything granted to <code>PUBLIC</code> or with <code>ACCOUNTADMIN</code> attached), and what is scheduled (tasks, pipes, streams and their failure rates).</p>
+                <p>The immediate safe wins are usually auto-suspend settings, resource monitors where there are none, and dropping objects nothing has touched in a year — after checking, not before. Anything structural waits until I understand why it is the way it is.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How do you keep up with Snowflake's release pace?<span class="qa-tag">Career</span></summary>
+              <div class="qa-body">
+                <p>Weekly and behavioural change release notes are the primary source, because behaviour change bundles are the ones that can break you and they have opt-in windows. Beyond that: the Snowflake community and blog for context, and a personal trial account to actually run new features rather than read about them.</p>
+                <p>The practical habit worth mentioning is testing behaviour change bundles in a non-production account during the opt-in period, so you find out about a breaking change on your schedule rather than Snowflake's.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What would you do in your first 90 days on our data platform team?<span class="qa-tag">Career</span></summary>
+              <div class="qa-body">
+                <p>Days 1&ndash;30: learn and ship something small. Understand the domain and the account as above, fix a visible irritant so people see output early, and map who depends on what.</p>
+                <p>Days 31&ndash;60: address the biggest measurable problem, which in most accounts is either cost or a fragile pipeline, and put monitoring around it so the improvement is provable. Days 61&ndash;90: propose the structural change I have earned the right to propose — a governance model, an environment strategy, a migration off something fragile — with evidence gathered in the first two months.</p>
+                <p>The framing matters more than the specifics: learn, then a quick win, then a measured improvement, then a structural proposal. Candidates who arrive planning to rewrite everything in week two are the ones interviewers worry about.</p>
+              </div>
+            </details>
+
+          </div>
+        </section>
+
+        <section class="section" id="rapid">
+          <h2>Round 11 &mdash; Rapid fire</h2>
+          <p class="muted">Short answers, asked fast, usually as a screen. If you cannot answer these in one breath, revise the section they came from.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+
+            <details class="qa">
+              <summary>What are the three layers of Snowflake's architecture?<span class="qa-tag">Rapid</span></summary>
+              <div class="qa-body"><p>Centralised storage, multi-cluster compute (virtual warehouses), and cloud services — the brain that handles authentication, metadata, optimisation, transactions and the result cache.</p></div>
+            </details>
+            <details class="qa">
+              <summary>What is a micro-partition?<span class="qa-tag">Rapid</span></summary>
+              <div class="qa-body"><p>An immutable, columnar storage unit of 50&ndash;500 MB uncompressed, created automatically. Snowflake stores min/max and other metadata per partition, which is what enables pruning.</p></div>
+            </details>
+            <details class="qa">
+              <summary>Scale up versus scale out?<span class="qa-tag">Rapid</span></summary>
+              <div class="qa-body"><p>Up is a bigger warehouse for one heavy query. Out is more clusters for many concurrent queries. Complexity versus concurrency.</p></div>
+            </details>
+            <details class="qa">
+              <summary>Name the three caches.<span class="qa-tag">Rapid</span></summary>
+              <div class="qa-body"><p>Result cache (24 hours, cloud services, free), metadata cache (statistics, enables instant <code>COUNT(*)</code>), and warehouse local disk cache (lost on suspend).</p></div>
+            </details>
+            <details class="qa">
+              <summary>What invalidates the result cache?<span class="qa-tag">Rapid</span></summary>
+              <div class="qa-body"><p>Changed underlying data, different SQL text (even whitespace), non-deterministic functions, and insufficient privileges on the referenced objects.</p></div>
+            </details>
+            <details class="qa">
+              <summary>Permanent, transient or temporary — how do they differ?<span class="qa-tag">Rapid</span></summary>
+              <div class="qa-body"><p>Permanent: up to 90 days Time Travel plus Fail-safe. Transient: max 1 day, no Fail-safe. Temporary: max 1 day, no Fail-safe, and dies with the session.</p></div>
+            </details>
+            <details class="qa">
+              <summary>What is zero-copy cloning?<span class="qa-tag">Rapid</span></summary>
+              <div class="qa-body"><p>A metadata-only copy that shares micro-partitions with its source. Instant, free at creation, and storage accrues only as the two diverge.</p></div>
+            </details>
+            <details class="qa">
+              <summary>Snowpipe versus COPY INTO?<span class="qa-tag">Rapid</span></summary>
+              <div class="qa-body"><p>Snowpipe is event-driven, serverless, roughly one-minute latency, defaults to <code>ON_ERROR = SKIP_FILE</code>. <code>COPY</code> is batch, uses your warehouse, defaults to <code>ABORT_STATEMENT</code>.</p></div>
+            </details>
+            <details class="qa">
+              <summary>What does a stream store?<span class="qa-tag">Rapid</span></summary>
+              <div class="qa-body"><p>An offset and change metadata, not the data itself. Standard, append-only and insert-only are the three types.</p></div>
+            </details>
+            <details class="qa">
+              <summary>Ideal file size for loading?<span class="qa-tag">Rapid</span></summary>
+              <div class="qa-body"><p>Roughly 100&ndash;250 MB compressed, many files rather than one, so the load parallelises across threads.</p></div>
+            </details>
+            <details class="qa">
+              <summary>What is the maximum size of a VARIANT value?<span class="qa-tag">Rapid</span></summary>
+              <div class="qa-body"><p>16 MB compressed per value.</p></div>
+            </details>
+            <details class="qa">
+              <summary>Which role manages users, and which manages grants?<span class="qa-tag">Rapid</span></summary>
+              <div class="qa-body"><p><code>USERADMIN</code> creates users and roles; <code>SECURITYADMIN</code> manages grants globally and inherits <code>USERADMIN</code>.</p></div>
+            </details>
+            <details class="qa">
+              <summary>What privilege do people always forget to grant?<span class="qa-tag">Rapid</span></summary>
+              <div class="qa-body"><p><code>USAGE</code> on the database and the schema. Without it, a table grant is invisible.</p></div>
+            </details>
+            <details class="qa">
+              <summary>INFORMATION_SCHEMA versus ACCOUNT_USAGE?<span class="qa-tag">Rapid</span></summary>
+              <div class="qa-body"><p><code>INFORMATION_SCHEMA</code>: real time, per database, 7&ndash;14 days, no dropped objects. <code>ACCOUNT_USAGE</code>: account-wide, about a year, includes dropped objects, lags 45 minutes to 3 hours.</p></div>
+            </details>
+            <details class="qa">
+              <summary>Which edition do you need for materialized views?<span class="qa-tag">Rapid</span></summary>
+              <div class="qa-body"><p>Enterprise or higher. Same for multi-cluster warehouses, extended Time Travel beyond one day, search optimization and column-level security.</p></div>
+            </details>
+            <details class="qa">
+              <summary>What does Tri-Secret Secure add?<span class="qa-tag">Rapid</span></summary>
+              <div class="qa-body"><p>A customer-managed key combined with Snowflake's key to form the account master key. Business Critical and above.</p></div>
+            </details>
+            <details class="qa">
+              <summary>Can you share a standard view?<span class="qa-tag">Rapid</span></summary>
+              <div class="qa-body"><p>No. Secure views, secure materialized views and secure UDFs only.</p></div>
+            </details>
+            <details class="qa">
+              <summary>What does a resource monitor not cover?<span class="qa-tag">Rapid</span></summary>
+              <div class="qa-body"><p>Serverless compute, storage, data transfer and Cortex. Warehouse credits only.</p></div>
+            </details>
+            <details class="qa">
+              <summary>How is the exam scored?<span class="qa-tag">Rapid</span></summary>
+              <div class="qa-body"><p>100 questions in 115 minutes, scaled score out of 1000, 750 to pass.</p></div>
+            </details>
+            <details class="qa">
+              <summary>Which warehouse sizes require Gen1?<span class="qa-tag">Rapid</span></summary>
+              <div class="qa-body"><p>5X-Large and 6X-Large. Standard Gen2 covers X-Small through 4X-Large.</p></div>
+            </details>
+
+          </div>
+        </section>
+
+        <section class="section" id="recap">
+          <h2>Recap</h2>
+          <div class="recap">
+            <ul class="checklist">
+              <li>Answer every scenario in four beats: contain, diagnose with named evidence, fix cheapest-first, then prevent.</li>
+              <li>Use <code>INFORMATION_SCHEMA</code> table functions for live incidents and <code>ACCOUNT_USAGE</code> for trends — never the other way round.</li>
+              <li>Queuing and slow execution look identical to a user and have opposite fixes.</li>
+              <li>Resource monitors cover warehouse credits only; budgets, tags and alerts cover the rest.</li>
+              <li>Say the trade-off out loud. The interviewer is buying your judgement, not your recall.</li>
+            </ul>
+            <p style="margin-top:1rem;">
+              <button type="button" data-complete="interview-prep">Mark complete</button>
+            </p>
+          </div>
+        </section>
+
+      </div>
+
+      <aside class="toc" aria-label="On this page">
+        <strong>On this page</strong>
+        <ol>
+          <li><a href="#framework">How to answer</a></li>
+          <li><a href="#performance">1 &middot; Slow queries</a></li>
+          <li><a href="#cost">2 &middot; Cost and credits</a></li>
+          <li><a href="#loading">3 &middot; Loading failures</a></li>
+          <li><a href="#pipelines">4 &middot; Pipelines and orchestration</a></li>
+          <li><a href="#recovery">5 &middot; Recovery and disaster</a></li>
+          <li><a href="#security">6 &middot; Security and access</a></li>
+          <li><a href="#sharing">7 &middot; Sharing and collaboration</a></li>
+          <li><a href="#design">8 &middot; Design decisions</a></li>
+          <li><a href="#migration">9 &middot; Migration</a></li>
+          <li><a href="#ways-of-working">10 &middot; Ways of working</a></li>
+          <li><a href="#rapid">11 &middot; Rapid fire</a></li>
+          <li><a href="#recap">Recap</a></li>
+        </ol>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<footer class="footer">Snowflake COF-C03 Course Notes &middot; Real-world interview scenarios &middot; Offline study edition</footer>
+</body>
+</html>

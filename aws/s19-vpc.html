@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="DEA-C01 Section 19: Amazon VPC, subnets, internet and NAT gateways, VPC peering, Transit Gateway, security groups versus NACLs, VPC endpoints, and Flow Logs — framed for data pipeline networking.">
+<title>Section 19 — VPCs | AWS Data Engineer DEA-C01 Notes</title>
+<link rel="stylesheet" href="assets/aws.css">
+<script defer src="assets/search-index.js"></script>
+<script defer src="assets/code-highlight.js"></script>
+<script defer src="assets/aws.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">Course section 19 of 21 · AWS Certified Data Engineer Associate</p>
+    <h1>VPCs</h1>
+    <p class="subtitle">Why a Glue job in a VPC cannot reach S3 without a gateway endpoint, how public and private subnets change where Redshift and RDS live, when Transit Gateway beats a mesh of peering connections, and the security-group rules that let a pipeline reach a database without opening the subnet to the internet.</p>
+    <div class="hero-meta">
+      <span class="chip">15 slides · ~35min</span>
+      <span class="chip">Exam domains: Data Security and Governance (18%) · Data Operations</span>
+      <span class="chip">Deck slides 668–682</span>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <nav class="pager" aria-label="Section navigation">
+    <a href="s18-migration.html">← Migration</a>
+    <a href="index.html">Course contents</a>
+    <a href="s20-security.html">Next: Security →</a>
+  </nav>
+
+  <main id="main">
+    <div class="layout">
+      <div class="content">
+
+        <section class="section" id="lectures">
+          <h2>Lectures in this section</h2>
+          <p class="muted">Each lecture links to the notes that cover it. Labs reuse bucket <code>dea-lab-&lt;initials&gt;-&lt;random&gt;</code> in <code>us-east-1</code>.</p>
+          <ol class="lecture-list">
+            <li class="lecture">
+              <a class="lec-title" href="#vpc-overview">Virtual Private Cloud overview</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">Slides 670–671</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#subnets">Subnets, CIDR sizing and route tables</a>
+              <span class="lec-time">~6:00</span>
+              <span class="lec-src">Slide 672</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#networking-components">Internet gateway, NAT gateway and egress-only gateway</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">Slide 674</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#hybrid-connectivity">Site-to-Site VPN and Direct Connect</a>
+              <span class="lec-time">~4:00</span>
+              <span class="lec-src">Slide 676</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#vpc-peering">VPC peering</a>
+              <span class="lec-time">~3:00</span>
+              <span class="lec-src">Slide 677</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#transit-gateway">Transit Gateway</a>
+              <span class="lec-time">~3:00</span>
+              <span class="lec-src">Slide 678</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#vpc-endpoints">VPC endpoints: gateway versus interface (PrivateLink)</a>
+              <span class="lec-time">~7:00</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#security-groups-nacls">Security groups versus network ACLs</a>
+              <span class="lec-time">~6:00</span>
+              <span class="lec-src">Slide 680</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#flow-logs">VPC Flow Logs and extra VPC features</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">Slide 682</span>
+            </li>
+          </ol>
+        </section>
+
+        <section class="section" id="vpc-overview">
+          <h2>Virtual Private Cloud (VPC)</h2>
+          <p class="lead">An Amazon Virtual Private Cloud is a <strong>private, isolated network</strong> inside AWS where you launch resources with IP addresses you control. For a data engineer it is the boundary that decides whether a Glue connection, a Lambda function, or a Redshift cluster can reach S3, a corporate Oracle database, or the public internet — and what that reach costs.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-670.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-670.png" alt="Course slide title card reading Virtual Private Cloud with the Amazon VPC service icon." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 670</span>Section opener for VPC networking. Everything in this section sits under Domain 4 (security and governance) because pipelines that ignore subnet placement leak data or fail at runtime.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-671.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-671.png" alt="Course slide showing Amazon VPC as a private isolated network in the AWS cloud, linkable to on-premises, regional service, with a diagram of two availability zones each containing public and private subnets." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 671</span>A VPC spans all Availability Zones in a region. Each AZ gets its own public and private subnets. Data stores that need high availability — Redshift, RDS Multi-AZ, OpenSearch — spread replicas across at least two AZ subnets.</figcaption>
+          </figure>
+
+          <h3>Regional scope and default VPC</h3>
+          <ul>
+            <li><strong>Regional service:</strong> a VPC exists in one AWS Region. Subnets inside it are zonal — one subnet maps to exactly one Availability Zone.</li>
+            <li><strong>Can link to on-premises:</strong> via Site-to-Site VPN or AWS Direct Connect, so a Glue job can read from an on-prem Oracle instance without exposing that database to the internet.</li>
+            <li><strong>Default VPC:</strong> every new account gets a VPC per region with a <code>/16</code> CIDR, one public subnet per AZ, an internet gateway attached, and a main route table sending <code>0.0.0.0/0</code> to the IGW. Labs often use the default VPC; production data platforms use custom VPCs with private subnets only.</li>
+          </ul>
+
+          <div class="diagram">
+            <p class="diagram-title">Two-AZ VPC — where data pipeline resources typically sit</p>
+            <div class="stack">
+              <div class="layer"><b>VPC 10.0.0.0/16</b><small>Regional · spans AZ-a and AZ-b</small></div>
+            </div>
+            <div class="flow" style="margin-top:14px;">
+              <div class="node is-source"><b>AZ-a public subnet</b><small>10.0.1.0/24 · NAT Gateway · bastion</small></div>
+              <div class="node is-source"><b>AZ-b public subnet</b><small>10.0.2.0/24 · NAT Gateway (HA)</small></div>
+            </div>
+            <div class="flow" style="margin-top:14px;">
+              <div class="node is-compute pulse"><b>AZ-a private</b><small>Glue connection · Lambda ENI · EMR nodes</small></div>
+              <div class="node is-store"><b>AZ-a private data</b><small>Redshift · RDS · OpenSearch</small></div>
+            </div>
+            <div class="flow" style="margin-top:14px;">
+              <div class="node is-compute"><b>AZ-b private</b><small>Replica subnet for Multi-AZ RDS</small></div>
+              <div class="node is-store"><b>S3 gateway endpoint</b><small>Route-table entry · no NAT needed for S3</small></div>
+            </div>
+          </div>
+
+          <div class="callout exam"><strong>Why this section is in a data course.</strong> Three recurring exam scenarios: (1) a Glue job in a VPC fails to start because the subnet has no route to S3; (2) Redshift or RDS in private subnets needs security-group rules, not a public IP; (3) cross-account lake access needs peering, Transit Gateway, or PrivateLink — not "make the bucket public".</div>
+        </section>
+
+        <section class="section" id="subnets">
+          <h2>Subnets and CIDR sizing</h2>
+          <p>A subnet is a <strong>range of IP addresses</strong> carved from the VPC CIDR block. Route tables attached to a subnet decide whether traffic to the internet, to S3, or to another VPC goes through an internet gateway, a NAT gateway, a VPC endpoint, or a peering connection.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-672.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-672.png" alt="Course slide on VPC subnets: a range of IP addresses, zonal service, types including public, private, VPN-only and isolated, and route tables dictating traffic routing." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 672</span>Four subnet types from the deck. In practice a data platform uses <strong>public</strong> subnets for NAT gateways and load balancers, and <strong>private</strong> subnets for everything that holds or processes data. VPN-only and isolated subnets appear in regulated or air-gapped designs.</figcaption>
+          </figure>
+
+          <h3>Subnet types</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Type</th><th>Internet route</th><th>Typical data-engineering use</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Public</strong></td><td>Route to internet gateway (<code>0.0.0.0/0 → igw</code>)</td><td>NAT gateway, public ALB, bastion host for emergency DB access</td></tr>
+                <tr><td><strong>Private</strong></td><td>No direct IGW route; outbound via NAT or VPC endpoints</td><td>Glue connections, Lambda with VPC config, Redshift, RDS, OpenSearch</td></tr>
+                <tr><td><strong>VPN-only</strong></td><td>On-premises reachable via VPN/DX; no public internet</td><td>Hybrid ETL reading from corporate ERP</td></tr>
+                <tr><td><strong>Isolated</strong></td><td>No internet, no VPN — VPC-internal only</td><td>Strictly internal staging between two pipeline tiers</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>CIDR blocks and the five reserved IPs</h3>
+          <p>VPC CIDR must be between <code>/16</code> and <code>/28</code>. Common production choice: <code>10.0.0.0/16</code> with <code>/24</code> subnets (256 addresses each). AWS reserves <strong>five IP addresses per subnet</strong> that you cannot assign:</p>
+          <ul>
+            <li><strong>First address</strong> — network address</li>
+            <li><strong>Second address</strong> — VPC router</li>
+            <li><strong>Third address</strong> — DNS server (<code>AmazonProvidedDNS</code> at VPC CIDR + 2)</li>
+            <li><strong>Fourth address</strong> — reserved for future use</li>
+            <li><strong>Last address</strong> — broadcast (unused in AWS but reserved)</li>
+          </ul>
+          <p>A <code>/24</code> subnet therefore has <strong>251 usable IPs</strong>, not 256. Size subnets for ENI growth: each Glue connection, Lambda in a VPC, and RDS instance consumes at least one private IP.</p>
+
+          <h3>What makes a subnet public</h3>
+          <p>A subnet is public when <strong>both</strong> conditions hold:</p>
+          <ol>
+            <li>The VPC has an <strong>internet gateway</strong> attached.</li>
+            <li>The subnet's route table has <code>0.0.0.0/0 → igw-xxxxxxxx</code> (and for IPv6, <code>::/0 → eigw</code> or IGW as appropriate).</li>
+          </ol>
+          <p>Auto-assign public IPv4 on launch is a separate setting — an instance can get a public IP only if the subnet is public. Redshift and RDS in private subnets should have this disabled; access comes through security groups and optionally AWS PrivateLink, not a public IP.</p>
+        </section>
+
+        <section class="section" id="networking-components">
+          <h2>VPC networking components</h2>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-674.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-674.png" alt="Course slide listing three VPC networking components: internet gateway for VPC-internet communication, egress-only internet gateway for outbound IPv6 only, and NAT gateway or instance for private subnet outbound access." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 674</span>The three egress paths from a VPC. Data pipelines in private subnets almost always need either a NAT gateway or VPC endpoints — the exam loves asking which is cheaper for S3 access (answer: S3 gateway endpoint, free).</figcaption>
+          </figure>
+
+          <h3>Internet gateway (IGW)</h3>
+          <p>Allows bidirectional communication between resources with public IPs and the internet. Attach one IGW per VPC. Resources in public subnets use it for inbound (e.g. SSH to a bastion) and outbound traffic.</p>
+
+          <h3>NAT gateway versus NAT instance</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Property</th><th>NAT gateway (managed)</th><th>NAT instance (EC2)</th></tr></thead>
+              <tbody>
+                <tr><td>Availability</td><td>Managed, highly available per AZ</td><td>You patch, scale and fail over</td></tr>
+                <tr><td>Bandwidth</td><td>Up to 100 Gbps</td><td>Depends on instance type</td></tr>
+                <tr><td>Placement</td><td>Must be in a <strong>public</strong> subnet</td><td>Same</td></tr>
+                <tr><td>Cost</td><td>~$0.045/hour per AZ + <strong>$0.045/GB</strong> processed</td><td>EC2 instance cost + operational time</td></tr>
+                <tr><td>Exam answer</td><td><strong>Default choice</strong> — least operational overhead</td><td>Legacy; only if question demands lowest fixed cost at tiny scale</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>Private subnet route table: <code>0.0.0.0/0 → nat-xxxxxxxx</code>. Glue jobs that download JARs from Maven Central, call external APIs, or reach AWS services <em>without</em> a VPC endpoint traverse the NAT — and bill per gigabyte.</p>
+
+          <div class="diagram">
+            <p class="diagram-title">S3 access from a private subnet — gateway endpoint (free) versus NAT (costs per GB)</p>
+            <div class="flow">
+              <div class="node is-compute pulse"><b>Glue worker</b><small>Private subnet · no public IP</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-store"><b>S3 gateway endpoint</b><small>Prefix list route · stays on AWS network · $0 data charge</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-store"><b>S3 bucket</b><small>Read/write Parquet partitions</small></div>
+            </div>
+            <div class="flow" style="margin-top:14px;">
+              <div class="node is-compute"><b>Glue worker</b><small>Same subnet · no S3 endpoint</small></div>
+              <span class="arrow">→</span>
+              <div class="node"><b>NAT Gateway</b><small>Public subnet · ~$0.045/GB processed</small></div>
+              <span class="arrow">→</span>
+              <div class="node"><b>Internet</b><small>Hairpin to S3 public endpoint</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-store"><b>S3</b><small>Same bucket · higher cost and latency</small></div>
+            </div>
+          </div>
+
+          <div class="callout cost"><strong>NAT Gateway is the silent budget killer.</strong> A nightly Glue job that reads 500 GB through NAT adds roughly $22.50 in NAT processing charges alone, every night. An S3 gateway endpoint adds no hourly charge and no per-GB NAT fee. For interface endpoints (KMS, Secrets Manager, Glue API), you pay ~$0.01/hour per AZ plus data — still often cheaper than sustained NAT traffic for control-plane calls.</div>
+
+          <h3>Egress-only internet gateway</h3>
+          <p>IPv6 only: allows outbound IPv6 from instances in a VPC while blocking inbound IPv6 connections initiated from the internet. Irrelevant for most S3/Glue pipelines unless you run dual-stack.</p>
+        </section>
+
+        <section class="section" id="hybrid-connectivity">
+          <h2>Connecting a VPC to a corporate data centre</h2>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-676.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-676.png" alt="Course slide on connecting VPC to corporate network via Site-to-Site VPN over the internet and Direct Connect for private dedicated connectivity, with diagram showing customer gateway, VPN gateway and Direct Connect paths." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 676</span>Two hybrid options. DMS reading from on-premises SQL Server over VPN is common in migration scenarios covered in <a href="s18-migration.html">Section 18</a>; Direct Connect wins when you need consistent low latency and large sustained throughput.</figcaption>
+          </figure>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Option</th><th>Path</th><th>Latency / bandwidth</th><th>When a data engineer picks it</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Site-to-Site VPN</strong></td><td>Encrypted tunnel over the public internet between customer gateway and virtual private gateway or Transit Gateway</td><td>Variable; up to 1.25 Gbps per tunnel</td><td>Quick hybrid setup, proof-of-concept DMS tasks, lower cost</td></tr>
+                <tr><td><strong>AWS Direct Connect</strong></td><td>Private dedicated fibre or partner connection into AWS</td><td>Consistent; 1 Gbps–100 Gbps ports</td><td>Large nightly batch loads from on-prem warehouse, predictable latency</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>Both terminate in your VPC (or Transit Gateway). Route tables must advertise the on-premises CIDR; security groups and NACLs still control which pipeline hosts may reach which source systems.</p>
+        </section>
+
+        <section class="section" id="vpc-peering">
+          <h2>VPC peering</h2>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-677.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-677.png" alt="Course slide on VPC peering enabling direct communication between two VPCs intra or inter region, with diagram showing three VPCs connected via peering links." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 677</span>Peering is a one-to-one connection. VPC1 and VPC2 need one peering link; VPC1 and VPC3 need another. There is no transitive routing — VPC2 cannot reach VPC3 through VPC1 unless you peer them separately.</figcaption>
+          </figure>
+
+          <ul>
+            <li><strong>Direct private IP routing</strong> between two VPC CIDR blocks — traffic stays on the AWS network.</li>
+            <li><strong>Intra-Region or inter-Region</strong> peering is supported; inter-Region peering has higher latency and separate pricing.</li>
+            <li><strong>Non-transitive:</strong> if Account A peers with B and B peers with C, A cannot reach C through B.</li>
+            <li><strong>CIDR overlap forbidden:</strong> both VPCs must have non-overlapping CIDR blocks.</li>
+          </ul>
+          <p><strong>Data-engineering use:</strong> peer the analytics VPC (Redshift, Glue) with a shared-services VPC (central logging bucket, enterprise KMS). Cross-account peering requires acceptance and IAM trust on both sides.</p>
+        </section>
+
+        <section class="section" id="transit-gateway">
+          <h2>Transit Gateway</h2>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-678.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-678.png" alt="Course slide on Transit Gateway as central hub interconnecting VPCs and on-premises networks, with diagram showing two accounts VPCs and Site-to-Site VPN connected to a central Transit Gateway." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 678</span>Transit Gateway is the hub-and-spoke replacement for a full mesh of peering connections. At scale — dozens of VPCs plus on-premises — it is the least operational overhead answer the exam wants.</figcaption>
+          </figure>
+
+          <ul>
+            <li><strong>Central hub</strong> connecting VPCs, VPN, and Direct Connect attachments across accounts and regions (with inter-Region peering between Transit Gateways).</li>
+            <li><strong>Route tables on the TGW</strong> control which attachments can talk to which — segment prod data VPC from dev.</li>
+            <li><strong>Scales better than peering:</strong> N VPCs need N attachments, not N×(N−1)/2 peering links.</li>
+          </ul>
+          <div class="callout exam"><strong>Peering versus Transit Gateway.</strong> Two VPCs in one account that need to share a Redshift cluster → peering is fine. Ten VPCs, multiple accounts, on-premises, and centralized egress → Transit Gateway. "Least operational overhead" at scale → Transit Gateway.</div>
+        </section>
+
+        <section class="section" id="vpc-endpoints">
+          <h2>VPC endpoints</h2>
+          <p class="lead">VPC endpoints let resources in private subnets reach AWS services <strong>without traversing the internet or a NAT gateway</strong>. The exam tests two types constantly; confusing them is one of the most common wrong answers on Domain 4.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Property</th><th>Gateway endpoint</th><th>Interface endpoint (PrivateLink)</th></tr></thead>
+              <tbody>
+                <tr><td>Services</td><td><strong>S3</strong> and <strong>DynamoDB</strong> only</td><td>Most other AWS APIs — KMS, Secrets Manager, Glue, Kinesis, STS, SNS, etc.</td></tr>
+                <tr><td>Implementation</td><td>Route-table entry to a prefix list (<code>pl-xxxxxxxx</code>)</td><td>ENI with private IPs in your subnet</td></tr>
+                <tr><td>DNS</td><td>Uses existing S3/DynamoDB public DNS names; route hijacks to AWS network</td><td><code>private-dns-enabled</code> maps <code>service.region.amazonaws.com</code> to the endpoint ENI</td></tr>
+                <tr><td>Cost</td><td><strong>Free</strong> — no hourly charge</td><td>~$0.01/hour per AZ + data processing</td></tr>
+                <tr><td>Security</td><td>Endpoint policy (IAM + bucket policy still apply)</td><td>Security group on the endpoint ENI</td></tr>
+                <tr><td>Exam trigger</td><td>"Glue job cannot access S3 in private subnet"</td><td>"Lambda needs KMS/Secrets Manager without internet"</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout danger"><strong>Glue connection requirement.</strong> When a Glue job uses a VPC connection, the job workers launch in your subnets. The connection's subnet <strong>must</strong> have a route to S3 — via an <strong>S3 gateway endpoint</strong> on the route table or via a NAT gateway. Without either, the job fails at startup when Glue tries to stage scripts and JARs. This is not optional configuration; it is a hard requirement.</div>
+
+          <pre data-lang="shell" data-title="AWS CLI — create S3 gateway VPC endpoint" data-explain="Adds a route to the S3 prefix list on the specified route tables so private-subnet Glue workers reach S3 without NAT."><code>aws ec2 create-vpc-endpoint \
+  --vpc-id vpc-0abc123def4567890 \
+  --service-name com.amazonaws.us-east-1.s3 \
+  --route-table-ids rtb-private-az-a rtb-private-az-b \
+  --policy-document '{
+    "Statement": [{
+      "Effect": "Allow",
+      "Principal": "*",
+      "Action": "s3:*",
+      "Resource": "*"
+    }]
+  }'
+
+# Interface endpoint example (KMS) — needs subnets + security group
+aws ec2 create-vpc-endpoint \
+  --vpc-id vpc-0abc123def4567890 \
+  --vpc-endpoint-type Interface \
+  --service-name com.amazonaws.us-east-1.kms \
+  --subnet-ids subnet-private-az-a subnet-private-az-b \
+  --security-group-ids sg-endpoint-kms \
+  --private-dns-enabled</code></pre>
+        </section>
+
+        <section class="section" id="security-groups-nacls">
+          <h2>Security groups versus network ACLs</h2>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-680.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-680.png" alt="Course slide on VPC security: security groups control traffic at resource level and NACLs at subnet level, with diagram showing traffic passing NACL then security group before reaching instances." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 680</span>Defence in depth: NACL is the subnet fence; security group is the instance gate. A Redshift cluster in a private subnet needs an inbound SG rule on port 5439 from the Glue security group, not an open NACL rule to the internet.</figcaption>
+          </figure>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Property</th><th>Security group</th><th>Network ACL (NACL)</th></tr></thead>
+              <tbody>
+                <tr><td>Scope</td><td><strong>ENI / resource</strong> (instance, RDS, Lambda ENI, Redshift)</td><td><strong>Subnet</strong> — all ENIs in the subnet</td></tr>
+                <tr><td>State</td><td><strong>Stateful</strong> — return traffic automatically allowed</td><td><strong>Stateless</strong> — must allow inbound and outbound separately</td></tr>
+                <tr><td>Rules</td><td><strong>Allow only</strong> — no deny rules</td><td><strong>Allow and deny</strong> — numbered rules, lowest number wins</td></tr>
+                <tr><td>Evaluation</td><td>All rules evaluated before deciding</td><td>Processed in order until a match</td></tr>
+                <tr><td>Default</td><td>Default SG: allow outbound, deny inbound except same SG</td><td>Default NACL: allow all in and out</td></tr>
+                <tr><td>Exam gotcha</td><td>Reference another SG as source — Glue → RDS pattern</td><td>Block a specific IP range at subnet edge</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Security groups referencing other security groups</h3>
+          <p>Instead of opening RDS to a CIDR range, add an inbound rule: <strong>port 5432 (PostgreSQL) or 5439 (Redshift) from security group <code>sg-glue-workers</code></strong>. When the Glue job's ENIs carry that security group, they can reach the database. The database stays in a private subnet with no public IP. Same pattern for Lambda → RDS, EMR → OpenSearch, and DMS replication instance → source database.</p>
+
+          <pre data-lang="shell" data-title="AWS CLI — allow Glue security group into RDS" data-explain="Authorizes inbound PostgreSQL traffic from the Glue worker ENIs by security group reference, not by IP."><code># RDS security group: allow Glue workers on PostgreSQL port
+aws ec2 authorize-security-group-ingress \
+  --group-id sg-rds-analytics \
+  --protocol tcp \
+  --port 5432 \
+  --source-group sg-glue-etl-workers
+
+# Outbound on the Glue SG is usually allow-all by default;
+# if locked down, add egress to sg-rds-analytics on 5432 as well.</code></pre>
+
+          <div class="callout tip"><strong>Ephemeral ports and NACLs.</strong> If you customize NACLs for a private subnet, remember return traffic from an established connection uses ephemeral ports (1024–65535). A stateless NACL must allow both request and response or connections hang — another reason production data subnets often leave the default NACL in place and rely on security groups.</div>
+        </section>
+
+        <section class="section" id="flow-logs">
+          <h2>VPC Flow Logs and extra features</h2>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-682.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-682.png" alt="Course slide on VPC extra features: Flow Logs capture IP traffic, Reachability Analyzer tests paths, ephemeral ports for outbound communication, and VPC sharing within an AWS Organization." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 682</span>Flow Logs are the primary troubleshooting tool when a Glue job "cannot connect" to RDS — they show REJECT records at the ENI. Reachability Analyzer answers "is there a path?" without sending packets.</figcaption>
+          </figure>
+
+          <h3>VPC Flow Logs</h3>
+          <p>Capture IP traffic metadata for a VPC, subnet, or ENI. Default format includes account, action (<code>ACCEPT</code>/<code>REJECT</code>), bytes, dstaddr, dstport, interface-id, protocol, srcaddr, srcport, and timestamps. Custom formats can add pkt-srcaddr, vpc-id, subnet-id, and tcp-flags.</p>
+
+          <p><strong>Destinations:</strong></p>
+          <ul>
+            <li><strong>Amazon CloudWatch Logs</strong> — quick search with Logs Insights; good for live debugging.</li>
+            <li><strong>Amazon S3</strong> — cheap long-term storage; partition by date for Athena queries.</li>
+            <li><strong>Kinesis Data Firehose</strong> — stream to S3, OpenSearch, or Splunk for near-real-time dashboards.</li>
+          </ul>
+
+          <pre data-lang="sql" data-title="Athena — Flow Log table DDL and rejected-traffic query" data-explain="Creates an external table over S3-stored Flow Logs in default format, then surfaces REJECT rows — the first place to look when security groups or NACLs block pipeline traffic."><code>CREATE EXTERNAL TABLE IF NOT EXISTS vpc_flow_logs (
+  version int,
+  account string,
+  interface_id string,
+  srcaddr string,
+  dstaddr string,
+  srcport int,
+  dstport int,
+  protocol bigint,
+  packets bigint,
+  bytes bigint,
+  start bigint,
+  end bigint,
+  action string,
+  log_status string
+)
+PARTITIONED BY (dt string)
+ROW FORMAT DELIMITED FIELDS TERMINATED BY ' '
+LOCATION 's3://dea-lab-ab-4821/logs/vpc-flow/'
+TBLPROPERTIES ("skip.header.line.count"="1");
+
+-- Rejected connections to RDS/Redshift ports in the last partition
+SELECT dt, srcaddr, dstaddr, dstport, action, interface_id
+FROM vpc_flow_logs
+WHERE dt = '2026-08-03'
+  AND action = 'REJECT'
+  AND dstport IN (5432, 5439, 443)
+ORDER BY bytes DESC
+LIMIT 100;</code></pre>
+
+          <h3>Other VPC features from the deck</h3>
+          <ul>
+            <li><strong>Reachability Analyzer:</strong> model-based path analysis between two resources — "Can this Glue ENI reach this RDS endpoint?" without changing security groups.</li>
+            <li><strong>VPC sharing (RAM):</strong> share subnets with other accounts in the same AWS Organization — central networking team owns the VPC; data teams deploy Glue and Redshift into shared private subnets.</li>
+            <li><strong>Ephemeral ports:</strong> temporary high ports used for return traffic on outbound connections; relevant when writing custom NACL rules.</li>
+          </ul>
+        </section>
+
+        <section class="section" id="deeper">
+          <h2>Deeper detail and exam edge cases</h2>
+          <p class="lead">Quota numbers, the free-versus-paid endpoint split that dominates pipeline cost, and the stateful-versus-stateless firewall rules that explain mysterious REJECT rows in Flow Logs.</p>
+
+          <h3>Limits and quotas that decide answers</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Limit</th><th>Value</th><th>Adjustable?</th><th>Why it matters</th></tr></thead>
+              <tbody>
+                <tr><td>VPCs per Region (default)</td><td>5</td><td>Yes — soft quota increase</td><td>Separate prod/dev/analytics VPCs consume quota fast in multi-env accounts.</td></tr>
+                <tr><td>Subnets per VPC (default)</td><td>200</td><td>Yes — soft quota increase</td><td>Micro-subnets per AZ for EMR, Glue, and RDS exhaust this at scale.</td></tr>
+                <tr><td>VPC CIDR block size</td><td>/16 to /28</td><td>No — set at create (additional CIDRs can be associated)</td><td>/28 VPC is tiny; plan headroom for private subnets across AZs.</td></tr>
+                <tr><td>Reserved IPs per subnet</td><td>5 (first four + last)</td><td>No (hard)</td><td>/24 subnet = 251 usable IPs, not 256 — matters for dense Fargate or Lambda ENI placement.</td></tr>
+                <tr><td>Internet gateways per VPC</td><td>1</td><td>No (hard)</td><td>Attach/detach only; no multi-IGW redundancy within one VPC.</td></tr>
+                <tr><td>NAT Gateway bandwidth</td><td>Scales automatically up to ~100 Gbps</td><td>N/A — managed service</td><td>No instance sizing; billed hourly per AZ plus per GB processed.</td></tr>
+                <tr><td>Site-to-Site VPN throughput</td><td>Up to 1.25 Gbps per tunnel</td><td>Yes — add tunnels / use DX for more</td><td>Large DMS/DataSync over VPN may need Direct Connect instead.</td></tr>
+                <tr><td>Gateway VPC endpoints (S3, DynamoDB)</td><td>Free — no hourly charge</td><td>N/A</td><td>Highest-value cost fact for data pipelines in private subnets.</td></tr>
+                <tr><td>Interface VPC endpoints (PrivateLink)</td><td>~$0.01 per hour per AZ + per GB data processed</td><td>N/A — metered</td><td>KMS, Secrets Manager, Glue API — cheaper than NAT for control-plane traffic at scale.</td></tr>
+                <tr><td>Transit Gateway attachment</td><td>Per attachment-hour + per GB processed</td><td>Yes — number of attachments via design</td><td>Hub-and-spoke at scale; each VPC and VPN/DX connects once.</td></tr>
+                <tr><td>VPC peering</td><td>Non-transitive; overlapping CIDRs rejected</td><td>No — design constraint</td><td>A cannot reach C through B; plan CIDR blocks before peering.</td></tr>
+                <tr><td>Security group rules</td><td>Allow only — no deny</td><td>N/A</td><td>Block specific IP at subnet edge requires NACL deny rule.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>What you actually pay for</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Billed dimension</th><th>Unit</th><th>How to spend less</th></tr></thead>
+              <tbody>
+                <tr><td>NAT Gateway</td><td>~$0.045/hr per AZ + ~$0.045/GB processed</td><td>S3/DynamoDB gateway endpoints for data-plane traffic; one NAT per AZ only when required; avoid cross-AZ hairpin to NAT (source and NAT in different AZs bills cross-AZ + NAT processing).</td></tr>
+                <tr><td>Cross-AZ data transfer</td><td>~$0.01/GB each direction (same Region)</td><td>Place Glue workers, Redshift, and MSK brokers in the same AZ as primary data access; Multi-AZ RDS replicas intentionally pay this for HA.</td></tr>
+                <tr><td>Interface VPC endpoint</td><td>~$0.01/hr/AZ + data processing</td><td>Enable only for APIs the subnet calls (KMS, STS, Secrets Manager); gateway endpoints first for S3/DynamoDB.</td></tr>
+                <tr><td>Transit Gateway</td><td>Attachment-hour + per GB between attachments</td><td>Replace full peering mesh only when VPC count justifies hub cost; segment route tables to limit propagation.</td></tr>
+                <tr><td>VPC Flow Logs to CloudWatch</td><td>Ingestion + storage per GB</td><td>Flow Logs to S3 + Athena for long retention; filter with custom format; sample in high-volume subnets.</td></tr>
+                <tr><td>VPC Flow Logs to S3</td><td>S3 storage only (no CloudWatch ingest fee)</td><td>Partition by date; lifecycle to Glacier for audit archives.</td></tr>
+                <tr><td>Site-to-Site VPN</td><td>VPN connection-hour (~$0.05/hr) + data transfer out</td><td>Direct Connect for sustained TB/day hybrid loads; VPN for lower throughput proof-of-concept.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout cost"><strong>Biggest VPC cost leak for data teams.</strong> EMR or MSK brokers spread across three AZs reading S3 through NAT in a single AZ — you pay cross-AZ traffic plus NAT processing on every terabyte. S3 gateway endpoint on all private route tables eliminates NAT from the S3 path entirely.</div>
+          <div class="callout danger"><strong>Cross-AZ NAT hairpin.</strong> A Glue worker in AZ-a sending traffic to a NAT Gateway in AZ-b incurs cross-AZ charges before NAT processing even begins. Deploy one NAT per AZ and align subnet route tables, or use VPC endpoints.</div>
+
+          <h3>Traps that catch people</h3>
+          <ul>
+            <li><strong>Interface endpoint for S3 —</strong> S3 uses a gateway endpoint (free), not PrivateLink interface endpoint. Picking interface endpoint for S3 adds hourly ENI charges unnecessarily — gateway endpoint is the exam answer for private S3 access.</li>
+            <li><strong>NACL deny breaks return traffic —</strong> NACLs are stateless. Allowing inbound 5432 to RDS but denying outbound ephemeral ports (1024–65535) hangs connections. Security groups avoid this because they are stateful.</li>
+            <li><strong>Security group deny assumption —</strong> SGs cannot deny — only allow. To block a malicious IP while allowing everything else, use a NACL deny rule with lower rule number than the allow.</li>
+            <li><strong>Peering transitivity —</strong> VPC A peers with B and B peers with C; A cannot reach C. Transit Gateway or separate peering link required.</li>
+            <li><strong>Overlapping CIDR peering —</strong> Peering request fails if both VPCs use 10.0.0.0/16. Plan non-overlapping CIDRs before multi-VPC lake design.</li>
+            <li><strong>Flow Logs show REJECT but not why —</strong> Flow Logs record accept/reject at ENI level, not which SG or NACL rule fired. Use Reachability Analyzer or systematically test SG rules.</li>
+            <li><strong>Flow Logs omit DNS and IMDS —</strong> Traffic to the Amazon DNS resolver (VPC CIDR + 2) and instance metadata service (169.254.169.254) is not captured in Flow Logs — do not expect to debug IMDS issues there.</li>
+            <li><strong>Glue without S3 route —</strong> VPC connection alone is insufficient; subnet route table needs S3 prefix list (gateway endpoint) or NAT route. Job fails before ETL starts.</li>
+            <li><strong>Endpoint policy forgotten —</strong> Gateway endpoint with restrictive policy blocks S3 paths even when IAM allows — check endpoint policy and bucket policy together.</li>
+            <li><strong>Public subnet mislabel —</strong> A subnet is public only with IGW attached AND <code>0.0.0.0/0 → igw</code> route — auto-assign public IP alone does not make it public.</li>
+          </ul>
+
+          <h3>Troubleshooting playbook</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Symptom</th><th>Most likely cause</th><th>What to check / fix</th></tr></thead>
+              <tbody>
+                <tr><td>Glue job "Unable to connect to S3" in VPC</td><td>No S3 gateway endpoint or NAT route on worker subnet</td><td>Route table for Glue connection subnets; add <code>com.amazonaws.region.s3</code> gateway endpoint.</td></tr>
+                <tr><td>Lambda in VPC timeout calling Secrets Manager</td><td>No interface endpoint and no NAT egress</td><td>Add Secrets Manager interface endpoint with private DNS, or NAT route.</td></tr>
+                <tr><td>Flow Logs show REJECT to RDS port 5432</td><td>RDS security group missing inbound from caller SG</td><td>RDS SG inbound: TCP 5432 from <code>sg-glue-workers</code>; verify Glue connection uses that SG.</td></tr>
+                <tr><td>Connection works once then hangs (custom NACL)</td><td>Outbound ephemeral ports blocked on NACL</td><td>Allow outbound 1024–65535 to client CIDR, or revert to default NACL allow-all.</td></tr>
+                <tr><td>Redshift COPY from S3 slow and costly</td><td>Traffic through NAT instead of gateway endpoint</td><td>Gateway endpoint on Redshift subnet route tables; compare Flow Logs dstaddr for S3 prefix list route.</td></tr>
+                <tr><td>Cross-account S3 access fails despite peering</td><td>Peering does not grant S3 access — need bucket policy or RAM</td><td>Peering routes private IP only; S3 is accessed via endpoint or public service endpoints — fix IAM/bucket policy.</td></tr>
+                <tr><td>MSK broker cross-AZ latency spikes</td><td>Producers/consumers in different AZ than broker leader</td><td>Align clients with broker AZ; accept cross-AZ cost for HA or use rack-aware placement.</td></tr>
+                <tr><td>Transit Gateway route not propagating</td><td>Attachment not associated with correct TGW route table</td><td>TGW route tables → association and propagation settings per attachment.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Production patterns</h3>
+          <p>A typical analytics VPC uses <strong>three AZs</strong>, each with one public subnet (NAT only) and two private subnets (compute vs data). S3 and DynamoDB gateway endpoints attach to all private route tables. Interface endpoints cover KMS, Secrets Manager, STS, and Glue API in subnets where Lambda and Glue run. Redshift and RDS live in data-tier private subnets with SG referencing only approved compute SGs.</p>
+          <div class="grid-2">
+            <div class="mini-card">
+              <h4>Cost-optimised lake VPC</h4>
+              <ul>
+                <li>Gateway endpoint for S3 on every private route table — zero NAT GB for lake I/O.</li>
+                <li>Single NAT per AZ only for external API calls (Maven, partner HTTPS).</li>
+                <li>Interface endpoints scoped to subnets that need them — not every AZ if workers are AZ-local.</li>
+              </ul>
+            </div>
+            <div class="mini-card">
+              <h4>Hybrid ingest VPC</h4>
+              <ul>
+                <li>Site-to-Site VPN or DX to Transit Gateway for on-prem DMS/DataSync sources.</li>
+                <li>Separate route table for VPN/DX propagation — segment prod from dev spokes.</li>
+                <li>Flow Logs to S3 partitioned by day for compliance audit of cross-prem traffic.</li>
+              </ul>
+            </div>
+          </div>
+          <p>Anti-pattern: one giant flat private subnet with default SG open to the VPC CIDR and no endpoints — every AWS API call hairpins through NAT, and blast radius is the entire CIDR. Segment compute and data tiers; reference SGs, not CIDRs, for database access.</p>
+          <pre data-lang="json" data-title="S3 gateway endpoint policy — restrict to pipeline bucket" data-explain="Endpoint policies are an additional layer beyond IAM. Deny-by-default with explicit bucket ARNs limits exfiltration even if a role is over-permissioned."><code>{
+  "Statement": [{
+    "Effect": "Allow",
+    "Principal": "*",
+    "Action": ["s3:GetObject", "s3:PutObject", "s3:ListBucket"],
+    "Resource": [
+      "arn:aws:s3:::dea-lab-ab-4821",
+      "arn:aws:s3:::dea-lab-ab-4821/*"
+    ]
+  }]
+}</code></pre>
+
+          <h3>Where this fits with the rest of the exam</h3>
+          <p>VPC knowledge underpins Domain 4 security and Domain 3 operations — almost every private-subnet pipeline question assumes you know endpoints and security groups.</p>
+          <ul>
+            <li><strong>Glue and Lambda in VPC:</strong> <a href="s04-glue.html">Section 4</a>, <a href="s05-lambda.html">Section 5</a> — JDBC connections to RDS require VPC placement plus SG rules from this section.</li>
+            <li><strong>Migration connectivity:</strong> <a href="s18-migration.html">Section 18</a> — DMS replication instance and DataSync agent subnet design over VPN/DX.</li>
+            <li><strong>Encryption control plane:</strong> <a href="s20-security.html">Section 20</a> — KMS and Secrets Manager interface endpoints when subnets have no internet.</li>
+            <li><strong>Streaming:</strong> <a href="s06-streaming.html">Section 6</a> — MSK broker AZ placement and cross-AZ producer costs.</li>
+            <li><strong>Monitoring:</strong> <a href="s16-management.html#cloudtrail">Section 16</a> — Flow Logs complement CloudTrail; neither replaces the other.</li>
+            <li><strong>Exam synthesis:</strong> <a href="s21-exam-prep.html#decisions">Section 21</a> — "cannot leave the VPC" and "reduce NAT costs" point to gateway/interface endpoints.</li>
+          </ul>
+          <div class="callout exam"><strong>How the exam frames VPC.</strong> "Glue in private subnet cannot reach S3" → S3 gateway endpoint. "Lambda needs KMS without internet" → interface endpoint. "Least cost for S3 from private subnet" → gateway endpoint, not NAT. "Block IP at subnet boundary" → NACL deny. "Allow Glue to RDS only" → security group reference. Peering vs Transit Gateway hinges on <em>least operational overhead at scale</em>.</div>
+        </section>
+
+        <section class="section" id="interview">
+          <h2>Interview questions</h2>
+          <p class="muted">Answer each one out loud before opening it.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+            <details class="qa">
+              <summary>A Glue ETL job with a VPC connection fails immediately with an S3 access error. What do you check first?<span class="qa-tag">Troubleshooting</span></summary>
+              <div class="qa-body">
+                <p>Confirm the subnets in the Glue connection have a route to S3. Either an <strong>S3 gateway VPC endpoint</strong> must be associated with the subnet route tables, or a <strong>NAT gateway</strong> route for <code>0.0.0.0/0</code> must exist. Glue workers need to reach S3 to stage scripts, libraries, and spill data before the job does any work.</p>
+                <p>Also verify the endpoint policy (if restrictive), the job role's IAM permissions on the bucket, and that the connection's security group allows outbound HTTPS. Missing S3 routing is the most common root cause.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Gateway endpoint versus interface endpoint — when do you use each?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p><strong>Gateway endpoints</strong> are only for S3 and DynamoDB. They add a prefix-list route to your route table, cost nothing, and need no security group. Use them whenever private-subnet resources read or write S3 — which is nearly every Glue, Lambda, and EMR pipeline.</p>
+                <p><strong>Interface endpoints (PrivateLink)</strong> create ENIs in your subnet for other AWS APIs: KMS, Secrets Manager, Glue API, Kinesis, STS. They cost per hour per AZ but keep control-plane traffic off NAT and the public internet. Enable private DNS so SDK calls resolve to the endpoint automatically.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Security group versus NACL — which blocks return traffic if you only allow inbound?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p><strong>NACL</strong>, because it is stateless. You must explicitly allow both inbound request and outbound response (including ephemeral ports). A security group is stateful: if inbound TCP 5432 from the Glue SG is allowed, return packets from RDS are automatically permitted.</p>
+                <p>For data pipelines, security groups do almost all the work. Custom NACL denies are rare and usually for compliance-driven IP blocking at the subnet edge.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How do you let a Glue job in a private subnet connect to RDS without exposing the database to the internet?<span class="qa-tag">Architecture</span></summary>
+              <div class="qa-body">
+                <p>Place RDS in a <strong>private subnet</strong> with no public IP. Create a security group on RDS allowing inbound on the database port (5432, 3306, etc.) where the <strong>source is the Glue worker security group</strong>, not <code>0.0.0.0/0</code>. Attach the same Glue SG to the Glue connection so job ENIs inherit it.</p>
+                <p>Ensure route tables allow traffic between the subnets (same VPC, so default local routes suffice). Use Secrets Manager for credentials and an interface endpoint for Secrets Manager if the subnet has no NAT.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>VPC peering versus Transit Gateway — three VPCs and an on-premises network all need to talk. What do you choose?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p><strong>Transit Gateway.</strong> Full mesh peering among three VPCs requires three peering connections; adding a fourth VPC adds three more links. Transit Gateway attaches each VPC once to a central hub. On-premises VPN or Direct Connect also attaches to the TGW, giving every spoke a single path to corporate networks.</p>
+                <p>Peering is acceptable for exactly two VPCs with simple routing. The exam's "least operational overhead" phrasing at scale points to Transit Gateway.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Why is NAT Gateway expensive for a high-volume S3 pipeline, and what is the fix?<span class="qa-tag">Cost</span></summary>
+              <div class="qa-body">
+                <p>NAT Gateway charges ~$0.045/hour per gateway plus <strong>~$0.045 per GB</strong> processed. Traffic to S3 through NAT counts as processed data even though S3 is an AWS service. A pipeline moving terabytes nightly pays NAT processing fees on every byte.</p>
+                <p>Add an <strong>S3 gateway VPC endpoint</strong> to the private subnet route tables. S3 traffic then routes over the AWS backbone directly to S3 with no NAT processing charge. Keep NAT only for traffic that truly needs the public internet.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What are the five reserved IP addresses in every subnet?<span class="qa-tag">Exam</span></summary>
+              <div class="qa-body">
+                <p>AWS reserves five addresses in each subnet CIDR: the network address (first), VPC router (second), DNS server at base+2 (third), reserved for future use (fourth), and broadcast address (last). A /24 subnet has 256 addresses but only <strong>251 assignable</strong> to ENIs.</p>
+                <p>Size subnets accordingly when planning many Lambda functions or Glue workers, each of which consumes a private IP while running.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>You see REJECT records in VPC Flow Logs from a Glue ENI to an RDS IP on port 5432. What layers do you check?<span class="qa-tag">Troubleshooting</span></summary>
+              <div class="qa-body">
+                <p>Work from the instance outward: <strong>RDS security group</strong> must allow inbound 5432 from the Glue SG; <strong>Glue SG</strong> must allow outbound to RDS (or all outbound); <strong>NACLs</strong> on both subnets must not deny the traffic (remember ephemeral return ports if NACLs are custom); <strong>route tables</strong> must have local VPC routes (default).</p>
+                <p>Flow Logs show REJECT at the ENI — they do not say which rule failed. Security groups are the usual culprit for database connectivity in same-VPC pipelines.</p>
+              </div>
+            </details>
+          </div>
+        </section>
+
+        <section class="section" id="practice">
+          <h2>Hands-on practice</h2>
+          <p class="muted">Free tier where possible. Delete everything at the end of each task.</p>
+          <ol class="practice-list">
+            <li class="practice">
+              <p class="practice-task">In the default VPC, create an S3 gateway endpoint and confirm the route table gained a prefix-list route to S3.</p>
+              <span class="console-path">VPC → Endpoints → Create endpoint → com.amazonaws.us-east-1.s3 (Gateway)</span>
+              <p class="practice-expect">Route table shows <code>pl-63a5400a</code> (us-east-1 S3 prefix list) → <code>vpce-xxxxx</code>.</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">Console + CLI</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li><strong>VPC → Your VPCs</strong> — note the default VPC id and main route table.</li>
+                    <li><strong>VPC → Endpoints → Create endpoint</strong>. Service: <code>com.amazonaws.us-east-1.s3</code>, type Gateway, route table = main.</li>
+                    <li>Verify in Route tables → Routes.</li>
+                  </ol>
+<pre data-lang="shell"><code>VPC_ID=$(aws ec2 describe-vpcs --filters Name=isDefault,Values=true \
+  --query 'Vpcs[0].VpcId' --output text)
+
+RTB_ID=$(aws ec2 describe-route-tables --filters Name=vpc-id,Values=$VPC_ID \
+  Name=association.main,Values=true --query 'RouteTables[0].RouteTableId' --output text)
+
+aws ec2 create-vpc-endpoint --vpc-id $VPC_ID \
+  --service-name com.amazonaws.us-east-1.s3 \
+  --route-table-ids $RTB_ID</code></pre>
+                  <p class="muted">Cleanup: VPC → Endpoints → select endpoint → Delete.</p>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Create two security groups: one for a fictional Glue worker and one for RDS. Authorize RDS to accept PostgreSQL only from the Glue SG by reference.</p>
+              <span class="console-path">VPC → Security groups → Create security group</span>
+              <p class="practice-expect">RDS SG inbound shows source <code>sg-glue</code> on port 5432; no CIDR rules.</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">CLI</span></summary>
+                <div class="qa-body">
+<pre data-lang="shell"><code>VPC_ID=$(aws ec2 describe-vpcs --filters Name=isDefault,Values=true \
+  --query 'Vpcs[0].VpcId' --output text)
+
+GLUE_SG=$(aws ec2 create-security-group --group-name dea-lab-glue \
+  --description "Glue workers" --vpc-id $VPC_ID --query GroupId --output text)
+
+RDS_SG=$(aws ec2 create-security-group --group-name dea-lab-rds \
+  --description "RDS PostgreSQL" --vpc-id $VPC_ID --query GroupId --output text)
+
+aws ec2 authorize-security-group-ingress --group-id $RDS_SG \
+  --protocol tcp --port 5432 --source-group $GLUE_SG</code></pre>
+                  <p class="muted">Cleanup: delete both security groups after the lab.</p>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Enable VPC Flow Logs on the default VPC, deliver to S3 under <code>s3://dea-lab-&lt;initials&gt;-&lt;random&gt;/logs/vpc-flow/</code>, then run the Athena DDL from this section against one day of logs.</p>
+              <span class="console-path">VPC → Your VPCs → Flow logs → Create flow log</span>
+              <p class="practice-expect">S3 prefix receives gzipped log files; Athena query returns ACCEPT and REJECT rows.</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">Console</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li><strong>VPC → Flow logs → Create</strong>. Filter: All traffic. Destination: S3. Log format: default.</li>
+                    <li>Wait a few minutes for log files to land.</li>
+                    <li>In Athena, run the DDL from the Flow Logs section, add a partition for today's date, and query <code>action = 'REJECT'</code>.</li>
+                  </ol>
+                  <p class="muted">Cleanup: delete the flow log, empty and optionally delete the S3 prefix. Flow Logs to S3 have storage charges.</p>
+                </div>
+              </details>
+            </li>
+          </ol>
+        </section>
+
+        <section class="section" id="recap">
+          <h2>Recap</h2>
+          <div class="recap">
+            <ul class="checklist">
+              <li>VPC = regional isolated network; subnets are zonal CIDR blocks inside it.</li>
+              <li>Public subnet = route <code>0.0.0.0/0 → IGW</code>. Private subnet = no IGW route; outbound via NAT or VPC endpoints.</li>
+              <li>Five IPs reserved per subnet — a /24 has 251 usable addresses.</li>
+              <li>S3 gateway endpoint: free, route-table based, required for Glue-in-VPC without NAT.</li>
+              <li>Interface endpoint (PrivateLink): ENI + private DNS for KMS, Secrets Manager, Glue API, Kinesis.</li>
+              <li>NAT Gateway: ~$0.045/hr + ~$0.045/GB — avoid for S3-heavy pipelines.</li>
+              <li>Security group: stateful, allow-only, ENI level, can reference another SG. NACL: stateless, allow/deny, subnet level.</li>
+              <li>Peering: one-to-one, non-transitive. Transit Gateway: hub-and-spoke at scale.</li>
+              <li>Flow Logs → CloudWatch, S3, or Firehose; query REJECT rows in Athena to debug SG/NACL blocks.</li>
+              <li>Glue VPC connection subnets must reach S3 (endpoint or NAT) or the job cannot start.</li>
+            </ul>
+            <p style="margin-top:1rem;">
+              <button type="button" data-complete="section-19">Mark complete</button>
+            </p>
+          </div>
+        </section>
+
+      </div>
+
+      <aside class="toc" aria-label="On this page">
+        <strong>On this page</strong>
+        <ol>
+          <li><a href="#lectures">Lectures</a></li>
+          <li><a href="#vpc-overview">VPC overview</a></li>
+          <li><a href="#subnets">Subnets and CIDR</a></li>
+          <li><a href="#networking-components">Networking components</a></li>
+          <li><a href="#hybrid-connectivity">VPN and Direct Connect</a></li>
+          <li><a href="#vpc-peering">VPC peering</a></li>
+          <li><a href="#transit-gateway">Transit Gateway</a></li>
+          <li><a href="#vpc-endpoints">VPC endpoints</a></li>
+          <li><a href="#security-groups-nacls">Security groups vs NACLs</a></li>
+          <li><a href="#flow-logs">Flow Logs</a></li>
+          <li><a href="#deeper">Deeper detail</a></li>
+          <li><a href="#interview">Interview questions</a></li>
+          <li><a href="#practice">Hands-on practice</a></li>
+          <li><a href="#recap">Recap</a></li>
+        </ol>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<footer class="footer">AWS Certified Data Engineer Associate (DEA-C01) · Section 19 · Offline study edition</footer>
+</body>
+</html>

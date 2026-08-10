@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="SnowPro Core COF-C03 Section 6: VARIANT and JSON path notation, FLATTEN, semi-structured predicates, relational export, unstructured file URLs, and directory tables.">
+<title>Section 6 — Semi-structured and Unstructured Data | Snowflake COF-C03 Course Notes</title>
+<link rel="stylesheet" href="assets/snowflake.css">
+<script defer src="assets/search-index.js"></script>
+<script defer src="assets/sql-glossary.js"></script>
+<script defer src="assets/sql-highlight.js"></script>
+<script defer src="assets/snowflake.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">Course section 6 of 17 · SnowPro Core (COF-C03)</p>
+    <h1>Semi- structured and Unstructured data</h1>
+    <p class="subtitle">VARIANT, OBJECT, and ARRAY types; JSON path notation; FLATTEN and lateral joins; semi-structured predicates; relational-to-JSON export; file URL functions for documents; and directory tables for stage inventories.</p>
+    <div class="hero-meta">
+      <span class="chip">9 lectures · 47min</span>
+      <span class="chip">Exam domain: Semi-Structured Data</span>
+      <span class="chip">Last verified: 28 Jul 2026</span>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <nav class="pager" aria-label="Section navigation">
+    <a href="s05-advance-data-loading.html">← Advance Data Loading</a>
+    <a href="../index.html">Course contents</a>
+    <a href="s07-connect-to-cloud.html">Next: Connect to Cloud →</a>
+  </nav>
+
+  <main id="main">
+    <div class="layout">
+      <div class="content">
+
+        <section class="section" id="lectures">
+          <h2>Lectures in this section</h2>
+          <p class="muted">Every lecture below links to the notes that cover it. Sample data: <code>data/json_simple.json</code>, <code>data/JSON_ADV.json</code>, and co-branding-agreement PDFs for unstructured demos.</p>
+          <ol class="lecture-list">
+            <li class="lecture">
+              <a class="lec-title" href="#semi-concept">Semi-structured Data Concept</a>
+              <span class="lec-time">3:06</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#semi-concept">Update</a>
+              <span class="lec-time">0:03</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#semi-basics">Demo : Semi-structured Basics</a>
+              <span class="lec-time">6:48</span>
+              <span class="lec-src">Semi- structured and Unstructured data/Semi-structured Basics.txt</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#semi-advance">Demo : Semi-structured Data Advance</a>
+              <span class="lec-time">15:03</span>
+              <span class="lec-src">Semi- structured and Unstructured data/Semi-structured Data Advance.txt</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#table-to-semi">Demo : Table to Semi-structured</a>
+              <span class="lec-time">3:03</span>
+              <span class="lec-src">Semi- structured and Unstructured data/Table to Semi-structured.txt</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#semi-advance">Semi- Structure Data Quiz</a>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#unstructured-concept">Unstructured Data Concept</a>
+              <span class="lec-time">4:28</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#unstructured-demo">Demo : Unstructured Data</a>
+              <span class="lec-time">8:16</span>
+              <span class="lec-src">Semi- structured and Unstructured data/Unstructured data.txt</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#directory">Demo : Directory</a>
+              <span class="lec-time">3:46</span>
+              <span class="lec-src">Semi- structured and Unstructured data/Directory.txt</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#predicates">Predicates</a>
+              <span class="lec-time">2:04</span>
+              <span class="lec-src">Semi- structured and Unstructured data/Predicates.txt</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#directory">Unstructured Data and Directory Quiz</a>
+            </li>
+          </ol>
+        </section>
+
+        <section class="section" id="semi-concept">
+          <h2>Semi-structured Data Concept</h2>
+          <p class="lead">Relational tables assume fixed columns. Real-world data arrives as JSON logs, nested API responses, and arrays of events. Snowflake stores flexible payloads in <strong>VARIANT</strong> (and related <strong>OBJECT</strong>/<strong>ARRAY</strong> types), then lets you query them with path notation and <code>FLATTEN</code>.</p>
+
+          <p><strong>Semi-structured data</strong> does not conform to the standards of traditional structured data, but it carries tags or other mark-up that identify distinct entities within the payload. It has no fixed schema and can contain <strong>N-level hierarchies</strong> of nested information — exactly the shape of JSON, XML, and Avro documents.</p>
+
+          <p>Snowflake provides native types <code>ARRAY</code>, <code>OBJECT</code>, and <code>VARIANT</code>, supports querying them with path notation and <code>FLATTEN</code>, and can load and unload several semi-structured file formats. Each native type is capped at <strong>16 MB</strong> per value.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Data type</th><th>Description</th><th>Example</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>ARRAY</code> (max 16 MB)</td>
+                  <td>Ordered list of values of the same data type.</td>
+                  <td><code>['apple', 'banana', 'orange']</code></td>
+                </tr>
+                <tr>
+                  <td><code>OBJECT</code> (max 16 MB)</td>
+                  <td>Unordered collection of key-value pairs; each key is a string and each value can be a different type.</td>
+                  <td><code>{'name': 'John', 'age': 35, 'isMarried': true}</code></td>
+                </tr>
+                <tr>
+                  <td><code>VARIANT</code> (max 16 MB)</td>
+                  <td>Universal semi-structured type — JSON, XML, and other complex documents; can hold any type and be queried or manipulated as needed.</td>
+                  <td><code>{'name': 'John', 'age': 35, 'isMarried': true, 'hobbies': ['reading', 'hiking', 'cooking'], 'address': {'street': '123 Main Street', 'city': 'Anytown', 'state': 'CA', 'zip': '12345'}}</code></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-130-semi-types.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-130-semi-types.png" alt="Comparison table of ARRAY, OBJECT and VARIANT semi-structured types with descriptions, 16 MB size cap, and example values including nested hobbies and address" loading="lazy" width="1920" height="1080">
+            </a>
+            <figcaption><span class="slide-no">Slide 130</span>ARRAY, OBJECT, and VARIANT compared — each capped at 16 MB per value.</figcaption>
+          </figure>
+
+          <h3>Supported file formats</h3>
+          <div class="grid-2">
+            <div class="mini-card">
+              <h4>Load (COPY INTO table)</h4>
+              <ul>
+                <li>JSON</li>
+                <li>Avro</li>
+                <li>ORC</li>
+                <li>Parquet</li>
+                <li>XML</li>
+              </ul>
+            </div>
+            <div class="mini-card">
+              <h4>Unload (COPY INTO @stage)</h4>
+              <ul>
+                <li>JSON</li>
+                <li>Parquet</li>
+              </ul>
+            </div>
+          </div>
+          <p class="muted">Unload support is narrower than load support — only JSON and Parquet can be written back to a stage. That asymmetry is a common exam question.</p>
+
+          <div class="analogy">
+            <strong>Everyday analogy — nested Russian dolls:</strong> A VARIANT column is the outer doll containing everything. Dot notation (<code>src:salesperson.name</code>) opens one doll at a time. <code>FLATTEN</code> is like laying every nested doll on the table as separate rows so you can sort and filter them like a normal spreadsheet.
+          </div>
+
+          <div class="diagram" role="img" aria-label="JSON document to VARIANT column to flattened rows">
+            <div class="flow">
+              <div class="node">json_simple.json<br><small class="muted">nested document</small></div>
+              <span class="arrow" aria-hidden="true">→</span>
+              <div class="node pulse">VARIANT column<br><small class="muted">one row per file</small></div>
+              <span class="arrow" aria-hidden="true">→</span>
+              <div class="node">FLATTEN<br><small class="muted">relational rows</small></div>
+              <span class="packet" aria-hidden="true"></span>
+            </div>
+          </div>
+
+          <div class="callout exam">
+            <strong>COF-C03 exam tip:</strong> Snowflake provides native types <code>VARIANT</code>, <code>OBJECT</code>, and <code>ARRAY</code>. In VARIANT, JSON <code>null</code> is stored as the string <code>"null"</code> — use <code>IS_NULL_VALUE()</code> to detect it. <code>PARSE_JSON</code> throws on invalid JSON; <code>TRY_PARSE_JSON</code> returns NULL instead.
+          </div>
+        </section>
+
+        <section class="section" id="semi-basics">
+          <h2>Demo : Semi-structured Basics</h2>
+          <p class="muted">Course file: <code>Semi- structured and Unstructured data/Semi-structured Basics.txt</code></p>
+
+          <pre><code>USE ROLE ACCOUNTADMIN;
+USE WAREHOUSE COMPUTE_WH;
+USE DATABASE la_db;
+USE SCHEMA la_schema;
+
+CREATE OR REPLACE FILE FORMAT myjsonformat TYPE = JSON;
+
+CREATE OR REPLACE STAGE my_jsonfile FILE_FORMAT = myjsonformat;
+
+CREATE OR REPLACE TABLE raw_source (src VARIANT);
+
+-- Upload: PUT in SnowSQL, or snow stage copy (CLI) — unavailable in Snowsight SQL
+-- PUT file://&lt;local_path&gt;/json_simple.json @my_jsonfile AUTO_COMPRESS=FALSE;
+
+COPY INTO raw_source FROM @my_jsonfile FILE_FORMAT = myjsonformat;
+
+SELECT * FROM raw_source;
+
+-- Bracket notation
+SELECT src, src['salesperson']['name'] FROM raw_source;
+
+-- Dot notation (preferred)
+SELECT src, src:salesperson.name FROM raw_source;
+
+SELECT src, src:salesperson.name::STRING AS salesperson_name FROM raw_source;
+-- Expected from json_simple.json: Frank Beasley</code></pre>
+
+          <div class="callout tip">
+            <strong>json_simple.json values:</strong> <code>dealership</code> = <code>Valley View Auto Sales</code>, <code>salesperson.name</code> = <code>Frank Beasley</code>, <code>customer[0].name</code> = <code>Joyce Ridgely</code>.
+          </div>
+
+          <pre><code>-- Inline PARSE_JSON example (different document from the file)
+INSERT INTO raw_source
+SELECT PARSE_JSON('{
+  "customer": [{"address": "New York, NY", "name": "Bradley Greenbloom", "phone": "12127593751"}],
+  "date": "2017-04-28",
+  "dealership": "Tindel Toyota",
+  "salesperson": {"id": "274", "name": "Greg Northrup"}
+}');
+
+SELECT src:salesperson.name::STRING FROM raw_source WHERE src:dealership::STRING = 'Tindel Toyota';</code></pre>
+        </section>
+
+        <section class="section" id="semi-advance">
+          <h2>Demo : Semi-structured Data Advance</h2>
+          <p class="muted">Course file: <code>Semi- structured and Unstructured data/Semi-structured Data Advance.txt</code></p>
+          <p>JSON_ADV.json is a top-level array of department objects with deeply nested <code>Zone → Division → Orders</code>. Use <code>STRIP_OUTER_ARRAY = TRUE</code> so each array element becomes its own row on load.</p>
+
+          <pre><code>CREATE OR REPLACE FILE FORMAT myjson_adv
+  TYPE = JSON STRIP_OUTER_ARRAY = TRUE;
+
+CREATE OR REPLACE STAGE my_json_adv_stage FILE_FORMAT = myjson_adv;
+
+-- PUT file://&lt;local_path&gt;/JSON_ADV.json @my_json_adv_stage AUTO_COMPRESS=FALSE;
+
+TRUNCATE raw_source;
+
+COPY INTO raw_source FROM @my_json_adv_stage FILE_FORMAT = myjson_adv;
+
+SELECT src:Department::STRING AS dept FROM raw_source;
+
+SELECT src, src:Zone[0].SubZone::STRING FROM raw_source;
+
+SELECT src, src:Zone[0].Division[0].Store::STRING FROM raw_source;</code></pre>
+
+          <h3>FLATTEN &amp; lateral joins</h3>
+          <pre><code>SELECT src:Department::STRING AS dept, zone_f.value:SubZone::STRING AS subzone
+FROM raw_source,
+  LATERAL FLATTEN(INPUT => src:Zone) AS zone_f;
+
+CREATE OR REPLACE TABLE dump_json AS
+SELECT
+  src:Department::STRING        AS dept_col,
+  zone.value:SubZone::STRING    AS subzone_col,
+  div.value:Store::STRING       AS store_col,
+  ord.value:SR::STRING          AS sr_col,
+  ord.value:Sales::STRING       AS sales_col
+FROM raw_source,
+  LATERAL FLATTEN(INPUT => src:Zone)              AS zone,
+  LATERAL FLATTEN(INPUT => zone.value:Division) AS div,
+  LATERAL FLATTEN(INPUT => div.value:Orders)    AS ord;
+
+SELECT * FROM dump_json;</code></pre>
+
+          <div class="diagram" role="img" aria-label="Nested JSON hierarchy flattened to relational rows">
+            <div class="stack">
+              <div class="layer">Department</div>
+              <div class="layer pulse">Zone → SubZone</div>
+              <div class="layer">Division → Store</div>
+              <div class="layer">Orders → SR, Sales (one row each)</div>
+            </div>
+          </div>
+
+          <div class="callout warn">
+            <strong>Common mistakes:</strong>
+            <ul>
+              <li>Forgetting <code>LATERAL</code> before <code>FLATTEN</code> — required in FROM clause.</li>
+              <li>Using 1-based array indexes — Snowflake arrays are <strong>zero-based</strong>.</li>
+              <li>Loading a JSON array without <code>STRIP_OUTER_ARRAY = TRUE</code> — entire file becomes one VARIANT row.</li>
+            </ul>
+          </div>
+        </section>
+
+        <section class="section" id="table-to-semi">
+          <h2>Demo : Table to Semi-structured</h2>
+          <p class="muted">Course file: <code>Semi- structured and Unstructured data/Table to Semi-structured.txt</code></p>
+          <p>Use <code>OBJECT_CONSTRUCT</code> to turn relational rows into JSON objects, then unload to a stage with <code>COPY INTO @stage</code> — the reverse of loading VARIANT.</p>
+
+          <pre><code>CREATE OR REPLACE TABLE mytable (
+  id NUMBER(8) NOT NULL,
+  first_name VARCHAR(255),
+  last_name VARCHAR(255),
+  city VARCHAR(255),
+  state VARCHAR(255)
+);
+
+INSERT INTO mytable VALUES
+  (1, 'Ryan', 'Dalton', 'Salt Lake City', 'UT'),
+  (2, 'Upton', 'Conway', 'Birmingham', 'AL'),
+  (3, 'Kibo', 'Horton', 'Columbus', 'GA');
+
+CREATE OR REPLACE FILE FORMAT myjson_unload TYPE = JSON COMPRESSION = NONE;
+CREATE OR REPLACE STAGE my_json_unload_stage FILE_FORMAT = myjson_unload;
+
+COPY INTO @my_json_unload_stage
+FROM (
+  SELECT OBJECT_CONSTRUCT(
+    'id', id, 'first_name', first_name, 'last_name', last_name,
+    'city', city, 'state', state
+  )
+  FROM mytable
+)
+FILE_FORMAT = myjson_unload;
+
+LIST @my_json_unload_stage;
+
+-- Parquet export (same pattern)
+CREATE OR REPLACE FILE FORMAT myparquet_unload TYPE = PARQUET COMPRESSION = NONE;
+CREATE OR REPLACE STAGE my_parquet_stage FILE_FORMAT = myparquet_unload;
+
+COPY INTO @my_parquet_stage
+FROM (
+  SELECT OBJECT_CONSTRUCT('id', id, 'first_name', first_name,
+         'last_name', last_name, 'city', city, 'state', state)
+  FROM mytable
+)
+FILE_FORMAT = myparquet_unload;</code></pre>
+
+          <pre><code>-- Safe vs strict JSON parse
+SELECT TRY_PARSE_JSON('{ invalid json }');  -- returns NULL
+-- SELECT PARSE_JSON('{ invalid json }');   -- error</code></pre>
+        </section>
+
+        <section class="section" id="predicates">
+          <h2>Predicates</h2>
+          <p class="muted">Course file: <code>Semi- structured and Unstructured data/Predicates.txt</code></p>
+          <p>Type-check VARIANT values before filtering. These functions inspect the JSON value type, not the SQL NULL state.</p>
+
+          <pre><code>CREATE OR REPLACE TABLE new_vartab (id NUMBER(3), data VARIANT);
+
+INSERT INTO new_vartab
+SELECT column1, PARSE_JSON(column2)
+FROM VALUES
+  (1, '["apple", "banana", "cherry"]'),
+  (2, '{"name": "John", "age": 30, "is_active": true}'),
+  (3, 'true'),
+  (4, '3.14159'),
+  (5, '100'),
+  (6, 'null'),
+  (7, '["1", "2", "3"]'),
+  (8, '[true, false, null, "string"]'),
+  (9, '{"address": {"street": "Main St", "city": "Snowflake"}}')
+AS vals;
+
+SELECT * FROM new_vartab WHERE IS_ARRAY(data);
+SELECT * FROM new_vartab WHERE IS_OBJECT(data);
+SELECT * FROM new_vartab WHERE IS_DECIMAL(data);
+SELECT * FROM new_vartab WHERE IS_NULL_VALUE(data);  -- row 6 (JSON null literal)</code></pre>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Function</th><th>Detects</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><code>IS_ARRAY</code></td><td>JSON array</td></tr>
+                <tr><td><code>IS_OBJECT</code></td><td>JSON object</td></tr>
+                <tr><td><code>IS_DECIMAL</code></td><td>JSON number (integer or float)</td></tr>
+                <tr><td><code>IS_NULL_VALUE</code></td><td>JSON null literal (not SQL NULL)</td></tr>
+                <tr><td><code>IS_BOOLEAN</code></td><td><code>true</code> / <code>false</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="section" id="unstructured-concept">
+          <h2>Unstructured Data Concept</h2>
+          <p><strong>Unstructured data</strong> is information that does not fit into a predefined data model or schema. Domain-specific examples include <strong>VCF</strong> files in genomics, <strong>KDF</strong> in semiconductors, and <strong>HDF5</strong> in aeronautics — plus everyday files like PDFs, images, and HTML that also lack a fixed column layout.</p>
+          <p>Snowflake lets you:</p>
+          <ul>
+            <li>Securely access data files located in cloud storage through external stages.</li>
+            <li>Share file access URLs with collaborators and partners.</li>
+            <li>Load file access URLs and other file metadata into Snowflake tables (via directory tables).</li>
+            <li>Process unstructured data — including Cortex document AI extraction on encrypted stages (see later sections).</li>
+          </ul>
+
+          <h3>External stages for unstructured files</h3>
+          <p>Unstructured files typically live on <strong>external stages</strong> backed by your cloud object storage rather than Snowflake-managed internal storage. Supported backing services include:</p>
+          <ul>
+            <li><strong>Amazon S3</strong></li>
+            <li><strong>Google Cloud Storage (GCP)</strong></li>
+            <li><strong>Microsoft Azure</strong> — Blob storage, Data Lake Storage Gen2, and general-purpose v1/v2 storage accounts</li>
+          </ul>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-131-external-stages.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-131-external-stages.png" alt="External stage backing services for unstructured data: Amazon S3, GCP, Azure Blob storage, Data Lake Storage Gen2, and general-purpose v1 and v2 accounts" loading="lazy" width="1920" height="1080">
+            </a>
+            <figcaption><span class="slide-no">Slide 131</span>Cloud storage services that can back an external stage for unstructured files.</figcaption>
+          </figure>
+
+          <p>Stages should use server-side encryption for document AI features — see advanced Cortex topics in later sections. URL builder functions reference staged files without exposing raw stage credentials.</p>
+        </section>
+
+        <section class="section" id="unstructured-demo">
+          <h2>Demo : Unstructured Data</h2>
+          <p class="muted">Course file: <code>Semi- structured and Unstructured data/Unstructured data.txt</code></p>
+          <p>Upload co-branding-agreement PDFs (or any sample PDF) to an encrypted internal stage before running URL functions.</p>
+
+          <pre><code>CREATE OR REPLACE STAGE internal_un_stage
+  ENCRYPTION = (TYPE = 'SNOWFLAKE_SSE');
+
+-- PUT file://&lt;local_path&gt;/co-branding-agreement-sample.pdf @internal_un_stage AUTO_COMPRESS=FALSE;
+
+LIST @internal_un_stage;
+
+-- Scoped URL — time-limited, user-scoped access
+SELECT BUILD_SCOPED_FILE_URL(@internal_un_stage, 'co-branding-agreement-sample.pdf');
+
+-- Stage file URL — Snowflake-hosted URL
+SELECT BUILD_STAGE_FILE_URL(@internal_un_stage, 'co-branding-agreement-sample.pdf');
+
+-- Presigned URL — external access (expires in seconds)
+SELECT GET_PRESIGNED_URL(@internal_un_stage, 'co-branding-agreement-sample.pdf', 60);
+
+SELECT GET_STAGE_LOCATION(@internal_un_stage);
+SELECT GET_ABSOLUTE_PATH(@internal_un_stage, 'co-branding-agreement-sample.pdf');
+SELECT GET_RELATIVE_PATH(@internal_un_stage, 's3://your-bucket/full/path/co-branding-agreement-sample.pdf');
+
+CREATE OR REPLACE SECURE VIEW sample_doc AS
+SELECT BUILD_SCOPED_FILE_URL(@internal_un_stage, 'co-branding-agreement-sample.pdf') AS scoped_url;</code></pre>
+
+          <h3>Types of file access URLs</h3>
+          <p>Snowflake provides three URL types for staged files. Each trades off access control, lifetime, and who can open the link.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>URL type</th><th>Definition</th><th>Access control</th><th>Expiration</th><th>Function</th><th>Syntax</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>Scoped URL</strong></td>
+                  <td>Encoded URL that permits temporary access to a staged file without granting privileges on the stage itself.</td>
+                  <td>Only the user who generated the scoped URL.</td>
+                  <td>Tied to query results cache — <strong>24 hours</strong>.</td>
+                  <td><code>BUILD_SCOPED_FILE_URL</code></td>
+                  <td><code>BUILD_SCOPED_FILE_URL(@&lt;stage_name&gt;, '&lt;relative_file_path&gt;')</code></td>
+                </tr>
+                <tr>
+                  <td><strong>File URL</strong> (stage file URL)</td>
+                  <td>URL identifying the database, schema, stage, and file path. Any role with sufficient privileges on the stage can access the files.</td>
+                  <td>Any user with access to the stage.</td>
+                  <td><strong>Permanent</strong> (until the file is removed or privileges change).</td>
+                  <td><code>BUILD_STAGE_FILE_URL</code></td>
+                  <td><code>BUILD_STAGE_FILE_URL(@&lt;stage_name&gt;, '&lt;relative_file_path&gt;')</code></td>
+                </tr>
+                <tr>
+                  <td><strong>Pre-signed URL</strong></td>
+                  <td>Simple HTTPS URL for browser access; temporarily accessible via a pre-signed access token.</td>
+                  <td><strong>Anyone holding the URL</strong> — no Snowflake login required.</td>
+                  <td>Configurable via <code>expiration_time</code> argument (seconds).</td>
+                  <td><code>GET_PRESIGNED_URL</code></td>
+                  <td><code>GET_PRESIGNED_URL(@&lt;stage_name&gt;, '&lt;relative_file_path&gt;', [&lt;expiration_time&gt;])</code></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-139-file-urls.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-139-file-urls.png" alt="Comparison table of scoped URL, file URL and pre-signed URL with definitions, access control, expiration, builder functions and syntax" loading="lazy" width="1920" height="1080">
+            </a>
+            <figcaption><span class="slide-no">Slide 139</span>Scoped, file, and pre-signed URLs — who can open them, how long they last, and which function builds each one.</figcaption>
+          </figure>
+
+          <div class="callout exam">
+            <strong>Determinism:</strong> <code>GET_PRESIGNED_URL</code> and <code>BUILD_SCOPED_FILE_URL</code> are <strong>non-deterministic</strong> — each call can return a different token or URL. <code>BUILD_STAGE_FILE_URL</code> and the path helper functions (<code>GET_STAGE_LOCATION</code>, <code>GET_ABSOLUTE_PATH</code>, <code>GET_RELATIVE_PATH</code>) are deterministic.
+          </div>
+
+          <div class="callout exam">
+            <strong>Document handling:</strong> <code>SNOWFLAKE.CORTEX</code> document functions extract text from PDFs on encrypted stages. Files are accessed via stage URLs — not direct local paths.
+          </div>
+        </section>
+
+        <section class="section" id="directory">
+          <h2>Demo : Directory</h2>
+          <p class="muted">Course file: <code>Semi- structured and Unstructured data/Directory.txt</code></p>
+          <p>A <strong>directory table</strong> stores file-level metadata about files in a stage. It is an <strong>implicit object layered on the stage</strong> — not a separate table you create — and can be enabled on internal or external stages. The metadata includes the URL produced by <code>BUILD_STAGE_FILE_URL</code>, so you can catalog staged files and their access paths in SQL.</p>
+          <p>Enable at stage creation with <code>DIRECTORY = (ENABLE = TRUE)</code>, or later with <code>ALTER STAGE … SET DIRECTORY = (ENABLE = TRUE)</code>. Query via <code>SELECT * FROM DIRECTORY(@stage)</code>. Refresh manually with <code>ALTER STAGE … REFRESH</code>, or enable automatic refresh on external (cloud) stages. No explicit privilege is required to query a directory table beyond access to the underlying stage.</p>
+
+          <pre><code>CREATE OR REPLACE STAGE internal_un_stage
+  ENCRYPTION = (TYPE = 'SNOWFLAKE_SSE')
+  DIRECTORY = (ENABLE = TRUE);
+
+ALTER STAGE internal_un_stage SET DIRECTORY = (ENABLE = TRUE);
+
+SELECT * FROM DIRECTORY(@internal_un_stage);
+
+ALTER STAGE internal_un_stage REFRESH;
+
+-- External stage directory (S3) — optional AUTO_REFRESH with event notifications
+-- DIRECTORY = ( ENABLE = TRUE, REFRESH_ON_CREATE = TRUE, AUTO_REFRESH = TRUE )</code></pre>
+
+          <div class="callout exam">
+            <strong>Exam note:</strong> Directory tables work on both internal and external stages. Internal stages require manual <code>ALTER STAGE … REFRESH</code>; automatic refresh is available only for external cloud stages. External tables and Iceberg are covered in <a href="s15-cof-c03-exclusive.html">Section 15</a>.
+          </div>
+        </section>
+
+        <section class="section" id="lab">
+          <div class="lab">
+            <h3>Practical Lab — json_simple.json &amp; JSON_ADV.json</h3>
+            <div class="lab-meta">
+              <span>Prerequisites: json_simple.json, JSON_ADV.json locally</span>
+              <span>Role: SYSADMIN</span>
+              <span>Warehouse: COMPUTE_WH</span>
+              <span>Local upload: SnowSQL PUT or CLI snow stage copy</span>
+              <span>Cost: Minimal</span>
+            </div>
+            <pre><code>CREATE DATABASE IF NOT EXISTS study_semi_db;
+CREATE SCHEMA IF NOT EXISTS study_semi_db.lab;
+USE SCHEMA study_semi_db.lab;
+
+CREATE OR REPLACE STAGE simple_json_stage FILE_FORMAT = (TYPE = JSON);
+CREATE OR REPLACE TABLE simple_raw (src VARIANT);
+-- PUT + COPY INTO simple_raw FROM @simple_json_stage;
+
+SELECT
+  src:dealership::STRING        AS dealership,
+  src:salesperson.name::STRING  AS salesperson,
+  src:customer[0].name::STRING  AS customer_name
+FROM simple_raw;
+
+CREATE OR REPLACE STAGE adv_json_stage
+  FILE_FORMAT = (TYPE = JSON STRIP_OUTER_ARRAY = TRUE);
+CREATE OR REPLACE TABLE adv_raw (src VARIANT);
+-- PUT + COPY INTO adv_raw FROM @adv_json_stage;
+
+SELECT
+  src:Department::STRING           AS department,
+  zone.value:SubZone::STRING       AS subzone,
+  div.value:Store::STRING          AS store,
+  ord.value:SR::STRING             AS sales_rep,
+  ord.value:Sales::NUMBER          AS sales
+FROM adv_raw,
+  LATERAL FLATTEN(INPUT => src:Zone)            AS zone,
+  LATERAL FLATTEN(INPUT => zone.value:Division) AS div,
+  LATERAL FLATTEN(INPUT => div.value:Orders)    AS ord
+ORDER BY department, store, sales_rep;</code></pre>
+            <h4>Expected results</h4>
+            <ul>
+              <li><code>simple_raw</code>: 1 row; dealership = <code>Valley View Auto Sales</code>, salesperson = <code>Frank Beasley</code>.</li>
+              <li><code>adv_raw</code>: 2 department rows; flatten query returns 8 order rows.</li>
+            </ul>
+            <h4>Cleanup</h4>
+            <pre><code>DROP DATABASE IF EXISTS study_semi_db;</code></pre>
+          </div>
+        </section>
+
+        <section class="section" id="interview">
+          <h2>Interview questions</h2>
+          <p class="muted">Try to answer each one before opening it.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+            <details class="qa">
+              <summary>What is the difference between <code>VARIANT</code>, <code>OBJECT</code>, and <code>ARRAY</code> in Snowflake?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p><code>VARIANT</code> is the universal semi-structured type — it can hold objects, arrays, strings, numbers, booleans, or JSON null in one column. <code>OBJECT</code> and <code>ARRAY</code> are typed variants restricted to JSON objects and arrays respectively, giving stricter schema intent. In practice you load JSON into <code>VARIANT</code> columns and use path notation to extract typed values.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What is the size limit for a single <code>VARIANT</code> value?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>A single <code>VARIANT</code> value can be up to 16 MB compressed. Documents or payloads larger than that cannot be stored in one VARIANT cell — split them across rows, store a reference on a stage, or use unstructured file handling instead. This limit applies per value, not per table.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How does Snowflake store semi-structured data internally, and how does that help pruning?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>Snowflake stores VARIANT in a compressed columnar format with type information and path metadata inside micro-partitions. When you filter on a extracted path like <code>src:dealership::STRING = 'Tindel Toyota'</code>, the engine can skip micro-partitions that cannot contain matching values. You still pay parsing cost on scanned partitions, but pruning reduces how much data is read compared to scanning raw text.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>When do you use colon path notation versus bracket notation, and why does <code>::</code> casting matter?<span class="qa-tag">SQL</span></summary>
+              <div class="qa-body">
+                <p>Colon notation (<code>src:salesperson.name</code>) is the preferred shorthand for nested fields; bracket notation (<code>src['salesperson']['name']</code>) works the same way and is useful when keys contain special characters. Path extraction returns VARIANT — append <code>::STRING</code>, <code>::NUMBER</code>, etc. to get a typed SQL value for comparisons and joins. Without casting, filters may behave unexpectedly because you are comparing VARIANT types.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Explain <code>FLATTEN</code>, including <code>LATERAL</code>, <code>OUTER</code>, and <code>RECURSIVE</code>, and the columns it produces.<span class="qa-tag">SQL</span></summary>
+              <div class="qa-body">
+                <p><code>LATERAL FLATTEN(INPUT => variant_path)</code> unnests arrays or objects into one row per element in the FROM clause. Key output columns are <code>SEQ</code>, <code>KEY</code>, <code>PATH</code>, <code>INDEX</code>, <code>VALUE</code>, and <code>THIS</code>. <code>OUTER =&gt; TRUE</code> keeps parent rows even when the array is empty. <code>RECURSIVE =&gt; TRUE</code> flattens all nested levels in one pass instead of chaining multiple FLATTEN calls for each hierarchy level.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>When do you need <code>STRIP_OUTER_ARRAY = TRUE</code> on a JSON file format?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p>When the JSON file is a top-level array — like JSON_ADV.json where <code>[{…}, {…}]</code> wraps department objects — without stripping, the entire file loads as one VARIANT row containing the whole array. Setting <code>STRIP_OUTER_ARRAY = TRUE</code> emits one row per top-level array element, which is what you want before flattening nested Zone/Division/Orders hierarchies.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What is the difference between <code>IS_NULL_VALUE()</code> and a SQL NULL check on a VARIANT column?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p>JSON null stored in VARIANT is the literal value <code>"null"</code> — the row exists and is not SQL NULL. <code>IS_NULL_VALUE(data)</code> detects that JSON null (row 6 in the predicates demo). <code>data IS NULL</code> checks whether the SQL cell itself is missing. Conflating the two causes rows with JSON null to slip through or be dropped incorrectly.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How do <code>OBJECT_CONSTRUCT</code> and <code>ARRAY_AGG</code> help export relational data to semi-structured form?<span class="qa-tag">SQL</span></summary>
+              <div class="qa-body">
+                <p><code>OBJECT_CONSTRUCT('key', column, …)</code> builds a JSON object from column values — used in <code>COPY INTO @stage</code> to unload rows as JSON or Parquet objects. <code>ARRAY_AGG(expr)</code> collects values into a JSON array, useful when grouping rows into nested lists. Together they reverse the load path: relational table → semi-structured files on a stage.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What is a directory table, and how do scoped, stage file, and pre-signed URLs differ?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p>A directory table catalogs files on a stage via <code>SELECT * FROM DIRECTORY(@stage)</code>, enabled with <code>DIRECTORY = (ENABLE = TRUE)</code>. <code>BUILD_SCOPED_FILE_URL</code> returns a time-limited URL scoped to the current user's access. <code>BUILD_STAGE_FILE_URL</code> returns a Snowflake-hosted stage URL. <code>GET_PRESIGNED_URL</code> generates an external pre-signed URL with a caller-specified expiry in seconds — suited for handing off temporary access outside Snowflake.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>When should unstructured files live in Snowflake versus staying in external object storage?<span class="qa-tag">Scenario</span></summary>
+              <div class="qa-body">
+                <p>Keep files in Snowflake stages when you need secure URL access, directory inventory, or Cortex document AI extraction on encrypted stage files. Leave large static archives in S3/Azure/GCS when Snowflake only needs occasional external table queries or when storage cost and egress dominate. The trade-off is integration and governance inside Snowflake versus cheaper bulk storage outside with connectivity overhead.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Which semi-structured file formats can Snowflake load versus unload?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p>Load supports JSON, Avro, ORC, Parquet, and XML. Unload supports only JSON and Parquet. If an exam question asks which formats you can write back to a stage with <code>COPY INTO @stage</code>, the answer is JSON and Parquet — not Avro, ORC, or XML.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Compare scoped URLs, stage file URLs, and pre-signed URLs on access control and expiration.<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p>Scoped URLs (<code>BUILD_SCOPED_FILE_URL</code>) are visible only to the user who generated them and expire after 24 hours tied to the query results cache. Stage file URLs (<code>BUILD_STAGE_FILE_URL</code>) require stage privileges but are permanent. Pre-signed URLs (<code>GET_PRESIGNED_URL</code>) can be opened by anyone holding the link, with expiry set via the <code>expiration_time</code> argument. The first two URL builders are non-deterministic; stage file URLs are deterministic.</p>
+              </div>
+            </details>
+          </div>
+        </section>
+
+        <section class="section" id="practice">
+          <h2>Hands-on practice</h2>
+          <p class="muted">Run these in a trial account on an X-Small warehouse with <code>AUTO_SUSPEND = 60</code>. Clean up when you finish.</p>
+          <ol class="practice-list">
+            <li class="practice">
+              <p class="practice-task">Upload <code>json_simple.json</code> to stage <code>my_jsonfile</code>, load into <code>raw_source</code>, and query dealership, salesperson name, and first customer name using colon path notation with <code>::STRING</code> casts.</p>
+              <p class="practice-expect">One row returned: dealership = <code>Valley View Auto Sales</code>, salesperson = <code>Frank Beasley</code>, customer name = <code>Joyce Ridgely</code>.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">SQL</span></summary>
+                <div class="qa-body">
+<pre><code>USE ROLE ACCOUNTADMIN;
+USE WAREHOUSE COMPUTE_WH;
+USE DATABASE la_db;
+USE SCHEMA la_schema;
+
+CREATE OR REPLACE FILE FORMAT myjsonformat TYPE = JSON;
+CREATE OR REPLACE STAGE my_jsonfile FILE_FORMAT = myjsonformat;
+CREATE OR REPLACE TABLE raw_source (src VARIANT);
+
+-- PUT file://&lt;local_path&gt;/json_simple.json @my_jsonfile AUTO_COMPRESS=FALSE;
+COPY INTO raw_source FROM @my_jsonfile FILE_FORMAT = myjsonformat;
+
+SELECT
+  src:dealership::STRING       AS dealership,
+  src:salesperson.name::STRING AS salesperson,
+  src:customer[0].name::STRING AS customer_name
+FROM raw_source;</code></pre>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Load JSON_ADV.json with <code>STRIP_OUTER_ARRAY = TRUE</code>, then flatten Zone → Division → Orders into <code>dump_json</code> and count order rows.</p>
+              <p class="practice-expect"><code>SELECT COUNT(*) FROM dump_json</code> returns 8 rows across two departments.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">SQL</span></summary>
+                <div class="qa-body">
+<pre><code>CREATE OR REPLACE FILE FORMAT myjson_adv
+  TYPE = JSON STRIP_OUTER_ARRAY = TRUE;
+CREATE OR REPLACE STAGE my_json_adv_stage FILE_FORMAT = myjson_adv;
+
+-- PUT file://&lt;local_path&gt;/JSON_ADV.json @my_json_adv_stage AUTO_COMPRESS=FALSE;
+TRUNCATE raw_source;
+COPY INTO raw_source FROM @my_json_adv_stage FILE_FORMAT = myjson_adv;
+
+CREATE OR REPLACE TABLE dump_json AS
+SELECT
+  src:Department::STRING        AS dept_col,
+  zone.value:SubZone::STRING    AS subzone_col,
+  div.value:Store::STRING       AS store_col,
+  ord.value:SR::STRING          AS sr_col,
+  ord.value:Sales::STRING       AS sales_col
+FROM raw_source,
+  LATERAL FLATTEN(INPUT => src:Zone)              AS zone,
+  LATERAL FLATTEN(INPUT => zone.value:Division) AS div,
+  LATERAL FLATTEN(INPUT => div.value:Orders)    AS ord;
+
+SELECT COUNT(*) FROM dump_json;</code></pre>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Create <code>new_vartab</code> with the predicates demo data and return only rows where the VARIANT holds a JSON object or a JSON null literal.</p>
+              <p class="practice-expect">The object query returns rows 2 and 9; the JSON-null query returns row 6 only — not row 6 via <code>IS NULL</code>.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">SQL</span></summary>
+                <div class="qa-body">
+<pre><code>CREATE OR REPLACE TABLE new_vartab (id NUMBER(3), data VARIANT);
+
+INSERT INTO new_vartab
+SELECT column1, PARSE_JSON(column2)
+FROM VALUES
+  (1, '["apple", "banana", "cherry"]'),
+  (2, '{"name": "John", "age": 30, "is_active": true}'),
+  (3, 'true'),
+  (4, '3.14159'),
+  (5, '100'),
+  (6, 'null'),
+  (7, '["1", "2", "3"]'),
+  (8, '[true, false, null, "string"]'),
+  (9, '{"address": {"street": "Main St", "city": "Snowflake"}}')
+AS vals;
+
+SELECT id FROM new_vartab WHERE IS_OBJECT(data) ORDER BY id;
+SELECT id FROM new_vartab WHERE IS_NULL_VALUE(data);</code></pre>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">On an encrypted internal stage with a sample PDF, compare <code>BUILD_SCOPED_FILE_URL</code>, <code>BUILD_STAGE_FILE_URL</code>, and <code>GET_PRESIGNED_URL</code> — note which URLs require Snowflake login and which expire.</p>
+              <p class="practice-expect">Scoped URL is user-scoped and cache-bound (24 h); stage file URL is permanent for users with stage access; pre-signed URL works for anyone with the link until <code>expiration_time</code> elapses.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">SQL</span></summary>
+                <div class="qa-body">
+<pre><code>CREATE OR REPLACE STAGE url_practice_stage
+  ENCRYPTION = (TYPE = 'SNOWFLAKE_SSE');
+-- PUT a sample PDF to @url_practice_stage
+
+SELECT BUILD_SCOPED_FILE_URL(@url_practice_stage, 'sample.pdf')   AS scoped;
+SELECT BUILD_STAGE_FILE_URL(@url_practice_stage, 'sample.pdf')     AS file_url;
+SELECT GET_PRESIGNED_URL(@url_practice_stage, 'sample.pdf', 3600) AS presigned;</code></pre>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Clean up semi-structured practice objects: drop <code>dump_json</code>, <code>new_vartab</code>, <code>raw_source</code>, and the JSON stages and file formats created above.</p>
+              <p class="practice-expect">All practice tables, stages, and file formats are removed.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">SQL</span></summary>
+                <div class="qa-body">
+<pre><code>DROP TABLE IF EXISTS dump_json;
+DROP TABLE IF EXISTS new_vartab;
+DROP TABLE IF EXISTS raw_source;
+DROP STAGE IF EXISTS my_json_adv_stage;
+DROP STAGE IF EXISTS my_jsonfile;
+DROP FILE FORMAT IF EXISTS myjson_adv;
+DROP FILE FORMAT IF EXISTS myjsonformat;</code></pre>
+                </div>
+              </details>
+            </li>
+          </ol>
+        </section>
+
+        <section class="section" id="recap">
+          <h2>Recap</h2>
+          <div class="recap">
+            <ul class="checklist">
+              <li>Semi-structured: no fixed schema; N-level nested hierarchies; native types <code>ARRAY</code>, <code>OBJECT</code>, <code>VARIANT</code> (16 MB each).</li>
+              <li>Load formats: JSON, Avro, ORC, Parquet, XML. Unload: JSON and Parquet only.</li>
+              <li><code>VARIANT</code> stores any semi-structured value; path access via <code>col:field.subfield</code> or brackets.</li>
+              <li><code>STRIP_OUTER_ARRAY = TRUE</code> for top-level JSON arrays (JSON_ADV.json).</li>
+              <li><code>LATERAL FLATTEN(INPUT => …)</code> unnests nested arrays/objects to relational rows.</li>
+              <li>Predicates: <code>IS_ARRAY</code>, <code>IS_OBJECT</code>, <code>IS_NULL_VALUE</code>, etc.</li>
+              <li>Unstructured examples: VCF, KDF, HDF5; external stages on S3, GCS, Azure.</li>
+              <li>URLs: scoped (24 h, user-only), file (permanent, stage access), pre-signed (anyone, configurable expiry).</li>
+              <li><code>GET_PRESIGNED_URL</code> and <code>BUILD_SCOPED_FILE_URL</code> are non-deterministic.</li>
+              <li>Directory tables: implicit on stage; <code>BUILD_STAGE_FILE_URL</code> metadata; auto-refresh external only.</li>
+            </ul>
+            <p style="margin-top:1rem;">
+              <button type="button" data-complete="section-06">Mark complete</button>
+            </p>
+          </div>
+        </section>
+
+      </div>
+
+      <aside class="toc" aria-label="On this page">
+        <strong>On this page</strong>
+        <ol>
+          <li><a href="#lectures">Lectures</a></li>
+          <li><a href="#semi-concept">Semi-structured concept</a></li>
+          <li><a href="#semi-basics">Basics demo</a></li>
+          <li><a href="#semi-advance">Advance demo</a></li>
+          <li><a href="#table-to-semi">Table to JSON</a></li>
+          <li><a href="#predicates">Predicates</a></li>
+          <li><a href="#unstructured-concept">Unstructured concept</a></li>
+          <li><a href="#unstructured-demo">Unstructured demo</a></li>
+          <li><a href="#directory">Directory tables</a></li>
+          <li><a href="#lab">Practical lab</a></li>
+          <li><a href="#interview">Interview questions</a></li>
+          <li><a href="#practice">Hands-on practice</a></li>
+          <li><a href="#recap">Recap</a></li>
+        </ol>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<footer class="footer">Snowflake COF-C03 Course Notes · Section 6 · Offline study edition</footer>
+</body>
+</html>

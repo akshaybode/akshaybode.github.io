@@ -1,0 +1,1003 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="dbt bootcamp Section 10: dbt snapshot command, YAML snapshot config, timestamp and check strategies, hard_deletes, updating sources, and building scd_raw_listings and scd_raw_hosts on the Airbnb project.">
+<title>Section 10 — Snapshots | The Complete dbt Bootcamp Notes</title>
+<link rel="stylesheet" href="assets/dbt.css">
+<script defer src="assets/search-index.js"></script>
+<script defer src="assets/code-highlight.js"></script>
+<script defer src="assets/dbt.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">Course section 10 of 22 · The Complete dbt Bootcamp: Zero to Hero</p>
+    <h1>Snapshots</h1>
+    <p class="subtitle">dbt snapshots implement Slowly Changing Dimension Type 2 over mutable source tables. This section covers the <code>dbt snapshot</code> command, the YAML definitions in <code>snapshots/</code>, timestamp versus check strategies, what happens when you update a raw row and re-run, how <code>hard_deletes</code> handles rows that disappear from the source, and the hosts snapshot assignment. For SCD theory and point-in-time join patterns, see <a href="s05-dimensional-modelling.html#slowly-changing-dimensions">Section&nbsp;5</a>.</p>
+    <div class="hero-meta">
+      <span class="chip">5 lectures · ~25min</span>
+      <span class="chip">SCD Type 2 in dbt</span>
+      <span class="chip">dbt snapshot</span>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <nav class="pager" aria-label="Section navigation">
+    <a href="s09-seeds-sources.html">← Seeds and Sources</a>
+    <a href="index.html">Course contents</a>
+    <a href="s11-tests.html">Next: Tests →</a>
+  </nav>
+
+  <main id="main">
+    <div class="layout">
+      <div class="content">
+
+        <section class="section" id="lectures">
+          <h2>Lectures in this section</h2>
+          <ol class="lecture-list">
+            <li class="lecture">
+              <a class="lec-title" href="#snapshot-command">What snapshots are and the dbt snapshot command</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">course-resources.md · Snapshots</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#yaml-config">YAML snapshot configuration</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">snapshots/raw_listings_snapshot.yml</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#listings-walkthrough">Walkthrough: raw_listings_snapshot.yml</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">course-resources.md · Snapshots for listing</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#update-rerun">Updating the source and reading validity columns</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">course-resources.md · Updating the table</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#hard-deletes">Hard deletes and the raw_hosts assignment</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">snapshots/raw_hosts_snapshot.yml</span>
+            </li>
+          </ol>
+          <p class="muted">Snapshots sit beside models, seeds, and tests in the dbt project. They read from declared sources (or models) and write Type 2 history tables you reference with <code>ref('scd_raw_listings')</code>. Theory on SCD types, validity joins, and when to choose snapshot over incremental is in <a href="s05-dimensional-modelling.html#slowly-changing-dimensions">Section&nbsp;5</a>; this section is the hands-on mechanics.</p>
+        </section>
+
+        <section class="section" id="snapshot-command">
+          <h2>The dbt snapshot command and snapshots/ folder</h2>
+          <p class="lead">A snapshot is a dbt node that watches a mutable relation, detects row-level changes, and appends history rows with validity timestamps. You run it with <code>dbt snapshot</code>, not <code>dbt run</code>.</p>
+
+          <h3>What problem snapshots solve</h3>
+          <p>Your ELT loader lands <code>raw_listings</code> and <code>raw_hosts</code> in Snowflake. Rows get updated in place: a host renames, a listing changes <code>minimum_nights</code>, a price string changes. Staging models and Type 1 dimensions (<code>dim_listings_cleansed</code>, <code>dim_hosts_cleansed</code>) show only the current value after each rebuild. If you need to know what the listing looked like when a review was written, you need Type 2 history &mdash; and that is what snapshots produce.</p>
+
+          <p>dbt does not infer changes from transaction logs or CDC streams. On each snapshot run it compares the current source query result to what it stored last time, using either a timestamp column or an explicit column list. When a row changed, it closes the old snapshot row and inserts a new one. See <a href="s05-dimensional-modelling.html#slowly-changing-dimensions">Section&nbsp;5</a> for the full SCD type taxonomy and point-in-time join pattern.</p>
+
+          <div class="diagram">
+            <p class="diagram-title">Snapshot flow from raw source to Type 2 history table</p>
+            <div class="flow">
+              <div class="node is-source"><b>raw_listings</b><small>mutable source table</small></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-compute"><b>dbt snapshot</b><small>compare &amp; merge</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-snapshot pulse"><b>scd_raw_listings</b><small>Type 2 history</small></div>
+            </div>
+          </div>
+
+          <h3>Where snapshot files live</h3>
+          <p>Snapshot definitions live under <code>snapshots/</code>, configured by <code>snapshot-paths</code> in <code>dbt_project.yml</code>:</p>
+
+<pre data-lang="yaml" data-title="dbt_project.yml (snapshot-paths)" data-explain="dbt discovers YAML snapshot definitions in the snapshots/ folder."><code>snapshot-paths: ["snapshots"]</code></pre>
+
+          <div class="filetree">
+            <ul>
+              <li><span class="dir">airbnb/</span>
+                <ul>
+                  <li><span class="dir">snapshots/</span>
+                    <ul>
+                      <li><span class="file">raw_listings_snapshot.yml</span> <span class="new">← new in this section</span></li>
+                      <li><span class="file">raw_hosts_snapshot.yml</span> <span class="new">← assignment in this section</span></li>
+                    </ul>
+                  </li>
+                  <li><span class="dir">models/</span>
+                    <ul>
+                      <li><span class="file">sources.yml</span> <span class="note">sources referenced by relation:</span></li>
+                    </ul>
+                  </li>
+                  <li><span class="file">dbt_project.yml</span></li>
+                </ul>
+              </li>
+            </ul>
+          </div>
+
+          <p>The course repo uses <strong>YAML snapshot definitions</strong> (dbt 1.9+), not the older <code>{% snapshot %}</code> blocks in <code>.sql</code> files. YAML keeps configuration alongside other resource YAML and matches how models and sources are declared today.</p>
+
+          <h3>Running dbt snapshot</h3>
+          <p>The command builds or refreshes every snapshot in the project (or a selection). It is separate from <code>dbt run</code> and <code>dbt build</code> &mdash; though <code>dbt build</code> can include snapshots when they are in the selected subgraph.</p>
+
+          <div class="terminal">
+            <p class="term-head">First snapshot run</p>
+            <pre class="term-body"><span class="tt-cmd">dbt snapshot --select scd_raw_listings</span>
+<span class="tt-dim">11:04:12  Running with dbt=1.11.12</span>
+<span class="tt-dim">11:04:14  1 of 1 START snapshot DEV.scd_raw_listings ........................ [RUN]</span>
+<span class="tt-ok">11:04:18  1 of 1 OK snapshotted DEV.scd_raw_listings .................... [SUCCESS 3847 in 3.91s]</span>
+<span class="tt-ok">11:04:18  Completed successfully</span></pre>
+          </div>
+
+          <p>On the <strong>first run</strong>, dbt creates the snapshot table and inserts every row from the source, setting <code>dbt_valid_from</code> to the snapshot run time and leaving <code>dbt_valid_to</code> null for all rows (all are current). On <strong>subsequent runs</strong>, only changed, new, and (depending on config) deleted rows trigger writes.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Command</th><th>What it runs</th><th>When to use</th></tr></thead>
+              <tbody>
+                <tr><td><code>dbt snapshot</code></td><td>All snapshots</td><td>Nightly job after raw loads complete</td></tr>
+                <tr><td><code>dbt snapshot --select scd_raw_listings</code></td><td>One snapshot by name</td><td>After you change one YAML file or one source table</td></tr>
+                <tr><td><code>dbt snapshot --select scd_raw_*</code></td><td>Name pattern</td><td>Both Airbnb snapshots in one command</td></tr>
+                <tr><td><code>dbt build --select scd_raw_listings+</code></td><td>Snapshot then downstream models</td><td>When a mart reads from the snapshot</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout tip"><strong>Order matters in pipelines.</strong> Run snapshots after the loader finishes updating raw tables and before models that <code>ref()</code> the snapshot. If <code>dbt run</code> builds a mart from <code>scd_raw_hosts</code> before <code>dbt snapshot</code> runs, the mart sees yesterday's history.</div>
+
+          <h3>dbt build including snapshots</h3>
+          <p><code>dbt build</code> runs models, tests, seeds, and snapshots in dependency order when selected. Example that snapshots listings then builds downstream dependents:</p>
+
+<pre data-lang="shell" data-title="Build snapshot and downstream models"><code>dbt build --select scd_raw_listings+</code></pre>
+
+          <p>The <code>+</code> suffix includes all downstream nodes that <code>ref('scd_raw_listings')</code>. If nothing downstream exists yet in the course project, the command behaves like <code>dbt snapshot --select scd_raw_listings</code> plus any configured snapshot tests.</p>
+
+          <h3>Columns dbt adds to every snapshot table</h3>
+          <p>Regardless of strategy, dbt appends metadata columns to the snapshot output. Downstream models and point-in-time joins rely on these names:</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Column</th><th>Role</th></tr></thead>
+              <tbody>
+                <tr><td><code>dbt_scd_id</code></td><td>Surrogate key for this version of the row (UUID on most adapters)</td></tr>
+                <tr><td><code>dbt_valid_from</code></td><td>When this version became valid (timestamp of the snapshot run that inserted it, or derived from <code>updated_at</code> on some configs)</td></tr>
+                <tr><td><code>dbt_valid_to</code></td><td>When this version was superseded; <code>NULL</code> means current</td></tr>
+                <tr><td><code>dbt_updated_at</code></td><td>When dbt last processed this row in the snapshot logic</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>All source columns are copied through. The snapshot table name in the warehouse follows the <code>name:</code> field in YAML &mdash; here <code>scd_raw_listings</code> and <code>scd_raw_hosts</code> &mdash; uppercased by Snowflake to <code>SCD_RAW_LISTINGS</code> in schema <code>DEV</code> (your target schema).</p>
+
+          <h3>Snapshots versus models in the DAG</h3>
+          <p>Snapshots are first-class nodes alongside models and seeds. They appear in <code>dbt ls --resource-type snapshot</code>, in lineage documentation, and in selectors. They do not inherit the <code>models:</code> materialization defaults from <code>dbt_project.yml</code> &mdash; snapshot behaviour is entirely config-driven in the YAML file.</p>
+
+          <p>Downstream models depend on snapshots through <code>ref('scd_raw_listings')</code> the same way they depend on dims and facts. dbt will not automatically run snapshots before models unless you use <code>dbt build</code> with a selection that includes both, or your orchestrator runs <code>dbt snapshot</code> explicitly before <code>dbt run</code>.</p>
+
+          <div class="analogy"><strong>Everyday analogy —</strong> a snapshot is a photo album that keeps every version of your passport photo when you renew, while a Type 1 dimension is the single ID card in your wallet that gets replaced. The album takes more shelf space but answers &ldquo;what did you look like in 2019?&rdquo;</div>
+
+          <h3>Adapter notes (Snowflake, BigQuery, Postgres)</h3>
+          <p>The course runs on Snowflake. Snapshot semantics are consistent across dbt adapters, but merge implementation differs:</p>
+          <ul>
+            <li><strong>Snowflake</strong> &mdash; merge into the snapshot table in your target schema. Identifiers uppercased unless quoted.</li>
+            <li><strong>BigQuery</strong> &mdash; merge into a native table; consider partitioning large history tables by <code>dbt_valid_from</code> manually for query pruning.</li>
+            <li><strong>Postgres / Redshift</strong> &mdash; same YAML config; watch lock duration on wide tables during merge.</li>
+            <li><strong>Databricks</strong> &mdash; Delta merge under the hood; ensure <code>updated_at</code> time zones match the cluster default.</li>
+          </ul>
+        </section>
+
+        <section class="section" id="yaml-config">
+          <h2>YAML snapshot configuration</h2>
+          <p class="lead">Each entry under the top-level <code>snapshots:</code> key names the snapshot, points at the relation to watch, and holds a <code>config:</code> block with strategy and behaviour flags.</p>
+
+          <h3>Top-level fields</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Field</th><th>Required</th><th>Meaning</th></tr></thead>
+              <tbody>
+                <tr><td><code>name</code></td><td>Yes</td><td>Snapshot node name and default table name (<code>scd_raw_listings</code>)</td></tr>
+                <tr><td><code>relation</code></td><td>Yes</td><td>What to snapshot: <code>source('airbnb', 'listings')</code>, <code>ref('my_model')</code>, or a relation macro</td></tr>
+                <tr><td><code>config</code></td><td>Yes</td><td>Strategy, keys, schema overrides, hard delete behaviour</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Config keys used in this course</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Config key</th><th>Course value</th><th>Purpose</th></tr></thead>
+              <tbody>
+                <tr><td><code>unique_key</code></td><td><code>id</code></td><td>Business key that identifies one entity across versions (listing id, host id)</td></tr>
+                <tr><td><code>strategy</code></td><td><code>timestamp</code></td><td>How dbt detects changes &mdash; compare an <code>updated_at</code> column</td></tr>
+                <tr><td><code>updated_at</code></td><td><code>updated_at</code></td><td>Source column used when <code>strategy: timestamp</code></td></tr>
+                <tr><td><code>hard_deletes</code></td><td><code>invalidate</code></td><td>What to do when a <code>unique_key</code> disappears from the source query</td></tr>
+                <tr><td><code>target_schema</code></td><td>(default)</td><td>Where the snapshot table is created; defaults to target schema from profile</td></tr>
+                <tr><td><code>target_database</code></td><td>(default)</td><td>Override database; rarely needed in the course project</td></tr>
+                <tr><td><code>check_cols</code></td><td>(not used here)</td><td>Required when <code>strategy: check</code> &mdash; list of columns to hash-compare</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Timestamp strategy versus check strategy</h3>
+          <p>The Airbnb raw tables include a trustworthy <code>updated_at</code> column maintained by the sample dataset, so the course uses <code>strategy: timestamp</code>. dbt selects rows from the source where <code>updated_at</code> is newer than the last time that <code>unique_key</code> was snapshotted, then merges changes into the history table.</p>
+
+          <p>When the source lacks reliable change metadata, use <code>strategy: check</code> with <code>check_cols</code> &mdash; either <code>all</code> or an explicit list of columns that matter for history. dbt compares hashed values of those columns; any difference triggers a new Type 2 row. The comparison table and trade-offs are documented in <a href="s05-dimensional-modelling.html#slowly-changing-dimensions">Section&nbsp;5</a>; the practical difference for you is config only:</p>
+
+<pre data-lang="yaml" data-title="Illustrative check strategy (not in course repo)" data-explain="Use when updated_at is missing or untrustworthy. check_cols lists columns that should trigger a new history row when they change."><code>snapshots:
+  - name: scd_legacy_hosts
+    relation: source('airbnb', 'hosts')
+    config:
+      unique_key: id
+      strategy: check
+      check_cols: ['name', 'is_superhost']
+      hard_deletes: invalidate</code></pre>
+
+          <div class="callout warn"><strong>Timestamp strategy trusts the source.</strong> If application code forgets to bump <code>updated_at</code> on edit, dbt will not see the change. Check strategy is safer when timestamps are unreliable but costs a wider column comparison each run.</div>
+
+          <h3>relation: source versus ref</h3>
+          <p>The course snapshots <strong>sources</strong> declared in <a href="s09-seeds-sources.html#sources-yml">Section&nbsp;9</a>:</p>
+
+<pre data-lang="yaml" data-title="Relation pointing at a declared source" data-explain="source() resolves to RAW.RAW_LISTINGS (via identifier mapping in sources.yml)."><code>relation: source('airbnb', 'listings')</code></pre>
+
+          <p>You can also snapshot a dbt model:</p>
+
+<pre data-lang="yaml" data-title="Relation pointing at a model" data-explain="Snapshots a model output instead of raw landing data — useful when cleansing must happen before history is recorded."><code>relation: ref('dim_hosts_cleansed')</code></pre>
+
+          <p>Snapshotting raw sources keeps history aligned with what the loader landed. Snapshotting a cleansed model records history after your business rules &mdash; useful when raw columns are noisy but transformations are stable.</p>
+
+          <div class="callout info"><strong>YAML snapshots replaced {% snapshot %} SQL blocks in dbt 1.9.</strong> Older projects may still have <code>snapshots/my_snapshot.sql</code> wrapping a <code>SELECT</code> in <code>{% snapshot %}...{% endsnapshot %}</code>. The course repo uses YAML only. Migration is mechanical: move <code>unique_key</code>, <code>strategy</code>, and the query target into <code>relation:</code> plus <code>config:</code>.</div>
+
+          <h3>Legacy SQL snapshot form (history only)</h3>
+          <p>If you maintain an older project, you may encounter this shape. Do not create new snapshots this way in dbt 1.11:</p>
+
+<pre data-lang="sql" data-title="Legacy snapshots/scd_raw_listings.sql (pre-1.9 pattern)" data-partial="true" data-explain="Historical form: config lived in the snapshot block and the SELECT defined columns. YAML replaces this entirely."><code>{% snapshot scd_raw_listings %}
+
+{{
+    config(
+      target_schema='dev',
+      unique_key='id',
+      strategy='timestamp',
+      updated_at='updated_at',
+      invalidate_hard_deletes=True,
+    )
+}}
+
+select * from {{ source('airbnb', 'listings') }}
+
+{% endsnapshot %}</code></pre>
+
+          <p>Note the legacy boolean <code>invalidate_hard_deletes=True</code> in the old block &mdash; the YAML equivalent is <code>hard_deletes: invalidate</code>.</p>
+
+          <h3>check_cols in detail</h3>
+          <p>When you cannot trust <code>updated_at</code>, list the columns whose change should open a new history row:</p>
+
+<pre data-lang="yaml" data-title="Check strategy with explicit columns" data-explain="dbt hashes only these columns when comparing source to snapshot for each unique_key."><code>config:
+  unique_key: id
+  strategy: check
+  check_cols: ['minimum_nights', 'price', 'room_type']
+  hard_deletes: invalidate</code></pre>
+
+          <p><code>check_cols: all</code> compares every column except metadata &mdash; convenient in tutorials, expensive in production on wide raw tables. Omit columns that drift cosmetically (ETL load timestamps unrelated to business change) to reduce noise and cost.</p>
+        </section>
+
+        <section class="section" id="listings-walkthrough">
+          <h2>Walkthrough: raw_listings_snapshot.yml</h2>
+          <p class="lead">The listings snapshot is the instructor's first demonstration. The file is short because dbt handles the merge SQL; your job is correct config against a declared source.</p>
+
+          <p>Create <code>snapshots/raw_listings_snapshot.yml</code> with the exact contents from the course repo:</p>
+
+          <div class="callout info"><strong>The course resources misspell this filename.</strong> <code>course-resources.md</code> calls the file <code>raw_listins_snapshot.yml</code>, dropping the <code>g</code>; the repo itself has <code>raw_listings_snapshot.yml</code>. Nothing breaks either way, because dbt reads every YAML file under <code>snapshots/</code> and identifies the snapshot by its <code>name:</code> key rather than its filename. Use the correct spelling so your project matches the repo.</div>
+
+<pre data-lang="yaml" data-title="snapshots/raw_listings_snapshot.yml" data-explain="Defines scd_raw_listings: timestamp strategy on the listings source, unique_key id, hard_deletes invalidate."><code>snapshots:
+  - name: scd_raw_listings
+    relation: source('airbnb', 'listings')
+    config:
+      unique_key: id
+      strategy: timestamp
+      updated_at: updated_at
+      hard_deletes: invalidate</code></pre>
+
+          <h3>Line-by-line</h3>
+          <ul>
+            <li><strong><code>name: scd_raw_listings</code></strong> &mdash; The dbt node name. Referenced as <code>ref('scd_raw_listings')</code> in models. Snowflake creates <code>DEV.SCD_RAW_LISTINGS</code> (database and schema from your target).</li>
+            <li><strong><code>relation: source('airbnb', 'listings')</code></strong> &mdash; Reads <code>models/sources.yml</code>, resolves logical <code>listings</code> with <code>identifier: raw_listings</code> to <code>AIRBNB.RAW.RAW_LISTINGS</code>.</li>
+            <li><strong><code>unique_key: id</code></strong> &mdash; Listing primary key from the raw table. One active history chain per <code>id</code>.</li>
+            <li><strong><code>strategy: timestamp</code></strong> with <strong><code>updated_at: updated_at</code></strong> &mdash; A row is considered changed when its source <code>updated_at</code> exceeds the snapshot's last recorded value for that <code>id</code>.</li>
+            <li><strong><code>hard_deletes: invalidate</code></strong> &mdash; If listing <code>3176</code> is deleted from <code>raw_listings</code>, dbt sets <code>dbt_valid_to</code> on the current snapshot row instead of leaving it open forever.</li>
+          </ul>
+
+          <h3>First run behaviour</h3>
+          <p>After saving the YAML file, run:</p>
+
+<pre data-lang="shell" data-title="Create the listings snapshot table"><code>dbt snapshot --select scd_raw_listings</code></pre>
+
+          <p>Inspect the result in Snowflake. Every listing row from raw appears once with <code>dbt_valid_to IS NULL</code>:</p>
+
+<pre data-lang="sql" data-title="Verify initial snapshot load" data-explain="After first run each listing id has one current row. Column names may be uppercased in Snowflake."><code>SELECT
+    id,
+    minimum_nights,
+    updated_at,
+    dbt_valid_from,
+    dbt_valid_to
+FROM AIRBNB.DEV.SCD_RAW_LISTINGS
+WHERE id = 3176;</code></pre>
+
+          <p>At this point the snapshot table mirrors raw content plus metadata columns. No Type 2 splits exist yet because dbt has only seen one version of each row.</p>
+
+          <div class="diagram">
+            <p class="diagram-title">Lineage: listings source through snapshot to future marts</p>
+            <div class="dag">
+              <div class="dag-col">
+                <p class="dag-label">Sources</p>
+                <div class="node is-source"><b>listings</b></div>
+              </div>
+              <div class="dag-col">
+                <p class="dag-label">Snapshots</p>
+                <div class="node is-snapshot pulse"><b>scd_raw_listings</b></div>
+              </div>
+              <div class="dag-col">
+                <p class="dag-label">Models (optional)</p>
+                <div class="node is-mart"><b>dim / mart</b></div>
+              </div>
+            </div>
+          </div>
+
+          <p>The snapshot appears in <code>dbt docs</code> lineage as its own node type. It does not replace <code>src_listings</code> or <code>dim_listings_cleansed</code> &mdash; those remain Type 1 views/tables for current-state reporting.</p>
+
+          <h3>How dbt resolves source('airbnb', 'listings')</h3>
+          <p>The <code>relation:</code> field uses the same Jinja as models. At compile time dbt reads <code>models/sources.yml</code>:</p>
+
+<pre data-lang="yaml" data-title="models/sources.yml (listings excerpt)" data-explain="Logical name listings maps to physical raw_listings in schema raw."><code>sources:
+  - name: airbnb
+    schema: raw
+    tables:
+      - name: listings
+        identifier: raw_listings</code></pre>
+
+          <p>Combined with your profile database, the snapshot's first run executes equivalent logic to <code>SELECT * FROM AIRBNB.RAW.RAW_LISTINGS</code> plus merge into <code>DEV.SCD_RAW_LISTINGS</code>. If sources.yml is wrong, the snapshot compiles but fails at runtime with object-not-found errors.</p>
+
+          <h3>Validating before the first run</h3>
+          <p>Compile without executing to catch YAML typos:</p>
+
+<pre data-lang="shell" data-title="Compile snapshot node"><code>dbt compile --select scd_raw_listings</code></pre>
+
+          <p>Inspect <code>target/compiled/airbnb/snapshots/</code> for the resolved relation. List snapshot nodes with <code>dbt ls --resource-type snapshot</code> &mdash; you should see <code>scd_raw_listings</code> and, after the assignment, <code>scd_raw_hosts</code>.</p>
+        </section>
+
+        <section class="section" id="update-rerun">
+          <h2>Updating the source and reading validity columns</h2>
+          <p class="lead">The instructor demonstrates Type 2 behaviour by mutating a raw row, re-running the snapshot, and querying history for listing <code>3176</code>.</p>
+
+          <h3>Step 1: change the raw table</h3>
+          <p>Run an <code>UPDATE</code> against the raw listings table. The course script sets <code>minimum_nights</code> to 30 and bumps <code>updated_at</code> so timestamp strategy detects the change:</p>
+
+<pre data-lang="sql" data-title="Mutate raw_listings (course demo)" data-explain="updated_at must change or timestamp strategy will not fire. This is the row the instructor queries after re-snapshotting."><code>UPDATE AIRBNB.RAW.RAW_LISTINGS
+SET
+    minimum_nights = 30,
+    updated_at = CURRENT_TIMESTAMP()
+WHERE id = 3176;</code></pre>
+
+          <div class="callout danger"><strong>Never UPDATE raw in production pipelines.</strong> This exercise simulates what your loader does when source applications edit rows. In real projects the ELT tool performs the update; you only run <code>dbt snapshot</code> afterward.</div>
+
+          <h3>Step 2: re-run the snapshot</h3>
+
+<pre data-lang="shell" data-title="Merge the change into history"><code>dbt snapshot --select scd_raw_listings</code></pre>
+
+          <div class="terminal">
+            <p class="term-head">Second snapshot run after UPDATE</p>
+            <pre class="term-body"><span class="tt-cmd">dbt snapshot --select scd_raw_listings</span>
+<span class="tt-dim">11:18:02  Running with dbt=1.11.12</span>
+<span class="tt-dim">11:18:04  1 of 1 START snapshot DEV.scd_raw_listings ........................ [RUN]</span>
+<span class="tt-ok">11:18:06  1 of 1 OK snapshotted DEV.scd_raw_listings .................... [SUCCESS 1 in 2.14s]</span>
+<span class="tt-ok">11:18:06  Completed successfully</span></pre>
+          </div>
+
+          <p>The <code>SUCCESS 1</code> count reflects changed rows processed, not total table size. Most listings were unchanged; only id 3176 (and any others with newer <code>updated_at</code>) merged.</p>
+
+          <h3>Step 3: query dbt_valid_from and dbt_valid_to</h3>
+          <p>The instructor selects all snapshot rows for the listing:</p>
+
+<pre data-lang="sql" data-title="Observe Type 2 split for listing 3176" data-explain="Two rows for the same id: old version closed with dbt_valid_to set, new version current with dbt_valid_to NULL."><code>SELECT *
+FROM AIRBNB.DEV.SCD_RAW_LISTINGS
+WHERE id = 3176
+ORDER BY dbt_valid_from;</code></pre>
+
+          <p>You should see <strong>two rows</strong> for <code>id = 3176</code>:</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>minimum_nights</th><th>dbt_valid_from</th><th>dbt_valid_to</th><th>Meaning</th></tr></thead>
+              <tbody>
+                <tr><td>Previous value</td><td>First snapshot run time</td><td>Second snapshot run time</td><td>Historical version &mdash; closed</td></tr>
+                <tr><td>30</td><td>Second snapshot run time</td><td><code>NULL</code></td><td>Current version</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p><code>dbt_valid_from</code> and <code>dbt_valid_to</code> define the validity window for point-in-time joins. A fact row joins to the snapshot version where <code>fact_date &gt;= dbt_valid_from</code> and <code>fact_date &lt; dbt_valid_to OR dbt_valid_to IS NULL</code>. The full join pattern is in <a href="s05-dimensional-modelling.html#slowly-changing-dimensions">Section&nbsp;5</a>; the critical rule is never join on <code>unique_key</code> alone without the validity predicate, or facts duplicate across history rows.</p>
+
+          <h3>Current-row filter for dashboards</h3>
+          <p>When you only need today's truth, filter to open rows:</p>
+
+<pre data-lang="sql" data-title="Current listings from snapshot" data-explain="dbt_valid_to IS NULL identifies the active Type 2 row per unique_key."><code>SELECT *
+FROM {{ ref('scd_raw_listings') }}
+WHERE dbt_valid_to IS NULL</code></pre>
+
+          <p>For most Airbnb marts the course still uses <code>dim_listings_cleansed</code> (Type 1). Reach for the snapshot when the question explicitly needs history or audit trail.</p>
+
+          <h3>Third run: no change</h3>
+          <p>If you run <code>dbt snapshot --select scd_raw_listings</code> again without touching raw data, dbt finds no rows with <code>updated_at</code> newer than the last merge. The terminal reports <code>SUCCESS 0</code> &mdash; success with zero changes. That is expected and cheap on timestamp strategy.</p>
+
+          <h3>Building a mart from snapshot history</h3>
+          <p>When a mart must answer historical questions, join facts to the snapshot with the validity predicate from <a href="s05-dimensional-modelling.html#slowly-changing-dimensions">Section&nbsp;5</a> rather than to <code>dim_listings_cleansed</code>:</p>
+
+<pre data-lang="sql" data-title="models/mart/mart_reviews_with_listing_at_review_time.sql" data-explain="Illustrative mart: listing attributes as they were when the review was written."><code>SELECT
+    r.review_id,
+    r.review_date,
+    s.minimum_nights,
+    s.room_type
+FROM {{ ref('fct_reviews') }} r
+JOIN {{ ref('scd_raw_listings') }} s
+  ON r.listing_id = s.id
+ AND r.review_date &gt;= s.dbt_valid_from
+ AND (r.review_date &lt; s.dbt_valid_to OR s.dbt_valid_to IS NULL)</code></pre>
+
+          <p>This pattern is not in the course repo but is the natural next step after completing both snapshots.</p>
+        </section>
+
+        <section class="section" id="hard-deletes">
+          <h2>Hard deletes: invalidate, new_record, and ignore</h2>
+          <p class="lead">When a row disappears from the source query result, dbt must decide whether the entity still exists. <code>hard_deletes</code> controls that behaviour.</p>
+
+          <h3>The three options</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>hard_deletes value</th><th>When source row is gone</th><th>Snapshot effect</th></tr></thead>
+              <tbody>
+                <tr><td><code>invalidate</code></td><td>Row deleted from source table</td><td>Set <code>dbt_valid_to</code> on the current row; entity no longer current</td></tr>
+                <tr><td><code>new_record</code></td><td>Row deleted from source table</td><td>Insert a new row marked deleted (adapter-specific nulling pattern)</td></tr>
+                <tr><td><code>ignore</code></td><td>Row deleted from source table</td><td>Leave the snapshot row open with <code>dbt_valid_to NULL</code> &mdash; pretends entity still exists</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>The course uses <code>hard_deletes: invalidate</code> on both listings and hosts. If a listing is removed from Airbnb and your loader deletes the raw row, the snapshot closes that listing's history instead of reporting it as active inventory.</p>
+
+          <div class="callout info"><strong>Config rename in dbt 1.9.</strong> Older docs and videos use <code>invalidate_hard_deletes: true</code> inside snapshot config. That boolean mapped to today's <code>hard_deletes: invalidate</code>. <code>hard_deletes: new_record</code> and <code>hard_deletes: ignore</code> replace the old false/absent behaviour with explicit semantics. Projects pinned below 1.9 may still use the legacy key.</div>
+
+          <h3>Why ignore is dangerous</h3>
+          <p>With <code>hard_deletes: ignore</code>, deleted listings remain current in <code>scd_raw_listings</code>. Active listing counts inflate; joins to facts still attach to ghost listings. Use <code>ignore</code> only when source deletes are unreliable false positives (bad loader behaviour) and you accept stale entities.</p>
+
+          <h3>Testing hard deletes locally</h3>
+          <p>To see invalidation in dev:</p>
+
+<pre data-lang="sql" data-title="Simulate a hard delete on raw" data-explain="After snapshot run, the open row for this id should get dbt_valid_to populated."><code>DELETE FROM AIRBNB.RAW.RAW_LISTINGS WHERE id = 9999;
+
+-- then
+-- dbt snapshot --select scd_raw_listings
+
+SELECT id, dbt_valid_from, dbt_valid_to
+FROM AIRBNB.DEV.SCD_RAW_LISTINGS
+WHERE id = 9999;</code></pre>
+
+          <p class="muted">Pick an id that exists in your sample data. Undo by reloading raw data or re-inserting the row from backup before continuing other exercises.</p>
+
+          <h3>new_record mode</h3>
+          <p><code>hard_deletes: new_record</code> inserts an additional row when the source key vanishes, marking the deletion in a way that preserves audit trail for compliance teams who want an explicit &ldquo;deleted&rdquo; event row. It is less common than <code>invalidate</code> in analytics marts. Choose based on whether downstream consumers expect a row to exist for every deletion event versus simply excluding deleted entities from current-state filters.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Scenario</th><th>Recommended hard_deletes</th></tr></thead>
+              <tbody>
+                <tr><td>Listings delisted from Airbnb; metrics should exclude them</td><td><code>invalidate</code></td></tr>
+                <tr><td>Loader sometimes drops rows during bad sync; deletes are untrusted</td><td><code>ignore</code> temporarily while fixing loader</td></tr>
+                <tr><td>Regulatory audit requires explicit deletion events in history</td><td><code>new_record</code></td></tr>
+                <tr><td>Course Airbnb project</td><td><code>invalidate</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="section" id="hosts-assignment">
+          <h2>Assignment: snapshot for raw_hosts</h2>
+          <p class="lead">Mirror the listings snapshot for hosts. The solution file is in the course repo as <code>snapshots/raw_hosts_snapshot.yml</code>.</p>
+
+          <h3>Task</h3>
+          <p>Create a YAML snapshot that:</p>
+          <ul>
+            <li>Names the snapshot <code>scd_raw_hosts</code></li>
+            <li>Points at <code>source('airbnb', 'hosts')</code></li>
+            <li>Uses <code>unique_key: id</code>, <code>strategy: timestamp</code>, <code>updated_at: updated_at</code></li>
+            <li>Sets <code>hard_deletes: invalidate</code></li>
+          </ul>
+
+          <h3>Solution</h3>
+
+<pre data-lang="yaml" data-title="snapshots/raw_hosts_snapshot.yml" data-explain="Identical pattern to listings, pointed at the hosts source declared in sources.yml."><code>snapshots:
+  - name: scd_raw_hosts
+    relation: source('airbnb', 'hosts')
+    config:
+      unique_key: id
+      strategy: timestamp
+      updated_at: updated_at
+      hard_deletes: invalidate</code></pre>
+
+          <p>Run both snapshots together:</p>
+
+<pre data-lang="shell" data-title="Run listings and hosts snapshots"><code>dbt snapshot --select scd_raw_listings scd_raw_hosts</code></pre>
+
+          <p>Rename a host in raw (update <code>name</code> and <code>updated_at</code>), re-run <code>dbt snapshot --select scd_raw_hosts</code>, and confirm two rows for that host id with the validity pattern from <a href="s05-dimensional-modelling.html#slowly-changing-dimensions">Section&nbsp;5's Type 2 example</a>.</p>
+
+          <h3>Side-by-side: listings and hosts YAML</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Field</th><th>scd_raw_listings</th><th>scd_raw_hosts</th></tr></thead>
+              <tbody>
+                <tr><td><code>name</code></td><td><code>scd_raw_listings</code></td><td><code>scd_raw_hosts</code></td></tr>
+                <tr><td><code>relation</code></td><td><code>source('airbnb', 'listings')</code></td><td><code>source('airbnb', 'hosts')</code></td></tr>
+                <tr><td><code>unique_key</code></td><td><code>id</code></td><td><code>id</code></td></tr>
+                <tr><td><code>strategy</code></td><td><code>timestamp</code></td><td><code>timestamp</code></td></tr>
+                <tr><td><code>updated_at</code></td><td><code>updated_at</code></td><td><code>updated_at</code></td></tr>
+                <tr><td><code>hard_deletes</code></td><td><code>invalidate</code></td><td><code>invalidate</code></td></tr>
+                <tr><td>Physical source table</td><td><code>RAW.RAW_LISTINGS</code></td><td><code>RAW.RAW_HOSTS</code></td></tr>
+                <tr><td>Snapshot table in DEV</td><td><code>SCD_RAW_LISTINGS</code></td><td><code>SCD_RAW_HOSTS</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>Both files are independent snapshot nodes. You can run them in one command or schedule hosts less frequently if host attributes change rarely &mdash; though the course runs both together for simplicity.</p>
+
+          <div class="callout exam"><strong>Certification:</strong> expect a question asking you to complete snapshot YAML given a source and business key, or to pick <code>hard_deletes</code> behaviour for a scenario where listings are delisted.</div>
+        </section>
+
+        <section class="section" id="view-vs-table">
+          <h2>Snapshotting a view versus a table, and target_schema conventions</h2>
+          <p class="lead">The course snapshots physical raw tables. Real projects sometimes point snapshots at views or models; schema placement follows the same rules as models with a few snapshot-specific defaults.</p>
+
+          <h3>Table sources (what the course uses)</h3>
+          <p><code>raw_listings</code> and <code>raw_hosts</code> are base tables in <code>AIRBNB.RAW</code>. The loader inserts and updates rows; timestamp strategy reads <code>updated_at</code> directly. This is the recommended pattern: snapshot as close to the mutable truth as possible.</p>
+
+          <h3>View sources</h3>
+          <p>dbt can snapshot a view if the adapter supports reading it like a table. Practical constraints:</p>
+          <ul>
+            <li><strong>Mutability must appear in the view result.</strong> A view over a Type 1 join does not create history the snapshot has not seen before &mdash; it reflects current underlying tables only.</li>
+            <li><strong>Performance.</strong> Each snapshot run executes <code>SELECT * FROM your_view</code>. Complex views with many joins multiply warehouse cost versus snapshotting a narrow raw table.</li>
+            <li><strong>Timestamp columns.</strong> Views must expose an <code>updated_at</code> (or use check strategy) that actually changes when business attributes change.</li>
+          </ul>
+
+          <p>Prefer <code>relation: source(...)</code> on the landing table, then build cleansed models with <code>ref('scd_raw_listings')</code> filtered to <code>dbt_valid_to IS NULL</code> or joined with validity predicates.</p>
+
+          <h3>target_schema conventions</h3>
+          <p>By default snapshots land in the same schema as models for your target &mdash; <code>DEV</code> in development, a custom prod schema after you adopt <code>generate_schema_name</code> in <a href="s19-production.html">Section&nbsp;19</a>.</p>
+
+          <p>Override per snapshot:</p>
+
+<pre data-lang="yaml" data-title="Optional target_schema override" data-explain="Places snapshot table in a dedicated schema separate from transform models."><code>snapshots:
+  - name: scd_raw_listings
+    relation: source('airbnb', 'listings')
+    config:
+      unique_key: id
+      strategy: timestamp
+      updated_at: updated_at
+      hard_deletes: invalidate
+      target_schema: snapshots</code></pre>
+
+          <p>Teams often use one of these conventions:</p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Convention</th><th>Pros</th><th>Cons</th></tr></thead>
+              <tbody>
+                <tr><td>Same schema as models (<code>DEV</code>)</td><td>Simple; works with default profile</td><td>History tables mixed with dims and facts</td></tr>
+                <tr><td>Dedicated <code>snapshots</code> or <code>audit</code> schema</td><td>Clear separation; easier grant policies</td><td>Requires <code>target_schema</code> or project-level snapshot config</td></tr>
+                <tr><td>Raw-adjacent schema (<code>raw_history</code>)</td><td>Signals proximity to sources</td><td>Cross-schema <code>ref()</code> still works but docs clutter</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>Project-wide defaults go in <code>dbt_project.yml</code> under a <code>snapshots:</code> key (parallel to <code>models:</code>):</p>
+
+<pre data-lang="yaml" data-title="dbt_project.yml (project-level snapshot config)" data-explain="Applies target_schema to every snapshot in the airbnb project unless overridden."><code>snapshots:
+  airbnb:
+    +target_schema: snapshots
+    +hard_deletes: invalidate</code></pre>
+
+          <p>The course leaves defaults: snapshots live in <code>DEV</code> beside <code>dim_listings_cleansed</code> and <code>fct_reviews</code>.</p>
+
+          <h3>Snapshots in CI and defer</h3>
+          <p>Production Slim CI in <a href="s19-production.html">Section&nbsp;19</a> often runs modified models with <code>--defer</code> against a prod manifest. Snapshots are stateful: they compare against the existing snapshot table in the target environment. Deferring snapshot runs to prod while testing models in CI can desynchronise history unless the snapshot table itself is prod-backed or CI runs snapshots against a clone with copied history.</p>
+
+          <p>Practical pattern: run snapshots in the same environment that owns the mutable source (typically prod or a staging schema fed by the same loader), not in ephemeral PR schemas, unless you seed the snapshot table first.</p>
+
+          <h3>Snapshotting a model instead of raw</h3>
+          <p>Some teams snapshot <code>ref('src_listings')</code> or a cleansed intermediate model when raw columns are unusable but the staging output is stable. Trade-offs:</p>
+          <ul>
+            <li>History reflects cleansed values (prices already cast, names trimmed) &mdash; good for analyst-facing audit.</li>
+            <li>Changes to staging SQL rewrite history semantics on the next snapshot unless you version the model carefully.</li>
+            <li>Ephemeral staging cannot be snapshotted; materialise as view or table first.</li>
+          </ul>
+
+          <p>The course snapshots raw because the loader owns mutability and staging is ephemeral. That is the pattern to copy unless you have a documented reason to snapshot downstream.</p>
+
+          <h3>Combining snapshots with tests (preview of Section 11)</h3>
+          <p>After snapshots exist, add tests on the snapshot table in YAML or <code>schema.yml</code>: <code>unique</code> on <code>dbt_scd_id</code>, custom tests asserting at most one open row per <code>unique_key</code>, and relationship tests to sources. The next section covers testing in depth; the snapshot-specific invariant worth enforcing early is &ldquo;no duplicate current rows per business key.&rdquo;</p>
+        </section>
+
+        <section class="section" id="deeper">
+          <h2>Deeper detail and edge cases</h2>
+          <p class="lead">Operational detail the lectures skip: version drift in snapshot syntax, warehouse cost of history tables, CI interactions, and the failure modes that silently corrupt Type 2 reporting.</p>
+
+          <h3>Version notes</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Behaviour</th><th>Before</th><th>Now</th><th>Version</th></tr></thead>
+              <tbody>
+                <tr><td>Snapshot definition format</td><td><code>{% snapshot %}</code> in <code>.sql</code> files</td><td>YAML under <code>snapshots/</code> with <code>relation:</code></td><td>1.9</td></tr>
+                <tr><td>Hard delete handling</td><td><code>invalidate_hard_deletes: true/false</code></td><td><code>hard_deletes: invalidate | new_record | ignore</code></td><td>1.9</td></tr>
+                <tr><td>Snapshot command in build</td><td>Separate manual step common</td><td><code>dbt build</code> can include snapshots in selection</td><td>1.0+</td></tr>
+                <tr><td>Generic tests on snapshots</td><td>Same as models</td><td>Column <code>data_tests:</code> in snapshot YAML supported</td><td>1.6+</td></tr>
+                <tr><td>Full refresh via --full-refresh flag</td><td>Not supported on snapshots like models</td><td>Drop table manually to rebuild history from scratch</td><td>&mdash;</td></tr>
+                <tr><td>Snapshot on Python model</td><td>N/A</td><td>Still unsupported &mdash; use SQL relation</td><td>&mdash;</td></tr>
+                <tr><td>dbt Cloud scheduling</td><td>Job step type Snapshot</td><td>Same; often chained after source freshness</td><td>&mdash;</td></tr>
+                <tr><td>BigQuery snapshot storage</td><td>Merge-based</td><td>Still merge; cluster on <code>unique_key</code> manually for large tables</td><td>&mdash;</td></tr>
+                <tr><td>Databricks snapshots</td><td>Delta merge</td><td>YAML config identical; validate <code>updated_at</code> timezone</td><td>&mdash;</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>What it costs to run</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>What runs</th><th>Where the cost lands</th><th>How to spend less</th></tr></thead>
+              <tbody>
+                <tr><td>First snapshot load</td><td>Full read of source + full insert to snapshot table</td><td>Expected once; avoid repeated full refreshes</td></tr>
+                <tr><td>Incremental snapshot run (timestamp)</td><td>Read source rows with new <code>updated_at</code> + merge into history</td><td>Ensure source index on <code>updated_at</code> where supported</td></tr>
+                <tr><td>Check strategy snapshot</td><td>Compare hashes for listed columns across all keys each run</td><td>Narrow <code>check_cols</code>; avoid <code>all</code> on wide tables</td></tr>
+                <tr><td>Snapshot over a view</td><td>View compute every run before merge</td><td>Snapshot the base table instead</td></tr>
+                <tr><td>Storage growth</td><td>One new row per attribute change per entity</td><td>Archive old history to cold storage; snapshot only columns that matter</td></tr>
+                <tr><td>Downstream point-in-time joins</td><td>Extra join predicates on large fact tables</td><td>Materialise current-state extract; use snapshot only for audit marts</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout cost"><strong>Biggest waste: check strategy on all columns of a wide raw table nightly.</strong> Each run hashes every column for every row. Use timestamp strategy when <code>updated_at</code> is trustworthy, or list only business columns in <code>check_cols</code>.</div>
+
+          <h3>Traps that catch people</h3>
+          <ul>
+            <li><strong>Joining without validity predicate —</strong> joining facts to <code>scd_raw_hosts</code> on <code>host_id</code> alone duplicates rows across every history version. Always constrain <code>dbt_valid_from</code> / <code>dbt_valid_to</code> or filter to <code>dbt_valid_to IS NULL</code> for current state.</li>
+            <li><strong>Forgetting to bump updated_at —</strong> timestamp strategy misses in-place edits if the loader does not update the timestamp column. Symptoms: snapshot run succeeds with zero changes while raw data clearly changed.</li>
+            <li><strong>Running snapshot before loader —</strong> snapshot captures stale source state; the next loader run changes raw without a matching snapshot until the next schedule. Order orchestration: load, snapshot, transform.</li>
+            <li><strong>Using dbt run instead of dbt snapshot —</strong> models rebuild; snapshots do not. New YAML files sit idle until someone runs the snapshot command.</li>
+            <li><strong>unique_key not actually unique —</strong> duplicate keys in the source create undefined merge behaviour and overlapping validity windows. Add a source test before snapshotting.</li>
+            <li><strong>hard_deletes: ignore on prod —</strong> deleted entities stay active forever in reporting. Default to <code>invalidate</code> unless you document why ignores are safe.</li>
+            <li><strong>Snapshotting ephemeral models —</strong> ephemeral models have no warehouse relation to read. Point <code>relation:</code> at a table, view, or materialised model.</li>
+            <li><strong>Full refresh surprise —</strong> dropping the snapshot table loses history unless you have backup. Treat snapshot tables as production-critical state.</li>
+            <li><strong>Confusing snapshot with incremental —</strong> incremental facts append events; snapshots version mutable entities. Using incremental on a slowly changing dimension loses history (see <a href="s08-materializations.html#incremental-models">Section&nbsp;8</a>).</li>
+            <li><strong>CI defer without prod snapshot —</strong> PR builds that defer to prod for refs but run snapshots locally create divergent history. Align snapshot execution with the environment that owns sources.</li>
+          </ul>
+
+          <h3>Troubleshooting playbook</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Symptom</th><th>Most likely cause</th><th>What to check / fix</th></tr></thead>
+              <tbody>
+                <tr><td><code>dbt snapshot</code> succeeds but no new history row after raw edit</td><td><code>updated_at</code> unchanged on source row</td><td>Verify source column; switch to check strategy or fix loader</td></tr>
+                <tr><td>Duplicate current rows per <code>unique_key</code></td><td>Multiple rows with <code>dbt_valid_to IS NULL</code></td><td>Inspect source uniqueness; may need snapshot full refresh after fixing source</td></tr>
+                <tr><td>Compile error on <code>relation:</code></td><td>Source not declared or typo in <code>source('airbnb', ...)</code></td><td>Check <code>models/sources.yml</code>; run <code>dbt compile --select scd_raw_listings</code></td></tr>
+                <tr><td>Snapshot table empty after first run</td><td>Source filter or wrong database/schema</td><td>Run source query manually; compare to <code>target/compiled/</code></td></tr>
+                <tr><td>Deleted listings still in active inventory mart</td><td><code>hard_deletes: ignore</code> or snapshot not run after delete</td><td>Set <code>invalidate</code>; re-run snapshot; filter marts on <code>dbt_valid_to</code></td></tr>
+                <tr><td><code>Database Error: Object does not exist</code></td><td>First snapshot never run</td><td><code>dbt snapshot --select &lt;name&gt;</code></td></tr>
+                <tr><td>Facts doubled after joining snapshot</td><td>Missing validity predicate</td><td>Add point-in-time join from <a href="s05-dimensional-modelling.html#slowly-changing-dimensions">Section&nbsp;5</a></td></tr>
+                <tr><td>YAML parse error</td><td>Tabs or wrong indentation under <code>config:</code></td><td>Validate YAML; compare to repo files</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Production patterns</h3>
+          <div class="grid-2">
+            <div class="mini-card">
+              <h4>Schedule after load</h4>
+              <p>Orchestrator DAG: Fivetran sync completes → <code>dbt source freshness</code> → <code>dbt snapshot</code> on raw entities → <code>dbt run</code> on marts. Snapshots belong in the same job as transforms, not a forgotten manual step.</p>
+            </div>
+            <div class="mini-card">
+              <h4>Separate history schema</h4>
+              <p>Set <code>+target_schema: audit</code> for all snapshots in prod. Grant analysts read on dims; restrict history tables to compliance roles. Keeps <code>ref('scd_raw_listings')</code> explicit about crossing schema boundaries.</p>
+            </div>
+          </div>
+          <p>Anti-pattern: snapshotting wide raw tables with <code>check_cols: all</code> on hourly schedules. At scale the hash comparison dominates warehouse spend. Fix: timestamp strategy with reliable CDC, or snapshot a narrow staging model that selects only columns needed for history.</p>
+
+<pre data-lang="sql" data-title="models/dim/dim_listings_current.sql" data-explain="Wrap snapshot current rows in a view model so marts do not repeat the dbt_valid_to filter."><code>{{ config(materialized='view') }}
+
+SELECT *
+FROM {{ ref('scd_raw_listings') }}
+WHERE dbt_valid_to IS NULL</code></pre>
+
+          <h3>Certification pointers</h3>
+          <p>The exam tests snapshot purpose (Type 2 SCD), command name (<code>dbt snapshot</code>), config keys (<code>unique_key</code>, <code>strategy</code>, <code>updated_at</code>, <code>check_cols</code>, <code>hard_deletes</code>), and metadata columns (<code>dbt_valid_from</code>, <code>dbt_valid_to</code>). It contrasts snapshots with incremental models and Type 1 dimensions.</p>
+          <ul>
+            <li><a href="s05-dimensional-modelling.html#slowly-changing-dimensions">Section 5</a> — SCD types and point-in-time joins the exam assumes you know.</li>
+            <li><a href="s09-seeds-sources.html">Section 9</a> — <code>source()</code> used in <code>relation:</code>.</li>
+            <li><a href="s08-materializations.html">Section 8</a> — why incremental is not a substitute for snapshots on dimensions.</li>
+            <li><a href="s19-production.html">Section 19</a> — schema naming, defer, and stateful CI considerations.</li>
+            <li><a href="s11-tests.html">Section 11</a> — testing snapshot outputs and source keys.</li>
+          </ul>
+          <div class="callout exam"><strong>Certification:</strong> memorise the three <code>hard_deletes</code> values, the two strategies, and that snapshots run with <code>dbt snapshot</code> — not <code>dbt run</code>. Know that <code>invalidate_hard_deletes</code> is legacy.</div>
+        </section>
+
+        <section class="section" id="interview">
+          <h2>Interview questions</h2>
+          <p class="muted">Answer each one out loud before opening it.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+
+            <details class="qa">
+              <summary>When would you reach for a snapshot instead of an incremental model?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p>Use a snapshot when the source row mutates in place and you need Type 2 history of attribute changes &mdash; host renames, price changes, status flips. dbt closes the old version and opens a new one with validity timestamps.</p>
+                <p>Use an incremental model when the grain is append-only events &mdash; new reviews, new orders &mdash; and each row is immutable once loaded. Incrementals add new rows; they do not version changes to existing entities.</p>
+                <p>If you only need current state, a Type 1 dimension rebuilt with <code>dbt run</code> is simpler and cheaper than maintaining snapshot history.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What command runs snapshots and how is it different from dbt run?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p><code>dbt snapshot</code> executes snapshot nodes defined in <code>snapshots/</code>. It performs merge logic that compares the source to existing history and updates <code>dbt_valid_from</code> / <code>dbt_valid_to</code>.</p>
+                <p><code>dbt run</code> materialises models only. Snapshot YAML files are invisible to <code>dbt run</code>. In orchestration, schedule both commands or use <code>dbt build</code> with a selection that includes snapshot nodes.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Explain timestamp strategy versus check strategy.<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>Timestamp strategy requires a reliable <code>updated_at</code> (configured via the <code>updated_at</code> key). dbt considers a row changed when that column is newer than the last snapshotted version for the same <code>unique_key</code>.</p>
+                <p>Check strategy compares configured columns &mdash; <code>check_cols</code> &mdash; between source and snapshot. Any difference creates a new Type 2 row. Use it when timestamps are missing or untrustworthy; pay the cost of broader comparisons each run.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What do dbt_valid_from and dbt_valid_to mean?<span class="qa-tag">Modelling</span></summary>
+              <div class="qa-body">
+                <p>They bound the period during which a snapshot row version was true. <code>dbt_valid_from</code> is when the version opened; <code>dbt_valid_to</code> is when it was superseded or invalidated. <code>NULL</code> in <code>dbt_valid_to</code> means the current version.</p>
+                <p>Point-in-time joins filter facts so the event timestamp falls inside this window. Current-state reporting filters <code>dbt_valid_to IS NULL</code>.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What happens when a row is deleted from the source and hard_deletes is invalidate?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>On the next snapshot run, dbt detects the <code>unique_key</code> missing from the source query. With <code>hard_deletes: invalidate</code>, it sets <code>dbt_valid_to</code> on the open row, closing the entity's history without inserting a new current row.</p>
+                <p>Reporting that filters to open rows excludes the deleted entity. With <code>ignore</code>, the entity would incorrectly remain current.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Your snapshot run reports SUCCESS 0 every time but raw data changes. Why?<span class="qa-tag">Troubleshooting</span></summary>
+              <div class="qa-body">
+                <p>Most common cause with timestamp strategy: the source row's <code>updated_at</code> did not change when attributes changed. dbt sees no newer timestamp and skips the row.</p>
+                <p>Verify with a direct <code>SELECT updated_at, ... FROM raw_table WHERE id = ...</code>. Fix the loader, manually bump timestamps in dev, or switch to check strategy on the columns that matter.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Can you snapshot a dbt ephemeral model?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p>No. Ephemeral models are inlined as CTEs and never become warehouse relations. Snapshots need a queryable table or view as <code>relation:</code>.</p>
+                <p>Snapshot the raw source or a materialised staging model instead. Course staging models under <code>src/</code> are ephemeral &mdash; snapshots point at <code>source('airbnb', ...)</code>, not <code>ref('src_listings')</code>.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Why should unique_key be tested before snapshotting?<span class="qa-tag">Testing</span></summary>
+              <div class="qa-body">
+                <p>Snapshot merge logic assumes one history chain per <code>unique_key</code>. Duplicate keys in the source produce overlapping validity ranges and duplicate current rows &mdash; silent corruption in downstream marts.</p>
+                <p>Add <code>unique</code> and <code>not_null</code> tests on the source key column in <code>sources.yml</code> before enabling snapshots in prod.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How do snapshots interact with Slim CI and defer in production?<span class="qa-tag">Production</span></summary>
+              <div class="qa-body">
+                <p>Snapshots are stateful: they read and write the same history table each run. CI environments that defer model refs to prod but run snapshots locally without a copy of prod history produce inconsistent results.</p>
+                <p>Common pattern: run snapshots only in prod (or staging with prod-equivalent raw feeds), while PR CI defers to prod for snapshot <code>ref()</code> outputs. See <a href="s19-production.html">Section&nbsp;19</a> for defer and state selection details.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What changed between invalidate_hard_deletes and hard_deletes?<span class="qa-tag">Certification</span></summary>
+              <div class="qa-body">
+                <p>Older snapshot config used boolean <code>invalidate_hard_deletes: true</code> to close rows when source keys disappeared. dbt 1.9+ replaced it with explicit <code>hard_deletes: invalidate | new_record | ignore</code>.</p>
+                <p><code>true</code> maps to <code>invalidate</code>. <code>false</code> maps closer to <code>ignore</code>, though teams should choose explicitly rather than rely on defaults.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How would you get current listings from a snapshot table in a mart?<span class="qa-tag">SQL</span></summary>
+              <div class="qa-body">
+                <p>Filter to open rows: <code>WHERE dbt_valid_to IS NULL</code> on <code>ref('scd_raw_listings')</code>. Alternatively build a thin view model wrapping that filter so mart SQL stays clean.</p>
+                <p>For historical analysis, keep all versions and apply the validity join on fact timestamps instead of filtering to current.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Snapshot versus source freshness: which detects stale data?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p>Source freshness (<code>dbt source freshness</code>) checks whether the latest load timestamp exceeds warn/error thresholds &mdash; operational staleness of the whole table.</p>
+                <p>Snapshots record row-level attribute history after data arrives. A fresh table can still be snapshotted; a stale table fails freshness before snapshots run. Use both: freshness gates the pipeline; snapshots preserve change history.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What is stored in dbt_scd_id and do you use it in joins?<span class="qa-tag">Modelling</span></summary>
+              <div class="qa-body">
+                <p><code>dbt_scd_id</code> is a surrogate key dbt generates for each version row in the snapshot table. It uniquely identifies one historical version independent of the business <code>unique_key</code>.</p>
+                <p>Downstream joins typically still use the business key plus validity dates, not <code>dbt_scd_id</code>. The surrogate is useful for debugging, deduplication tests, and incremental exports that need a stable row identifier for each version.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How do you rebuild snapshot history from scratch?<span class="qa-tag">Troubleshooting</span></summary>
+              <div class="qa-body">
+                <p>Drop the snapshot table in the warehouse (<code>DROP TABLE DEV.SCD_RAW_LISTINGS</code>), then run <code>dbt snapshot --select scd_raw_listings</code>. dbt treats it as a first run and loads all current source rows as open history.</p>
+                <p>There is no <code>--full-refresh</code> for snapshots comparable to models. Document drop-and-rebuild procedures carefully in prod &mdash; you lose prior history unless you backed up the table.</p>
+              </div>
+            </details>
+
+          </div>
+        </section>
+
+        <section class="section" id="practice">
+          <h2>Hands-on practice</h2>
+          <p class="muted">Run these from the <code>airbnb</code> folder with your virtualenv active.</p>
+          <ol class="practice-list">
+
+            <li class="practice">
+              <p class="practice-task">Create <code>snapshots/raw_listings_snapshot.yml</code>, run the first snapshot, and confirm <code>SCD_RAW_LISTINGS</code> exists with one open row per listing id.</p>
+              <span class="console-path">airbnb/snapshots/raw_listings_snapshot.yml</span>
+              <p class="practice-expect"><code>dbt snapshot --select scd_raw_listings</code> succeeds; <code>SELECT COUNT(*), COUNT(DISTINCT id) FROM DEV.SCD_RAW_LISTINGS WHERE dbt_valid_to IS NULL</code> shows equal counts.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Copy the YAML from the listings walkthrough section.</li>
+                    <li>Run <code>dbt snapshot --select scd_raw_listings</code>.</li>
+                    <li>Query open rows and compare counts.</li>
+                  </ol>
+<pre data-lang="yaml" data-title="snapshots/raw_listings_snapshot.yml" data-explain="Course listings snapshot definition."><code>snapshots:
+  - name: scd_raw_listings
+    relation: source('airbnb', 'listings')
+    config:
+      unique_key: id
+      strategy: timestamp
+      updated_at: updated_at
+      hard_deletes: invalidate</code></pre>
+                  <p class="muted">Undo: <code>DROP TABLE IF EXISTS DEV.SCD_RAW_LISTINGS</code> to re-test first-run behaviour.</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">Update listing 3176 in raw (<code>minimum_nights = 30</code>, bump <code>updated_at</code>), re-snapshot, and verify two rows with correct <code>dbt_valid_from</code> / <code>dbt_valid_to</code>.</p>
+              <span class="console-path">Snowflake worksheet · dbt snapshot</span>
+              <p class="practice-expect">Two rows for <code>id = 3176</code>; exactly one has <code>dbt_valid_to IS NULL</code> and <code>minimum_nights = 30</code>.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Run the course UPDATE statement on <code>RAW.RAW_LISTINGS</code>.</li>
+                    <li><code>dbt snapshot --select scd_raw_listings</code></li>
+                    <li>Query history ordered by <code>dbt_valid_from</code>.</li>
+                  </ol>
+<pre data-lang="sql" data-title="Update and verify"><code>UPDATE AIRBNB.RAW.RAW_LISTINGS
+SET minimum_nights = 30, updated_at = CURRENT_TIMESTAMP()
+WHERE id = 3176;
+
+-- dbt snapshot --select scd_raw_listings
+
+SELECT id, minimum_nights, dbt_valid_from, dbt_valid_to
+FROM AIRBNB.DEV.SCD_RAW_LISTINGS
+WHERE id = 3176
+ORDER BY dbt_valid_from;</code></pre>
+                  <p class="muted">Undo: restore original <code>minimum_nights</code> from a backup row or re-load sample data; drop and rebuild snapshot if history gets messy.</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">Complete the hosts assignment: add <code>raw_hosts_snapshot.yml</code>, snapshot both entities, and rename a host in raw to produce Type 2 history.</p>
+              <span class="console-path">airbnb/snapshots/raw_hosts_snapshot.yml</span>
+              <p class="practice-expect"><code>dbt snapshot --select scd_raw_hosts</code> succeeds; after host name UPDATE, two rows for that host id in <code>SCD_RAW_HOSTS</code>.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Add hosts YAML matching listings pattern.</li>
+                    <li>Run <code>dbt snapshot --select scd_raw_listings scd_raw_hosts</code>.</li>
+                    <li>UPDATE a host name and <code>updated_at</code> in <code>RAW.RAW_HOSTS</code>.</li>
+                    <li>Re-run hosts snapshot and inspect validity columns.</li>
+                  </ol>
+<pre data-lang="yaml" data-title="snapshots/raw_hosts_snapshot.yml" data-explain="Course solution for hosts snapshot."><code>snapshots:
+  - name: scd_raw_hosts
+    relation: source('airbnb', 'hosts')
+    config:
+      unique_key: id
+      strategy: timestamp
+      updated_at: updated_at
+      hard_deletes: invalidate</code></pre>
+                  <p class="muted">Undo: revert raw host row; optional <code>DROP TABLE DEV.SCD_RAW_HOSTS</code> for clean retry.</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">Simulate a hard delete: remove a listing from raw, run snapshot, and confirm <code>dbt_valid_to</code> is set on the formerly current row.</p>
+              <span class="console-path">RAW.RAW_LISTINGS · dbt snapshot</span>
+              <p class="practice-expect">No open row (<code>dbt_valid_to IS NULL</code>) for the deleted id; closed row has non-null <code>dbt_valid_to</code>.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Pick a listing id that exists in sample data.</li>
+                    <li><code>DELETE FROM AIRBNB.RAW.RAW_LISTINGS WHERE id = &lt;id&gt;;</code></li>
+                    <li><code>dbt snapshot --select scd_raw_listings</code></li>
+                    <li>Verify closed history for that id.</li>
+                  </ol>
+                  <p class="muted">Undo: re-insert row from backup or refresh sample dataset; rebuild snapshot if needed.</p>
+                </div>
+              </details>
+            </li>
+
+          </ol>
+        </section>
+
+        <section class="section" id="recap">
+          <h2>Recap</h2>
+          <div class="recap">
+            <ul class="checklist">
+              <li>Snapshots implement Type 2 SCD over mutable sources; theory and join patterns live in <a href="s05-dimensional-modelling.html#slowly-changing-dimensions">Section&nbsp;5</a>.</li>
+              <li>Run them with <code>dbt snapshot</code>, not <code>dbt run</code>. Definitions live in <code>snapshots/*.yml</code> via <code>snapshot-paths</code>.</li>
+              <li>YAML snapshots use <code>name</code>, <code>relation:</code>, and <code>config:</code> with <code>unique_key</code>, <code>strategy</code>, and strategy-specific keys.</li>
+              <li>Course snapshots: <code>scd_raw_listings</code> and <code>scd_raw_hosts</code> on <code>source('airbnb', ...)</code> with <code>strategy: timestamp</code> and <code>updated_at: updated_at</code>.</li>
+              <li>dbt adds <code>dbt_scd_id</code>, <code>dbt_valid_from</code>, <code>dbt_valid_to</code>, and <code>dbt_updated_at</code> to every snapshot table.</li>
+              <li>After a source UPDATE with bumped <code>updated_at</code>, re-snapshot closes the old row and opens a new current row.</li>
+              <li><code>hard_deletes: invalidate</code> closes history when a <code>unique_key</code> disappears; replaced legacy <code>invalidate_hard_deletes: true</code> in dbt 1.9.</li>
+              <li>Other hard delete modes: <code>new_record</code> and <code>ignore</code> (avoid ignore in prod unless deletes are untrustworthy).</li>
+              <li>Check strategy uses <code>check_cols</code> when timestamps are unreliable.</li>
+              <li>Snapshot physical raw tables; view sources work but often cost more and hide mutability.</li>
+              <li>Default <code>target_schema</code> is your profile target schema; override per snapshot or in <code>dbt_project.yml</code>.</li>
+              <li>In CI, treat snapshots as stateful &mdash; align with <a href="s19-production.html">Section&nbsp;19</a> defer patterns.</li>
+              <li>Reference snapshots in models with <code>ref('scd_raw_listings')</code>; filter <code>dbt_valid_to IS NULL</code> for current state.</li>
+            </ul>
+            <p style="margin-top:1rem;">
+              <button type="button" data-complete="section-10">Mark complete</button>
+            </p>
+          </div>
+        </section>
+
+      </div>
+
+      <aside class="toc" aria-label="On this page">
+        <strong>On this page</strong>
+        <ol>
+          <li><a href="#lectures">Lectures</a></li>
+          <li><a href="#snapshot-command">dbt snapshot command</a></li>
+          <li><a href="#yaml-config">YAML config</a></li>
+          <li><a href="#listings-walkthrough">Listings walkthrough</a></li>
+          <li><a href="#update-rerun">Update and re-run</a></li>
+          <li><a href="#hard-deletes">Hard deletes</a></li>
+          <li><a href="#hosts-assignment">Hosts assignment</a></li>
+          <li><a href="#view-vs-table">Views and target_schema</a></li>
+          <li><a href="#deeper">Deeper detail</a></li>
+          <li><a href="#interview">Interview questions</a></li>
+          <li><a href="#practice">Hands-on practice</a></li>
+          <li><a href="#recap">Recap</a></li>
+        </ol>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<footer class="footer">The Complete dbt Bootcamp: Zero to Hero · Section 10 · Offline study edition</footer>
+</body>
+</html>

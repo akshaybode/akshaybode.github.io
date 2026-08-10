@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="DEA-C01 Section 14: Amazon SageMaker for data engineers — Feature Store, ML lineage tracking, Data Wrangler, Processing jobs, Model Monitor, Clarify, and Canvas; what the exam tests versus what it skips.">
+<title>Section 14 — Machine Learning with SageMaker | AWS Data Engineer DEA-C01 Notes</title>
+<link rel="stylesheet" href="assets/aws.css">
+<script defer src="assets/search-index.js"></script>
+<script defer src="assets/code-highlight.js"></script>
+<script defer src="assets/aws.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">Course section 14 of 21 · AWS Certified Data Engineer Associate</p>
+    <h1>Machine Learning with SageMaker</h1>
+    <p class="subtitle">SageMaker is a full ML platform, but the DEA-C01 exam cares about the data-engineering half: where features live, how they are versioned and served, how lineage is recorded for audit, and how Data Wrangler and Processing jobs prepare data — not algorithm choice or hyperparameter tuning.</p>
+    <div class="hero-meta">
+      <span class="chip">12 slides · ~35min</span>
+      <span class="chip">Exam domains: Data Ingestion · Data Store Management</span>
+      <span class="chip">Deck slides 496–507</span>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <nav class="pager" aria-label="Section navigation">
+    <a href="s13-analytics.html">← Analytics</a>
+    <a href="index.html">Course contents</a>
+    <a href="s15-app-integration.html">Next: Application Integration →</a>
+  </nav>
+
+  <main id="main">
+    <div class="layout">
+      <div class="content">
+
+        <section class="section" id="lectures">
+          <h2>Lectures in this section</h2>
+          <p class="muted">Each lecture links to the notes that cover it. The exam tests SageMaker as a <em>data platform</em>, not as a model-training toolkit.</p>
+          <ol class="lecture-list">
+            <li class="lecture">
+              <a class="lec-title" href="#sagemaker-overview">Amazon SageMaker overview</a>
+              <span class="lec-time">~4:00</span>
+              <span class="lec-src">Slides 497–498</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#sagemaker-studio">SageMaker Studio</a>
+              <span class="lec-time">~4:00</span>
+              <span class="lec-src">Slide 499</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#access-management">Access management and security</a>
+              <span class="lec-time">~4:00</span>
+              <span class="lec-src">Slide 500</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#feature-store">Feature Store: online vs offline, feature groups</a>
+              <span class="lec-time">~8:00</span>
+              <span class="lec-src">Slides 501–502</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#lineage-tracking">ML lineage tracking entities and benefits</a>
+              <span class="lec-time">~6:00</span>
+              <span class="lec-src">Slides 503–505</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#data-wrangler">Data Wrangler: preparation, insights and export</a>
+              <span class="lec-time">~7:00</span>
+              <span class="lec-src">Slides 506–507</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#exam-boundary">What the exam tests — and what it skips</a>
+              <span class="lec-time">~4:00</span>
+            </li>
+          </ol>
+        </section>
+
+        <section class="section" id="sagemaker-overview">
+          <h2>Amazon SageMaker overview</h2>
+          <p class="lead">Amazon SageMaker is AWS's managed machine learning platform. It covers the full ML lifecycle — build, train, deploy and optimise — but as a data engineer you care about the <strong>data preparation, feature management, lineage and batch transformation</strong> pieces that feed models, not about picking algorithms or tuning hyperparameters.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-498.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-498.png" alt="Course slide showing SageMaker simplifies ML with managed infrastructure for build, train, deploy and optimisation phases, supporting Jupyter notebooks, TensorFlow and PyTorch." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 498</span>SageMaker's four phases. For DEA-C01, treat <em>Build</em> (Data Wrangler, Processing, Feature Store) and <em>Deploy</em> (batch transform, real-time endpoints fed by the online store) as your focus; leave Autopilot and hyperparameter tuning to the ML specialty exams.</figcaption>
+          </figure>
+
+          <ul>
+            <li><strong>Build:</strong> Jupyter notebooks, Data Wrangler, Processing jobs, Feature Store ingestion from Glue, EMR, Kinesis and Lambda.</li>
+            <li><strong>Train:</strong> Managed training clusters — you need to know that training reads from S3 and Feature Store offline tables, not how to configure an estimator.</li>
+            <li><strong>Deploy:</strong> Real-time endpoints and batch transform; the online Feature Store serves low-latency inference features.</li>
+            <li><strong>Optimisation:</strong> Automatic model tuning exists but is out of exam scope for data engineers.</li>
+          </ul>
+
+          <h3>SageMaker Processing jobs for Spark and scikit-learn at scale</h3>
+          <p>A <strong>Processing job</strong> runs a containerised script on managed instances — the SageMaker answer when transforms are too heavy for Lambda but must stay inside an ML pipeline. Use the built-in scikit-learn or Spark images for pandas/sklearn preprocessing, or bring a custom Docker image for domain-specific logic. Input and output are S3 paths under <code>/opt/ml/processing/</code>; the job role needs S3 and KMS access. Processing fits feature engineering before training, dataset validation, and post-training metric computation. Compared with Glue ETL, Processing wins when the consumer is SageMaker Pipelines, Feature Store, or a training job that expects SageMaker's I/O layout; Glue wins for catalog-driven Spark with job bookmarks and Data Catalog integration.</p>
+
+          <h3>Batch transform for offline inference over S3</h3>
+          <p><strong>Batch transform</strong> runs a trained model against large input files in S3 and writes predictions to S3 — no persistent endpoint. You pay for instance-hours while the transform job runs. Use it when inference is periodic (nightly scoring of millions of rows) rather than millisecond latency. Input can be CSV, JSON Lines, or RecordIO; output lands as S3 objects partitioned for downstream Athena or Redshift loads. Batch transform pairs with Feature Store offline features: join historical features in Athena, score with batch transform, load results to the warehouse. Real-time endpoints plus the online store are the alternative when latency matters.</p>
+
+          <div class="callout exam"><strong>Exam framing.</strong> Questions ask where feature data lives, how it is versioned, how training datasets avoid leakage, and how lineage supports audit — not "which algorithm fits this problem". If Redshift can run the SQL transform, consider <a href="s10-redshift.html">Redshift ML</a> first; if the pipeline already lives in the analytics stack, see <a href="s13-analytics.html">Section 13</a> for how SageMaker fits beside QuickSight and Lake Formation.</div>
+        </section>
+
+        <section class="section" id="sagemaker-studio">
+          <h2>SageMaker Studio</h2>
+          <p class="lead">SageMaker Studio is a web-based IDE — a unified interface for the entire ML workflow with built-in collaboration and Git-based version control.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-499.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-499.png" alt="Course slide on SageMaker Studio IDE with notebooks, experiments, debugger and Autopilot components for collaboration and version control." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 499</span>Studio components. Data engineers use <strong>Notebooks</strong> and <strong>Experiments</strong> daily; Debugger and Autopilot are model-tuning tools you only need to recognise by name.</figcaption>
+          </figure>
+
+          <div class="grid-2">
+            <div class="mini-card">
+              <h4>Tools you will use</h4>
+              <ul>
+                <li><strong>Notebooks:</strong> Pre-configured JupyterLab environments with one-click compute.</li>
+                <li><strong>Experiments:</strong> Organise and compare training runs — ties into lineage tracking.</li>
+                <li><strong>Data Wrangler:</strong> Visual data preparation launched from Studio.</li>
+              </ul>
+            </div>
+            <div class="mini-card">
+              <h4>Tools to recognise only</h4>
+              <ul>
+                <li><strong>Debugger:</strong> Captures tensors during training to find vanishing gradients — ML scientist tool.</li>
+                <li><strong>Autopilot:</strong> Automated model creation — not a data-engineering service.</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <section class="section" id="access-management">
+          <h2>Access management</h2>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-500.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-500.png" alt="Course slide on SageMaker access management: SageMakerFullAccess and ReadOnly policies, resource-based policies, tag-based fine-grained control, VPC and KMS integration." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 500</span>Access layers for SageMaker. The state machine or Glue job that writes to Feature Store needs IAM permissions on the feature group; Studio users need SageMaker execution roles with S3, Glue and KMS access scoped by resource tags.</figcaption>
+          </figure>
+
+          <h3>SageMaker-specific IAM policies</h3>
+          <ul>
+            <li><code>AmazonSageMakerFullAccess</code> — full access to SageMaker API actions and resources.</li>
+            <li><code>AmazonSageMakerReadOnly</code> — list and describe only; useful for auditors and dashboard roles.</li>
+          </ul>
+
+          <h3>Fine-grained control</h3>
+          <ul>
+            <li><strong>Resource-based policies</strong> on feature groups and endpoints restrict which principals can read or write.</li>
+            <li><strong>Tag-based conditions</strong> in IAM policies — e.g. allow <code>CreateFeatureGroup</code> only when <code>Environment=prod</code>.</li>
+            <li><strong>VPC:</strong> Studio notebooks and Processing jobs can run inside a VPC with interface endpoints so data never crosses the public internet.</li>
+            <li><strong>KMS:</strong> Encrypt data at rest in S3 offline stores, online DynamoDB tables and EBS volumes attached to training instances.</li>
+          </ul>
+        </section>
+
+        <section class="section" id="feature-store">
+          <h2>Feature Store</h2>
+          <p class="lead">Amazon SageMaker Feature Store is a central repository for ML features — engineered values derived from raw data, such as "average purchase amount in the last 30 days". It solves three data-engineering problems: <strong>training/serving skew</strong> (the same feature logic feeds both training and inference), <strong>feature reuse</strong> across teams, and <strong>point-in-time correctness</strong> (historical training rows reflect only what was known at that timestamp).</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-501.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-501.png" alt="Course slide showing Feature Store stores features in one place with online store for low-latency apps and offline store for historical analysis, grouped by Id, Time, and feature columns." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 501</span>Feature Store structure. Every record has a <strong>record identifier</strong> (entity key), an <strong>event time</strong>, and one or more feature values. Features are grouped into <strong>feature groups</strong> — the unit of schema, ingestion and access control.</figcaption>
+          </figure>
+
+          <h3>Online store vs offline store</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Store</th><th>Backing</th><th>Latency</th><th>Use case</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Online store</strong></td><td>DynamoDB (low-latency key-value)</td><td>Single-digit milliseconds</td><td>Real-time inference — fetch the latest feature vector for a customer ID at prediction time</td></tr>
+                <tr><td><strong>Offline store</strong></td><td>S3 in Apache Parquet, queryable via Athena or Spark</td><td>Batch / minutes</td><td>Training datasets, batch scoring, historical analysis, point-in-time joins</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>When you create a feature group with both stores enabled, every ingested record is written to both automatically — one ingestion pipeline, two serving modes. That is the primary mechanism for preventing training/serving skew: the training job reads the same feature definitions the online store serves at inference.</p>
+
+          <h3>Feature groups, record identifiers and event times</h3>
+          <ul>
+            <li><strong>Feature group:</strong> A named collection of features with a defined schema — like a table. You set a <code>RecordIdentifierFeatureName</code> (e.g. <code>customer_id</code>) and an <code>EventTimeFeatureName</code> (e.g. <code>event_time</code>).</li>
+            <li><strong>Record identifier:</strong> The entity key. All features for one customer share the same identifier.</li>
+            <li><strong>Event time:</strong> When the feature value was true in the real world. Point-in-time training joins use event time to avoid future leakage — you only join features whose event time is before the label's event time.</li>
+          </ul>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-502.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-502.png" alt="Course slide diagram showing Feature Store ingestion from EMR, Glue, Kinesis, Kafka, Lambda and Athena into offline and online stores feeding an ML model, with benefits of efficiency and flexibility." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 502</span>Ingestion sources and dual-store architecture. Batch pipelines (Glue, EMR) typically write to the offline store; stream processors (Kinesis, Lambda) keep the online store fresh. Both paths can populate the same feature group.</figcaption>
+          </figure>
+
+          <div class="diagram">
+            <p class="diagram-title">Feature pipeline: from raw data to training and inference</p>
+            <div class="flow">
+              <div class="node is-source"><b>Raw S3</b><small>CSV · JSON · Parquet</small></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-compute pulse"><b>Glue / Data Wrangler</b><small>transform · validate</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-store"><b>Feature Store</b><small>online + offline</small></div>
+            </div>
+            <div class="flow" style="margin-top:14px;">
+              <div class="node is-store"><b>Offline store</b><small>S3 Parquet · Athena</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-compute"><b>Training</b><small>Processing · SageMaker</small></div>
+              <div class="node is-serve"><b>Inference</b><small>online store lookup</small></div>
+            </div>
+          </div>
+
+          <pre data-lang="python" data-title="SageMaker SDK — create a feature group and put a record" data-explain="Creates a feature group with both online and offline stores, then ingests one feature record. The offline store lands Parquet under the S3OutputPath prefix; the online store is a DynamoDB table keyed by customer_id."><code>import boto3
+import sagemaker
+from sagemaker.feature_store.feature_group import FeatureGroup
+
+session = sagemaker.Session()
+role = "arn:aws:iam::123456789012:role/SageMakerFeatureStoreRole"
+bucket = "dea-lab-ab-4821"
+
+fg = FeatureGroup(
+    name="customer-features",
+    sagemaker_session=session,
+    record_identifier_name="customer_id",
+    event_time_feature_name="event_time",
+)
+
+fg.create(
+    s3_uri=f"s3://{bucket}/feature-store/customer-features/",
+    record_identifier_feature_name="customer_id",
+    event_time_feature_name="event_time",
+    enable_online_store=True,
+    role_arn=role,
+)
+
+fg.ingest(
+    data_frame=df,  # columns: customer_id, event_time, avg_order_value, days_since_last_order
+    max_workers=2,
+    wait=True,
+)
+
+# Single-record update for streaming / Lambda ingestion
+fg.put_record(
+    record=[
+        {"FeatureName": "customer_id", "ValueAsString": "10042"},
+        {"FeatureName": "event_time", "ValueAsString": "2026-08-03T12:00:00Z"},
+        {"FeatureName": "avg_order_value", "ValueAsString": "87.50"},
+        {"FeatureName": "days_since_last_order", "ValueAsString": "14"},
+    ]
+)</code></pre>
+
+          <pre data-lang="sql" data-title="Athena — point-in-time join from the offline store" data-explain="Feature Store creates a Glue table over the offline S3 Parquet data. Join features to labels using event time so training rows only see features that existed before the label event."><code>-- Glue table auto-created: sagemaker_feature_store.customer_features_offline
+SELECT
+  l.customer_id,
+  l.order_date,
+  l.order_total AS label,
+  f.avg_order_value,
+  f.days_since_last_order
+FROM curated.orders l
+JOIN sagemaker_feature_store.customer_features_offline f
+  ON l.customer_id = f.customer_id
+ AND f.event_time &lt;= l.order_date          -- point-in-time: no future leakage
+ AND f.event_time = (
+       SELECT MAX(f2.event_time)
+       FROM sagemaker_feature_store.customer_features_offline f2
+       WHERE f2.customer_id = l.customer_id
+         AND f2.event_time &lt;= l.order_date
+     );</code></pre>
+        </section>
+
+        <section class="section" id="lineage-tracking">
+          <h2>ML lineage tracking</h2>
+          <p class="lead">SageMaker ML Lineage Tracking records the provenance of every artefact in an ML workflow — which dataset produced which model, which code version ran, and who approved deployment. For data engineers it is the audit trail that answers "where did this feature come from?" and "can we reproduce last month's training set?"</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-503.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-503.png" alt="Course slide introducing SageMaker lineage tracking for managing ML model lifecycle, workflow insights, dependencies, auditing and reproducibility." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 503</span>Why lineage matters. Regulated industries need to trace a prediction back to source data; retraining requires reproducing the exact input snapshot and transformation code.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-504.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-504.png" alt="Course slide listing SageMaker lineage entities: trial components, trials, experiments, contexts, actions, artifacts and associations." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 504</span>The seven lineage entity types. SageMaker creates many of these automatically when you run Processing jobs, training jobs and pipeline steps.</figcaption>
+          </figure>
+
+          <h3>Lineage entities</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Entity</th><th>What it represents</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Trial components</strong></td><td>Individual stages or steps — a Processing job, a training job, a data-validation step</td></tr>
+                <tr><td><strong>Trials</strong></td><td>Iterations or approaches within an experiment — "run with learning rate 0.01"</td></tr>
+                <tr><td><strong>Experiments</strong></td><td>Containers grouping trials around one problem — "churn prediction Q3"</td></tr>
+                <tr><td><strong>Contexts</strong></td><td>Logical groupings that tie entities together — a pipeline execution, a project</td></tr>
+                <tr><td><strong>Actions</strong></td><td>Operations performed on artifacts — "approved for production", "deployed"</td></tr>
+                <tr><td><strong>Artifacts</strong></td><td>Data objects — datasets in S3, model files, feature groups, metrics</td></tr>
+                <tr><td><strong>Associations</strong></td><td>Directed relationships — "dataset X was input to training job Y", "model Z was output of job Y"</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-505.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-505.png" alt="Course slide on lineage tracking benefits: reproducibility, auditability, governance and collaboration." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 505</span>Four benefits the exam expects you to recite: reproducibility (re-run the same pipeline), auditability (who changed what when), governance (approval gates), collaboration (shared experiment history).</figcaption>
+          </figure>
+        </section>
+
+        <section class="section" id="data-wrangler">
+          <h2>Data Wrangler</h2>
+          <p class="lead">SageMaker Data Wrangler is a visual data-preparation tool with 300+ built-in transformations. Import from S3, Redshift, Athena or EMR; clean, join and engineer features; inspect distributions; then export the result to a Glue job, SageMaker Pipeline or notebook.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-506.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-506.png" alt="Course slide showing Data Wrangler flow from S3, Redshift, EMR and Feature Store through data preparation, visualization and feature engineering to export to SageMaker or other AWS services." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 506</span>Data Wrangler workflow stages. It sits alongside Glue DataBrew (<a href="s04-glue.html">Section 4</a>) but is SageMaker-native and exports directly into ML pipelines and Feature Store.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-507.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-507.png" alt="Course slide on Data Wrangler Quick Model feature that trains a test model and provides model summary, feature summary and confusion matrix insights." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 507</span>Quick Model and the data-quality insights report. Before exporting, Wrangler can flag missing values, type mismatches and class imbalance — the same class of checks a data engineer runs before loading a warehouse.</figcaption>
+          </figure>
+
+          <h3>Data-quality and insights report</h3>
+          <p>Data Wrangler analyses your dataset and produces an <strong>insights report</strong>: missing-value counts, outlier detection, feature correlation, target leakage warnings and data-type suggestions. This is exam-relevant because it parallels Glue Data Quality and the "ensure data quality" task statement — Wrangler is the SageMaker-side answer when the downstream consumer is a model rather than a SQL table.</p>
+
+          <h3>Export destinations</h3>
+          <ul>
+            <li><strong>Glue job:</strong> Generates PySpark code you can schedule as a recurring ETL job.</li>
+            <li><strong>SageMaker Pipeline:</strong> Embeds the transformation as a pipeline step alongside training and deployment.</li>
+            <li><strong>Jupyter notebook:</strong> Exports reproducible pandas or PySpark code for interactive work.</li>
+            <li><strong>Feature Store:</strong> Writes engineered features directly into a feature group.</li>
+          </ul>
+
+          <h3>SageMaker Pipelines as ML orchestration</h3>
+          <p><strong>SageMaker Pipelines</strong> is a native ML workflow orchestrator — DAG of steps (Processing, training, transform, registration) with dependency tracking and lineage integration. Think of it as the SageMaker counterpart to <a href="s15-app-integration.html#step-functions">Step Functions</a> when every step is a SageMaker job type rather than arbitrary Lambda or Glue tasks. A Data Wrangler flow exports directly into a Pipeline step so interactive prep becomes scheduled production code. Pipelines record lineage artifacts automatically; use them when the scenario mentions reproducible ML pipelines with approval gates, not when the team only needs generic event routing across non-SageMaker services.</p>
+
+          <pre data-lang="python" data-title="SageMaker Processing job — batch feature transformation" data-explain="A Processing job runs a containerised script over input data in S3 and writes transformed output back to S3 or Feature Store. This is the batch alternative to real-time feature computation at inference time."><code>from sagemaker.processing import ScriptProcessor, ProcessingInput, ProcessingOutput
+
+processor = ScriptProcessor(
+    image_uri="763104351884.dkr.ecr.us-east-1.amazonaws.com/sagemaker-scikit-learn:1.2-1-cpu-py3",
+    role=role,
+    instance_type="ml.m5.xlarge",
+    instance_count=1,
+)
+
+processor.run(
+    code="scripts/feature_transform.py",
+    inputs=[ProcessingInput(source=f"s3://{bucket}/raw/customers/", destination="/opt/ml/processing/input")],
+    outputs=[ProcessingOutput(source="/opt/ml/processing/output", destination=f"s3://{bucket}/staging/features/")],
+    arguments=["--date", "2026-08-03"],
+)</code></pre>
+        </section>
+
+        <section class="section" id="exam-boundary">
+          <h2>What the exam tests — and what it skips</h2>
+          <p class="lead">The DEA-C01 exam treats SageMaker as infrastructure for data, not as a modelling workshop. Know the services below by purpose; do not memorise algorithm names or hyperparameter ranges.</p>
+
+          <h3>Model Monitor and data drift detection</h3>
+          <p><strong>Model Monitor</strong> watches production endpoints (and can analyse batch transform outputs) for <strong>data drift</strong> — incoming feature distributions diverging from the training baseline — plus model quality drift when labels arrive later and bias drift over time. You define baseline statistics from a training dataset; Monitor schedules jobs that compare live traffic to those baselines and publishes violations to CloudWatch and SNS. For a data engineer this is a data-quality alarm on the inference path: the same class of problem as Glue Data Quality or pipeline row-count checks, but tied to ML feature statistics. Enable it when bad upstream data can silently degrade model accuracy without hard failures.</p>
+
+          <h3>Ground Truth for labelling</h3>
+          <p><strong>SageMaker Ground Truth</strong> manages human labelling workflows — built-in or custom workforces label images, text, or tabular data for training sets. You pay per labelled object and optional workforce type (private, vendor, Mechanical Turk). Ground Truth is the exam answer when a scenario needs a managed labelling pipeline with quality controls (consensus, audit) feeding S3 training data — not when labels already exist in the warehouse. Lineage can record labelling jobs as trial components linking raw objects to labelled datasets.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Service</th><th>Data-engineer purpose</th><th>Exam depth</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Feature Store</strong></td><td>Central feature repository; online/offline stores; point-in-time joins</td><td>High — expect architecture questions</td></tr>
+                <tr><td><strong>Lineage Tracking</strong></td><td>Audit trail; entity types; reproducibility</td><td>Medium — know entity names and benefits</td></tr>
+                <tr><td><strong>Data Wrangler</strong></td><td>Visual prep; export to Glue/Pipeline; data-quality report</td><td>Medium</td></tr>
+                <tr><td><strong>Processing jobs</strong></td><td>Batch transformation at scale</td><td>Medium — compare with Glue ETL</td></tr>
+                <tr><td><strong>Model Monitor</strong></td><td>Detect <em>data drift</em> in production endpoints — statistics of incoming features vs training baseline</td><td>Low–medium — know it exists and why</td></tr>
+                <tr><td><strong>Clarify</strong></td><td>Bias detection and explainability; can flag PII in datasets</td><td>Low — recognise name and purpose</td></tr>
+                <tr><td><strong>Canvas</strong></td><td>No-code ML for business users — AutoML without writing code</td><td>Low — "least technical option" distractor</td></tr>
+                <tr><td><strong>Autopilot / Debugger / hyperparameter tuning</strong></td><td>Model optimisation</td><td>Out of scope</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout info"><strong>Redshift ML is a separate path.</strong> If the question mentions SQL-based training inside the warehouse — <code>CREATE MODEL</code> from a Redshift query — the answer is <a href="s10-redshift.html">Redshift ML</a>, not SageMaker Studio. SageMaker Feature Store is the answer when features must be shared across multiple models or served at low latency outside Redshift.</div>
+
+          <div class="callout exam"><strong>Boundary summary.</strong> The exam asks: where does feature data live (online DynamoDB vs offline S3 Parquet)? How is it versioned (feature group schema, event time)? How is lineage recorded (artifacts, associations)? It does <em>not</em> ask you to choose XGBoost over Random Forest or set learning rates.</div>
+        </section>
+
+        <section class="section" id="deeper">
+          <h2>Deeper detail and exam edge cases</h2>
+          <p class="lead">Feature Store billing, Studio idle traps, Wrangler export economics, and where SageMaker overlaps Glue and EMR — the operational detail data engineers need when ML pipelines share the same lake as the warehouse.</p>
+
+          <h3>Limits and quotas that decide answers</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Limit</th><th>Value</th><th>Adjustable?</th><th>Why it matters</th></tr></thead>
+              <tbody>
+                <tr><td>Feature Store online store latency</td><td>Single-digit milliseconds (DynamoDB-backed)</td><td>N/A (design)</td><td>Real-time inference reads online store via <code>GetRecord</code>; offline store is for batch.</td></tr>
+                <tr><td>Feature group ingestion throughput</td><td>Scales with ingestion workers; large batch ingests are asynchronous</td><td>Soft — tune <code>max_workers</code></td><td>Streaming via <code>put_record</code> vs bulk <code>ingest</code> — pick API for volume.</td></tr>
+                <tr><td>Record identifier + event time</td><td>Both required on every feature group</td><td>No (hard schema)</td><td>Event time enables point-in-time joins; missing event time causes training leakage.</td></tr>
+                <tr><td>Offline store format</td><td>S3 Parquet; Glue table auto-created; Iceberg supported on newer API paths</td><td>N/A</td><td>Athena-queryable offline data — same pattern as lake tables in <a href="s03-athena.html">Section 3</a>.</td></tr>
+                <tr><td>Studio notebook instances</td><td>Billed per instance-hour while <code>InService</code></td><td>Yes — stop or delete apps</td><td>Idle notebooks left running charge GPU/CPU instances continuously.</td></tr>
+                <tr><td>Data Wrangler</td><td>Billed by underlying Studio compute instance-hour</td><td>Yes — idle timeout (default 60 min)</td><td>Wrangler UI left open runs the attached instance; export does not free compute until stopped.</td></tr>
+                <tr><td>Processing / training instance quotas</td><td>Per-instance-type soft limits (e.g. ml.m5.xlarge)</td><td>Yes — Service Quotas request</td><td>Large training jobs may need quota increase before launch.</td></tr>
+                <tr><td>Spot training</td><td>Up to 90% discount vs On-Demand; interruptible</td><td>N/A (pricing)</td><td>Requires checkpointing to S3 — exam pairs Spot with checkpoint-enabled training.</td></tr>
+                <tr><td>Lineage query depth</td><td>Graph traversal via API; practical depth depends on pipeline size</td><td>N/A</td><td>Audit questions ask which entity links dataset to model — artifacts and associations.</td></tr>
+                <tr><td>Batch transform input</td><td>Large files split automatically; S3 in/out</td><td>N/A</td><td>No 29-second API limit — runs as async job, unlike real-time endpoints.</td></tr>
+                <tr><td>Feature Store online billing</td><td>Storage per GB-month + read/write request units</td><td>Right-size features</td><td>High-cardinality online features cost DynamoDB storage and read RUs at inference.</td></tr>
+                <tr><td>Offline store billing</td><td>Standard S3 storage + Athena scan if queried</td><td>Lifecycle to IA/Glacier for old snapshots</td><td>Offline is cheap storage; cost appears when Athena scans wide history.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>What you actually pay for</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Billed dimension</th><th>Unit</th><th>How to spend less</th></tr></thead>
+              <tbody>
+                <tr><td>Studio / notebook instances</td><td>EC2 instance-hour (ml.* types) while running</td><td>Stop apps when done; use smaller instance types for exploration; delete idle domains in labs.</td></tr>
+                <tr><td>Data Wrangler</td><td>Same Studio compute instance-hour while session active</td><td>Set aggressive idle timeout; export flow to Processing job or Pipeline and shut down Wrangler.</td></tr>
+                <tr><td>Processing jobs</td><td>Instance-hour × instance count for job duration</td><td>Right-size instance type; use Spot for fault-tolerant Processing where supported.</td></tr>
+                <tr><td>Batch transform</td><td>Instance-hour for transform job</td><td>Batch large S3 inputs in one job instead of many small endpoint calls.</td></tr>
+                <tr><td>Feature Store online</td><td>DynamoDB storage GB-month + on-demand read/write requests</td><td>Store only inference-necessary features online; keep history in offline store.</td></tr>
+                <tr><td>Feature Store offline</td><td>S3 Standard (and Athena if queried)</td><td>Partition offline data by event date; lifecycle old training snapshots.</td></tr>
+                <tr><td>Training (when in scope)</td><td>Instance-hour or Spot discount with checkpointing</td><td>Spot + S3 checkpoints for long jobs; right-size GPU only when needed.</td></tr>
+                <tr><td>Real-time endpoints</td><td>Instance-hour 24×7 while endpoint InService</td><td>Prefer batch transform for offline scoring; scale-to-zero patterns need architect review.</td></tr>
+                <tr><td>Ground Truth</td><td>Per object labelled + workforce fees</td><td>Pre-filter objects; use automated labelling where confidence is high.</td></tr>
+                <tr><td>EFS (Studio home)</td><td>GB-month stored + throughput</td><td>Clean up large notebook outputs; delete unused Studio domains after labs.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout cost"><strong>Biggest waste in this section.</strong> SageMaker Studio notebook or Data Wrangler sessions left running overnight on <code>ml.m5.xlarge</code> (or larger) bill continuously — the same pattern as forgetting an EMR cluster. Export Wrangler flows to Processing jobs or Pipelines and stop the compute app.</div>
+          <div class="callout danger"><strong>Wrangler export is not free compute.</strong> Exporting a flow to a Processing job or Pipeline generates runnable code, but executing that code spins up billed Processing instances. Treat interactive Wrangler as exploration only.</div>
+
+          <h3>Traps that catch people</h3>
+          <ul>
+            <li><strong>Online vs offline store confusion —</strong> Training jobs query offline S3/Athena; real-time endpoints need the online DynamoDB store. Enabling only offline breaks low-latency inference.</li>
+            <li><strong>Missing event time —</strong> Feature groups without a proper event time column allow future features into training joins — models fail silently in production.</li>
+            <li><strong>Idle Studio notebooks —</strong> Closing the browser tab does not stop the underlying kernel instance. Bills accrue until you shut down the app or domain.</li>
+            <li><strong>Data Wrangler left open —</strong> Wrangler charges the attached Studio instance until idle timeout fires. Long lunches on an ml.large add up.</li>
+            <li><strong>Assuming Wrangler runs pipelines for free —</strong> Export produces code; Processing jobs and Pipelines bill instance-hours when executed.</li>
+            <li><strong>Feature Store vs raw S3 prefix —</strong> Shared prefixes lack schema enforcement, dual-store replication, and point-in-time semantics — exam scenarios with training/serving skew want Feature Store.</li>
+            <li><strong>Glue vs Processing pick —</strong> "Data Catalog, crawlers, bookmarks" → Glue. "SageMaker Pipeline step, Feature Store ingest" → Processing.</li>
+            <li><strong>EMR vs Processing —</strong> Petabyte custom Spark with YARN tuning → EMR. ML-native container transform feeding training → Processing.</li>
+            <li><strong>Spot training without checkpoints —</strong> Spot interruption loses progress. Enable S3 checkpointing for jobs longer than the Spot interruption window.</li>
+            <li><strong>Lineage only in notebooks —</strong> Manual README provenance does not satisfy audit questions — SageMaker Lineage Tracking artifacts and associations are the managed answer.</li>
+          </ul>
+
+          <h3>Troubleshooting playbook</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Symptom</th><th>Most likely cause</th><th>What to check / fix</th></tr></thead>
+              <tbody>
+                <tr><td>Feature Store <code>GetRecord</code> empty at inference</td><td>Record not ingested to online store or wrong identifier</td><td>Verify <code>enable_online_store=True</code>; check DynamoDB table; confirm <code>put_record</code> event time and ID match query.</td></tr>
+                <tr><td>Offline Athena query returns no rows</td><td>Ingestion still running or wrong Glue database</td><td>Feature group ingestion status; table <code>sagemaker_feature_store.&lt;name&gt;_offline</code>; S3 prefix under configured URI.</td></tr>
+                <tr><td>Processing job <code>ClientError: AccessDenied</code> on S3</td><td>Execution role missing S3/KMS on input/output paths</td><td>IAM role on Processing job; bucket policy; KMS key policy for CMK-encrypted data.</td></tr>
+                <tr><td>Studio app stuck in Pending</td><td>Insufficient quota or VPC subnet IP exhaustion</td><td>Service Quotas for ml.* instances; VPC subnet free IPs; CloudWatch Studio logs.</td></tr>
+                <tr><td>Unexpected SageMaker bill after lab</td><td>Notebook, endpoint, or domain still running</td><td>SageMaker console → Domains → running apps; Endpoints → InService; delete domain if lab-only.</td></tr>
+                <tr><td>Batch transform output malformed</td><td>Input format mismatch (CSV vs JSON Lines)</td><td>Job definition <code>TransformInput</code> content type; model expects RecordIO vs CSV.</td></tr>
+                <tr><td>Model Monitor false positives</td><td>Baseline statistics stale after legitimate schema change</td><td>Regenerate baseline from current training set; adjust threshold in monitoring schedule.</td></tr>
+                <tr><td>Pipeline step fails on lineage</td><td>Missing artifact registration permissions</td><td>Execution role needs <code>sagemaker:CreateArtifact</code>, <code>AddAssociation</code>; check pipeline execution logs.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Production patterns</h3>
+          <p>Mature teams land raw data in S3 via Glue or streaming, engineer features in Processing jobs or Wrangler exports, ingest into Feature Store with both stores enabled, and train from offline Athena joins with point-in-time event filters. SageMaker Pipelines orchestrates Processing → training → model registration → optional batch transform; Lineage Tracking records artifacts for audit. Real-time paths serve from the online store; nightly scoring uses batch transform over S3 exports.</p>
+          <div class="grid-2">
+            <div class="mini-card">
+              <h4>When SageMaker wins</h4>
+              <ul>
+                <li>Shared features across models with online + offline serving.</li>
+                <li>ML pipeline orchestration with lineage and model registry.</li>
+                <li>Batch transform or Processing tied to training containers.</li>
+              </ul>
+            </div>
+            <div class="mini-card">
+              <h4>When Glue/EMR wins</h4>
+              <ul>
+                <li>Catalog-centric ETL, crawlers, job bookmarks — <a href="s04-glue.html">Glue</a>.</li>
+                <li>Long-running custom Spark clusters — <a href="s13-analytics.html#emr">EMR</a>.</li>
+                <li>SQL-only transforms in the warehouse — <a href="s10-redshift.html">Redshift ML</a>.</li>
+              </ul>
+            </div>
+          </div>
+          <p>Anti-pattern: using Data Wrangler as the production scheduler. Export flows to Pipelines or Glue jobs with CloudWatch alarms; interactive sessions do not retry on failure or integrate with <a href="s15-app-integration.html#step-functions">Step Functions</a> event triggers without extra wiring.</p>
+<pre data-lang="shell" data-title="Stop idle Studio apps — cost guardrail" data-explain="Lists running Studio apps so you can delete them after a lab; idle apps continue billing the attached instance."><code>aws sagemaker list-apps \
+  --domain-id-equals $DOMAIN_ID \
+  --query 'Apps[?Status==`InService`].[AppName,AppType,ResourceSpec.InstanceType]' \
+  --output table
+
+aws sagemaker delete-app \
+  --domain-id $DOMAIN_ID \
+  --app-type KernelGateway \
+  --app-name default</code></pre>
+
+          <h3>Where this fits with the rest of the exam</h3>
+          <p>SageMaker is lighter weight on DEA-C01 than Glue or S3, but scenarios increasingly test feature pipelines and data quality at the ML boundary. Treat this section as the bridge between warehouse/lake engineering and model consumers.</p>
+          <ul>
+            <li><a href="s04-glue.html#databrew">Section 4 — Glue DataBrew</a>: Visual prep counterpart to Data Wrangler — pick DataBrew for catalog-centric ETL, Wrangler when export targets Pipelines or Feature Store.</li>
+            <li><a href="s13-analytics.html#emr">Section 13 — EMR</a>: EMR feeds Feature Store offline ingest for large Spark feature engineering; Processing replaces EMR when jobs are ML-container-native and shorter.</li>
+            <li><a href="s15-app-integration.html#step-functions">Section 15 — Step Functions</a>: Orchestrates cross-service ETL; SageMaker Pipelines is preferable when every step is a SageMaker job type with lineage.</li>
+            <li><a href="s06-streaming.html#kinesis-data-streams">Section 6 — Kinesis</a>: Stream processors call <code>put_record</code> to keep online features fresh.</li>
+            <li><a href="s16-management.html#iam">Section 16 — IAM</a>: Execution roles for Processing, Feature Store, and Studio require <code>iam:PassRole</code> and scoped S3/KMS policies.</li>
+          </ul>
+          <div class="callout exam"><strong>How the exam frames SageMaker.</strong> "Prevent training/serving skew with point-in-time features" → Feature Store with event time. "Visual prep exporting into an ML pipeline" → Data Wrangler → Pipeline. "Audit trail from dataset to model" → Lineage Tracking. "Batch score millions of rows from S3" → batch transform, not a real-time endpoint. Do <em>not</em> pick SageMaker when the scenario is pure SQL warehouse ETL with no ML consumer — that is Glue or Redshift.</div>
+        </section>
+
+        <section class="section" id="interview">
+          <h2>Interview questions</h2>
+          <p class="muted">Answer each one out loud before opening it.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+            <details class="qa">
+              <summary>What problem does SageMaker Feature Store solve that a shared S3 prefix does not?<span class="qa-tag">Architecture</span></summary>
+              <div class="qa-body">
+                <p>A shared S3 prefix gives you storage, not semantics. Feature Store adds a schema (feature group), dual online/offline serving, automatic replication between them, point-in-time query support via event timestamps, and IAM at the feature-group level. Without it, teams re-implement the same aggregations differently for batch training and real-time inference — <strong>training/serving skew</strong> — and cannot guarantee that a training row only sees features that existed at the label's timestamp.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Explain online store versus offline store and when each is queried.<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>The <strong>online store</strong> is a DynamoDB-backed, low-latency key-value lookup keyed by record identifier. A real-time endpoint calls <code>GetRecord</code> at inference time to fetch the latest feature vector for a customer. The <strong>offline store</strong> is S3 Parquet with a Glue catalog table, queried by Athena or Spark for batch training and historical analysis. Both are populated from the same ingestion API so the feature definitions stay consistent.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What is point-in-time correctness and why does event time matter in a feature group?<span class="qa-tag">Exam</span></summary>
+              <div class="qa-body">
+                <p>Point-in-time correctness means a training example only joins features that were known <em>before</em> the label event. Without an event time, you might accidentally join a "30-day average spend" computed from future transactions — the model looks great in training and fails in production. Feature Store records carry an event time; offline queries filter <code>feature.event_time &lt;= label.event_time</code> and take the latest matching row.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Name the SageMaker lineage entities and explain what an Association represents.<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>Entities: <strong>trial components</strong>, <strong>trials</strong>, <strong>experiments</strong>, <strong>contexts</strong>, <strong>actions</strong>, <strong>artifacts</strong>, and <strong>associations</strong>. An artifact is a data object (S3 dataset, model file, feature group). An action is an operation on an artifact ("approved", "deployed"). An <strong>association</strong> is a directed link — "dataset A was input to training job B" — that forms the provenance graph auditors traverse.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How does Data Wrangler differ from Glue DataBrew, and when would you export to a Glue job?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p>Both are visual data-preparation tools. Data Wrangler is SageMaker-native: it exports to SageMaker Pipelines, Processing jobs and Feature Store, and includes Quick Model for ML-oriented insights. DataBrew (<a href="s04-glue.html">Section 4</a>) is catalog-centric and exports to Glue jobs by default. Choose Wrangler when the consumer is a SageMaker training pipeline; export to a Glue job when you need scheduled Spark ETL that feeds both the warehouse and Feature Store without SageMaker compute.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What is a SageMaker Processing job and how does it compare to a Glue ETL job?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p>A Processing job runs a containerised script (scikit-learn, Spark, custom Docker) on managed instances, reading from and writing to S3. Glue ETL runs PySpark on Glue DPUs with Data Catalog integration and job bookmarks. Processing fits ML-centric transforms (feature engineering libraries, model-specific preprocessing); Glue fits catalog-driven ETL at warehouse scale. The exam may present either — pick Processing when the scenario mentions SageMaker pipelines or Feature Store; pick Glue when it mentions crawlers, the Data Catalog or DPU pricing.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What does SageMaker Model Monitor detect, and when would you enable it?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>Model Monitor watches production inference endpoints for <strong>data drift</strong> (feature distributions shifting from the training baseline), <strong>model quality drift</strong> (predictions degrading when ground-truth labels arrive), and <strong>bias drift</strong>. Enable it when a model serves business-critical predictions and you need automated alerts before bad data silently degrades accuracy — it is the ML equivalent of a data-quality alarm on a pipeline.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>A stakeholder wants no-code ML for a sales forecast. SageMaker Canvas or Redshift ML?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p><strong>Canvas</strong> if they need a standalone ML workflow with visual data prep, AutoML and one-click deployment — no SQL required. <strong>Redshift ML</strong> if the data already lives in Redshift and the forecast can be expressed as SQL over warehouse tables — less context-switching, no separate SageMaker bill. Canvas is the "least technical" SageMaker answer; Redshift ML is the answer when the question anchors on the warehouse.</p>
+              </div>
+            </details>
+          </div>
+        </section>
+
+        <section class="section" id="practice">
+          <h2>Hands-on practice</h2>
+          <p class="muted">Free tier where possible. Delete everything at the end of each task.</p>
+          <ol class="practice-list">
+            <li class="practice">
+              <p class="practice-task">Open SageMaker Studio and launch Data Wrangler. Import <code>data/customers.csv</code> from your lab bucket, run the data-quality insights report, apply a "remove duplicates" transform, and export the flow as a Jupyter notebook.</p>
+              <span class="console-path">SageMaker → Studio → File → New → Data Wrangler flow</span>
+              <p class="practice-expect">The insights report flags the duplicate Sarah Smith row; the exported notebook contains reproducible pandas code.</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">Console</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li><strong>SageMaker → Studio → Create domain</strong> if you do not have one (use default settings, <code>us-east-1</code>).</li>
+                    <li>Open Studio → <em>File → New → Data Wrangler flow</em>.</li>
+                    <li>Import → S3 → <code>s3://dea-lab-&lt;initials&gt;-&lt;random&gt;/raw/customers/customers.csv</code>.</li>
+                    <li>Run <em>Get data insights</em> — note the duplicate row count.</li>
+                    <li>Add transform → <em>Handle missing</em> or <em>Drop duplicates</em>.</li>
+                    <li>Export → <em>Notebook</em>. Save to your default S3 bucket.</li>
+                  </ol>
+                  <p class="muted">Cleanup: delete the Studio domain if you created one for this lab only. Studio idle charges apply to the default execution role's EFS volume.</p>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Create a feature group named <code>customer-features-lab</code> with online and offline stores enabled. Ingest one record via the SDK, then query the offline store table in Athena.</p>
+              <span class="console-path">SageMaker → Feature Store → Create feature group</span>
+              <p class="practice-expect">Athena returns one row with your test <code>customer_id</code> and feature values from the offline Parquet files.</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">Console + CLI</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Create an IAM role with <code>AmazonSageMakerFullAccess</code>, S3 write to your lab bucket, and Glue catalog access.</li>
+                    <li>Use the Python snippet in the Feature Store section above, substituting your bucket and role ARN.</li>
+                    <li>Wait for ingestion to complete. Find the Glue table under database <code>sagemaker_feature_store</code>.</li>
+                    <li>Run the Athena point-in-time query against the offline table.</li>
+                  </ol>
+                  <p class="muted">Cleanup: delete the feature group (this removes the online DynamoDB table and offline S3 data).</p>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Run a SageMaker Processing job that reads <code>raw/customers/customers.csv</code>, drops duplicates in a Python script, and writes Parquet to <code>staging/features/</code>.</p>
+              <span class="console-path">SageMaker → Processing → Create processing job</span>
+              <p class="practice-expect"><code>aws s3 ls s3://$BUCKET/staging/features/</code> lists Parquet part files with 10 rows (duplicate removed).</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">Console</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Write <code>feature_transform.py</code> that reads CSV from <code>/opt/ml/processing/input</code>, drops duplicates, writes Parquet to <code>/opt/ml/processing/output</code>.</li>
+                    <li>Upload the script to <code>s3://$BUCKET/scripts/feature_transform.py</code>.</li>
+                    <li>Create a Processing job with the scikit-learn CPU image, one <code>ml.m5.xlarge</code> instance, and the input/output paths from the code block above.</li>
+                  </ol>
+                  <p class="muted">Cleanup: no persistent resources beyond S3 output — delete the staging prefix if not needed.</p>
+                </div>
+              </details>
+            </li>
+          </ol>
+        </section>
+
+        <section class="section" id="recap">
+          <h2>Recap</h2>
+          <div class="recap">
+            <ul class="checklist">
+              <li>DEA-C01 tests SageMaker as data infrastructure — Feature Store, lineage, Wrangler, Processing — not algorithm tuning.</li>
+              <li>Feature Store: feature groups with record ID + event time; online store (DynamoDB, low latency) vs offline store (S3 Parquet, Athena/Spark).</li>
+              <li>Point-in-time joins use event time to prevent training leakage — the exam's reason for Feature Store over raw S3.</li>
+              <li>Lineage entities: trial components, trials, experiments, contexts, actions, artifacts, associations.</li>
+              <li>Data Wrangler: 300+ transforms, insights report, export to Glue job / Pipeline / notebook / Feature Store.</li>
+              <li>Processing jobs = batch transformation in a container; compare with Glue ETL for catalog-driven Spark work.</li>
+              <li>Model Monitor = data drift; Clarify = bias/PII; Canvas = no-code ML.</li>
+              <li>Redshift ML (<a href="s10-redshift.html">Section 10</a>) for SQL-native training; Feature Store when features serve multiple models or real-time endpoints.</li>
+            </ul>
+            <p style="margin-top:1rem;">
+              <button type="button" data-complete="section-14">Mark complete</button>
+            </p>
+          </div>
+        </section>
+
+      </div>
+
+      <aside class="toc" aria-label="On this page">
+        <strong>On this page</strong>
+        <ol>
+          <li><a href="#lectures">Lectures</a></li>
+          <li><a href="#sagemaker-overview">SageMaker overview</a></li>
+          <li><a href="#sagemaker-studio">Studio</a></li>
+          <li><a href="#access-management">Access management</a></li>
+          <li><a href="#feature-store">Feature Store</a></li>
+          <li><a href="#lineage-tracking">Lineage tracking</a></li>
+          <li><a href="#data-wrangler">Data Wrangler</a></li>
+          <li><a href="#exam-boundary">Exam boundary</a></li>
+          <li><a href="#deeper">Deeper detail</a></li>
+          <li><a href="#interview">Interview questions</a></li>
+          <li><a href="#practice">Hands-on practice</a></li>
+          <li><a href="#recap">Recap</a></li>
+        </ol>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<footer class="footer">AWS Certified Data Engineer Associate (DEA-C01) · Section 14 · Offline study edition</footer>
+</body>
+</html>

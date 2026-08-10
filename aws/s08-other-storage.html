@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="DEA-C01 Section 8: Amazon EBS block storage, Amazon EFS shared file storage, EFS performance and throughput modes, and AWS Backup with vaults and Vault Lock.">
+<title>Section 8 — Other Storage Services | AWS Data Engineer DEA-C01 Notes</title>
+<link rel="stylesheet" href="assets/aws.css">
+<script defer src="assets/search-index.js"></script>
+<script defer src="assets/code-highlight.js"></script>
+<script defer src="assets/aws.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">Course section 8 of 21 · AWS Certified Data Engineer Associate</p>
+    <h1>Other Storage Services</h1>
+    <p class="subtitle">Block storage on a single EC2 instance with EBS, shared POSIX file storage across AZs with EFS, and centralized backup orchestration with AWS Backup — plus the decision table that tells you when each beats S3 or instance store.</p>
+    <div class="hero-meta">
+      <span class="chip">18 slides · ~25min</span>
+      <span class="chip">Exam domain: Data Store Management (26%)</span>
+      <span class="chip">Deck slides 185–202</span>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <nav class="pager" aria-label="Section navigation">
+    <a href="s07-s3.html">← Storage with S3</a>
+    <a href="index.html">Course contents</a>
+    <a href="s09-dynamodb.html">Next: DynamoDB →</a>
+  </nav>
+
+  <main id="main">
+    <div class="layout">
+      <div class="content">
+
+        <section class="section" id="lectures">
+          <h2>Lectures in this section</h2>
+          <p class="muted">Each lecture links to the notes that cover it. EBS and EFS complement the object-storage patterns in <a href="s07-s3.html">Section 7</a>.</p>
+          <ol class="lecture-list">
+            <li class="lecture">
+              <a class="lec-title" href="#ebs">Amazon EBS — block storage for EC2</a>
+              <span class="lec-time">~10:00</span>
+              <span class="lec-src">Slides 186–192</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#efs">Amazon EFS — elastic shared file storage</a>
+              <span class="lec-time">~8:00</span>
+              <span class="lec-src">Slides 193–198</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#aws-backup">AWS Backup — plans, vaults and Vault Lock</a>
+              <span class="lec-time">~7:00</span>
+              <span class="lec-src">Slides 199–202</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#storage-decision">Choosing block, file, object or scratch storage</a>
+              <span class="lec-time">~5:00</span>
+            </li>
+          </ol>
+        </section>
+
+        <section class="section" id="ebs">
+          <h2>Amazon EBS — Elastic Block Store</h2>
+          <p class="lead"><strong>Amazon Elastic Block Store (EBS)</strong> provides scalable, durable <strong>block-level storage</strong> attached to a single EC2 instance. It behaves like a virtual hard drive: you format it with a filesystem and mount it at a path such as <code>/dev/xvdf</code>. EBS is the default choice when an application needs low-latency random I/O on one machine — databases, boot volumes, and ETL staging on EC2.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-187.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-187.png" alt="Diagram showing a single EC2 instance in one availability zone connected to an AWS EBS volume as persistent block storage." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 187</span>EBS is bound to one EC2 instance in one Availability Zone. It is not shared across instances and not directly accessible from other services — you mount it on the instance like a local disk.</figcaption>
+          </figure>
+
+          <div class="callout exam"><strong>AZ scope is the key exam fact.</strong> An EBS volume lives in exactly one AZ. You cannot attach it to an instance in a different AZ. To move data, take a snapshot and restore it in the target AZ or Region. EFS, by contrast, is Region-scoped and reachable from any AZ — the exam loves that contrast.</div>
+
+          <h3>Key features</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-188.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-188.png" alt="Slide listing EBS key features: scalability, durability, block-level storage, persistence, high performance and cost effectiveness." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 188</span>EBS delivers independent scaling of storage capacity and performance, 99.999% durability via replication inside the AZ, and pay-as-you-go pricing per GB-month and per provisioned IOPS where applicable.</figcaption>
+          </figure>
+
+          <ul>
+            <li><strong>Scalability</strong> — resize volumes online (with a filesystem grow step on the instance).</li>
+            <li><strong>Durability</strong> — data is replicated within the AZ; snapshots add cross-AZ and cross-Region portability.</li>
+            <li><strong>Block-level</strong> — raw blocks, not files or objects; the OS sees a disk device.</li>
+            <li><strong>Persistent</strong> — survives instance stop/start; survives instance termination only if <em>delete on termination</em> is disabled.</li>
+            <li><strong>Encryption</strong> — all new EBS volumes are encrypted by default using AWS KMS (or the account default key).</li>
+          </ul>
+
+          <h3>How EBS attaches to EC2</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-189.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-189.png" alt="Diagram of EBS volume types bound to an EC2 instance in a specific AZ, with SSD and HDD families and snapshots for cross-AZ recovery." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 189</span>Volume type selection drives cost and performance. Because the volume is AZ-bound, snapshots are the standard mechanism for disaster recovery into another AZ or Region.</figcaption>
+          </figure>
+
+          <h3>EBS volume types</h3>
+          <p>The deck names GP2/GP3, IO1/IO2, ST1 and SC1. The table below is what the exam actually tests — IOPS/throughput ceilings, size ranges, and the workload each type targets.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Type</th><th>Media</th><th>Max IOPS</th><th>Max throughput</th><th>Size range</th><th>Use case</th></tr></thead>
+              <tbody>
+                <tr><td><strong>gp3</strong></td><td>SSD</td><td>16,000</td><td>1,000 MB/s</td><td>1 GB – 16 TB</td><td>General purpose — boot volumes, dev, most databases. <strong>Baseline 3,000 IOPS and 125 MB/s regardless of size</strong>; scale IOPS/throughput independently.</td></tr>
+                <tr><td><strong>gp2</strong></td><td>SSD</td><td>16,000</td><td>250 MB/s</td><td>1 GB – 16 TB</td><td>Legacy general purpose; IOPS scale with volume size (3 IOPS/GB, burst to 3,000). Prefer gp3 for new workloads.</td></tr>
+                <tr><td><strong>io2 Block Express</strong></td><td>SSD</td><td>256,000</td><td>4,000 MB/s</td><td>4 GB – 64 TB</td><td>Mission-critical, sub-millisecond latency, 99.999% durability SLA.</td></tr>
+                <tr><td><strong>io1 / io2</strong></td><td>SSD</td><td>64,000 (io1) / 256,000 (io2)</td><td>1,000 MB/s</td><td>4 GB – 16 TB</td><td>Provisioned IOPS for sustained random I/O — OLTP databases, latency-sensitive apps. Supports <strong>Multi-Attach</strong> on Nitro instances.</td></tr>
+                <tr><td><strong>st1</strong></td><td>HDD</td><td>500</td><td>500 MB/s</td><td>125 GB – 16 TB</td><td>Throughput-optimised — big data, log processing, sequential reads/writes. Cannot be a boot volume.</td></tr>
+                <tr><td><strong>sc1</strong></td><td>HDD</td><td>250</td><td>250 MB/s</td><td>125 GB – 16 TB</td><td>Cold HDD — lowest cost, infrequent access, sequential patterns only.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout tip"><strong>gp3 exam shortcut.</strong> Unlike gp2, gp3 gives you 3,000 IOPS and 125 MB/s on a 1 GB volume. You do not need a large volume just to get baseline performance — you provision extra IOPS/throughput only when the workload needs it.</div>
+
+          <h3>EBS Multi-Attach</h3>
+          <p><strong>io1</strong> and <strong>io2</strong> volumes on Nitro-based instances can attach to up to 16 EC2 instances in the same AZ simultaneously. Every attached instance must use a cluster-aware filesystem (such as GFS or OCFS2) — a standard ext4 or XFS mount on two instances will corrupt data. Multi-Attach is rare in data-engineering pipelines but appears as a distractor against EFS.</p>
+
+          <h3>EBS snapshots</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-190.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-190.png" alt="Slide describing EBS snapshots as incremental block-level backups stored in S3 with lifecycle management and data recovery uses." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 190</span>Snapshots are point-in-time copies stored in S3 (you never manage the bucket). They are incremental — only changed blocks since the last snapshot are stored — which keeps cost down for frequent backups.</figcaption>
+          </figure>
+
+          <ul>
+            <li><strong>Incremental</strong> — the first snapshot is a full copy; subsequent snapshots store only deltas.</li>
+            <li><strong>Crash-consistent by default</strong> — for a database, quiesce I/O or use VSS/agent for application-consistent snapshots.</li>
+            <li><strong>Cross-AZ and cross-Region</strong> — copy a snapshot to another Region for DR; create a new volume in any AZ from a snapshot.</li>
+            <li><strong>EBS Snapshot Archive</strong> — move infrequently accessed snapshots to a lower-cost archive tier (minimum 90-day retention).</li>
+            <li><strong>Fast Snapshot Restore (FSR)</strong> — pre-warm a snapshot in an AZ so the first volume created from it is immediately at full performance (costs per snapshot-AZ-hour).</li>
+            <li><strong>Lifecycle policies</strong> — automate snapshot creation and expiration via Data Lifecycle Manager or AWS Backup.</li>
+          </ul>
+
+          <h3>Modifying volume size and performance</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-191.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-191.png" alt="Slide showing EBS capacity provisioning: volume size increase, GP2/GP3 and IO1/IO2 types, and provisioned IOPS adjustment." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 191</span>You can grow volume size and (for gp3/io volumes) IOPS and throughput online without detaching. After AWS expands the volume, extend the partition and filesystem inside the OS.</figcaption>
+          </figure>
+
+          <h3>Delete on termination</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-192.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-192.png" alt="Slide explaining EBS delete-on-termination attribute: enabled deletes volume with instance, disabled keeps volume after termination." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 192</span>The root volume defaults to <em>delete on termination = true</em>. Data volumes you want to keep must have this flag disabled before you terminate the instance — a common cause of accidental data loss in labs.</figcaption>
+          </figure>
+        </section>
+
+        <section class="section" id="efs">
+          <h2>Amazon EFS — Elastic File System</h2>
+          <p class="lead"><strong>Amazon Elastic File System (EFS)</strong> is a serverless, fully elastic <strong>shared file system</strong> using the <strong>NFSv4.1</strong> protocol. Many EC2 instances (and other compute such as Lambda or ECS) mount the same filesystem concurrently across multiple Availability Zones in a Region. You pay for storage used and do not pre-provision capacity.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-194.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-194.png" alt="Slide introducing Amazon EFS as serverless elastic NFS with multi-AZ availability, POSIX API, performance modes and pay-as-you-go pricing." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 194</span>EFS scales storage and throughput automatically. Performance Mode (General Purpose vs Max I/O) is chosen at creation time and cannot be changed later — pick carefully.</figcaption>
+          </figure>
+
+          <div class="callout exam"><strong>EBS vs EFS scope.</strong> EBS = one instance, one AZ, block device. EFS = many clients, all AZs in the Region, NFS file share. If the question says "shared across a fleet of EC2 instances in multiple AZs", the answer is EFS, not EBS Multi-Attach.</div>
+
+          <h3>POSIX API</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-195.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-195.png" alt="Slide describing EFS support for POSIX standard APIs for Linux compatibility and cross-platform interoperability." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 195</span>POSIX semantics mean standard Linux file operations — <code>open</code>, <code>read</code>, <code>write</code>, file locking, directory hierarchies — work without application changes. This is why lift-and-shift web and CMS workloads land on EFS.</figcaption>
+          </figure>
+
+          <h3>Performance and storage classes</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-196.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-196.png" alt="Slide listing EFS performance and throughput modes, automatic scaling, 1000 concurrent NFS connections, and IA and One Zone-IA storage classes." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 196</span>EFS supports lifecycle management to Infrequent Access (EFS-IA) and Archive tiers for files not read for 30+ or 90+ days. One Zone-IA stores data in a single AZ at lower cost with no cross-AZ redundancy.</figcaption>
+          </figure>
+
+          <ul>
+            <li><strong>Standard</strong> — replicated across multiple AZs; default for production.</li>
+            <li><strong>EFS Infrequent Access (IA)</strong> — lower storage cost for files accessed less often; pay a retrieval fee on access.</li>
+            <li><strong>EFS Archive</strong> — lowest storage cost for rarely accessed files; higher retrieval cost.</li>
+            <li><strong>EFS One Zone</strong> — data in one AZ only; pair with AWS Backup for DR. One Zone-IA adds the IA pricing model.</li>
+            <li><strong>Lifecycle management</strong> — transition files automatically between Standard → IA → Archive based on last-access time.</li>
+          </ul>
+
+          <h3>Performance Mode — General Purpose vs Max I/O</h3>
+          <div class="slide-row">
+            <figure class="slide-fig">
+              <a href="assets/slides/slide-197.png" target="_blank" rel="noopener">
+                <img src="assets/slides/slide-197.png" alt="Comparison slide: EFS General Purpose performance mode for latency-sensitive mixed workloads versus Max I/O for highest aggregate throughput." loading="lazy">
+              </a>
+              <figcaption><span class="slide-no">Slide 197</span>General Purpose scales performance with stored data size. Max I/O offers higher aggregate IOPS/throughput for analytics and media processing but does not auto-scale with data size.</figcaption>
+            </figure>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Feature</th><th>General Purpose</th><th>Max I/O</th></tr></thead>
+              <tbody>
+                <tr><td>Latency</td><td>Low — default for most workloads</td><td>Lower per-operation latency at scale</td></tr>
+                <tr><td>Throughput / IOPS</td><td>Good for mixed read/write; auto-scales with data stored</td><td>Highest aggregate throughput and IOPS</td></tr>
+                <tr><td>Ideal workloads</td><td>Web serving, CMS, dev/test, home directories</td><td>Big data analytics, media processing, database scratch</td></tr>
+                <tr><td>Scaling</td><td>Automatic with stored data</td><td>Does not auto-scale; tune throughput mode separately</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Throughput Mode — Bursting, Provisioned and Elastic</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-198.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-198.png" alt="Comparison slide: EFS Bursting throughput mode for spikey workloads versus Provisioned throughput for sustained predictable performance." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 198</span>Bursting uses a credit system for spikey traffic. Provisioned guarantees a fixed MiB/s regardless of size or credits. Elastic (not on this slide) automatically scales throughput up and down with workload — best when traffic is unpredictable but sustained peaks exceed bursting credits.</figcaption>
+          </figure>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Mode</th><th>How it works</th><th>When to choose</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Bursting</strong> (default)</td><td>Baseline throughput scales with filesystem size; burst credits allow short spikes above baseline</td><td>Dev/test, periodic batch jobs, unpredictable but moderate traffic</td></tr>
+                <tr><td><strong>Provisioned</strong></td><td>You set throughput in MiB/s independent of storage size</td><td>Sustained high throughput — continuous ETL, large-scale analytics, media pipelines</td></tr>
+                <tr><td><strong>Elastic</strong></td><td>Automatically scales throughput up and down with workload</td><td>Unpredictable workloads that exceed bursting baseline for extended periods; no manual capacity planning</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Where FSx fits</h3>
+          <p>The deck stops at EFS, but the exam occasionally offers <strong>Amazon FSx</strong> as an option. FSx is a family of managed filesystems for specific protocols and performance profiles:</p>
+          <ul>
+            <li><strong>FSx for Lustre</strong> — high-throughput parallel filesystem for HPC and ML. Tight S3 integration: lazy-load from S3 or sync datasets. Choose this when the question mentions "scratch space for large-scale batch analytics reading from S3" or "sub-millisecond latency at hundreds of GB/s".</li>
+            <li><strong>FSx for Windows File Server</strong> — SMB for Windows workloads.</li>
+            <li><strong>FSx for NetApp ONTAP / OpenZFS</strong> — enterprise NAS features, snapshots, replication.</li>
+          </ul>
+          <p>For generic Linux shared storage across AZs, EFS is still the default answer. FSx for Lustre wins when throughput to compute clusters matters more than POSIX simplicity.</p>
+        </section>
+
+        <section class="section" id="aws-backup">
+          <h2>AWS Backup</h2>
+          <p class="lead"><strong>AWS Backup</strong> is a fully managed, centralised backup service. Instead of configuring snapshots, RDS backups and EFS backups separately, you define <strong>backup plans</strong> once and assign AWS resources by tag or ID. AWS Backup orchestrates creation, retention, cross-Region copy and restore.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-200.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-200.png" alt="Slide listing AWS Backup features: centralised backup for many services, scheduling, cross-region and cross-account copy, restore, compliance rules and IAM access control." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 200</span>One service backs up EC2, EBS, EFS, RDS, Aurora, DynamoDB, S3, DocumentDB, Neptune, FSx, Storage Gateway and more. Monitoring flows through the AWS Backup dashboard and CloudWatch.</figcaption>
+          </figure>
+
+          <h3>Supported services and backup plans</h3>
+          <p>AWS Backup creates <strong>recovery points</strong> — immutable snapshots of the protected resource at a point in time. A <strong>backup plan</strong> defines:</p>
+          <ul>
+            <li><strong>Rules</strong> — frequency (cron schedule), start window, completion window.</li>
+            <li><strong>Lifecycle</strong> — transition recovery points to cold storage (where supported) and expire them after N days.</li>
+            <li><strong>Cross-Region copy</strong> — replicate recovery points to a DR Region automatically.</li>
+            <li><strong>Cross-account copy</strong> — copy to a vault in a security/audit account for isolation.</li>
+          </ul>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-201.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-201.png" alt="Diagram showing AWS resources backed up on a schedule into a Backup Vault, with backup plans defining frequency and retention." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 201</span>A backup vault is an encrypted container for recovery points. Assign resources to plans by tag — for example, <code>Backup=daily</code> — so new EBS volumes inherit policy automatically.</figcaption>
+          </figure>
+
+          <h3>Backup Vault Lock</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-202.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-202.png" alt="Slide explaining AWS Backup Vault Lock immutability, WORM storage, and Governance versus Compliance lock modes." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 202</span>Vault Lock makes retention policies WORM-compliant — even the root user cannot delete locked recovery points before the retention period expires in Compliance mode.</figcaption>
+          </figure>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Mode</th><th>Who can change the policy</th><th>Can recovery points be deleted early?</th><th>Typical use</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Governance</strong></td><td>Specified IAM principals can edit the vault lock policy</td><td>No — recovery points remain immutable; policy can be loosened by authorised admins</td><td>Internal governance, ops teams that need flexibility</td></tr>
+                <tr><td><strong>Compliance</strong></td><td>Nobody — policy cannot be changed or deleted for the lock period</td><td>No — not even root or AWS support can shorten retention</td><td>Regulated industries (finance, healthcare) with strict audit requirements</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout danger"><strong>Compliance mode is irreversible.</strong> Once Vault Lock enters Compliance mode for a retention period, you cannot undo it, shorten it or delete the vault until every recovery point ages out. Test in Governance mode first.</div>
+
+          <h3>Backup Audit Manager</h3>
+          <p><strong>AWS Backup Audit Manager</strong> (not on the deck) provides prebuilt and custom compliance frameworks that continuously evaluate backup activity against rules — for example, "all production RDS instances must have daily backups retained 35 days". It generates audit reports for SOC, PCI and HIPAA evidence. Pair it with Vault Lock when the exam question mentions regulatory compliance and provable immutability.</p>
+        </section>
+
+        <section class="section" id="storage-decision">
+          <h2>Choosing block, file, object or scratch storage</h2>
+          <p>The exam presents five storage layers. Use this table before you pick an answer.</p>
+
+          <div class="diagram">
+            <p class="diagram-title">Three access models on AWS — one instance, many instances, any client</p>
+            <div class="flow">
+              <div class="node is-store"><b>EBS</b><small>Block · one EC2 · one AZ</small></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-store pulse"><b>EFS / FSx</b><small>File · NFS/SMB/Lustre · multi-AZ</small></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-store"><b>S3</b><small>Object · HTTP/API · Region-wide</small></div>
+            </div>
+            <div class="flow" style="margin-top:14px;">
+              <div class="node is-source"><b>Instance store</b><small>Block · ephemeral · highest local I/O</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-compute"><b>Data pipeline pattern</b><small>Land in S3 → transform → serve from Redshift/Athena</small></div>
+            </div>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Store</th><th>Access protocol</th><th>Scope</th><th>Who can mount / access</th><th>Durability</th><th>Data-engineering use case</th></tr></thead>
+              <tbody>
+                <tr><td><strong>S3</strong></td><td>Object (HTTP REST/API)</td><td>Region (bucket global name)</td><td>Any AWS service or client with IAM</td><td>11 nines; versioning + replication</td><td>Data lake landing zone, curated Parquet, Athena/Glue source — see <a href="s07-s3.html">Section 7</a></td></tr>
+                <tr><td><strong>EBS</strong></td><td>Block (disk device)</td><td>Single AZ</td><td>One EC2 instance (Multi-Attach: up to 16 in same AZ on io1/io2)</td><td>Replicated within AZ; snapshot for cross-AZ</td><td>EC2 database disk, staging before upload to S3, boot volumes</td></tr>
+                <tr><td><strong>EFS</strong></td><td>File (NFSv4.1)</td><td>Region (multi-AZ)</td><td>Many EC2, ECS, Lambda in VPC</td><td>Multi-AZ redundant (Standard); One Zone trades redundancy for cost</td><td>Shared input/output directory for a fleet of Glue-adjacent EC2 workers</td></tr>
+                <tr><td><strong>FSx for Lustre</strong></td><td>File (POSIX, parallel)</td><td>Single AZ (usually)</td><td>EC2 cluster, EKS</td><td>Durable backend; cache/scratch semantics</td><td>HPC/ML scratch, high-throughput reads from S3-backed datasets</td></tr>
+                <tr><td><strong>Instance store</strong></td><td>Block (local NVMe/SSD)</td><td>Single instance</td><td>One EC2 only</td><td>Ephemeral — lost on stop (depending on type) or terminate</td><td>Spark shuffle, temporary sort spill — never the sole copy of curated data</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout exam"><strong>Quick eliminations.</strong> "Lowest cost archival" → S3 Glacier, not EBS sc1. "Shared filesystem across AZs" → EFS, not EBS. "Sub-millisecond local scratch on one instance" → instance store or EBS io2, not S3. "Centralised backup policy across RDS and EFS" → AWS Backup.</div>
+        </section>
+
+        <section class="section" id="deeper">
+          <h2>Deeper detail and exam edge cases</h2>
+          <p class="lead">Volume-type ceilings, snapshot billing mechanics, EFS throughput credits, and Backup vault economics — the block and file storage details EC2-attached pipelines hit after the lab instance terminates.</p>
+
+          <h3>Limits and quotas that decide answers</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Limit</th><th>Value</th><th>Adjustable?</th><th>Why it matters</th></tr></thead>
+              <tbody>
+                <tr><td>gp3 baseline IOPS / throughput</td><td>3,000 IOPS and 125 MB/s on any size volume</td><td>Yes — provision up to 16,000 IOPS and 1,000 MB/s independently of size</td><td>Unlike gp2, small volumes are not IOPS-starved — exam favours gp3 for new workloads.</td></tr>
+                <tr><td>gp2 IOPS formula</td><td>3 IOPS per GB; burst to 3,000 with burst credits on volumes &lt; 1 TB</td><td>Partially — grow volume or switch to gp3</td><td>100 GB gp2 = 300 baseline IOPS; burst credits exhaust under sustained load.</td></tr>
+                <tr><td>io1 / io2 IOPS ratio</td><td>Up to 50:1 IOPS to GB (io1); io2 up to 500:1 on smaller sizes</td><td>Yes — provisioned IOPS billed whether used or not</td><td>Over-provisioned IOPS is a common database cost leak.</td></tr>
+                <tr><td>io2 Block Express</td><td>Up to 256,000 IOPS and 4,000 MB/s; 4 GB – 64 TB</td><td>Yes — Nitro instances only</td><td>Mission-critical OLTP; not bootable on non-Nitro instance families.</td></tr>
+                <tr><td>st1 / sc1 boot volume</td><td>Cannot be root/boot volumes</td><td>No (hard)</td><td>Exam distractor: st1 for OS disk is invalid.</td></tr>
+                <tr><td>EBS volume AZ scope</td><td>Single Availability Zone</td><td>No (hard) — snapshot + restore to move</td><td>Cross-AZ attachment fails; DR requires snapshot copy.</td></tr>
+                <tr><td>Multi-Attach</td><td>Up to 16 instances on io1/io2 in same AZ; cluster filesystem required</td><td>N/A — feature of volume type</td><td>Standard ext4 on two instances corrupts data — EFS is the shared-file answer.</td></tr>
+                <tr><td>EBS encryption</td><td>Enabled by default on new volumes; cannot disable encryption on a volume once enabled</td><td>No (hard) for decrypting existing encrypted volume</td><td>Snapshot of encrypted volume is encrypted; copy unencrypted only via instance-side copy.</td></tr>
+                <tr><td>EFS Performance mode</td><td>General Purpose vs Max I/O — chosen at creation</td><td>No (hard) — cannot change after create</td><td>Wrong mode requires new filesystem and migration.</td></tr>
+                <tr><td>EFS Throughput mode</td><td>Bursting (default), Provisioned, or Elastic</td><td>Yes — can change throughput mode</td><td>Bursting baseline scales with stored GiB; credits exhaust on sustained spikes.</td></tr>
+                <tr><td>EFS IA access charge</td><td>Per GB read from Infrequent Access storage class</td><td>N/A — pricing model</td><td>Frequently read IA files cost more than Standard — lifecycle policy must match access.</td></tr>
+                <tr><td>EFS protocol scope</td><td>NFSv4.1 — Linux only</td><td>No (hard)</td><td>Windows SMB → FSx for Windows; HPC parallel → FSx for Lustre.</td></tr>
+                <tr><td>AWS Backup cold storage minimum</td><td>90 days minimum retention when transitioning recovery points to cold storage</td><td>No (hard) for cold tier rule</td><td>Shorter retention must stay on warm tier.</td></tr>
+                <tr><td>Vault Lock Compliance</td><td>Policy immutable for lock period</td><td>No (hard)</td><td>Same WORM semantics as S3 Object Lock Compliance — test in Governance first.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>What you actually pay for</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Billed dimension</th><th>Unit</th><th>How to spend less</th></tr></thead>
+              <tbody>
+                <tr><td>EBS gp3 storage</td><td>GB-month plus provisioned IOPS/throughput above baseline</td><td>Stay at 3,000 IOPS / 125 MB/s unless metrics prove need; delete unattached volumes.</td></tr>
+                <tr><td>EBS gp2 storage</td><td>GB-month; IOPS tied to size</td><td>Migrate to gp3 — smaller volumes get same baseline IOPS at lower cost.</td></tr>
+                <tr><td>Provisioned IOPS (io1/io2)</td><td>GB-month plus per-IOPS-month provisioned</td><td>Right-size IOPS to actual <code>VolumeQueueLength</code>; io2 Block Express only when SLA requires it.</td></tr>
+                <tr><td>EBS snapshots</td><td>GB-month incremental changed blocks in snapshot chain</td><td>Delete obsolete snapshots — deleting a snapshot merges data into later snapshots, no orphan blocks billed twice.</td></tr>
+                <tr><td>Snapshot Archive</td><td>Lower GB-month rate; 90-day minimum retention</td><td>Archive infrequently accessed snapshots; restore latency is hours.</td></tr>
+                <tr><td>Fast Snapshot Restore</td><td>Per snapshot-AZ-hour while enabled</td><td>Enable only during cutover windows; disable after volume created.</td></tr>
+                <tr><td>EFS Standard storage</td><td>GB-month</td><td>Lifecycle to IA after 30+ days no access; One Zone for non-critical dev.</td></tr>
+                <tr><td>EFS IA / Archive retrieval</td><td>Per GB accessed</td><td>Do not point hot ETL output at IA tier; use lifecycle only on cold prefixes.</td></tr>
+                <tr><td>EFS Provisioned / Elastic throughput</td><td>MiB/s-month regardless of burst credits</td><td>Switch to Elastic when sustained load exceeds bursting baseline; Provisioned when load is flat and predictable.</td></tr>
+                <tr><td>AWS Backup warm storage</td><td>GB-month for recovery points in vault</td><td>Match retention to RPO/RTO; expire stale recovery points with lifecycle.</td></tr>
+                <tr><td>AWS Backup cold storage</td><td>Lower GB-month after 90-day minimum warm period</td><td>Long-retention compliance backups only — restore from cold is slower.</td></tr>
+                <tr><td>Cross-Region backup copy</td><td>Backup storage in DR Region plus inter-Region data transfer per GB</td><td>Copy only tagged production resources; same-Region vault for non-DR workloads.</td></tr>
+                <tr><td>Cross-account backup copy</td><td>Storage in audit account vault plus transfer</td><td>Central vault in security account; source account pays copy API charges.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout cost"><strong>Biggest block-storage leak.</strong> Unattached EBS volumes and old snapshots on stopped instances. gp2 volumes over-provisioned for IOPS via size when gp3 would deliver the same performance at half the GB-month.</div>
+          <div class="callout danger"><strong>Orphan EBS after terminate.</strong> Root volumes with delete-on-termination enabled vanish; data volumes without the flag bill forever. Run a weekly script for <code>available</code> volumes with no attachments.</div>
+
+          <h3>Traps that catch people</h3>
+          <ul>
+            <li><strong>gp2 burst credit exhaustion —</strong> Volumes under 1 TB earn burst credits for 3,000 IOPS spikes. Sustained random I/O depletes credits and throughput collapses to baseline 3 IOPS/GB — migrate to gp3 or io2.</li>
+            <li><strong>Deleting snapshot does not lose data —</strong> Snapshots are incremental. Deleting an intermediate snapshot merges its blocks into the next snapshot; you only remove redundant billing, not recoverability, unless it was the only snapshot in the chain.</li>
+            <li><strong>EBS encryption is one-way —</strong> You cannot turn off encryption on a volume or share an encrypted snapshot unencrypted without copying data through an instance.</li>
+            <li><strong>EBS-optimised instances —</strong> Maximum EBS throughput depends on instance type (<code>EbsBandwidth</code> / <code>EbsThroughput</code> limits). Provisioning 1,000 MB/s on gp3 attached to a small instance wastes money — the instance caps delivery.</li>
+            <li><strong>Multi-Attach without cluster FS —</strong> Two Linux instances mounting io2 with ext4 corrupts the filesystem. Exam answer for shared POSIX across AZs is EFS, not Multi-Attach.</li>
+            <li><strong>EFS bursting credit drain —</strong> Small filesystems have low baseline throughput. A one-time large parallel copy exhausts burst credits and throttles for hours — use Provisioned or Elastic throughput for migration spikes.</li>
+            <li><strong>EFS IA read penalty —</strong> Lifecycle moves cold files to IA storage class; reading them triggers per-GB access charges. Re-read weekly reports from IA cost more than keeping them in Standard.</li>
+            <li><strong>EFS vs FSx for Lustre —</strong> EFS is general NFS; Lustre links to S3 for HPC scratch at hundreds of GB/s. "Analytics cluster reading S3 dataset at line rate" → FSx for Lustre, not EFS Max I/O.</li>
+            <li><strong>Backup cold storage 90-day floor —</strong> Transition to cold storage in backup plan lifecycle requires minimum 90 days before cold tier — shorter retention rules cannot use cold storage.</li>
+            <li><strong>Compliance Vault Lock —</strong> Same irreversibility as S3 Object Lock Compliance — nobody shortens retention until every recovery point ages out.</li>
+          </ul>
+
+          <h3>Troubleshooting playbook</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Symptom</th><th>Most likely cause</th><th>What to check / fix</th></tr></thead>
+              <tbody>
+                <tr><td>EBS volume queue length high; IOPS flat</td><td>Volume or instance EBS bandwidth limit hit</td><td>CloudWatch <code>VolumeQueueLength</code>, <code>VolumeThroughputPercentage</code>; upgrade instance EBS optimisation or volume type.</td></tr>
+                <tr><td>gp2 performance collapsed after burst</td><td>Burst balance zero</td><td>Metric <code>BurstBalance</code>; switch to gp3 or increase volume size (legacy fix).</td></tr>
+                <tr><td>Cannot attach volume to instance in another AZ</td><td>EBS AZ lock</td><td>Snapshot → <code>create-volume</code> in target AZ; or enable cross-AZ attach only via snapshot restore.</td></tr>
+                <tr><td>EFS mount hangs or stale file handle</td><td>Security group missing NFS 2049; mount target in wrong subnet</td><td>Verify SG ingress; one mount target per AZ used; use EFS mount helper.</td></tr>
+                <tr><td>EFS throughput throttled mid-batch</td><td>Burst credits exhausted on Bursting mode</td><td>CloudWatch <code>BurstCreditBalance</code>; temporarily enable Provisioned throughput or switch to Elastic.</td></tr>
+                <tr><td>AWS Backup job FAILED</td><td>IAM role missing on resource; vault KMS key policy</td><td>Backup job log in console; confirm resource assignment tag; default role <code>AWSBackupDefaultServiceRole</code>.</td></tr>
+                <tr><td>Cross-Region copy not appearing in DR vault</td><td>Copy action misconfigured or KMS cross-Region key</td><td>Backup plan copy rule destination vault ARN; CMK must allow destination Region.</td></tr>
+                <tr><td>Restore slower than expected from backup</td><td>Recovery point in cold storage tier</td><td>Check lifecycle transition age; warm restores are faster; plan RTO accordingly.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Production patterns</h3>
+          <p>Data pipelines on EC2 use <strong>gp3 data volumes</strong> for staging transforms, snapshot before AMI upgrades, and push finished datasets to S3 — EBS is never the system of record for curated analytics data. Shared worker fleets mount <strong>EFS Elastic throughput</strong> for input/output directories; FSx for Lustre backs Spark/EMR when shuffle and S3 read throughput dominate. AWS Backup tags (<code>Backup=daily</code>) replace cron snapshot scripts across EBS, EFS, and RDS.</p>
+          <div class="grid-2">
+            <div class="mini-card">
+              <h4>Staging pattern</h4>
+              <ul>
+                <li>gp3 500 GB with baseline IOPS; disable delete-on-termination on data volume.</li>
+                <li>Nightly AWS Backup to vault with 35-day retention; cross-Region copy for DR.</li>
+                <li>Upload curated Parquet to S3; terminate instance; keep snapshot only if rebuild SLA requires.</li>
+              </ul>
+            </div>
+            <div class="mini-card">
+              <h4>Anti-pattern</h4>
+              <p>sc1 or st1 volume as a random-I/O database disk — HDD volumes are sequential throughput designs; OLTP on st1 hits 500 IOPS ceiling quickly. Use io2 or RDS instead.</p>
+            </div>
+          </div>
+<pre data-lang="shell" data-title="Find unattached EBS volumes — common cost leak" data-explain="Available volumes still bill GB-month. Snapshot anything worth keeping, then delete."><code>aws ec2 describe-volumes \
+  --filters Name=status,Values=available \
+  --query 'Volumes[*].[VolumeId,Size,VolumeType,CreateTime]' \
+  --output table</code></pre>
+
+          <h3>Where this fits with the rest of the exam</h3>
+          <p>Block and file storage supports <strong>compute-attached workloads</strong> in Domain 2 — the layer beneath S3, not a replacement for the lake.</p>
+          <ul>
+            <li><a href="s07-s3.html">Section 7 — S3</a> — durable lake landing; EBS/EFS are staging and shared scratch, not query sources for Athena.</li>
+            <li><a href="s12-compute.html">Section 12 — Compute</a> — EC2 instance store vs EBS for EMR and custom ETL workers; EBS-optimised instance sizing.</li>
+            <li><a href="s10-redshift.html">Section 10 — Redshift</a> — contrast EBS-backed RA3 local cache with S3 as the durability tier.</li>
+            <li><a href="s09-dynamodb.html">Section 9 — DynamoDB</a> — operational metadata stores vs EBS for self-managed databases on EC2.</li>
+            <li><a href="s16-management.html">Section 16 — Management</a> — AWS Backup alongside Data Lifecycle Manager and cross-service governance.</li>
+          </ul>
+          <div class="callout exam"><strong>Exam framing.</strong> "Single EC2 database disk low latency" → gp3 or io2 EBS. "Shared Linux home directory across AZs" → EFS. "Windows file share" → FSx for Windows, not EFS. "Central backup policy for RDS and EFS" → AWS Backup with vault and optional Vault Lock Compliance. "Lowest cost cold archive" → S3 Glacier, not EBS sc1. Block storage is almost never the answer for petabyte analytics — S3 is.</div>
+        </section>
+
+        <section class="section" id="interview">
+          <h2>Interview questions</h2>
+          <p class="muted">Answer each one out loud before opening it.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+            <details class="qa">
+              <summary>When would you attach EBS instead of writing directly to S3?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>Choose EBS when the workload needs a <strong>POSIX or block filesystem</strong> with low-latency random I/O on a single EC2 instance — a self-managed database, a transformation engine that reads/writes many small files, or a boot/data volume that must persist across instance reboots. S3 excels at durable, cheap object storage accessed over HTTP, but it is wrong for database page files or applications that expect a local disk.</p>
+                <p>In pipelines, EBS is often a staging layer: land and shape data on a fast local volume, then bulk-upload finished partitions to S3 as Parquet.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Explain the difference between EBS snapshots and S3 versioning for disaster recovery.<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p><strong>EBS snapshots</strong> are block-level, incremental backups of a volume stored in AWS-managed S3 infrastructure. You restore by creating a new EBS volume in any AZ from the snapshot. They capture an entire filesystem image, not individual objects.</p>
+                <p><strong>S3 versioning</strong> keeps multiple versions of each object key in a bucket you control. It is object-granular, not a disk image. For a data lake, versioning protects against accidental overwrites and supports replication; for an EC2 database disk, snapshots (or AWS Backup) are the correct tool.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Why is gp3 usually preferred over gp2 for new EBS volumes?<span class="qa-tag">Cost</span></summary>
+              <div class="qa-body">
+                <p>gp3 decouples performance from capacity. You get <strong>3,000 IOPS and 125 MB/s baseline on any volume size</strong>, whereas gp2 only reaches 3,000 IOPS at 1 TB (3 IOPS/GB). On a 100 GB boot volume, gp2 delivers 300 IOPS; gp3 delivers 3,000 at lower cost per GB.</p>
+                <p>When you need more than baseline, gp3 lets you provision IOPS and throughput independently without growing the volume — cheaper and more predictable for databases with steady I/O requirements.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>EFS General Purpose vs Max I/O — how do you choose?<span class="qa-tag">Performance</span></summary>
+              <div class="qa-body">
+                <p><strong>General Purpose</strong> is the default: low latency, automatic performance scaling with data size, suitable for web content, CMS and dev environments. Choose it unless profiling shows aggregate throughput is the bottleneck.</p>
+                <p><strong>Max I/O</strong> targets workloads that need the highest aggregate IOPS and throughput — media transcoding, big-data scratch, heavy metadata operations. It does not auto-scale performance with stored data; you pair it with the right throughput mode (Provisioned or Elastic) for sustained load.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What happens to an EBS volume when its EC2 instance is terminated?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p>It depends on the <strong>delete on termination</strong> flag. Root volumes default to <em>enabled</em> — AWS deletes the volume with the instance. Additional data volumes often default to <em>disabled</em>, but always verify in the block device mapping before terminating.</p>
+                <p>Orphaned volumes continue billing per GB-month until you snapshot and delete them. This is one of the most common surprise charges on study accounts.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How does AWS Backup Vault Lock Compliance mode differ from Governance mode?<span class="qa-tag">Security</span></summary>
+              <div class="qa-body">
+                <p>Both modes make recovery points immutable for the configured retention period — nobody can delete backups early.</p>
+                <p><strong>Governance mode</strong> allows specified IAM principals to change the vault lock policy itself (for example, extend or relax future retention). <strong>Compliance mode</strong> locks the policy for the entire lock period — no one, including root, can shorten retention or delete the vault until all recovery points expire. Compliance mode satisfies strict regulatory WORM requirements but cannot be undone.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>When would FSx for Lustre beat EFS in a data pipeline?<span class="qa-tag">Architecture</span></summary>
+              <div class="qa-body">
+                <p>When compute needs <strong>massively parallel, high-throughput POSIX I/O</strong> tightly coupled to S3 — typical in HPC, genomics, or large-scale ML training. FSx for Lustre can burst to hundreds of GB/s and lazy-load datasets from S3.</p>
+                <p>EFS is simpler, multi-AZ by default, and sufficient for moderate shared storage. FSx for Lustre adds operational complexity but wins on raw throughput and cost at scale for scratch workloads.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>A team wants daily backups of all tagged production EBS volumes copied to a second Region. What do you configure?<span class="qa-tag">Exam</span></summary>
+              <div class="qa-body">
+                <p>Create an <strong>AWS Backup plan</strong> with a daily schedule rule, assign resources by tag (for example <code>Environment=production</code>), store recovery points in a <strong>backup vault</strong>, and enable <strong>cross-Region copy</strong> to a vault in the DR Region. Optionally apply <strong>Vault Lock</strong> in Compliance mode if regulations require immutable retention.</p>
+                <p>This replaces per-volume snapshot scripts and centralises monitoring in the AWS Backup console and CloudWatch.</p>
+              </div>
+            </details>
+          </div>
+        </section>
+
+        <section class="section" id="practice">
+          <h2>Hands-on practice</h2>
+          <p class="muted">Free tier where possible. Delete everything at the end of each task.</p>
+          <ol class="practice-list">
+            <li class="practice">
+              <p class="practice-task">Launch a <code>t3.micro</code> EC2 instance with a 10 GB gp3 root volume. Create a second 5 GB gp3 data volume, attach it, format ext4, mount at <code>/data</code>, and set <em>delete on termination = disabled</em> on the data volume.</p>
+              <span class="console-path">EC2 → Volumes → Create volume → Attach</span>
+              <p class="practice-expect">The data volume persists after instance termination; remounting after reattach works.</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">Console + CLI</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Launch instance in <code>us-east-1</code> with Amazon Linux 2023.</li>
+                    <li><strong>EC2 → Volumes → Create volume</strong> — 5 GB, gp3, same AZ as instance.</li>
+                    <li>Attach as <code>/dev/sdf</code>. On the instance: <code>sudo mkfs -t ext4 /dev/xvdf</code>, mount, add to <code>/etc/fstab</code>.</li>
+                    <li>Volume → Actions → Modify → disable delete on termination.</li>
+                  </ol>
+<pre data-lang="shell"><code>aws ec2 create-volume --size 5 --volume-type gp3 --availability-zone us-east-1a
+aws ec2 attach-volume --volume-id vol-xxx --instance-id i-xxx --device /dev/sdf</code></pre>
+                  <p class="muted">Cleanup: terminate instance, detach and delete the data volume if no longer needed.</p>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Create an EFS filesystem, mount it on two EC2 instances in different AZs, write a file from one and read it from the other.</p>
+              <span class="console-path">EFS → Create file system → Mount via NFS</span>
+              <p class="practice-expect"><code>cat /mnt/efs/test.txt</code> returns the same content on both instances.</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">Console</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Create EFS in <code>us-east-1</code>, General Purpose, Bursting throughput.</li>
+                    <li>Add a security group rule allowing NFS (port 2049) from both instance SGs.</li>
+                    <li>Use the EFS console mount helper commands on each instance.</li>
+                    <li>Instance A: <code>echo hello &gt; /mnt/efs/test.txt</code>. Instance B: read the file.</li>
+                  </ol>
+                  <p class="muted">Cleanup: delete mount targets and the filesystem. EFS has no free tier — delete promptly.</p>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Create an AWS Backup plan that snapshots an EBS volume daily with 7-day retention. Assign your data volume by tag <code>Backup=daily</code>.</p>
+              <span class="console-path">AWS Backup → Backup plans → Create plan</span>
+              <p class="practice-expect">Recovery points appear in the vault each day; the volume tag triggers automatic assignment.</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">Console</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Tag the volume <code>Backup=daily</code>.</li>
+                    <li><strong>AWS Backup → Backup plans → Build a new plan</strong> — daily cron, 7-day retention.</li>
+                    <li><strong>Assign resources</strong> → tag <code>Backup=daily</code>.</li>
+                    <li>Run an on-demand backup job to verify without waiting 24 hours.</li>
+                  </ol>
+                  <p class="muted">Cleanup: delete the backup plan, vault recovery points, and the vault if empty.</p>
+                </div>
+              </details>
+            </li>
+          </ol>
+        </section>
+
+        <section class="section" id="recap">
+          <h2>Recap</h2>
+          <div class="recap">
+            <ul class="checklist">
+              <li>EBS = block storage, one EC2, one AZ; EFS = NFS file share, Region-scoped, multi-AZ.</li>
+              <li>gp3 baseline: 3,000 IOPS + 125 MB/s independent of volume size; io1/io2 support Multi-Attach.</li>
+              <li>EBS snapshots are incremental, stored in S3; Snapshot Archive and Fast Snapshot Restore for cost/performance tuning.</li>
+              <li>Delete on termination defaults true for root volumes — disable for data you want to keep.</li>
+              <li>EFS storage classes: Standard, IA, Archive, One Zone; lifecycle policies automate tiering.</li>
+              <li>EFS Performance Mode: General Purpose (default) vs Max I/O. Throughput: Bursting, Provisioned, Elastic.</li>
+              <li>FSx for Lustre = high-throughput HPC/ML scratch with S3 integration; not a generic EFS replacement.</li>
+              <li>AWS Backup centralises plans, vaults, cross-Region/account copy, and Vault Lock (Governance vs Compliance).</li>
+              <li>Compliance Vault Lock cannot be undone — recovery points are WORM until retention expires.</li>
+              <li>Pipeline default landing zone remains S3; EBS/EFS are for compute-attached workloads.</li>
+            </ul>
+            <p style="margin-top:1rem;">
+              <button type="button" data-complete="section-08">Mark complete</button>
+            </p>
+          </div>
+        </section>
+
+      </div>
+
+      <aside class="toc" aria-label="On this page">
+        <strong>On this page</strong>
+        <ol>
+          <li><a href="#lectures">Lectures</a></li>
+          <li><a href="#ebs">EBS</a></li>
+          <li><a href="#efs">EFS</a></li>
+          <li><a href="#aws-backup">AWS Backup</a></li>
+          <li><a href="#storage-decision">Storage decision table</a></li>
+          <li><a href="#deeper">Deeper detail</a></li>
+          <li><a href="#interview">Interview questions</a></li>
+          <li><a href="#practice">Hands-on practice</a></li>
+          <li><a href="#recap">Recap</a></li>
+        </ol>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<footer class="footer">AWS Certified Data Engineer Associate (DEA-C01) · Section 8 · Offline study edition</footer>
+</body>
+</html>

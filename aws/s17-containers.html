@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="DEA-C01 Section 17: Docker fundamentals, Amazon ECS orchestration and IAM roles, Amazon ECR registries, and Amazon EKS Kubernetes — framed for data-engineering workloads on Batch, Glue, EMR and SageMaker.">
+<title>Section 17 — Containers | AWS Data Engineer DEA-C01 Notes</title>
+<link rel="stylesheet" href="assets/aws.css">
+<script defer src="assets/search-index.js"></script>
+<script defer src="assets/code-highlight.js"></script>
+<script defer src="assets/aws.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">Course section 17 of 21 · AWS Certified Data Engineer Associate</p>
+    <h1>Containers</h1>
+    <p class="subtitle">Docker packages ETL code once and runs it anywhere. Amazon ECS and EKS orchestrate those containers at scale, ECR stores the images, and Fargate removes the EC2 management — the stack behind Batch on Fargate, Glue custom containers, EMR on EKS, and SageMaker Processing.</p>
+    <div class="hero-meta">
+      <span class="chip">36 slides · ~45min</span>
+      <span class="chip">Exam domains: Data Operations · Data Ingestion</span>
+      <span class="chip">Deck slides 608–643</span>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <nav class="pager" aria-label="Section navigation">
+    <a href="s16-management.html">← Management, Monitoring, and Governance</a>
+    <a href="index.html">Course contents</a>
+    <a href="s18-migration.html">Next: Migration →</a>
+  </nav>
+
+  <main id="main">
+    <div class="layout">
+      <div class="content">
+
+        <section class="section" id="lectures">
+          <h2>Lectures in this section</h2>
+          <p class="muted">Containers are how AWS runs custom ETL when Lambda's 15-minute limit is too short and a Glue Spark job is the wrong shape. Cross-links: <a href="s12-compute.html">Section 12</a> (Batch), <a href="s04-glue.html">Section 4</a> (Glue custom containers), <a href="s13-analytics.html">Section 13</a> (EMR on EKS).</p>
+          <ol class="lecture-list">
+            <li class="lecture">
+              <a class="lec-title" href="#docker">Introduction to Docker and container fundamentals</a>
+              <span class="lec-time">~8:00</span>
+              <span class="lec-src">Slides 609–615</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#ecs">Amazon ECS — clusters, tasks, services and launch types</a>
+              <span class="lec-time">~18:00</span>
+              <span class="lec-src">Slides 616–630</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#ecr">Amazon ECR — private and public registries</a>
+              <span class="lec-time">~6:00</span>
+              <span class="lec-src">Slides 631–635</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#eks">Amazon EKS — Kubernetes on AWS</a>
+              <span class="lec-time">~13:00</span>
+              <span class="lec-src">Slides 636–643</span>
+            </li>
+          </ol>
+        </section>
+
+        <section class="section" id="docker">
+          <h2>Docker</h2>
+          <p class="lead"><strong>Docker</strong> is a platform for developing, shipping, and running applications in <strong>containers</strong> — lightweight, isolated processes that share the host kernel but carry their own filesystem, libraries and dependencies. For a data engineer, Docker is the packaging format behind almost every custom compute option on AWS: you write a Python ETL script, wrap it in a container, push the image to ECR, and Batch, ECS, EKS, Glue or SageMaker runs it without you rebuilding the environment on each platform.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-610.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-610.png" alt="Slide defining Docker as a platform for developing, shipping and running applications in containers that package apps and dependencies into standardized units." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 610</span>Docker standardises the unit of deployment. The same image that passes CI on a laptop runs identically on an ECS Fargate task, a Batch job, or a SageMaker Processing container.</figcaption>
+          </figure>
+
+          <h3>Why containers instead of VMs or bare EC2</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-611.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-611.png" alt="Slide listing Docker container benefits: consistency across environments, isolation, portability, and scalability." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 611</span>Consistency eliminates "works on my machine" failures in pipelines. Isolation lets you run pandas 2.x and 1.x jobs on the same host without conflict. Portability means an image built locally deploys to any AWS container service unchanged.</figcaption>
+          </figure>
+
+          <ul>
+            <li><strong>Consistency</strong> — dependencies are baked into the image, so dev, staging and production run the same bytecode.</li>
+            <li><strong>Isolation</strong> — each container has its own process namespace, network stack and filesystem; one job cannot crash a neighbour's.</li>
+            <li><strong>Portability</strong> — push once to ECR, pull from ECS in <code>us-east-1</code>, EKS in <code>eu-west-1</code>, or Batch on Fargate.</li>
+            <li><strong>Scalability</strong> — spin up N identical containers for parallel partition processing; tear them down when the job finishes.</li>
+          </ul>
+
+          <h3>Use cases for data engineering</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-612.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-612.png" alt="Slide listing Docker use cases: microservices, CI/CD, hybrid cloud, and big data analytics." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 612</span>Big data and analytics is the DEA-C01 angle: custom Spark drivers, proprietary JDBC connectors, ML preprocessing, and long-running Python transforms that exceed Lambda's timeout all ship as containers.</figcaption>
+          </figure>
+
+          <p>On AWS specifically, containers are the answer when:</p>
+          <ul>
+            <li>A <strong>Lambda</strong> function hits the 15-minute limit but the job is not Spark-shaped enough for Glue.</li>
+            <li><strong>Glue</strong> needs a custom library or runtime — Glue 4.0+ supports bringing your own container image for Spark and Python shell jobs.</li>
+            <li><strong>AWS Batch</strong> runs array jobs over thousands of files, each in its own container on Spot or Fargate.</li>
+            <li><strong>EMR on EKS</strong> or <strong>SageMaker Processing</strong> expects a Docker image as the job definition.</li>
+          </ul>
+
+          <h3>Docker components</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-613.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-613.png" alt="Slide listing Docker components: Docker Engine, Docker Image, Docker Containers, and Docker Registry." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 613</span>The four building blocks. The deck also mentions a Dockerfile (the recipe) and the Docker daemon (the background process that builds and runs containers) — both are part of Docker Engine.</figcaption>
+          </figure>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Component</th><th>What it is</th><th>Data-engineering example</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Dockerfile</strong></td><td>Text recipe: base image, <code>COPY</code> code, <code>RUN pip install</code>, <code>CMD</code> entrypoint</td><td><code>FROM python:3.11-slim</code> + install <code>pandas pyarrow boto3</code></td></tr>
+                <tr><td><strong>Image</strong></td><td>Read-only template built from a Dockerfile (<code>docker build</code>)</td><td><code>123456789012.dkr.ecr.us-east-1.amazonaws.com/etl-job:v3</code></td></tr>
+                <tr><td><strong>Container</strong></td><td>Running instance of an image (<code>docker run</code>)</td><td>One Batch job processing <code>s3://bucket/raw/partition=2026-01/</code></td></tr>
+                <tr><td><strong>Registry</strong></td><td>Store and distribute images (<code>docker push</code> / <code>docker pull</code>)</td><td>Amazon ECR (private) or Docker Hub (public base images)</td></tr>
+                <tr><td><strong>Docker Engine / daemon</strong></td><td>Background service that builds images and manages container lifecycle</td><td>Runs on your laptop, on EC2 container instances, or is abstracted away by Fargate</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Docker registries — Docker Hub and Amazon ECR</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-614.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-614.png" alt="Slide comparing Docker Hub and Amazon ECR as container registries with public and private repositories." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 614</span>Docker Hub hosts millions of public base images (<code>python</code>, <code>openjdk</code>, <code>postgres</code>). ECR is AWS-native, integrates with IAM, and is where production pipeline images should live — ECS, EKS, Batch and Glue pull from it without traversing the public internet.</figcaption>
+          </figure>
+
+          <h3>Image versus container — the build lifecycle</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-615.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-615.png" alt="Diagram showing Docker lifecycle: Dockerfile builds into Docker Image, image runs as Container, image is pushed to and pulled from Docker Registries including Docker Hub and ECR." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 615</span>The canonical flow: write a Dockerfile → <code>docker build</code> produces an image → <code>docker push</code> stores it in a registry → at runtime the orchestrator <code>docker pull</code>s the image and <code>docker run</code>s a container. Images are immutable and versioned by tag; containers are ephemeral.</figcaption>
+          </figure>
+
+          <h3>Example Dockerfile for a Python ETL job</h3>
+          <pre data-lang="dockerfile" data-title="Dockerfile — Python ETL reading S3, writing Redshift" data-explain="Multi-stage is optional here; this single-stage image installs dependencies, copies the script, and sets the entrypoint Batch or ECS will invoke."><code>FROM python:3.11-slim
+
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY etl_job.py .
+
+# Batch/ECS pass env vars at runtime; no secrets in the image
+ENV AWS_DEFAULT_REGION=us-east-1
+
+CMD ["python", "etl_job.py"]</code></pre>
+
+          <pre data-lang="shell" data-title="Build, tag, authenticate to ECR, and push" data-explain="Replace ACCOUNT and REGION. ECR repositories must exist before push; create one in the console or with aws ecr create-repository."><code># Build locally
+docker build -t dea-etl-job:latest .
+
+# Tag for ECR (repository must already exist)
+ACCOUNT=123456789012
+REGION=us-east-1
+docker tag dea-etl-job:latest \
+  $ACCOUNT.dkr.ecr.$REGION.amazonaws.com/dea-etl-job:latest
+
+# Authenticate Docker to ECR (token valid ~12 hours)
+aws ecr get-login-password --region $REGION | \
+  docker login --username AWS --password-stdin \
+  $ACCOUNT.dkr.ecr.$REGION.amazonaws.com
+
+# Push
+docker push $ACCOUNT.dkr.ecr.$REGION.amazonaws.com/dea-etl-job:latest</code></pre>
+
+          <div class="callout exam"><strong>When the exam mentions a custom ETL container.</strong> The pattern is always: build image → push to ECR → reference the image URI in Batch, ECS, EKS, Glue or SageMaker. ECR is the registry; the orchestrator (ECS/Batch/EKS) is separate. Do not confuse ECR with ECS.</div>
+        </section>
+
+        <section class="section" id="ecs">
+          <h2>Amazon ECS</h2>
+          <p class="lead"><strong>Amazon Elastic Container Service (ECS)</strong> is AWS's native container orchestrator. It schedules containers onto EC2 instances you manage, onto serverless Fargate capacity, or onto on-premises servers (external launch type). For data pipelines, ECS is less common than Batch for pure batch work, but it excels at long-running ingestion services, always-on micro-ETL daemons, and custom streaming processors that need a persistent container with a load balancer in front.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-617.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-617.png" alt="Slide introducing ECS as a fully managed container orchestration service with deployment, management, scaling, high availability, security, and AWS integration." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 617</span>ECS handles scheduling, health checks, and replacement of failed containers. You define <em>what</em> to run (task definition); ECS decides <em>where</em> and keeps the desired count steady.</figcaption>
+          </figure>
+
+          <h3>Core terminology</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-618.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-618.png" alt="Slide defining ECS Task Definition as application blueprint and Cluster as logical grouping of container instances." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 618</span>A <strong>task definition</strong> is JSON (or CloudFormation) specifying CPU, memory, container images, environment variables, IAM roles, and network mode. A <strong>cluster</strong> is the namespace where tasks run — it can mix EC2 and Fargate capacity providers.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-619.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-619.png" alt="Slide defining ECS Task as short-running instantiation of a task definition that can be scheduled and terminated dynamically." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 619</span>A <strong>task</strong> is one or more containers launched together from a task definition. Use tasks for batch-style jobs: run once, exit when done. Step Functions can invoke ECS RunTask for orchestrated ETL steps.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-620.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-620.png" alt="Slide defining ECS Service for long-running applications with automatic task replacement, and Container Agent on EC2 instances." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 620</span>A <strong>service</strong> maintains a desired count of tasks and replaces failed ones — for always-on APIs or stream consumers. The <strong>ECS container agent</strong> runs on each EC2 container instance and registers with the ECS control plane; Fargate has no agent on your side.</figcaption>
+          </figure>
+
+          <h3>Launch types — EC2, Fargate, and external</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-621.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-621.png" alt="Slide on ECS EC2 launch type: you provision infrastructure, price-optimised for large workloads, Spot and custom instance types, scaling not automatic." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 621</span>EC2 launch type: you own the instances, patch the AMI, and pay for capacity even when idle. Wins on cost at sustained scale with Spot instances and GPU instance types Batch does not expose.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-622.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-622.png" alt="Slide on ECS Fargate launch type: no EC2 management, AWS runs tasks based on CPU and RAM, handles scaling, plus external launch type for on-premises." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 622</span>Fargate: specify vCPU and memory per task; AWS places it on shared infrastructure. <strong>External</strong> launch type runs ECS tasks on on-premises VMs registered to the cluster — hybrid scenarios only.</figcaption>
+          </figure>
+
+          <h3>ECS versus EKS versus Fargate — decision table</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Dimension</th><th>ECS (EC2)</th><th>ECS (Fargate)</th><th>EKS</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Control</strong></td><td>AWS-native API; simpler mental model</td><td>Same ECS API, no servers</td><td>Full Kubernetes API — pods, CRDs, Helm</td></tr>
+                <tr><td><strong>Operational overhead</strong></td><td>Manage EC2, AMIs, scaling</td><td>Lowest — task-level billing only</td><td>Highest — control plane + nodes (unless Fargate profiles)</td></tr>
+                <tr><td><strong>Ecosystem</strong></td><td>AWS integrations first-class</td><td>Same</td><td>Portable K8s tooling; EMR on EKS, Karpenter</td></tr>
+                <tr><td><strong>When it wins</strong></td><td>Sustained high volume, Spot, GPUs, custom networking</td><td>Microservices, modest batch, least ops</td><td>Existing K8s estate, multi-cloud, Spark on K8s, complex operators</td></tr>
+                <tr><td><strong>Data-engineering fit</strong></td><td>Custom long-running consumers</td><td>Small containerised ETL services</td><td>EMR on EKS, large Spark, ML platforms already on K8s</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p><strong>Fargate</strong> is not a third orchestrator — it is a compute launch type for both ECS and EKS. The exam often lists "ECS, EKS, Fargate" as three options; the correct framing is ECS-on-Fargate versus EKS-on-Fargate versus ECS-on-EC2.</p>
+
+          <h3>Task placement strategies and constraints (EC2 launch type only)</h3>
+          <p>When ECS places a task on an EC2 container instance, it follows a fixed order. Placement strategies and constraints do <strong>not</strong> apply to Fargate — AWS chooses the infrastructure for you.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-623.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-623.png" alt="Slide introducing ECS task placement strategies binpack, random, and spread, applicable to EC2 launch type only." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 623</span>Placement <strong>strategies</strong> are algorithms for picking instances. You can combine multiple strategies in priority order (e.g. spread by AZ, then binpack on CPU).</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-624.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-624.png" alt="Slide explaining binpack placement: tasks placed on instances with least available CPU or memory to minimize wasted resources." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 624</span><strong>Binpack</strong> packs tasks tightly onto the fullest instances first — minimises idle CPU/RAM and Spot waste. Best for cost optimisation when instance failure affects only a subset of tasks.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-625.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-625.png" alt="Slide explaining spread placement: tasks distributed evenly across container instances to avoid overloading one instance." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 625</span><strong>Spread</strong> distributes tasks evenly across instances (optionally by instance ID or AZ). Use when no single host should hold too many replicas — HA for stateless stream consumers.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-626.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-626.png" alt="Slide explaining random placement and that multiple strategies can be combined." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 626</span><strong>Random</strong> is a fallback with no optimisation goal. Multi-strategy chains run in order: constraints filter candidates, then strategies rank them.</figcaption>
+          </figure>
+
+          <h3>Placement constraints — distinctInstance and memberOf</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-627.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-627.png" alt="Slide introducing task placement constraints: distinctInstance and memberOf types that must be satisfied before placement." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 627</span><strong>Constraints</strong> are hard rules — if no instance satisfies them, the task stays pending. Two built-in types: <code>distinctInstance</code> and <code>memberOf</code>.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-628.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-628.png" alt="Slide explaining distinctInstance places each task on a different container instance, and memberOf places tasks on instances matching an expression." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 628</span><code>distinctInstance</code> ensures at most one task per instance — useful for singleton jobs or licence-limited software. <code>memberOf</code> uses cluster query language against instance attributes, e.g. <code>attribute:ecs.instance-type == r5.xlarge</code>.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-629.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-629.png" alt="Slide showing ECS task placement order: CPU memory and port requirements first, then placement constraints, then placement strategies." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 629</span>Placement order: (1) filter instances with enough CPU, memory and available ports → (2) apply constraints → (3) apply strategies. Exam questions about "why won't my task start" often trace to unsatisfied constraints or insufficient ports in <code>awsvpc</code> mode.</figcaption>
+          </figure>
+
+          <h3>IAM roles for ECS — task execution role versus task role</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-630.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-630.png" alt="Slide distinguishing ECS task execution role used by ECS to manage tasks and task role enabling containers to access AWS resources." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 630</span>Two roles, two principals. Mixing them up is one of the most common ECS exam traps.</figcaption>
+          </figure>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Role</th><th>Who assumes it</th><th>Typical permissions</th></tr></thead>
+              <tbody>
+                <tr>
+                  <td><strong>Task execution role</strong></td>
+                  <td>The ECS agent / Fargate infrastructure on your behalf</td>
+                  <td>Pull image from ECR (<code>ecr:GetAuthorizationToken</code>, <code>ecr:BatchGetImage</code>); write logs to CloudWatch Logs; read secrets from Secrets Manager/SSM for container env injection</td>
+                </tr>
+                <tr>
+                  <td><strong>Task role</strong></td>
+                  <td>Your application code inside the running container</td>
+                  <td>S3 read/write on pipeline buckets; <code>redshift-data:ExecuteStatement</code>; DynamoDB; Kinesis — whatever the ETL script needs at runtime via the SDK</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout exam"><strong>Memory trick.</strong> <em>Execution</em> = ECS executing setup (pull image, start container, fetch secrets). <em>Task</em> = the task's business logic talking to S3. If the container cannot pull from ECR, fix the execution role. If it cannot read S3, fix the task role.</div>
+
+          <h3>Network mode — awsvpc</h3>
+          <p>ECS tasks support <code>bridge</code>, <code>host</code>, and <code>awsvpc</code> network modes. <strong>Fargate requires <code>awsvpc</code></strong> — each task gets its own elastic network interface (ENI) with a private IP in your VPC subnets. That means:</p>
+          <ul>
+            <li>Security groups attach at the task level, not only the instance — fine-grained egress to Redshift, RDS, or S3 via VPC endpoints.</li>
+            <li>Each task consumes an ENI; large clusters need enough IP addresses in the subnet (the /28 per task rule of thumb for dense Fargate).</li>
+            <li><code>awsvpc</code> is the default for new task definitions and matches how Batch on Fargate and EKS pods with the AWS VPC CNI allocate IPs.</li>
+          </ul>
+
+          <h3>Service auto scaling and capacity providers</h3>
+          <ul>
+            <li><strong>Service auto scaling</strong> — target tracking on CPU or memory, or step scaling on CloudWatch alarms. A Kinesis consumer service scales task count with shard count or lag metrics.</li>
+            <li><strong>Capacity providers</strong> — link a cluster to EC2 Auto Scaling groups or Fargate. Mix <code>FARGATE</code> and <code>FARGATE_SPOT</code> with weights to run fault-tolerant batch tasks on Spot while keeping one On-Demand task for coordination.</li>
+            <li><strong>Cluster auto scaling</strong> (EC2 launch type) — managed scaling on the ASG backing the cluster adds instances when tasks cannot be placed.</li>
+          </ul>
+
+          <h3>Example ECS task definition JSON</h3>
+          <pre data-lang="json" data-title="ECS task definition — Fargate ETL task" data-explain="executionRoleArn lets ECS pull from ECR and write logs; taskRoleArn is what etl_job.py uses for S3 and Redshift Data API calls."><code>{
+  "family": "dea-etl-task",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "1024",
+  "memory": "2048",
+  "executionRoleArn": "arn:aws:iam::123456789012:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::123456789012:role/deaEtlTaskRole",
+  "containerDefinitions": [
+    {
+      "name": "etl",
+      "image": "123456789012.dkr.ecr.us-east-1.amazonaws.com/dea-etl-job:latest",
+      "essential": true,
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/dea-etl",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "etl"
+        }
+      },
+      "environment": [
+        {"name": "SOURCE_BUCKET", "value": "dea-lab-ab-4821"},
+        {"name": "SOURCE_PREFIX", "value": "raw/customers/"}
+      ]
+    }
+  ]
+}</code></pre>
+
+          <div class="diagram">
+            <p class="diagram-title">Containerised ETL pipeline — build to warehouse</p>
+            <div class="flow">
+              <div class="node is-source"><b>Dockerfile</b><small>python · pandas · boto3</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-compute"><b>docker build</b><small>local or CodeBuild</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-store"><b>ECR</b><small>private registry · scan</small></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-compute pulse"><b>ECS / EKS / Batch</b><small>Fargate task runs container</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-source"><b>Amazon S3</b><small>read raw/customers/</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-serve"><b>Amazon Redshift</b><small>COPY or Data API load</small></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="section" id="ecr">
+          <h2>Amazon ECR</h2>
+          <p class="lead"><strong>Amazon Elastic Container Registry (ECR)</strong> is AWS's fully managed Docker registry. Every container service on AWS — ECS, EKS, Batch, Glue custom images, SageMaker — pulls from ECR in the same region to avoid cross-region latency and data-transfer charges.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-632.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-632.png" alt="Slide introducing Amazon ECR as a fully managed secure Docker registry integrated with AWS services." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 632</span>ECR stores images in your account. IAM policies and repository policies control who can push and pull. Encryption at rest uses AES-256 or KMS.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-633.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-633.png" alt="Diagram showing ECS cluster pulling Docker images from ECR and deploying them as ECS tasks on EC2 instances." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 633</span>At task launch, the execution role authorises ECR; the agent pulls the image URI specified in the task definition, then starts the container. Same pull pattern for EKS kubelet and Batch.</figcaption>
+          </figure>
+
+          <h3>Features</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-634.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-634.png" alt="Slide listing ECR features: lifecycle policies, image scanning, cross-region replication, versioning, and tagging." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 634</span><strong>Lifecycle policies</strong> expire untagged or old images to control storage cost. <strong>Image scanning</strong> (basic or enhanced) checks for CVEs on push — important for compliance pipelines. <strong>Replication</strong> copies images to other regions or accounts for DR and multi-region deploys.</figcaption>
+          </figure>
+
+          <ul>
+            <li><strong>Lifecycle policies</strong> — JSON rules like "keep last 10 tagged images, delete untagged after 7 days".</li>
+            <li><strong>Image scanning</strong> — on-push scan flags vulnerabilities; block deploy in CI if critical CVEs appear.</li>
+            <li><strong>Cross-region / cross-account replication</strong> — disaster recovery and shared platform accounts.</li>
+            <li><strong>Versioning and tagging</strong> — immutable layers; tags (<code>:v1</code>, <code>:latest</code>) are mutable pointers.</li>
+            <li><strong>Repository policies</strong> — resource-based policies allowing another account's ECS execution role to pull.</li>
+          </ul>
+
+          <h3>Public versus private repositories</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-635.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-635.png" alt="Slide comparing ECR public repositories accessible without credentials versus private repositories controlled by IAM." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 635</span><strong>Public ECR</strong> galleries host open images (no auth to pull). <strong>Private ECR</strong> is the default for proprietary ETL code — access via IAM user/role or repository policy. Production pipeline images belong in private repos.</figcaption>
+          </figure>
+        </section>
+
+        <section class="section" id="eks">
+          <h2>Amazon EKS</h2>
+          <p class="lead"><strong>Kubernetes</strong> is the open-source standard for container orchestration at scale. <strong>Amazon Elastic Kubernetes Service (EKS)</strong> runs a managed control plane so you do not patch etcd or the Kubernetes API server. For data engineering, EKS matters because of <strong>EMR on EKS</strong> — run Spark jobs on shared Kubernetes infrastructure instead of dedicated EMR clusters — and because organisations already running ML platforms on K8s can colocate batch ETL there.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-637.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-637.png" alt="Slide introducing Kubernetes as open-source platform for automating deployment, scaling and management of containerized applications, originally from Google in 2014." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 637</span>Kubernetes is cloud-neutral — the same manifests run on EKS, GKE, or on-premises. AWS adds managed integrations (IAM Roles for Service Accounts, VPC CNI, EBS CSI driver).</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-638.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-638.png" alt="Slide introducing Amazon EKS as managed Kubernetes with AWS integration, high availability, scalability, security, and monitoring." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 638</span>EKS runs the control plane across three AZs. You pay for the cluster hour (~0.10 USD/hour per cluster) plus worker compute (EC2, Fargate, or Karpenter-provisioned nodes).</figcaption>
+          </figure>
+
+          <h3>Architecture — control plane and compute</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-639.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-639.png" alt="Slide describing EKS control plane as fully AWS-managed nodes running Kubernetes software that orchestrates the cluster." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 639</span>The <strong>control plane</strong> — API server, scheduler, controller manager, etcd — is fully managed. You cannot SSH to control-plane nodes. AWS handles upgrades and patching.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-640.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-640.png" alt="Slide describing EKS compute worker nodes and node types: managed node groups, Fargate, Karpenter, and self-managed nodes." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 640</span><strong>Compute</strong> (worker nodes) run your pods. EKS offers four primary ways to supply that capacity — pick based on ops burden and scaling pattern.</figcaption>
+          </figure>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Node type</th><th>Who manages nodes</th><th>Best for</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Managed node groups</strong></td><td>AWS creates/patches EC2; you choose instance types and scaling</td><td>Default choice — Spark executors, steady workloads</td></tr>
+                <tr><td><strong>Fargate</strong></td><td>AWS — serverless pods, no EC2 visible</td><td>Small jobs, least ops, per-pod billing</td></tr>
+                <tr><td><strong>Karpenter</strong></td><td>Karpenter provisioner launches right-sized EC2 on pending pods</td><td>Highly variable batch — EMR on EKS, ML training bursts</td></tr>
+                <tr><td><strong>Self-managed nodes</strong></td><td>You — full control over AMIs, kubelet, upgrades</td><td>Custom kernels, GPU drivers, compliance hardening</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-641.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-641.png" alt="Slide on EKS Fargate as serverless compute where AWS manages underlying infrastructure based on resource needs." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 641</span>EKS Fargate profiles map namespaces/labels to Fargate — pods matching the selector run serverlessly. No node group to scale; pay per vCPU-second and GB-second.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-642.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-642.png" alt="Slide on Karpenter for high availability with right-sized compute in response to load, and managed node groups for EC2 management." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 642</span><strong>Karpenter</strong> watches unschedulable pods and launches EC2 instances in seconds — often cheaper than over-provisioned node groups. <strong>Managed node groups</strong> are simpler but scale at ASG granularity.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-643.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-643.png" alt="Slide on self-managed EKS nodes offering full EC2 control with user responsible for management, scaling and maintenance." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 643</span>Self-managed nodes: you bring the AMI (often EKS-optimised Amazon Linux), register with the cluster, and handle kubelet upgrades. Maximum flexibility, maximum operational load.</figcaption>
+          </figure>
+
+          <div class="callout tip"><strong>EMR on EKS.</strong> Submit Spark jobs to a shared EKS cluster instead of creating a transient EMR cluster — covered in <a href="s13-analytics.html#emr">Section 13</a>. The exam may ask which service runs Spark on Kubernetes: EMR on EKS, not plain ECS.</div>
+        </section>
+
+        <section class="section" id="deeper">
+          <h2>Deeper detail and exam edge cases</h2>
+          <p class="lead">Fargate billing meters, ENI density limits, ECR cost controls, and the IAM and Kubernetes identity patterns the deck mentions but never numbers — the material that separates a passing service-selection answer from a production-ready one.</p>
+
+          <h3>Limits and quotas that decide answers</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Limit</th><th>Value</th><th>Adjustable?</th><th>Why it matters</th></tr></thead>
+              <tbody>
+                <tr><td>Containers per task definition</td><td>10</td><td>No (hard)</td><td>Sidecar pattern (log router + app + metrics) counts toward the cap — design multi-container tasks accordingly.</td></tr>
+                <tr><td>Fargate CPU / memory pairs</td><td>Fixed valid combinations only (e.g. 1 vCPU → 2–8 GB; 4 vCPU → 8–30 GB)</td><td>No — pick from AWS matrix</td><td>Task fails at registration if CPU and memory do not match an allowed pair; exam distractors often pair incompatible values.</td></tr>
+                <tr><td>Fargate ephemeral storage (default)</td><td>20 GB</td><td>Yes — up to 200 GB at task definition</td><td>Large local Spark shuffle or temp files on Fargate need explicit storage increase; default is too small for multi-GB spills.</td></tr>
+                <tr><td>Fargate minimum billable duration</td><td>1 minute per task start</td><td>No (hard)</td><td>Short RunTask jobs under 60 seconds still bill a full minute of vCPU and memory.</td></tr>
+                <tr><td>ENIs per EC2 instance (awsvpc on EC2 launch type)</td><td>Varies by instance type (e.g. t3.large ≈ 3 ENIs)</td><td>Yes — larger instance type</td><td>Each awsvpc task consumes one ENI; instance ENI quota caps task density regardless of free CPU/RAM.</td></tr>
+                <tr><td>ECS services per cluster</td><td>5,000 (soft default)</td><td>Yes — quota increase</td><td>Rare on the exam; matters for microservice estates, not batch ETL.</td></tr>
+                <tr><td>ECR image tag immutability</td><td>Per-repository setting</td><td>Yes — enable at create or update</td><td>When enabled, pushing an existing tag fails — prevents accidental overwrite of <code>:prod</code> in CI/CD.</td></tr>
+                <tr><td>EKS control plane cost</td><td>~$0.10 per hour per cluster (all Regions)</td><td>No — metered continuously</td><td>Cluster bills 24/7 even with zero pods; shared platform clusters amortise this across teams.</td></tr>
+                <tr><td>EKS Fargate — DaemonSets</td><td>Not supported</td><td>No (hard)</td><td>Node-level agents (log collectors, security daemons) require EC2 or managed node groups, not Fargate profiles.</td></tr>
+                <tr><td>Lambda timeout (container alternative threshold)</td><td>15 minutes max</td><td>No (hard)</td><td>Jobs longer than 15 minutes must move to Batch, ECS RunTask, EKS, or Glue — not Lambda.</td></tr>
+                <tr><td>ECR image scan — enhanced</td><td>Uses Amazon Inspector</td><td>Yes — enable enhanced scanning per registry</td><td>Continuous CVE monitoring beyond basic on-push scan; adds Inspector charges per image.</td></tr>
+                <tr><td>Placement strategies on Fargate</td><td>Not applicable</td><td>N/A</td><td>Binpack and spread apply only to EC2 launch type — a common "why won't binpack work" trap.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>What you actually pay for</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Billed dimension</th><th>Unit</th><th>How to spend less</th></tr></thead>
+              <tbody>
+                <tr><td>ECS Fargate compute</td><td>vCPU-second + GB-second (us-east-1 ~$0.04048/vCPU-hr + ~$0.004445/GB-hr); 1-minute minimum per task</td><td>Right-size CPU/memory pairs; use Fargate Spot for fault-tolerant batch; stop services when idle — no instance to "turn off", but running tasks bill continuously.</td></tr>
+                <tr><td>ECS EC2 launch type</td><td>EC2 instance hour whether tasks run or not</td><td>Cluster auto scaling + capacity providers; Spot instances for batch; binpack placement to fill instances before scaling out.</td></tr>
+                <tr><td>EKS control plane</td><td>~$0.10 per cluster-hour</td><td>Consolidate dev/test onto shared clusters with namespace isolation; delete idle clusters.</td></tr>
+                <tr><td>EKS / ECS worker compute</td><td>EC2, Fargate, or Karpenter-provisioned instances</td><td>Karpenter or Cluster Autoscaler for variable Spark; Fargate only for small sporadic pods.</td></tr>
+                <tr><td>ECR storage</td><td>~$0.10 per GB-month</td><td>Lifecycle policies to expire untagged images and keep last N tags; delete stale repos after migration.</td></tr>
+                <tr><td>ECR data transfer</td><td>Cross-Region pull incurs transfer; same-Region pull to ECS/EKS is free</td><td>Build and push in the same Region as the cluster; use cross-Region replication only for DR, not daily pulls.</td></tr>
+                <tr><td>ECR enhanced scanning</td><td>Amazon Inspector pricing per image</td><td>Enable on production repos only; basic scan-on-push for dev.</td></tr>
+                <tr><td>NAT Gateway (private subnet pulls without VPC endpoint)</td><td>~$0.045/hr + ~$0.045/GB processed</td><td>ECR interface endpoint or pull from public subnet build agents; see <a href="s19-vpc.html#vpc-endpoints">Section 19</a> for S3 gateway endpoint on workers.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout cost"><strong>Biggest container cost leak.</strong> ECS on EC2 with an Auto Scaling group sized for peak but left at max capacity overnight — you pay for every instance hour whether tasks are placed or not. Fargate avoids idle instances but bills per running task; pick EC2 + binpack only when sustained utilization justifies it.</div>
+          <div class="callout danger"><strong>Fargate is not free between jobs.</strong> A service with desired count 1 runs 24/7 at the task's vCPU and memory rate. Batch-style workloads should use RunTask or AWS Batch with job completion, not an always-on service.</div>
+
+          <h3>Traps that catch people</h3>
+          <ul>
+            <li><strong>Task execution role for S3 access —</strong> Developers add S3 permissions to the execution role because "that's the ECS role". The execution role only pulls images, writes logs, and reads secrets for startup. Application S3 calls need the task role — AccessDenied at runtime despite a "correct-looking" task definition.</li>
+            <li><strong>Fargate CPU/memory mismatch —</strong> Setting 512 CPU units (0.5 vCPU) with 16 GB memory is invalid. Registration fails before any task launches. Always cross-check the Fargate compatibility matrix.</li>
+            <li><strong>Binpack on Fargate —</strong> Exam questions about placement strategies assume EC2 launch type. Fargate ignores binpack, spread, and constraints — AWS picks infrastructure.</li>
+            <li><strong>awsvpc ENI exhaustion —</strong> A c5.large with three ENI slots may host only two awsvpc tasks (one ENI reserved for the host). Scaling task count without upgrading instance type leaves tasks in PENDING.</li>
+            <li><strong>Confusing ECR with ECS —</strong> "Store and run containers" — ECR is storage only. Batch, ECS, EKS, and SageMaker pull from ECR; none of them replace a registry.</li>
+            <li><strong>DaemonSet on EKS Fargate —</strong> Fargate profiles cannot run DaemonSets. Logging agents that rely on DaemonSet pattern need EC2 node groups or sidecars in each pod.</li>
+            <li><strong>Spark on plain ECS —</strong> The exam answer for "Spark on Kubernetes" is EMR on EKS, not a DIY Spark container on ECS. ECS lacks Kubernetes-native Spark operator ecosystem.</li>
+            <li><strong>Immutable tag overwrite —</strong> CI pushes <code>:latest</code> twice; second push fails if immutability is on. Use unique tags per build (<code>:build-4821</code>) or disable immutability on dev repos only.</li>
+            <li><strong>Service auto scaling vs cluster capacity —</strong> Service auto scaling adds tasks; it does not add EC2 instances. On EC2 launch type, tasks stay PENDING until cluster capacity providers scale the ASG — two separate mechanisms.</li>
+            <li><strong>Cross-Region image pull latency —</strong> Task definition references an ECR URI in eu-west-1 while the cluster runs in us-east-1. Pull works but adds cross-Region transfer charges and slow cold starts.</li>
+          </ul>
+
+          <h3>Troubleshooting playbook</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Symptom</th><th>Most likely cause</th><th>What to check / fix</th></tr></thead>
+              <tbody>
+                <tr><td><code>CannotPullContainerError</code> on task start</td><td>Execution role missing ECR permissions or wrong image URI/Region</td><td>Verify <code>ecr:GetAuthorizationToken</code>, <code>ecr:BatchGetImage</code> on execution role; confirm image exists: <code>aws ecr describe-images</code>.</td></tr>
+                <tr><td>Container starts but S3 AccessDenied</td><td>Missing or wrong task role</td><td>Task definition <code>taskRoleArn</code>; role trust for <code>ecs-tasks.amazonaws.com</code>; S3 policy on task role, not execution role.</td></tr>
+                <tr><td>Tasks stuck in PENDING (EC2 launch type)</td><td>Insufficient CPU/RAM, ENI slots, or placement constraints unsatisfied</td><td>ECS console → Events tab; check container instance remaining resources and <code>distinctInstance</code> / <code>memberOf</code> constraints.</td></tr>
+                <tr><td>Tasks stuck in PENDING (Fargate)</td><td>Subnet has no available IPs or invalid CPU/memory pair</td><td>Subnet IP utilization in VPC console; validate Fargate-compatible CPU/memory in task definition.</td></tr>
+                <tr><td>Fargate task exits immediately with no logs</td><td>Missing log configuration or execution role CloudWatch permissions</td><td><code>logConfiguration</code> in container definition; execution role needs <code>logs:CreateLogStream</code>, <code>logs:PutLogEvents</code>.</td></tr>
+                <tr><td>EKS pod <code>ImagePullBackOff</code></td><td>Node/instance role or Fargate pod execution role cannot pull from ECR</td><td>Node IAM role (EC2) or pod execution role (Fargate) ECR permissions; image pull secrets if using private external registry.</td></tr>
+                <tr><td>Spark job on EKS cannot reach S3</td><td>Pod IRSA role missing S3 policy or no S3 VPC endpoint in private subnet</td><td>Service account annotation <code>eks.amazonaws.com/role-arn</code>; verify OIDC provider; add S3 gateway endpoint per <a href="s19-vpc.html#vpc-endpoints">Section 19</a>.</td></tr>
+                <tr><td>ECR storage bill climbing</td><td>Untagged layers from CI builds accumulating</td><td>Lifecycle policy: expire untagged after 7 days, keep last 10 tagged images; run <code>aws ecr describe-images --filter tagStatus=UNTAGGED</code>.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Production patterns</h3>
+          <p>Data teams typically land on one of three tiers. <strong>AWS Batch on Fargate</strong> for queue-driven ETL array jobs — simplest scheduling, pay per job, no cluster to maintain. <strong>ECS Fargate services</strong> for always-on stream consumers or small API wrappers around pipeline triggers. <strong>EKS with EMR on EKS</strong> when Spark executors need Kubernetes-native scaling (Karpenter), shared infrastructure with ML platforms, or Helm-based operators already in the org.</p>
+          <div class="grid-2">
+            <div class="mini-card">
+              <h4>Batch ETL on Fargate (intermittent)</h4>
+              <ul>
+                <li>Push image to ECR in the same Region as the compute environment.</li>
+                <li>Batch job definition references image URI; job queue on Fargate Spot for cost.</li>
+                <li>Task role grants S3 and Redshift Data API; execution role handles ECR pull.</li>
+              </ul>
+            </div>
+            <div class="mini-card">
+              <h4>Spark on EKS (sustained or bursty)</h4>
+              <ul>
+                <li>Shared EKS cluster; EMR on EKS virtual clusters submit Spark jobs.</li>
+                <li>IRSA (IAM Roles for Service Accounts) or EKS Pod Identity for pod-level S3/KMS access.</li>
+                <li>Karpenter or managed node groups scale executors; Fargate only for driver if small.</li>
+              </ul>
+            </div>
+          </div>
+          <p>Anti-pattern: running EMR as a 24/7 cluster for one nightly job when EMR on EKS or Glue would scale to zero between runs. The cluster hour charge dominates; containers only win when utilization is shared or bursty enough to amortise EKS control-plane cost.</p>
+          <pre data-lang="json" data-title="EKS Pod Identity / IRSA — service account annotation" data-explain="Maps a Kubernetes service account to an IAM role so Spark driver pods call S3 without node-wide credentials. EKS Pod Identity is the newer mechanism; IRSA via OIDC remains common on existing clusters."><code>{
+  "apiVersion": "v1",
+  "kind": "ServiceAccount",
+  "metadata": {
+    "name": "spark-driver",
+    "namespace": "etl",
+    "annotations": {
+      "eks.amazonaws.com/role-arn": "arn:aws:iam::123456789012:role/SparkS3AccessRole"
+    }
+  }
+}</code></pre>
+
+          <h3>Where this fits with the rest of the exam</h3>
+          <p>Containers are the compute layer when Lambda is too short and Glue/EMR is the wrong shape. They connect ingestion, transformation, and ops sections through image-based custom code.</p>
+          <ul>
+            <li><strong>When Lambda is not enough:</strong> <a href="s05-lambda.html">Section 5</a> — 15-minute and 10 GB limits push long Python ETL to Batch or ECS.</li>
+            <li><strong>Spark placement:</strong> <a href="s04-glue.html">Section 4</a> (serverless Spark), <a href="s12-compute.html">Section 12</a> (EMR clusters), <a href="s13-analytics.html#emr">Section 13</a> (EMR on EKS) — the exam asks which orchestrator, not just "use Spark".</li>
+            <li><strong>Custom Glue runtime:</strong> <a href="s04-glue.html">Section 4</a> — Glue custom containers pull from ECR; same registry pattern as ECS.</li>
+            <li><strong>Networking:</strong> <a href="s19-vpc.html">Section 19</a> — awsvpc tasks and EKS pods consume subnet IPs; private subnets need S3 gateway endpoints.</li>
+            <li><strong>Security:</strong> <a href="s20-security.html">Section 20</a> — task roles for S3/KMS; Secrets Manager for JDBC credentials injected at task start.</li>
+            <li><strong>Practice decisions:</strong> <a href="s21-exam-prep.html#decisions">Section 21</a> — "container batch, no always-on cluster" → Batch; "Spark on Kubernetes" → EMR on EKS.</li>
+          </ul>
+          <div class="callout exam"><strong>How the exam frames containers.</strong> Custom ETL image → ECR + Batch/ECS is the default. Choose EKS when the stem mentions Kubernetes, Helm, EMR on EKS, or existing K8s estate. Choose Fargate over EC2 when the qualifier is <em>least operational overhead</em>; choose EC2 + binpack + Spot when the qualifier is <em>most cost-effective at sustained volume</em>. Never pick plain ECS for managed Spark — that is EMR or Glue territory.</div>
+        </section>
+
+        <section class="section" id="interview">
+          <h2>Interview questions</h2>
+          <p class="muted">Answer each one out loud before opening it.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+            <details class="qa">
+              <summary>What is the difference between a Docker image and a Docker container?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>An <strong>image</strong> is an immutable, read-only template built from a Dockerfile — layers stacked with code, runtime, and libraries. A <strong>container</strong> is a running process instantiated from that image, with a writable layer on top for runtime state. You can run many containers from one image; when the container stops, the writable layer is discarded unless committed (which is rare in pipelines).</p>
+                <p>In AWS terms, you push the image to ECR once; each ECS task, Batch job, or EKS pod creates a new container from it.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>When would you choose a containerised ETL job over Lambda or Glue?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>Choose containers when the job exceeds <strong>Lambda's 15-minute timeout</strong> or needs more than 10 GB memory, but is not a distributed Spark workload that Glue or EMR handles better. Examples: a 45-minute Python pandas transform, a proprietary binary, a JVM tool with a fixed heap, or a multi-step ETL with dependencies Glue's built-in runtimes lack.</p>
+                <p>Package as Docker → ECR → AWS Batch (simplest for batch), ECS RunTask, or SageMaker Processing. If the job is Spark-shaped and TB-scale, prefer Glue or EMR instead.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Explain the ECS task execution role versus the task role.<span class="qa-tag">Exam</span></summary>
+              <div class="qa-body">
+                <p>The <strong>task execution role</strong> is assumed by the ECS infrastructure to <em>set up</em> the task: pull the image from ECR, create the log stream in CloudWatch, and read secrets/parameters injected as environment variables. The <strong>task role</strong> is assumed by your application code inside the container via the container credentials endpoint — it grants S3, DynamoDB, Redshift Data API, or whatever the ETL script calls.</p>
+                <p>Symptoms: "CannotPullContainerError" or no logs → execution role. AccessDenied on <code>s3:GetObject</code> from Python → task role.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Compare ECS Fargate and ECS on EC2 for a data pipeline.<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p><strong>Fargate</strong> — no instances to manage, pay per task vCPU/memory, automatic placement, ideal for sporadic or modest workloads and when "least operational overhead" is the exam qualifier. No placement strategies — AWS handles placement.</p>
+                <p><strong>EC2 launch type</strong> — you manage the cluster capacity, can use Spot instances for 60–90% savings, choose GPU or high-memory instance types, and control placement with binpack/spread and constraints. Better for sustained high-volume batch where idle Fargate cost would exceed an always-warm Spot fleet.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What are ECS task placement strategies, and when do they apply?<span class="qa-tag">Architecture</span></summary>
+              <div class="qa-body">
+                <p>Placement strategies (<code>binpack</code>, <code>spread</code>, <code>random</code>) choose which EC2 container instance runs a new task, after resource and constraint filtering. <strong>Binpack</strong> minimises wasted CPU/RAM; <strong>spread</strong> distributes for HA; <strong>random</strong> has no goal.</p>
+                <p>They apply only to the <strong>EC2 launch type</strong>, not Fargate. Placement order: CPU/memory/ports → constraints (<code>distinctInstance</code>, <code>memberOf</code>) → strategies.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>ECS versus EKS — how do you decide?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p>Pick <strong>ECS</strong> when you want AWS-native simplicity, tight integration with ALB and IAM roles, and no Kubernetes operational burden. Pick <strong>EKS</strong> when you need Kubernetes portability, Helm charts, custom operators, existing K8s skills, or services like EMR on EKS that require Kubernetes.</p>
+                <p>Both can run on Fargate. Neither replaces Batch for queue-driven array jobs — Batch is the higher-level job scheduler on top of ECS.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What is awsvpc network mode and why does Fargate require it?<span class="qa-tag">Architecture</span></summary>
+              <div class="qa-body">
+                <p><code>awsvpc</code> assigns each task its own ENI and private IP in specified subnets. Security groups attach directly to the task, giving per-task network isolation and precise egress rules to Redshift, RDS, or VPC endpoints.</p>
+                <p>Fargate has no shared host network namespace — each task is isolated infrastructure, so <code>awsvpc</code> is mandatory. Plan subnet IP capacity: dense Fargate services consume many ENIs.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How does ECR integrate with ECS, EKS, Batch, and Glue?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>All AWS container runtimes pull images from ECR using IAM-authenticated <code>docker pull</code> (or containerd equivalents). ECS task definitions and Batch job definitions reference the image URI. EKS pods reference it in the container spec. Glue custom containers register an ECR image for Spark or Python shell jobs.</p>
+                <p>Keep images in the same region as the compute to avoid cross-region transfer charges and pull latency. Use lifecycle policies to prune old tags.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What EKS node option would you use for bursty Spark workloads?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p><strong>Karpenter</strong> or EMR on EKS's built-in managed scaling — both provision right-sized EC2 when pods pend, and scale down when jobs finish. Managed node groups work but scale in ASG increments, often leaving idle nodes. Fargate suits small jobs but gets expensive for large Spark executor fleets.</p>
+                <p>Self-managed nodes only when you need custom AMIs or kernel modules not supported on EKS-optimised images.</p>
+              </div>
+            </details>
+          </div>
+        </section>
+
+        <section class="section" id="practice">
+          <h2>Hands-on practice</h2>
+          <p class="muted">Free tier where possible. Delete everything at the end of each task.</p>
+          <ol class="practice-list">
+            <li class="practice">
+              <p class="practice-task">Create a private ECR repository, build a minimal Python "hello ETL" Docker image locally, push it to ECR, and verify the image appears with a <code>latest</code> tag.</p>
+              <span class="console-path">ECR → Repositories → Create repository</span>
+              <p class="practice-expect"><code>aws ecr describe-images</code> lists your image digest and tag.</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">Console + CLI</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Create repository <code>dea-etl-job</code> with scan-on-push enabled.</li>
+                    <li>Write a Dockerfile with <code>FROM python:3.11-slim</code> and <code>CMD ["python", "-c", "print('ETL ready')"]</code>.</li>
+                    <li>Build, tag, authenticate, and push using the commands in the Docker section above.</li>
+                  </ol>
+<pre data-lang="shell"><code>aws ecr create-repository --repository-name dea-etl-job --region us-east-1
+docker build -t dea-etl-job .
+# tag, login, push as shown above
+aws ecr describe-images --repository-name dea-etl-job --region us-east-1</code></pre>
+                  <p class="muted">Cleanup: delete the repository (force delete images) when finished. ECR storage is cheap but lifecycle policies are good practice.</p>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Register an ECS Fargate task definition referencing your ECR image, then run a one-off task in a cluster with <code>awsvpc</code> networking and confirm CloudWatch Logs output.</p>
+              <span class="console-path">ECS → Task definitions → Create → Fargate</span>
+              <p class="practice-expect">Task status <code>STOPPED</code> with exit code 0; log stream shows "ETL ready".</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">Console + CLI</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Create a cluster <code>dea-lab</code> (Fargate only).</li>
+                    <li>Create task definition from the JSON example — attach the default <code>ecsTaskExecutionRole</code>.</li>
+                    <li>Create a security group allowing egress; pick a private or public subnet with IP capacity.</li>
+                    <li>Run task → Networking → select subnet and security group.</li>
+                  </ol>
+<pre data-lang="shell"><code>aws ecs run-task \
+  --cluster dea-lab \
+  --launch-type FARGATE \
+  --task-definition dea-etl-task \
+  --network-configuration "awsvpcConfiguration={subnets=[subnet-abc],securityGroups=[sg-abc],assignPublicIp=ENABLED}"</code></pre>
+                  <p class="muted">Cleanup: stop/delete any running tasks; deregister task definition revisions; delete cluster. Fargate bills per second while tasks run.</p>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Enable ECR image scanning on your repository, push a new image tag, and review scan findings in the console.</p>
+              <span class="console-path">ECR → Repository → Scan on push</span>
+              <p class="practice-expect">Image scan status completes with a findings summary (even base Python images have informational CVEs).</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">Console</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Edit repository settings → enable <em>Scan on push</em>.</li>
+                    <li>Push <code>:v2</code> tag with any Dockerfile change.</li>
+                    <li>Open the image → <em>Scan results</em> → review severity counts.</li>
+                  </ol>
+                  <p class="muted">Cleanup: same as task 1 — delete repository when done.</p>
+                </div>
+              </details>
+            </li>
+          </ol>
+        </section>
+
+        <section class="section" id="recap">
+          <h2>Recap</h2>
+          <div class="recap">
+            <ul class="checklist">
+              <li>Docker: Dockerfile → image (immutable) → container (running instance) → registry (ECR/Docker Hub).</li>
+              <li>Containers fit ETL that exceeds Lambda timeout but is not Spark-scale — Batch, ECS, SageMaker Processing, Glue custom containers.</li>
+              <li>ECS: cluster, task definition, task (batch), service (long-running), container agent on EC2.</li>
+              <li>Launch types: EC2 (you manage, Spot, placement strategies), Fargate (serverless), external (on-prem).</li>
+              <li>Placement order: CPU/memory/ports → constraints (distinctInstance, memberOf) → strategies (binpack, spread, random). EC2 only.</li>
+              <li>Task execution role = ECR pull + logs + secrets. Task role = application AWS API access.</li>
+              <li>Fargate requires awsvpc — one ENI per task; plan subnet IPs.</li>
+              <li>ECR: lifecycle policies, scanning, replication; private repos for production images.</li>
+              <li>EKS: managed control plane; compute via managed node groups, Fargate, Karpenter, or self-managed.</li>
+              <li>ECS = simpler AWS-native; EKS = Kubernetes/EMR on EKS; Fargate = launch type for both.</li>
+            </ul>
+            <p style="margin-top:1rem;">
+              <button type="button" data-complete="section-17">Mark complete</button>
+            </p>
+          </div>
+        </section>
+
+      </div>
+
+      <aside class="toc" aria-label="On this page">
+        <strong>On this page</strong>
+        <ol>
+          <li><a href="#lectures">Lectures</a></li>
+          <li><a href="#docker">Docker</a></li>
+          <li><a href="#ecs">Amazon ECS</a></li>
+          <li><a href="#ecr">Amazon ECR</a></li>
+          <li><a href="#eks">Amazon EKS</a></li>
+          <li><a href="#deeper">Deeper detail</a></li>
+          <li><a href="#interview">Interview questions</a></li>
+          <li><a href="#practice">Hands-on practice</a></li>
+          <li><a href="#recap">Recap</a></li>
+        </ol>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<footer class="footer">AWS Certified Data Engineer Associate (DEA-C01) · Section 17 · Offline study edition</footer>
+</body>
+</html>

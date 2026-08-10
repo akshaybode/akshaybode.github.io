@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="DEA-C01 Section 18: AWS Snow Family offline transfer, Transfer Family SFTP, DataSync file migration, DMS database replication with SCT, and Application Discovery and Migration services.">
+<title>Section 18 — Migration | AWS Data Engineer DEA-C01 Notes</title>
+<link rel="stylesheet" href="assets/aws.css">
+<script defer src="assets/search-index.js"></script>
+<script defer src="assets/code-highlight.js"></script>
+<script defer src="assets/aws.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">Course section 18 of 21 · AWS Certified Data Engineer Associate</p>
+    <h1>Migration</h1>
+    <p class="subtitle">Moving data and workloads into AWS spans offline appliances when bandwidth is the bottleneck, managed file sync for recurring NFS/SMB transfers, SFTP endpoints for legacy clients, and DMS for continuous database replication with minimal downtime.</p>
+    <div class="hero-meta">
+      <span class="chip">24 slides · ~35min</span>
+      <span class="chip">Exam domain: Data Ingestion and Transformation (34%)</span>
+      <span class="chip">Deck slides 644–667</span>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <nav class="pager" aria-label="Section navigation">
+    <a href="s17-containers.html">← Containers</a>
+    <a href="index.html">Course contents</a>
+    <a href="s19-vpc.html">Next: VPCs →</a>
+  </nav>
+
+  <main id="main">
+    <div class="layout">
+      <div class="content">
+
+        <section class="section" id="lectures">
+          <h2>Lectures in this section</h2>
+          <p class="muted">Migration tools sit at the ingest edge of the pipeline — most land in S3 or a database that downstream Glue and Redshift jobs consume. See also <a href="s07-s3.html">Section 7</a> (S3) and <a href="s21-exam-prep.html#decisions">Section 21</a> (service decision tables).</p>
+          <ol class="lecture-list">
+            <li class="lecture">
+              <a class="lec-title" href="#snow">AWS Snow Family — offline data transfer</a>
+              <span class="lec-time">~10:00</span>
+              <span class="lec-src">Slides 645–650</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#transfer">AWS Transfer Family — managed SFTP/FTPS/FTP</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">Slides 651–653</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#datasync">AWS DataSync — automated file and object sync</a>
+              <span class="lec-time">~7:00</span>
+              <span class="lec-src">Slides 654–657</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#dms">AWS DMS and Schema Conversion Tool</a>
+              <span class="lec-time">~10:00</span>
+              <span class="lec-src">Slides 658–662</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#app-discovery">AWS Application Discovery Service</a>
+              <span class="lec-time">~3:00</span>
+              <span class="lec-src">Slides 663–664</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#app-migration">AWS Application Migration Service</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">Slides 665–667</span>
+            </li>
+          </ol>
+        </section>
+
+        <section class="section" id="snow">
+          <h2>AWS Snow Family</h2>
+          <p class="lead">The <strong>AWS Snow Family</strong> moves data physically when network transfer is too slow, too expensive, or unavailable. Devices are tamper-evident, encrypted with <strong>AWS KMS</strong>, and chain-of-custody tracked — you load data locally, ship the appliance back, and AWS uploads into S3 or Glacier.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-646.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-646.png" alt="Slide introducing AWS Snow Family for data management and processing, bypassing bandwidth limits, with local computing on Snowball Edge and Snowcone, secured at rest and in transit with KMS." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 646</span>Snow devices combine storage with optional edge compute (Lambda, IoT Greengrass on Snowcone/Snowball Edge). Security is end-to-end: KMS encryption at rest, tamper-evident enclosures, and tracked shipping.</figcaption>
+          </figure>
+
+          <h3>Snowcone</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-647.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-647.png" alt="Slide on Snowcone: small lightweight device with 8 TB storage, built-in DataSync agent, and edge processing with IoT Greengrass and Lambda." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 647</span>Snowcone is the smallest form factor — suitcase-sized, 8 TB HDD (14 TB SSD optional), 2 vCPUs. Built-in DataSync agent can sync online when connectivity exists; offline when it does not. Edge processing for remote sites.</figcaption>
+          </figure>
+
+          <h3>Snowball Edge</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-648.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-648.png" alt="Slide on Snowball Edge Storage Optimized with 80 TB and Compute Optimized with 42 TB storage and application processing for remote low-bandwidth locations." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 648</span><strong>Storage Optimized</strong> — 80 TB usable capacity, 40 vCPUs, focused on bulk transfer. <strong>Compute Optimized</strong> — 42 TB storage, up to 104 vCPUs, runs EC2-compatible instances at the edge for local preprocessing before upload.</figcaption>
+          </figure>
+
+          <h3>Snowmobile</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-649.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-649.png" alt="Slide on AWS Snowmobile shipping container truck carrying up to 100 PB for exabyte-scale enterprise dataset migration." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 649</span>Snowmobile is a 45-foot shipping container on a truck — up to <strong>100 PB</strong> per load. Consider when you have <strong>10 PB or more</strong> and network transfer would take years. AWS drives the container to your datacenter.</figcaption>
+          </figure>
+
+          <h3>Ordering workflow and device comparison</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-650.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-650.png" alt="Slide showing Snow Family workflow Order, Transfer Data Locally, Send Back to AWS, AWS Uploads to S3, plus comparison table of Snowcone, Snowball Edge Storage Optimized, and Snowmobile." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 650</span>Four-step process: order in console → copy data locally → return device → AWS imports to your S3/Glacier buckets. Snowcone handles up to ~24 TB (online or offline); Snowball Edge to petabytes; Snowmobile to exabytes.</figcaption>
+          </figure>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Device</th><th>Usable storage</th><th>Migration scale</th><th>Compute</th><th>Typical trigger phrase</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Snowcone</strong></td><td>8 TB HDD (14 TB SSD opt.)</td><td>Up to ~24 TB</td><td>2 vCPU; Lambda, Greengrass</td><td>Remote edge site, small batch, optional online sync</td></tr>
+                <tr><td><strong>Snowball Edge Storage Optimized</strong></td><td><strong>80 TB</strong></td><td>Petabytes (multiple jobs)</td><td>40 vCPU</td><td>No reliable internet; TB-scale one-off</td></tr>
+                <tr><td><strong>Snowball Edge Compute Optimized</strong></td><td>42 TB</td><td>Petabytes with local EC2</td><td>Up to 104 vCPU</td><td>Preprocess at edge before cloud upload</td></tr>
+                <tr><td><strong>Snowmobile</strong></td><td>Up to 100 PB</td><td>Exabytes</td><td>N/A (storage focus)</td><td>Petabytes in weeks; &gt;10 PB datacenter exit</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout info"><strong>Encryption and chain of custody.</strong> All Snow devices encrypt data with KMS keys you control. Tamper-evident seals and GPS tracking apply during shipping. Data is wiped from the device after successful import. The 80 TB figure on Storage Optimized is usable capacity after formatting — plan jobs accordingly.</div>
+        </section>
+
+        <section class="section" id="transfer">
+          <h2>AWS Transfer Family</h2>
+          <p class="lead"><strong>AWS Transfer Family</strong> provides fully managed <strong>SFTP, FTPS, FTP, and AS2</strong> endpoints backed by Amazon S3 or Amazon EFS. Partners and legacy systems that already speak SFTP can keep their clients unchanged while files land directly in your data lake buckets.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-652.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-652.png" alt="Slide on AWS Transfer Family: managed SFTP FTPS FTP, integration with S3 and EFS, DNS and IAM authentication." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 652</span>Transfer Family is a protocol front door — not a migration accelerator. Files uploaded via SFTP are stored as S3 objects (or EFS files) with optional IAM or custom identity provider authentication.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-653.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-653.png" alt="Slide on Transfer Family use cases: secure data distribution, backup archiving, simplified migration without changing applications, pay-as-you-go pricing." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 653</span>Primary win: <strong>no application changes</strong> — existing SFTP clients and scripts keep working. Use cases include partner file drops, archival, and lift-and-shift of FTP-based ingestion.</figcaption>
+          </figure>
+
+          <h3>Identity providers and endpoint types</h3>
+          <ul>
+            <li><strong>Service-managed users</strong> — IAM-backed SFTP users with SSH keys stored in the service.</li>
+            <li><strong>Custom identity provider</strong> — API Gateway + Lambda validates credentials against Active Directory or an internal user store.</li>
+            <li><strong>Endpoint types</strong> — public (internet-facing), VPC (internal only), or VPC endpoint with PrivateLink.</li>
+          </ul>
+
+          <div class="callout cost"><strong>Why Transfer Family loses to plain S3 when clients can change.</strong> You pay a <strong>per-hour endpoint fee</strong> (~0.30 USD/hour per protocol per AZ for SFTP) plus data transfer. If partners can switch to S3 API, IAM roles, or S3 pre-signed URLs, those are cheaper at scale. Transfer Family wins when the question says "existing SFTP clients" or "must not modify the application".</div>
+        </section>
+
+        <section class="section" id="datasync">
+          <h2>AWS DataSync</h2>
+          <p class="lead"><strong>AWS DataSync</strong> automates and accelerates online movement of file and object data between on-premises NFS/SMB shares, self-managed object storage, AWS Snow devices, and AWS targets (S3, EFS, FSx for Windows, ONTAP, OpenZFS). It preserves file permissions and metadata and runs up to <strong>10× faster</strong> than open-source tools by using a dedicated network protocol and parallelised transfers.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-655.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-655.png" alt="Slide introducing AWS DataSync for moving data on-premises to AWS and between AWS storage services, preserving permissions and metadata, with Snowcone built-in agent." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 655</span>DataSync is for scheduled or one-time <strong>file</strong> sync — not database replication. Snowcone ships with a DataSync agent for hybrid online/offline workflows.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-656.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-656.png" alt="Slide on DataSync key features: up to 10 times faster transfers, scheduling without continuous sync, integration with S3 EFS FSx." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 656</span>DataSync supports <strong>schedules</strong> (cron-style recurring sync) but does <strong>not</strong> offer continuous real-time sync — that gap belongs to DMS (databases) or replication products. Each task run compares and copies changed files.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-657.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-657.png" alt="Diagram of DataSync agent on-premises connecting over TLS to AWS DataSync service targeting S3, EFS, or FSx." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 657</span>Install the <strong>DataSync agent</strong> as a VM or EC2 instance with access to source NFS/SMB. Define locations and a task; traffic flows over <strong>TLS</strong> (in-flight encryption). Configure bandwidth throttling and schedules per task.</figcaption>
+          </figure>
+
+          <h3>DataSync versus aws s3 sync</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Feature</th><th>AWS DataSync</th><th><code>aws s3 sync</code></th></tr></thead>
+              <tbody>
+                <tr><td>Source</td><td>NFS, SMB, HDFS, object, Snow, S3, EFS, FSx</td><td>Local filesystem or S3 only</td></tr>
+                <tr><td>Performance</td><td>Parallel optimised protocol, ~10× vs tools like rsync</td><td>Single-threaded per process; you scale manually</td></tr>
+                <tr><td>Scheduling</td><td>Built-in cron schedules</td><td>Requires EventBridge + Lambda or cron on a host</td></tr>
+                <tr><td>Bandwidth control</td><td>Per-task throttling caps</td><td>No native throttle — can saturate links</td></tr>
+                <tr><td>Encryption in flight</td><td>TLS by default</td><td>HTTPS to S3</td></tr>
+                <tr><td>Metadata</td><td>Preserves POSIX permissions, timestamps</td><td>Basic file metadata; no NFS ACL semantics</td></tr>
+                <tr><td>Cost</td><td>Per-GB transferred</td><td>Free tool; you pay S3 and egress only</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Supported source and destination pairs</h3>
+          <ul>
+            <li>On-premises <strong>NFS / SMB</strong> → S3, EFS, FSx (Windows, ONTAP, OpenZFS)</li>
+            <li>S3 ↔ S3 (cross-account, cross-region)</li>
+            <li>EFS ↔ EFS, FSx ↔ FSx</li>
+            <li>Snowcone / Snowball → S3 (via device agent)</li>
+          </ul>
+
+          <pre data-lang="shell" data-title="AWS CLI — create a DataSync task" data-explain="Create locations first (aws datasync create-location-s3 and create-location-nfs), then wire them in a task with optional schedule and bandwidth limit."><code># After creating source (NFS) and destination (S3) location ARNs:
+aws datasync create-task \
+  --source-location-arn arn:aws:datasync:us-east-1:123456789012:location/loc-abc \
+  --destination-location-arn arn:aws:datasync:us-east-1:123456789012:location/loc-def \
+  --name nightly-raw-to-s3 \
+  --options VerifyMode=ONLY_FILES_TRANSFERRED,TransferMode=CHANGED \
+  --schedule ScheduleExpression="cron(0 2 * * ? *)" \
+  --includes '[{"FilterType":"SIMPLE_PATTERN","Value":"/data/raw/*"}]'
+
+# Run immediately (outside schedule):
+aws datasync start-task-execution --task-arn arn:aws:datasync:us-east-1:123456789012:task/task-abc</code></pre>
+        </section>
+
+        <section class="section" id="dms">
+          <h2>AWS Database Migration Service</h2>
+          <p class="lead"><strong>AWS Database Migration Service (DMS)</strong> replicates data from source databases to AWS or between AWS databases with minimal downtime. It runs on a <strong>replication instance</strong> (managed EC2) and supports homogeneous migrations (Oracle → Oracle) and heterogeneous ones (Oracle → Aurora PostgreSQL) with the <strong>Schema Conversion Tool (SCT)</strong>.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-659.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-659.png" alt="Slide introducing AWS DMS for database migration with continuous replication, EC2 replication instances, encryption in transit, pay-as-you-go pricing." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 659</span>DMS is the standard exam answer for <strong>migrate database with minimal downtime</strong> and <strong>continuous replication</strong>. It is not for bulk file moves — that is DataSync or Snow.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-660.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-660.png" alt="Slide listing DMS sources including Oracle, SQL Server, MySQL, PostgreSQL, MongoDB, SAP ASE and targets including Aurora, RDS, Redshift, DynamoDB, S3, Kinesis, Kafka." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 660</span>Sources include on-premises and EC2 databases. Targets include Aurora/RDS, <strong>Redshift</strong>, DynamoDB, S3 (CSV/Parquet), Kinesis, and Kafka — making DMS a common lake-ingestion path for CDC streams.</figcaption>
+          </figure>
+
+          <h3>How DMS works — endpoints and replication tasks</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-661.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-661.png" alt="Diagram of homogeneous DMS migration with replication instance, source and target endpoints, replication task performing full load and CDC." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 661</span><strong>Homogeneous</strong> migration (same engine family): create source/target endpoints → replication task → full load ± CDC. No SCT needed for schema when engines match.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-662.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-662.png" alt="Diagram of heterogeneous DMS migration with Schema Conversion Tool converting schema before replication task full load and CDC." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 662</span><strong>Heterogeneous</strong> migration: SCT converts schema, stored procedures, and views offline; DMS handles data movement. Typical path: Oracle on-prem → Aurora PostgreSQL.</figcaption>
+          </figure>
+
+          <h3>Migration types</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Type</th><th>What happens</th><th>When to use</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Full load</strong></td><td>One-time copy of all existing data</td><td>Static warehouses, initial bulk migrate, downtime acceptable during copy</td></tr>
+                <tr><td><strong>CDC</strong> (Change Data Capture)</td><td>Ongoing replication of inserts/updates/deletes from transaction logs</td><td>Minimal downtime cutover — keep apps on source until flip</td></tr>
+                <tr><td><strong>Full load + CDC</strong></td><td>Bulk copy then switch to log tailing</td><td>Most production migrations — standard exam answer</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>CDC prerequisites on the source</h3>
+          <p>DMS reads changes from database transaction logs — not triggers. You must enable supplemental logging on the source:</p>
+          <ul>
+            <li><strong>Oracle</strong> — supplemental logging, archive log mode.</li>
+            <li><strong>SQL Server</strong> — MS-CDC or MS-Replication enabled on published tables.</li>
+            <li><strong>MySQL / MariaDB</strong> — binary logging (<code>binlog</code>) with <code>binlog_format=ROW</code>.</li>
+            <li><strong>PostgreSQL</strong> — logical replication or WAL settings per DMS docs.</li>
+          </ul>
+          <p>Without log access, CDC tasks stall after full load. The exam may ask what to enable on MySQL for ongoing replication — answer <strong>binary logging (binlog)</strong>.</p>
+
+          <h3>LOB handling, validation, and premigration assessment</h3>
+          <ul>
+            <li><strong>LOB settings</strong> — large objects (BLOB/CLOB) can be migrated inline, limited-size, or in full LOB mode (slower but complete). Task settings JSON controls <code>"LobSettings"</code> per table — inline for small LOBs, full for critical binary columns.</li>
+            <li><strong>Validation</strong> — DMS can row-count and optionally hash/compare source vs target after full load. Enable in task settings; failures surface in CloudWatch.</li>
+            <li><strong>Premigration assessment</strong> — run before cutover to flag unsupported types, missing primary keys, and permission issues. Saves failed cutovers.</li>
+            <li><strong>DMS Serverless</strong> — auto-provisions replication capacity; pay for active migration time without sizing a replication instance upfront. Good for unpredictable or one-off heterogeneous moves.</li>
+          </ul>
+
+          <pre data-lang="json" data-title="DMS table-mapping rules with transformation" data-explain="Selection rules choose schemas/tables; transformation rules rename schema or add column mappings before data reaches the target."><code>{
+  "rules": [
+    {
+      "rule-type": "selection",
+      "rule-id": "1",
+      "rule-name": "include-sales-schema",
+      "object-locator": {
+        "schema-name": "SALES",
+        "table-name": "%"
+      },
+      "rule-action": "include"
+    },
+    {
+      "rule-type": "transformation",
+      "rule-id": "2",
+      "rule-name": "rename-schema-to-curated",
+      "rule-target": "schema",
+      "object-locator": {
+        "schema-name": "SALES"
+      },
+      "rule-action": "rename",
+      "value": "curated"
+    },
+    {
+      "rule-type": "transformation",
+      "rule-id": "3",
+      "rule-name": "add-ingest-timestamp",
+      "rule-target": "column",
+      "object-locator": {
+        "schema-name": "SALES",
+        "table-name": "ORDERS",
+        "column-name": "INGESTED_AT"
+      },
+      "rule-action": "add-column",
+      "value": "timestamp",
+      "expression": "$AR_H_TIMESTAMP"
+    }
+  ]
+}</code></pre>
+
+          <pre data-lang="shell" data-title="AWS CLI — create a DMS replication task" data-explain="Replication instance and endpoints must exist first. MigrationType Full-load-and-cdc is the production default."><code>aws dms create-replication-task \
+  --replication-task-identifier prod-orders-to-aurora \
+  --source-endpoint-arn arn:aws:dms:us-east-1:123456789012:endpoint:SRC1 \
+  --target-endpoint-arn arn:aws:dms:us-east-1:123456789012:endpoint:TGT1 \
+  --replication-instance-arn arn:aws:dms:us-east-1:123456789012:rep:RI1 \
+  --migration-type full-load-and-cdc \
+  --table-mappings file://table-mapping.json \
+  --replication-task-settings file://task-settings.json
+
+aws dms start-replication-task \
+  --replication-task-arn arn:aws:dms:us-east-1:123456789012:task:TASK1 \
+  --start-replication-task-type start-replication</code></pre>
+
+          <div class="callout exam"><strong>Minimal downtime database migration.</strong> When the scenario mentions keeping the source database live during migration, ongoing replication, or cutover with seconds of downtime → <strong>DMS with full load + CDC</strong>, not DataSync, Snow, or Transfer Family. Add <strong>SCT</strong> when source and target engines differ.</div>
+        </section>
+
+        <section class="section" id="app-discovery">
+          <h2>AWS Application Discovery Service</h2>
+          <p class="lead"><strong>AWS Application Discovery Service</strong> collects metadata about on-premises servers — specs, dependencies, utilization — so you can plan a migration before moving anything. Output feeds <strong>Migration Hub</strong> and <strong>Application Migration Service</strong>.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-664.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-664.png" alt="Slide on Application Discovery Service collecting on-premises server and database information via agent-based or agentless collection for migration planning." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 664</span><strong>Agent-based</strong> collection installs on each VM for detailed process and dependency data. <strong>Agentless</strong> collection queries VMware vCenter — no guest OS install. Use this in the discovery phase, not for ongoing data sync.</figcaption>
+          </figure>
+        </section>
+
+        <section class="section" id="app-migration">
+          <h2>AWS Application Migration Service</h2>
+          <p class="lead"><strong>AWS Application Migration Service (MGN)</strong> — formerly CloudEndure Migration — replicates entire servers into AWS for lift-and-shift with continuous block-level replication and non-disruptive test cutovers. It migrates <strong>applications and OS</strong>, not just files or database tables.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-666.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-666.png" alt="Slide on Application Migration Service simplifying lift-and-shift with continuous replication, test environments, and Windows and Linux support." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 666</span>MGN is for <strong>server lift-and-shift</strong> — replicate a VM running your app stack, test in AWS, then cut over. Different from DMS (database-only) and DataSync (files).</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-667.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-667.png" alt="Slide showing Application Migration Service workflow: install replication agent, configure launch settings, test launch, cutover." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 667</span>Workflow: install <strong>AWS Replication Agent</strong> on source → configure launch templates (instance type, subnet, SG) → launch <strong>test instances</strong> without stopping production → <strong>cutover</strong> when validated.</figcaption>
+          </figure>
+        </section>
+
+        <section class="section" id="migration-decisions">
+          <h2>Choosing a migration service</h2>
+          <p class="lead">Exam scenarios hinge on <em>what</em> is moving (files vs database vs whole server), <em>how often</em> (one-off vs ongoing), and <em>network constraints</em>. Use this table before picking an answer.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Service</th><th>What moves</th><th>Pattern</th><th>Network</th><th>Trigger phrase in question</th></tr></thead>
+              <tbody>
+                <tr>
+                  <td><strong>Snowball / Snowmobile</strong></td>
+                  <td>Files/objects (bulk)</td>
+                  <td>One-off offline</td>
+                  <td>No or insufficient internet</td>
+                  <td>"No reliable internet"; "petabytes in weeks"; "80 TB datacenter exit"</td>
+                </tr>
+                <tr>
+                  <td><strong>DataSync</strong></td>
+                  <td>Files (NFS/SMB/HDFS)</td>
+                  <td>Scheduled recurring sync</td>
+                  <td>Online, bandwidth-limited OK</td>
+                  <td>"Ongoing nightly sync from on-prem NFS"; "preserve file permissions"</td>
+                </tr>
+                <tr>
+                  <td><strong>Transfer Family</strong></td>
+                  <td>Files via SFTP/FTPS/FTP/AS2</td>
+                  <td>Ongoing partner drops</td>
+                  <td>Online</td>
+                  <td>"Existing SFTP clients"; "must not change the application"</td>
+                </tr>
+                <tr>
+                  <td><strong>DMS (+ SCT)</strong></td>
+                  <td>Database tables / CDC</td>
+                  <td>Continuous replication</td>
+                  <td>Online</td>
+                  <td>"Minimal downtime"; "Oracle to Aurora"; "ongoing replication"</td>
+                </tr>
+                <tr>
+                  <td><strong>S3 Transfer Acceleration</strong></td>
+                  <td>Objects to S3</td>
+                  <td>One-off or ad hoc uploads</td>
+                  <td>Online, long geographic distance</td>
+                  <td>"Speed up uploads from distant clients over public internet to S3"</td>
+                </tr>
+                <tr>
+                  <td><strong>Direct Connect</strong></td>
+                  <td>Any (private link)</td>
+                  <td>Persistent pipe</td>
+                  <td>Dedicated private connectivity</td>
+                  <td>"Consistent low-latency private link"; "bypass public internet" (not offline)</td>
+                </tr>
+                <tr>
+                  <td><strong>Application Migration (MGN)</strong></td>
+                  <td>Entire servers / VMs</td>
+                  <td>Lift-and-shift with test cutover</td>
+                  <td>Online replication</td>
+                  <td>"Replicate whole application server"; "lift-and-shift VM"</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="diagram">
+            <p class="diagram-title">Migration paths into the data lake</p>
+            <div class="flow">
+              <div class="node is-source"><b>On-premises</b><small>NFS · DB · SFTP · VMs</small></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-compute"><b>Offline path</b><small>Snowcone · Snowball · Snowmobile</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-store"><b>Amazon S3</b><small>raw/ · staging/</small></div>
+            </div>
+            <div class="flow" style="margin-top:14px;">
+              <div class="node is-source"><b>On-premises</b><small>same sources</small></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-compute pulse"><b>Online path</b><small>DataSync · Transfer · DMS · MGN</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-store"><b>S3 · RDS · EC2</b><small>lake · warehouse · apps</small></div>
+            </div>
+          </div>
+
+          <div class="callout exam"><strong>Do not confuse offline with "no network ever".</strong> Snowcone can run DataSync online when a link exists. Direct Connect is online private networking, not offline transfer. Transfer Acceleration speeds public HTTPS uploads to S3 — it is not a file-server migration tool.</div>
+        </section>
+
+        <section class="section" id="deeper">
+          <h2>Deeper detail and exam edge cases</h2>
+          <p class="lead">Bandwidth-versus-time arithmetic for Snowball decisions, idle Transfer Family endpoints, DMS replication-instance storage failures, and the source-database prerequisites that silently break CDC after a successful full load.</p>
+
+          <h3>Limits and quotas that decide answers</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Limit</th><th>Value</th><th>Adjustable?</th><th>Why it matters</th></tr></thead>
+              <tbody>
+                <tr><td>Snowcone usable storage</td><td>8 TB HDD (14 TB SSD option)</td><td>No — pick device type at order</td><td>Smallest offline appliance; built-in DataSync agent for hybrid online/offline.</td></tr>
+                <tr><td>Snowball Edge Storage Optimized usable</td><td>80 TB per device</td><td>Order multiple devices for petabytes</td><td>Classic exam figure for "one appliance capacity" questions.</td></tr>
+                <tr><td>Snowmobile capacity</td><td>Up to 100 PB per truck load</td><td>N/A — engagement-based</td><td>Trigger when datacenter exit exceeds ~10 PB and network time is measured in years.</td></tr>
+                <tr><td>Snowball job retention (overdue device)</td><td>Per-day charge after included days</td><td>No — return device on schedule</td><td>Keeping an appliance past the allowed window adds daily fees on top of the job charge.</td></tr>
+                <tr><td>DMS replication instance storage</td><td>Allocated at create (e.g. 50–100 GB default on small classes)</td><td>Yes — increase allocated storage</td><td>Full load caches changes on the instance; running out of disk stalls or fails the task mid-migration.</td></tr>
+                <tr><td>DMS LOB inline mode</td><td>Truncates LOBs above inline limit</td><td>Configure LOB mode in task settings</td><td>Silent data loss on large BLOB/CLOB columns unless full LOB mode is enabled.</td></tr>
+                <tr><td>DMS CDC without primary key</td><td>Updates/deletes may not replicate correctly</td><td>Add PK or use supplemental logging workarounds</td><td>Tables without PKs are an exam gotcha for ongoing replication.</td></tr>
+                <tr><td>MySQL CDC prerequisite</td><td><code>binlog_format=ROW</code> required</td><td>Yes — DBA config change</td><td>STATEMENT or MIXED binlog breaks row-level CDC; task stalls after full load.</td></tr>
+                <tr><td>Oracle CDC prerequisite</td><td>Supplemental logging enabled</td><td>Yes — DBA config</td><td>DMS reads redo/archive logs; without supplemental logging, changes are incomplete.</td></tr>
+                <tr><td>DataSync agent</td><td>Required for on-premises NFS/SMB sources</td><td>N/A — deploy VM or EC2 agent</td><td>No agent means no on-prem source — unlike <code>aws s3 sync</code> from a laptop.</td></tr>
+                <tr><td>Secrets Manager secret size (DMS endpoint creds)</td><td>64 KB max</td><td>No (hard)</td><td>Large connection JSON or certs may need Parameter Store Advanced or S3 reference.</td></tr>
+                <tr><td>SCT scope</td><td>Heterogeneous migrations only</td><td>N/A</td><td>Oracle → PostgreSQL needs SCT; PostgreSQL → RDS PostgreSQL does not.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>What you actually pay for</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Billed dimension</th><th>Unit</th><th>How to spend less</th></tr></thead>
+              <tbody>
+                <tr><td>Snowball / Snowcone job</td><td>Per-job fee plus per-day retention after included period</td><td>Load and return promptly; size jobs to fill device capacity; compute-optimized only when edge preprocessing is required.</td></tr>
+                <tr><td>Transfer Family endpoint</td><td>~$0.30 per hour per protocol per AZ (SFTP) even when idle</td><td>Tear down dev endpoints; prefer S3 API or pre-signed URLs when partners can change clients.</td></tr>
+                <tr><td>Transfer Family data</td><td>Per GB uploaded/downloaded</td><td>Same as S3 PUT/GET underlying storage; compress before upload where possible.</td></tr>
+                <tr><td>DataSync</td><td>Per GB transferred (simple pricing, Region-dependent)</td><td>Schedule incremental syncs (<code>TransferMode=CHANGED</code>); throttle bandwidth to avoid saturating links; scope includes filters to skip cold paths.</td></tr>
+                <tr><td>DMS replication instance</td><td>Instance class per hour while running (e.g. dms.t3.medium ~$0.068/hr us-east-1)</td><td>Right-size instance; use DMS Serverless for short heterogeneous migrations; stop instance after cutover.</td></tr>
+                <tr><td>DMS Serverless</td><td>Capacity units while replication active</td><td>Good for unpredictable one-off migrations — no idle instance between phases.</td></tr>
+                <tr><td>S3 / network path</td><td>DataSync and DMS target writes bill S3 storage and possibly cross-AZ/Region transfer</td><td>Keep agent, replication instance, and bucket in the same Region; use Direct Connect for sustained large online migrations instead of repeated Snowball jobs.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout cost"><strong>Biggest migration cost leak.</strong> An SFTP Transfer Family endpoint left running in three AZs for a completed migration — ~$650/month in endpoint hours alone with zero uploads. DataSync agents on oversized EC2 instances running 24/7 when sync runs nightly also dominate spend.</div>
+          <div class="callout danger"><strong>DMS target prep mode can drop data.</strong> <code>DROP_AND_CREATE</code> or <code>TRUNCATE</code> target table preparation silently removes existing rows before full load. Validate mode in non-production first; enable DMS validation and compare row counts before cutover.</div>
+
+          <h3>Traps that catch people</h3>
+          <ul>
+            <li><strong>Bandwidth math ignored —</strong> Exam gives datacenter size, link speed, and deadline. If network transfer exceeds the window, Snowball wins even though DataSync is "online and managed". Work the arithmetic: TB ÷ Mbps × 8 ≈ seconds required.</li>
+            <li><strong>Idle Transfer Family endpoint —</strong> Teams create SFTP for a six-week migration and forget to delete it. Hourly endpoint charges continue indefinitely — unlike S3, which has no idle endpoint fee.</li>
+            <li><strong>DMS for files, DataSync for databases —</strong> Swapped answers are common distractors. DMS moves relational tables via CDC; DataSync moves NFS/SMB files.</li>
+            <li><strong>Full load success, CDC never starts —</strong> MySQL without ROW binlog or Oracle without supplemental logging. Full load completes; task then errors or stalls on CDC phase.</li>
+            <li><strong>Replication instance disk full —</strong> Large full load with many concurrent tables fills instance storage. CloudWatch <code>FreeStorageSpace</code> drops; task fails with storage errors — increase allocated storage proactively.</li>
+            <li><strong>LOB truncation —</strong> Default inline LOB mode truncates large objects. Target looks healthy but binary columns are cropped — enable full LOB mode for critical BLOB tables.</li>
+            <li><strong>SCT on homogeneous migration —</strong> PostgreSQL to RDS PostgreSQL does not need Schema Conversion Tool. Adding SCT is wasted overhead unless engines differ.</li>
+            <li><strong>DataSync versus Storage Gateway —</strong> Storage Gateway is hybrid cache/volume access for on-prem apps treating AWS as local storage. DataSync is one-time or scheduled bulk copy — different use cases.</li>
+            <li><strong>Storage Gateway versus Transfer Family —</strong> Gateway serves iSCSI/NFS/file views; Transfer Family is protocol endpoint into S3/EFS for SFTP clients.</li>
+            <li><strong>MGN versus DMS —</strong> Application Migration replicates whole VMs block-level. DMS replicates database tables — not interchangeable for "lift-and-shift the Oracle server OS".</li>
+          </ul>
+
+          <h3>Troubleshooting playbook</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Symptom</th><th>Most likely cause</th><th>What to check / fix</th></tr></thead>
+              <tbody>
+                <tr><td>DMS task failed after full load, CDC phase errors</td><td>Binlog/supplemental logging not enabled or wrong binlog format</td><td>MySQL: <code>binlog_format=ROW</code>, user REPLICATION privileges; Oracle: supplemental logging; run premigration assessment.</td></tr>
+                <tr><td>High <code>CDCLatencySource</code> or <code>CDCLatencyTarget</code></td><td>Undersized replication instance or network bottleneck</td><td>CloudWatch DMS metrics; scale instance class; check VPN/DX bandwidth; reduce parallel load threads if CPU-saturated.</td></tr>
+                <tr><td>DMS task status running but target row counts diverge</td><td>LOB truncation, missing PK on source table, or validation disabled</td><td>Enable validation in task settings; review LOB mode; premigration assessment for tables without PK.</td></tr>
+                <tr><td>DataSync task slow or failing verification</td><td>Agent undersized, bandwidth throttle too low, or VerifyMode mismatch</td><td>Agent EC2 instance size; <code>BytesPerSecond</code> in task options; try <code>ONLY_FILES_TRANSFERRED</code> vs <code>POINT_IN_TIME_CONSISTENT</code>.</td></tr>
+                <tr><td>DataSync cannot reach on-prem NFS</td><td>Agent not activated or firewall blocks TCP 443 to AWS</td><td>Agent activation code; security group on agent VM; test <code>telnet</code> to DataSync service endpoints.</td></tr>
+                <tr><td>Transfer Family auth succeeds but S3 object missing</td><td>Home directory mapping or IAM role scope wrong</td><td>User logical directory mapping; role policy <code>s3:PutObject</code> on intended prefix only.</td></tr>
+                <tr><td>Snowball import stuck after return</td><td>Import job error or KMS key policy blocking decrypt</td><td>Snowball console job status; CloudWatch Events; confirm KMS key allows Snowball service.</td></tr>
+                <tr><td>Snowball vs network — which is cheaper?</td><td>Exam scenario with fixed bandwidth and TB count</td><td>Calculate transfer days = (data TB × 8192) ÷ (link Mbps × 86400); compare to Snowball job fee + shipping time.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Production patterns</h3>
+          <p>Large replatforming projects combine tools by data shape. <strong>Phase 1:</strong> Snowball Edge for initial bulk file landing in S3. <strong>Phase 2:</strong> DMS full load + CDC for operational databases while apps stay on source. <strong>Phase 3:</strong> DataSync nightly delta for remaining NAS shares. Transfer Family stays only where SFTP partners cannot migrate.</p>
+          <div class="diagram">
+            <p class="diagram-title">Hybrid migration timeline — bulk offline then CDC online</p>
+            <div class="flow">
+              <div class="node is-source"><b>On-prem DB + files</b><small>Week 0 baseline</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-compute"><b>Snowball bulk</b><small>Historical files → S3 raw/</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-compute pulse"><b>DMS full load + CDC</b><small>DB catches up continuously</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-store"><b>Cutover window</b><small>Lag near zero → flip apps</small></div>
+            </div>
+          </div>
+          <p>Anti-pattern: running a dms.r5.xlarge replication instance 24/7 for months after cutover "just in case". After validation, stop the task and instance, or switch to native Aurora read replica logic. Idle DMS instances are pure hourly waste.</p>
+          <pre data-lang="shell" data-title="CloudWatch — DMS CDC latency metrics" data-explain="CDCLatencySource and CDCLatencyTarget measure seconds of lag between source commit and target apply — the primary cutover readiness signal."><code>aws cloudwatch get-metric-statistics \
+  --namespace AWS/DMS \
+  --metric-name CDCLatencyTarget \
+  --dimensions Name=ReplicationInstanceIdentifier,Value=prod-replication \
+  --start-time 2026-08-03T00:00:00Z \
+  --end-time 2026-08-03T23:59:59Z \
+  --period 300 \
+  --statistics Maximum</code></pre>
+
+          <h3>Where this fits with the rest of the exam</h3>
+          <p>Migration services sit at Domain 1 ingest edge — most targets are S3 or Aurora/RDS that downstream Glue and Redshift jobs consume.</p>
+          <ul>
+            <li><strong>Landing zone:</strong> <a href="s07-s3.html">Section 7</a> — Snowball, DataSync, and Transfer Family all write S3 prefixes; lifecycle and encryption apply immediately.</li>
+            <li><strong>Database targets:</strong> <a href="s11-other-databases.html">Section 11</a> — DMS common targets Aurora, RDS, Redshift; SCT maps Oracle types to PostgreSQL.</li>
+            <li><strong>Streaming CDC alternative:</strong> <a href="s06-streaming.html">Section 6</a> — DMS to Kinesis when the lake needs change feeds, not just RDS replica.</li>
+            <li><strong>Networking:</strong> <a href="s19-vpc.html">Section 19</a> — DataSync agent and DMS replication instance need VPC placement, security groups, and routes to on-prem over VPN/DX.</li>
+            <li><strong>Credentials:</strong> <a href="s20-security.html#secrets-manager">Section 20</a> — DMS endpoints can pull database passwords from Secrets Manager.</li>
+            <li><strong>Decision tables:</strong> <a href="s21-exam-prep.html#decisions">Section 21</a> — trigger phrases "minimal downtime", "NFS nightly", "existing SFTP", "no reliable internet".</li>
+          </ul>
+          <div class="callout exam"><strong>How the exam frames migration.</strong> Read the data type first: files → DataSync/Snowball/Transfer Family; database with live source → DMS (+ SCT if engines differ); whole VM → MGN. Bandwidth questions require calculation — if math shows months of transfer time, Snowball is the intended answer even when online options exist.</div>
+        </section>
+
+        <section class="section" id="interview">
+          <h2>Interview questions</h2>
+          <p class="muted">Answer each one out loud before opening it.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+            <details class="qa">
+              <summary>When do you choose Snowball over DataSync?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p>Choose <strong>Snowball</strong> when network bandwidth makes online transfer impractical — no reliable internet, transfer would take months, or egress costs exceed appliance rental. Snowball Edge Storage Optimized holds <strong>80 TB usable</strong> per device; order multiple for petabytes.</p>
+                <p>Choose <strong>DataSync</strong> when you have connectivity and want automated, scheduled sync of NFS/SMB shares to S3 with bandwidth throttling. DataSync is online; Snowball is offline-first (Snowcone excepted).</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What is the difference between DMS and DataSync?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p><strong>DMS</strong> replicates <strong>database</strong> tables using full load and/or CDC from transaction logs — targets include Aurora, Redshift, S3, Kinesis. <strong>DataSync</strong> moves <strong>files</strong> and objects between filesystems and S3/EFS/FSx with schedules and metadata preservation.</p>
+                <p>If the source is PostgreSQL and the target is Aurora with minimal downtime → DMS. If the source is an on-prem NFS share of CSV files → DataSync.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Why would a company use Transfer Family instead of giving partners S3 credentials?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>Partners already run SFTP clients and scripts — Transfer Family lets them keep the same workflow while files land in S3. IAM-based SFTP users, custom identity providers, and VPC endpoints meet security requirements without rewriting integrations.</p>
+                <p>When partners <em>can</em> adopt S3 APIs or pre-signed URLs, Transfer Family's hourly endpoint cost makes plain S3 access cheaper. The exam uses "existing SFTP clients" as the discriminator for Transfer Family.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Explain full load, CDC, and full load + CDC in DMS.<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p><strong>Full load</strong> copies all existing rows once — simple but source may need to stay read-only or you accept inconsistency during copy. <strong>CDC</strong> tails the transaction log for ongoing changes only — requires binlog/supplemental logging enabled on the source.</p>
+                <p><strong>Full load + CDC</strong> is the production pattern: bulk copy historical data, then seamlessly tail the log so the target stays current until cutover. Switch applications to the target when lag is near zero.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What must you enable on MySQL for DMS CDC?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p>Enable the <strong>binary log (binlog)</strong> with <code>binlog_format=ROW</code> so DMS can read row-level changes. The replication user needs REPLICATION SLAVE and REPLICATION CLIENT privileges. Without binlog, only full load works — no ongoing replication.</p>
+                <p>Run premigration assessment to catch this before scheduling cutover.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>When is the Schema Conversion Tool required?<span class="qa-tag">Exam</span></summary>
+              <div class="qa-body">
+                <p>SCT is required for <strong>heterogeneous</strong> migrations where source and target engines differ — Oracle to PostgreSQL, SQL Server to Aurora MySQL, etc. It converts schemas, data types, views, and stored procedures that DMS cannot translate automatically.</p>
+                <p>Homogeneous migrations (PostgreSQL to RDS PostgreSQL) typically need only DMS endpoints and a replication task.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>S3 Transfer Acceleration versus Direct Connect — what problem does each solve?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p><strong>Transfer Acceleration</strong> routes HTTPS uploads through CloudFront edge locations to S3 — faster over long distances on the <strong>public internet</strong>. Pay per GB accelerated; enable per bucket.</p>
+                <p><strong>Direct Connect</strong> is a dedicated private circuit from your datacenter to AWS — consistent latency and bandwidth, bypasses public internet entirely, but requires telco provisioning and monthly port fees. It is not a migration service by itself; DMS and DataSync run over it.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Application Discovery versus Application Migration — what is each for?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p><strong>Application Discovery Service</strong> inventories on-premises servers (CPU, memory, dependencies, utilization) for planning — agent or agentless via vCenter. Output goes to Migration Hub.</p>
+                <p><strong>Application Migration Service (MGN)</strong> executes lift-and-shift: continuous block-level replication of entire VMs, test launches in AWS, then cutover. Discovery plans; MGN moves.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How does DataSync differ from aws s3 sync for a nightly NFS-to-S3 pipeline?<span class="qa-tag">Performance</span></summary>
+              <div class="qa-body">
+                <p>DataSync provides a dedicated agent, parallel transfer protocol (~10× faster than rsync-like tools), built-in scheduling, bandwidth throttling, TLS encryption, and POSIX metadata preservation. <code>aws s3 sync</code> is a CLI convenience — you host it, schedule it yourself, and it lacks NFS as a native source.</p>
+                <p>For recurring enterprise NFS → S3 with ops guardrails, DataSync is the managed answer; for ad hoc laptop uploads, <code>aws s3 sync</code> suffices.</p>
+              </div>
+            </details>
+          </div>
+        </section>
+
+        <section class="section" id="practice">
+          <h2>Hands-on practice</h2>
+          <p class="muted">Free tier where possible. Delete everything at the end of each task.</p>
+          <ol class="practice-list">
+            <li class="practice">
+              <p class="practice-task">Create an S3 bucket and enable Transfer Acceleration. Upload <code>data/customers.csv</code> with and without acceleration and compare upload time from your network (or note the accelerated endpoint URL format).</p>
+              <span class="console-path">S3 → Bucket → Properties → Transfer Acceleration</span>
+              <p class="practice-expect">Bucket shows Acceleration enabled; accelerated endpoint <code>bucket.s3-accelerate.amazonaws.com</code> accepts uploads.</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">Console + CLI</span></summary>
+                <div class="qa-body">
+<pre data-lang="shell"><code>BUCKET=dea-lab-ab-4821
+
+aws s3api put-bucket-accelerate-configuration \
+  --bucket $BUCKET \
+  --accelerate-configuration Status=Enabled
+
+# Standard endpoint
+time aws s3 cp data/customers.csv s3://$BUCKET/raw/customers/std.csv
+
+# Accelerated endpoint
+time aws s3 cp data/customers.csv \
+  s3://$BUCKET/raw/customers/accel.csv \
+  --endpoint-url https://s3-accelerate.amazonaws.com</code></pre>
+                  <p class="muted">Cleanup: disable acceleration if not needed (no hourly fee, but per-GB accelerated pricing applies). Delete test objects.</p>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">In the DMS console, walk through creating a source endpoint (use a free RDS MySQL or skip create and review settings only), and inspect table-mapping and LOB settings on a sample replication task wizard.</p>
+              <span class="console-path">DMS → Endpoints → Create endpoint</span>
+              <p class="practice-expect">You can explain full-load-and-cdc, where LOB mode is set, and what premigration assessment reports.</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">Console</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Open <strong>DMS → Endpoints</strong> → review engine options (MySQL, PostgreSQL, S3 as target).</li>
+                    <li>Start <strong>Create replication task</strong> → note migration types and table mapping JSON upload.</li>
+                    <li>Expand <strong>Task settings</strong> → LOB settings, validation, logging.</li>
+                    <li>Run <strong>Premigration assessment</strong> if endpoints exist.</li>
+                  </ol>
+                  <p class="muted">A running replication instance bills ~0.034 USD/hour for dms.t3.micro — terminate after lab. DMS Serverless avoids idle instance cost for short tests.</p>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Review DataSync pricing and create a task definition on paper: source NFS location, destination S3 location <code>s3://dea-lab-ab-4821/staging/</code>, nightly schedule, 50 Mbps bandwidth cap.</p>
+              <span class="console-path">DataSync → Tasks → Create task</span>
+              <p class="practice-expect">Written CLI or console steps specifying locations, <code>ScheduleExpression</code>, and <code>BytesPerSecond</code> throttle in task options.</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">CLI</span></summary>
+                <div class="qa-body">
+                  <p>Deploy the DataSync agent as an EC2 instance (requires a VPC — see <a href="s19-vpc.html">Section 19</a>). Agent activation produces an agent ARN.</p>
+<pre data-lang="shell"><code># Throttle example in task options (bytes per second):
+# 50 Mbps ≈ 6250000 bytes/s
+aws datasync create-task \
+  --source-location-arn arn:aws:datasync:us-east-1:123456789012:location/nfs-src \
+  --destination-location-arn arn:aws:datasync:us-east-1:123456789012:location/s3-dst \
+  --name nightly-nfs-staging \
+  --schedule ScheduleExpression="cron(0 3 * * ? *)" \
+  --options BytesPerSecond=6250000,VerifyMode=POINT_IN_TIME_CONSISTENT</code></pre>
+                  <p class="muted">Cleanup: delete task and locations; terminate agent EC2. DataSync bills per GB transferred.</p>
+                </div>
+              </details>
+            </li>
+          </ol>
+        </section>
+
+        <section class="section" id="recap">
+          <h2>Recap</h2>
+          <div class="recap">
+            <ul class="checklist">
+              <li>Snow Family: offline when bandwidth fails — Snowcone (8 TB), Snowball Storage Optimized (80 TB usable), Snowmobile (100 PB). KMS, tamper-evident, order → load → return → S3 import.</li>
+              <li>Transfer Family: managed SFTP/FTPS/FTP/AS2 → S3/EFS; wins when clients cannot change; hourly endpoint cost vs plain S3.</li>
+              <li>DataSync: NFS/SMB → S3/EFS/FSx; scheduled sync, TLS, bandwidth throttle, ~10× faster; not continuous DB replication.</li>
+              <li>DMS: database full load + CDC; replication instance, endpoints, tasks; enable binlog/supplemental logging for CDC.</li>
+              <li>SCT: heterogeneous schema conversion before DMS data load.</li>
+              <li>DMS Serverless, LOB settings, validation, premigration assessment — production extras the deck skips.</li>
+              <li>Transfer Acceleration: faster public internet uploads to S3. Direct Connect: private dedicated link.</li>
+              <li>Application Discovery = inventory/plan; Application Migration (MGN) = lift-and-shift VMs with test cutover.</li>
+              <li>"Minimal downtime" + database → DMS. "Nightly NFS sync" → DataSync. "No reliable internet" → Snow. "Existing SFTP" → Transfer Family.</li>
+            </ul>
+            <p style="margin-top:1rem;">
+              <button type="button" data-complete="section-18">Mark complete</button>
+            </p>
+          </div>
+        </section>
+
+      </div>
+
+      <aside class="toc" aria-label="On this page">
+        <strong>On this page</strong>
+        <ol>
+          <li><a href="#lectures">Lectures</a></li>
+          <li><a href="#snow">Snow Family</a></li>
+          <li><a href="#transfer">Transfer Family</a></li>
+          <li><a href="#datasync">DataSync</a></li>
+          <li><a href="#dms">DMS</a></li>
+          <li><a href="#app-discovery">Application Discovery</a></li>
+          <li><a href="#app-migration">Application Migration</a></li>
+          <li><a href="#migration-decisions">Service choice</a></li>
+          <li><a href="#deeper">Deeper detail</a></li>
+          <li><a href="#interview">Interview questions</a></li>
+          <li><a href="#practice">Hands-on practice</a></li>
+          <li><a href="#recap">Recap</a></li>
+        </ol>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<footer class="footer">AWS Certified Data Engineer Associate (DEA-C01) · Section 18 · Offline study edition</footer>
+</body>
+</html>

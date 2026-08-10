@@ -1,0 +1,1291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="DEA-C01 Section 16: AWS CloudFormation, CloudWatch metrics and alarms and logs, CloudTrail auditing, AWS Config compliance, the Well-Architected Framework, and IAM policies and roles for data pipelines.">
+<title>Section 16 — Management, Monitoring, and Governance | AWS Data Engineer DEA-C01 Notes</title>
+<link rel="stylesheet" href="assets/aws.css">
+<script defer src="assets/search-index.js"></script>
+<script defer src="assets/code-highlight.js"></script>
+<script defer src="assets/aws.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">Course section 16 of 21 · AWS Certified Data Engineer Associate</p>
+    <h1>Management, Monitoring, and Governance</h1>
+    <p class="subtitle">Infrastructure as code with CloudFormation, the full observability stack in CloudWatch, audit trails with CloudTrail, compliance with Config, architectural review with the Well-Architected Framework, and the IAM model every pipeline role depends on.</p>
+    <div class="hero-meta">
+      <span class="chip">48 slides · ~75min</span>
+      <span class="chip">Exam domains: Data Operations (22%) · Data Security and Governance (18%)</span>
+      <span class="chip">Deck slides 560–607</span>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <nav class="pager" aria-label="Section navigation">
+    <a href="s15-app-integration.html">← Application Integration</a>
+    <a href="index.html">Course contents</a>
+    <a href="s17-containers.html">Next: Containers →</a>
+  </nav>
+
+  <main id="main">
+    <div class="layout">
+      <div class="content">
+
+        <section class="section" id="lectures">
+          <h2>Lectures in this section</h2>
+          <p class="muted">Each lecture links to the notes that cover it. Labs reuse bucket <code>dea-lab-&lt;initials&gt;-&lt;random&gt;</code> in <code>us-east-1</code>.</p>
+          <ol class="lecture-list">
+            <li class="lecture">
+              <a class="lec-title" href="#cloudformation">AWS CloudFormation: templates, stacks and infrastructure as code</a>
+              <span class="lec-time">~10:00</span>
+              <span class="lec-src">Slides 561–564</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#cloudwatch">Amazon CloudWatch: metrics, alarms, logs and agents</a>
+              <span class="lec-time">~18:00</span>
+              <span class="lec-src">Slides 565–576</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#cloudtrail">AWS CloudTrail: audit events, trails and CloudTrail Lake</a>
+              <span class="lec-time">~8:00</span>
+              <span class="lec-src">Slides 577–582</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#config">AWS Config: rules, conformance packs and aggregation</a>
+              <span class="lec-time">~10:00</span>
+              <span class="lec-src">Slides 583–590</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#well-architected">AWS Well-Architected Framework and Tool</a>
+              <span class="lec-time">~6:00</span>
+              <span class="lec-src">Slides 591–597</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#iam">AWS IAM: users, roles, policies and evaluation logic</a>
+              <span class="lec-time">~12:00</span>
+              <span class="lec-src">Slides 598–607</span>
+            </li>
+          </ol>
+        </section>
+
+        <!-- CLOUDFORMATION -->
+        <section class="section" id="cloudformation">
+          <h2>AWS CloudFormation</h2>
+          <p class="lead">CloudFormation lets you define and provision AWS infrastructure as code (IaC). A template describes the desired state; CloudFormation creates, updates and deletes the resources as a single unit called a <strong>stack</strong>. For a data engineer this is how you reproducibly stand up the S3 landing zone, Glue catalog objects and crawlers that every lab in this course assumes.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-560.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-560.png" alt="Course section divider slide for Section 16 Management Monitoring and Governance." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 560</span>Section opener. Everything from here through slide 607 is the operational and governance layer that wraps around the pipelines in earlier sections.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-561.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-561.png" alt="Course slide introducing AWS CloudFormation as an infrastructure management service." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 561</span>CloudFormation topic header. The exam treats it as the managed IaC service — contrast it with Terraform (third-party) and CDK (generates CloudFormation under the hood).</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-562.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-562.png" alt="CloudFormation overview: define infrastructure as code, replicate across regions, track changes, simplify management, with console screenshot." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 562</span>Core value proposition. Use cases the deck lists — cross-region replication, change tracking, simplified management — map directly to exam scenarios where a team needs repeatable, version-controlled pipeline infrastructure.</figcaption>
+          </figure>
+
+          <h3>Templates and template sections</h3>
+          <p>A CloudFormation template is a YAML or JSON text file describing the desired state. Only <code>Resources</code> is mandatory; the other sections make templates reusable and flexible.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Section</th><th>Purpose</th><th>Data-engineer example</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Parameters</strong></td><td>Inputs at deploy time — no hard-coded account-specific values</td><td><code>BucketName</code>, <code>Environment</code> (dev/prod), Glue database name</td></tr>
+                <tr><td><strong>Mappings</strong></td><td>Static lookup tables keyed by a parameter</td><td>Region → S3 endpoint, or env → retention days</td></tr>
+                <tr><td><strong>Conditions</strong></td><td>Boolean gates that include or skip resources</td><td>Create the crawler only when <code>Environment</code> is prod</td></tr>
+                <tr><td><strong>Resources</strong></td><td>AWS resources to create — the only required section</td><td><code>AWS::S3::Bucket</code>, <code>AWS::Glue::Database</code>, <code>AWS::Glue::Crawler</code></td></tr>
+                <tr><td><strong>Outputs</strong></td><td>Values exported after stack creation</td><td>Bucket ARN, crawler name — consumed by other stacks or CI/CD</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-563.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-563.png" alt="Minimal CloudFormation YAML template with Resources section creating an S3 bucket named FirstS3Bucket." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 563</span>Minimal template. The logical ID <code>FirstS3Bucket</code> is how other resources in the same template reference this bucket; CloudFormation assigns the physical name at runtime unless you set <code>BucketName</code> explicitly.</figcaption>
+          </figure>
+
+          <pre data-lang="yaml" data-title="CloudFormation — S3 bucket, Glue database and crawler" data-explain="A realistic data-lake bootstrap stack: raw-data bucket, Glue catalog database, and a crawler over the raw/ prefix. Parameters keep it reusable across accounts."><code>AWSTemplateFormatVersion: '2010-09-09'
+Description: Data-lake landing zone — S3, Glue database and crawler
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, prod]
+  BucketName:
+    Type: String
+    Description: Globally unique S3 bucket name
+
+Resources:
+  RawDataBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref BucketName
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+
+  GlueDatabase:
+    Type: AWS::Glue::Database
+    Properties:
+      CatalogId: !Ref AWS::AccountId
+      DatabaseInput:
+        Name: !Sub 'dea_${Environment}_raw'
+        Description: Raw landing zone tables
+
+  GlueCrawlerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'dea-${Environment}-crawler-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: glue.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSGlueServiceRole
+
+  RawCrawler:
+    Type: AWS::Glue::Crawler
+    DependsOn: RawDataBucket
+    Properties:
+      Name: !Sub 'dea-${Environment}-raw-crawler'
+      Role: !GetAtt GlueCrawlerRole.Arn
+      DatabaseName: !Ref GlueDatabase
+      Targets:
+        S3Targets:
+          - Path: !Sub 's3://${BucketName}/raw/'
+      SchemaChangePolicy:
+        UpdateBehavior: UPDATE_IN_DATABASE
+        DeleteBehavior: DEPRECATE_IN_DATABASE
+
+Outputs:
+  BucketArn:
+    Value: !GetAtt RawDataBucket.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-BucketArn'
+  DatabaseName:
+    Value: !Ref GlueDatabase</code></pre>
+
+          <h3>Stacks, change sets and drift</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-564.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-564.png" alt="CloudFormation stack workflow diagram: Template to S3 bucket to CloudFormation service to Stack." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 564</span>How a stack works. You upload a template (often to S3 first for large templates), CloudFormation evaluates it, and creates every resource in <code>Resources</code> as one atomic unit — if any resource fails, the stack rolls back unless you disabled rollback.</figcaption>
+          </figure>
+
+          <ul>
+            <li><strong>Change sets</strong> preview what an update will do before you apply it — essential before touching a production crawler or bucket policy.</li>
+            <li><strong>Drift detection</strong> compares the stack's template to the actual resource configuration. If someone changed a bucket policy in the console, drift detection flags it.</li>
+            <li><strong>Nested stacks</strong> let a parent template call child templates — useful when your data platform has separate modules for networking, storage and compute.</li>
+            <li><strong>StackSets</strong> deploy the same stack across multiple accounts and regions from a management account — common in enterprise landing zones.</li>
+            <li><strong>Rollback behaviour:</strong> by default a failed <code>CREATE</code> rolls back (deletes partial resources). A failed <code>UPDATE</code> rolls back to the previous known-good state. You can disable rollback for debugging, but you then inherit a broken partial stack.</li>
+          </ul>
+
+          <div class="callout exam"><strong>CloudFormation vs other IaC on the exam.</strong> CloudFormation is native, free (you pay for the resources), and integrates with StackSets and drift detection. CDK synthesises CloudFormation. Terraform is third-party state. When the question says "AWS-native IaC with rollback and drift detection", the answer is CloudFormation.</div>
+        </section>
+
+        <section class="section" id="cloudwatch">
+          <h2>Amazon CloudWatch</h2>
+          <p class="lead">CloudWatch is AWS's proprietary monitoring service for applications and resources in real time. Metrics appear on dashboards; logs consolidate in log groups; alarms trigger actions when thresholds breach. Every data pipeline you build in this course should emit something CloudWatch can see.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-565.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-565.png" alt="Course slide introducing Amazon CloudWatch monitoring service." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 565</span>CloudWatch topic header. It is the default answer for "monitor an AWS service metric" unless the question specifically asks for audit logging (CloudTrail) or configuration compliance (Config).</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-566.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-566.png" alt="CloudWatch as main monitoring service with real-time metrics on dashboards and console screenshot." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 566</span>CloudWatch monitors both AWS services (automatically published metrics) and your own custom metrics. Dashboards aggregate multiple metrics and can be shared across accounts.</figcaption>
+          </figure>
+
+          <h3>Metrics: namespaces, dimensions and resolution</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-567.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-567.png" alt="CloudWatch metrics concepts: namespaces, timestamps, dimensions, statistics, period, standard versus high resolution." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 567</span>Metric vocabulary. <strong>Namespace</strong> groups related metrics (e.g. <code>AWS/Glue</code>). <strong>Dimensions</strong> are key/value pairs that identify a specific resource instance. <strong>Period</strong> is the aggregation window; <strong>Resolution</strong> is how granular the raw data points are.</figcaption>
+          </figure>
+
+          <ul>
+            <li><strong>Standard resolution:</strong> one data point per minute — default for AWS service metrics and free-tier custom metrics.</li>
+            <li><strong>High resolution:</strong> one data point per second — costs more, needed for sub-minute alerting on custom metrics.</li>
+            <li><strong>Statistics:</strong> Average, Sum, Minimum, Maximum, SampleCount — aggregated over the chosen period.</li>
+          </ul>
+
+          <pre data-lang="shell" data-title="CloudWatch — publish a custom metric" data-explain="PutMetricData publishes a custom metric into a namespace you define. Useful for tracking rows processed, file counts, or data-quality scores from a Glue job or Lambda."><code>aws cloudwatch put-metric-data \
+  --namespace "DEA/DataPipeline" \
+  --metric-data '[{
+    "MetricName": "RowsProcessed",
+    "Dimensions": [{"Name": "JobName", "Value": "customers-etl"}],
+    "Timestamp": "2026-08-03T12:00:00Z",
+    "Value": 10482,
+    "Unit": "Count",
+    "StorageResolution": 60
+  }]'</code></pre>
+
+          <h3>Metric streams</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-568.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-568.png" alt="CloudWatch metric streams diagram streaming metrics through Kinesis Data Firehose to OpenSearch, Redshift and S3." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 568</span>Metric streams continuously export CloudWatch metrics to destinations in near real time. Firehose is the AWS-native path to S3, Redshift or third-party partners — complementary to dashboards, not a replacement for alarms.</figcaption>
+          </figure>
+
+          <h3>Alarms</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-569.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-569.png" alt="CloudWatch alarm types: metric alarm monitoring a single metric and composite alarm monitoring other alarms." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 569</span>Two alarm types. A <strong>metric alarm</strong> watches one metric (optionally with math expressions). A <strong>composite alarm</strong> combines the states of other alarms with AND/OR logic — e.g. alarm only when <em>both</em> iterator age is high <em>and</em> error rate is elevated.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-570.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-570.png" alt="CloudWatch alarm states OK ALARM INSUFFICIENT_DATA and alarm actions to SNS EC2 Auto Scaling Lambda incident management." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 570</span>Three alarm states and possible actions. <code>INSUFFICIENT_DATA</code> often means the metric has not reported yet or the evaluation period has too few datapoints — configure missing-data treatment explicitly or new resources will sit in this state indefinitely.</figcaption>
+          </figure>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Alarm setting</th><th>What it controls</th><th>Typical data-pipeline value</th></tr></thead>
+              <tbody>
+                <tr><td>Evaluation periods</td><td>How many consecutive periods are evaluated</td><td>2 periods of 5 minutes = alert after 10 minutes of breach</td></tr>
+                <tr><td>Datapoints to alarm</td><td>How many of those periods must breach</td><td>M out of N — e.g. 2 out of 3 reduces flapping</td></tr>
+                <tr><td>Missing data treatment</td><td>How to treat gaps in the metric stream</td><td><code>notBreaching</code> for sparse metrics; <code>breaching</code> if silence means failure</td></tr>
+                <tr><td>Actions</td><td>What happens on state change</td><td>SNS email, Lambda auto-remediation, Auto Scaling policy</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Metrics a data engineer should alarm on</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Service</th><th>Metric</th><th>Why alarm</th><th>How to catch it</th></tr></thead>
+              <tbody>
+                <tr><td>Glue</td><td>Job failure (no native failure metric)</td><td>ETL silently stops landing curated data</td><td><a href="s15-app-integration.html#eventbridge">EventBridge</a> rule on Glue Job State Change → FAILED → SNS</td></tr>
+                <tr><td>Kinesis Data Streams</td><td><code>GetRecords.IteratorAgeMilliseconds</code></td><td>Consumer falling behind — data going stale</td><td>CloudWatch metric alarm → SNS</td></tr>
+                <tr><td>Lambda</td><td><code>Errors</code>, <code>Throttles</code></td><td>Transformation step failing or capacity-limited</td><td>CloudWatch metric alarm → SNS</td></tr>
+                <tr><td>Redshift</td><td><code>QueryDuration</code>, <code>PercentageDiskSpaceUsed</code></td><td>Runaway queries or cluster filling up</td><td>CloudWatch metric alarm → SNS</td></tr>
+                <tr><td>DynamoDB</td><td><code>ThrottledRequests</code></td><td>Hot partition or under-provisioned capacity</td><td>CloudWatch metric alarm → SNS</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout info"><strong>EventBridge vs CloudWatch Alarms for pipeline failures.</strong> CloudWatch Alarms watch <em>metrics</em> — numeric time series. EventBridge reacts to <em>events</em> — structured state changes such as "Glue job X failed" or "Step Functions execution timed out". Glue job failure notification is an EventBridge pattern, not a native CloudWatch metric alarm, because Glue publishes job state as events. Use alarms for continuous numeric thresholds (iterator age, error rate, disk usage); use EventBridge for discrete lifecycle events.</div>
+
+          <h3>CloudWatch Logs</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-571.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-571.png" alt="CloudWatch Logs centralized logging and real-time monitoring from multiple sources." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 571</span>Logs consolidate output from Lambda, Glue, Kinesis, VPC Flow Logs, and custom applications into one queryable store.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-572.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-572.png" alt="CloudWatch Logs structure: log streams, log groups, log events, retention, Log Insights, export to S3 Kinesis Firehose Lambda." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 572</span>Hierarchy: a <strong>log group</strong> (e.g. <code>/aws-glue/jobs/output</code>) contains <strong>log streams</strong> (one per job run or instance). Set <strong>retention</strong> to control cost — default is never expire, which adds up. Export to S3 for cheap long-term archival.</figcaption>
+          </figure>
+
+          <h3>Logs Insights query syntax</h3>
+          <p>Logs Insights is an interactive query language over log groups. Queries run server-side — you pay per GB scanned, not per log group size.</p>
+
+          <pre data-lang="sql" data-title="CloudWatch Logs Insights — find Glue job errors" data-explain="Scans the Glue job output log group, filters to ERROR lines in the last 24 hours, parses the job name and error message, and counts occurrences."><code>fields @timestamp, @message
+| filter @message like /ERROR/
+| parse @message /\[*\] *(?&lt;errorMsg&gt;.*)/
+| filter @logStream like /customers-etl/
+| stats count() as errorCount by errorMsg
+| sort errorCount desc
+| limit 20</code></pre>
+
+          <p>Common Insights commands: <code>fields</code> selects columns; <code>filter</code> keeps matching rows; <code>parse</code> extracts structured fields with regex; <code>stats</code> aggregates; <code>sort</code> and <code>limit</code> shape the result. Run this from CloudWatch → Logs → Logs Insights, selecting <code>/aws-glue/jobs/output</code> and <code>/aws-glue/jobs/error</code>.</p>
+
+          <h3>Metric filters versus subscription filters</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-573.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-573.png" alt="CloudWatch log filtering: metric filter creates custom metrics, subscription filter sends log data to Firehose Kinesis Streams or Lambda." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 573</span>Two different filter types with different destinations. Do not confuse them on the exam.</figcaption>
+          </figure>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Filter type</th><th>Destination</th><th>Use when</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Metric filter</strong></td><td>CloudWatch metric (then alarm on it)</td><td>Turn log patterns into numbers — count ERROR lines, track "OutOfMemory" occurrences</td></tr>
+                <tr><td><strong>Subscription filter</strong></td><td>Kinesis Data Streams, Firehose, or Lambda</td><td>Stream raw or filtered log events to OpenSearch, S3, or a real-time processor</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <pre data-lang="json" data-title="CloudWatch metric filter — count ERROR log lines" data-explain="Attached to a log group. Each matching log event increments the custom metric by 1, which you then alarm on."><code>{
+  "filterName": "GlueJobErrors",
+  "filterPattern": "ERROR",
+  "metricTransformations": [{
+    "metricName": "GlueJobErrorCount",
+    "metricNamespace": "DEA/DataPipeline",
+    "metricValue": "1",
+    "defaultValue": 0
+  }]
+}</code></pre>
+
+          <h3>Cross-account log delivery</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-574.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-574.png" alt="Cross-account CloudWatch Logs delivery: four-step setup with Kinesis Data Stream in destination account, IAM role and trust policy, subscription filter in source account." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 574</span>Centralised logging across accounts. The destination account owns the Kinesis stream and an IAM role whose trust policy allows the source account's CloudWatch Logs service to assume it and write records.</figcaption>
+          </figure>
+
+          <ol>
+            <li>Create a <strong>Kinesis Data Stream</strong> in the destination account.</li>
+            <li>Create an <strong>IAM role</strong> in the destination account with a trust policy allowing <code>logs.&lt;region&gt;.amazonaws.com</code> from the source account, plus a policy granting <code>kinesis:PutRecord</code>.</li>
+            <li>In the <strong>source account</strong>, create a subscription filter on the log group pointing to the destination stream ARN and the cross-account role ARN.</li>
+            <li>Optionally attach a <strong>resource policy</strong> on the Kinesis stream granting the source account write access.</li>
+          </ol>
+
+          <h3>CloudWatch agent</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-575.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-575.png" alt="CloudWatch Logs agent for EC2 and on-premises servers to send logs to CloudWatch." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 575</span>EC2 instances do not automatically ship OS-level logs to CloudWatch. You install an agent to collect application and system logs from EC2 or on-premises servers.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-576.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-576.png" alt="Comparison of legacy CloudWatch Logs agent versus Unified CloudWatch agent for logs and system metrics." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 576</span>AWS recommends the <strong>Unified CloudWatch agent</strong>. The legacy Logs agent only collects logs; the unified agent collects logs <em>and</em> system metrics (CPU, memory, disk, network, swap). Use it on EMR edge nodes or self-managed Kafka brokers where you need host-level observability.</figcaption>
+          </figure>
+
+          <div class="diagram">
+            <p class="diagram-title">Observability path for a data pipeline</p>
+            <div class="flow">
+              <div class="node is-source"><b>Pipeline</b><small>Glue · Lambda · Kinesis</small></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-store"><b>CloudWatch</b><small>Logs · Metrics</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-compute pulse"><b>Alarm / Filter</b><small>Metric · Subscription</small></div>
+            </div>
+            <div class="flow" style="margin-top:14px;">
+              <div class="node is-serve"><b>SNS</b><small>Email · PagerDuty</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-serve"><b>Responder</b><small>On-call engineer</small></div>
+              <div class="node is-store"><b>Firehose / OpenSearch</b><small>Subscription filter branch</small></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="section" id="cloudtrail">
+          <h2>AWS CloudTrail</h2>
+          <p class="lead">CloudTrail is the audit and governance service that records API activity in your AWS account. Every console click and SDK call that changes state leaves a CloudTrail event. It is enabled by default for management events in the 90-day Event history, but long-term retention and data-level auditing require a trail.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-577.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-577.png" alt="Course slide introducing AWS CloudTrail audit and governance service." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 577</span>CloudTrail topic header. Pair it mentally with CloudWatch (operational metrics) and Config (resource configuration state) — three different lenses on the same infrastructure.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-578.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-578.png" alt="CloudTrail records all account activities as events, enabled by default, with console screenshot of event history." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 578</span>CloudTrail is on from day one for management events. The console Event history view shows the last 90 days without creating a trail — but you cannot query beyond that window or capture data events without a trail.</figcaption>
+          </figure>
+
+          <h3>Event types</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-579.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-579.png" alt="CloudTrail event types: management events, data events, insight events, and 90-day event history." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 579</span>Three event categories. <strong>Management events</strong> cover control-plane API calls (CreateBucket, RunJobFlow). <strong>Data events</strong> cover object-level activity (GetObject, PutObject). <strong>Insight events</strong> flag unusual API rate patterns.</figcaption>
+          </figure>
+
+          <div class="callout exam"><strong>Data events are off by default — and they are what data engineers need.</strong> Management events tell you someone created an S3 bucket; data events tell you someone read or wrote a specific object in that bucket. S3 object-level auditing, Lambda Invoke, and DynamoDB item-level reads all require enabling data events on a trail. They cost extra per event — the exam still expects you to know when they are required.</div>
+
+          <pre data-lang="json" data-title="CloudTrail — S3 data event selector" data-explain="Add this to a trail's event selector to capture object-level read and write activity on a specific bucket prefix. Without it, CloudTrail never records GetObject or PutObject."><code>{
+  "ReadWriteType": "All",
+  "IncludeManagementEvents": true,
+  "DataResources": [{
+    "Type": "AWS::S3::Object",
+    "Values": [
+      "arn:aws:s3:::dea-lab-ab-4821/raw/*",
+      "arn:aws:s3:::dea-lab-ab-4821/curated/*"
+    ]
+  }]
+}</code></pre>
+
+          <h3>Trails</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-580.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-580.png" alt="CloudTrail trails: multi-region, single region, organizational trails, multiple trails per region, S3 delivery." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 580</span>Trail scope. A <strong>multi-Region trail</strong> logs events in every Region and delivers to one S3 bucket. An <strong>organizational trail</strong> logs all accounts in an AWS Organization. You can run multiple trails per Region with different event selectors — e.g. one trail for management events everywhere, another for S3 data events on sensitive buckets only.</figcaption>
+          </figure>
+
+          <ul>
+            <li><strong>S3 delivery:</strong> trail log files land in an S3 bucket you designate — typically with lifecycle rules to Glacier for cost.</li>
+            <li><strong>Log file validation:</strong> SHA-256 digest files prove logs were not tampered with after delivery.</li>
+            <li><strong>KMS encryption:</strong> encrypt trail log files at rest with a CMK you control.</li>
+            <li><strong>CloudWatch Logs integration:</strong> ship trail events to a log group for metric filters and near-real-time alerting on API calls (e.g. alert on <code>DeleteBucket</code>).</li>
+          </ul>
+
+          <h3>CloudTrail Lake</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-581.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-581.png" alt="CloudTrail Lake managed data lake for API activity with channels for external event ingestion." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 581</span>CloudTrail Lake is a managed event store you query with SQL. <strong>Channels</strong> ingest events from external sources (on-premises, other clouds) into the same query engine. Event data stores retain events up to 7 years (or 2,557 days max).</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-582.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-582.png" alt="CloudTrail extras: deep event analysis and EventBridge rules for CloudTrail events." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 582</span>Route CloudTrail events to <a href="s15-app-integration.html#eventbridge">EventBridge</a> for automated response — e.g. disable an IAM user whose access key was used from an unexpected country, or block a bucket deletion attempt.</figcaption>
+          </figure>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Feature</th><th>90-day Event history</th><th>Trail to S3</th><th>CloudTrail Lake</th></tr></thead>
+              <tbody>
+                <tr><td>Retention</td><td>90 days, fixed</td><td>As long as your S3 lifecycle allows</td><td>Up to 7 years in an event data store</td></tr>
+                <tr><td>Data events</td><td>No</td><td>Yes (if configured)</td><td>Yes</td></tr>
+                <tr><td>Query</td><td>Console filter only</td><td>Athena over S3 logs</td><td>Built-in SQL (CloudTrail Lake query)</td></tr>
+                <tr><td>Cost</td><td>Free</td><td>S3 storage + data event charges</td><td>Ingestion + storage per event</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="section" id="config">
+          <h2>AWS Config</h2>
+          <p class="lead">AWS Config assesses, audits and evaluates the <em>configuration</em> of your AWS resources — not API calls (CloudTrail) and not runtime metrics (CloudWatch). It is disabled by default. When enabled, it records configuration items and evaluates them against rules to produce compliance results.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-583.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-583.png" alt="Course slide introducing AWS Config centralized configuration management." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 583</span>Config topic header. Think "is my S3 bucket encrypted and are public access blocks on?" — not "how many GetObject calls happened today".</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-584.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-584.png" alt="AWS Config overview: assess audit evaluate resource configurations, generates configuration items, disabled by default." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 584</span>Each tracked resource gets a <strong>configuration item (CI)</strong> — a JSON snapshot of its settings at a point in time. The configuration recorder must be on and a delivery channel (S3 + optional SNS) configured before Config stores anything.</figcaption>
+          </figure>
+
+          <h3>Core concepts</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-585.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-585.png" alt="AWS Config concepts: configuration item, recorder, history, snapshot, stream, conformance packs, discovery, advanced queries, resource relationships." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 585</span>Vocabulary cheat sheet. <strong>Configuration stream</strong> pushes CIs to SNS/Kinesis in near real time. <strong>Conformance packs</strong> bundle rules and remediation into a deployable unit — like a compliance template for your organisation.</figcaption>
+          </figure>
+
+          <h3>Config rules</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-586.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-586.png" alt="AWS Config rules evaluate resource compliance with managed and custom rule types." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 586</span>Rules return COMPLIANT, NON_COMPLIANT, or NOT_APPLICABLE. Non-compliant resources can trigger automatic remediation if you attach a remediation action.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-587.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-587.png" alt="Managed versus custom Config rules comparison and evaluation flow diagram with Lambda." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 587</span><strong>Managed rules</strong> are pre-built by AWS (often parameterised). <strong>Custom rules</strong> call a Lambda function or AWS Config rule with Guard (policy-as-code) that you write — e.g. "every S3 bucket must have a <code>raw/</code> prefix lifecycle rule".</figcaption>
+          </figure>
+
+          <pre data-lang="python" data-title="AWS Config custom rule — Lambda skeleton" data-explain="Config invokes this Lambda with the configuration item of the evaluated resource. Return COMPLIANT or NON_COMPLIANT."><code>import json
+
+def evaluate_compliance(configuration_item):
+    resource_type = configuration_item["resourceType"]
+    if resource_type != "AWS::S3::Bucket":
+        return "NOT_APPLICABLE"
+    encryption = configuration_item.get("configuration", {}).get(
+        "serverSideEncryptionConfiguration", {}
+    )
+    if encryption:
+        return "COMPLIANT"
+    return "NON_COMPLIANT"
+
+def lambda_handler(event, context):
+    invoking_event = json.loads(event["invokingEvent"])
+    ci = invoking_event["configurationItem"]
+    compliance = evaluate_compliance(ci)
+    return {
+        "compliance_type": compliance,
+        "Annotation": f"Bucket encryption check: {compliance}"
+    }</code></pre>
+
+          <h3>Trigger types and evaluation modes</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-588.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-588.png" alt="AWS Config rule trigger types: configuration change, periodic, and hybrid." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 588</span><strong>Configuration change</strong> triggers on every CI update — immediate but can be noisy. <strong>Periodic</strong> runs on a schedule (e.g. every 24 hours) for resources that rarely change. <strong>Hybrid</strong> combines both.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-589.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-589.png" alt="AWS Config evaluation modes: proactive before deployment and detective after deployment." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 589</span><strong>Detective</strong> evaluation (the classic mode) checks resources after they exist. <strong>Proactive</strong> evaluation uses CloudFormation hooks / Config proactive rules to block non-compliant templates <em>before</em> resources are created — e.g. reject a template that creates an unencrypted RDS instance.</figcaption>
+          </figure>
+
+          <h3>Multi-account aggregation</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-590.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-590.png" alt="AWS Config multi-account multi-Region aggregation with aggregator and source accounts." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 590</span>An <strong>aggregator account</strong> collects compliance data from <strong>source accounts</strong> across Regions. Source accounts must authorise the aggregator. This is how a central governance team sees every bucket's encryption status without logging into fifty accounts.</figcaption>
+          </figure>
+        </section>
+
+        <section class="section" id="well-architected">
+          <h2>AWS Well-Architected Framework and Tool</h2>
+          <p class="lead">The Well-Architected Framework is AWS's collection of best practices across six pillars. The Well-Architected Tool is a free console application that walks you through a questionnaire for a specific workload and returns high-risk and medium-risk issues with remediation guidance.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-592.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-592.png" alt="AWS Well-Architected Framework five pillars: operational excellence, security, reliability, performance efficiency, cost optimization." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 592</span>Five of the six pillars. Each is a lens for reviewing an architecture — the exam may describe a pipeline problem and expect you to name which pillar it violates.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-593.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-593.png" alt="AWS Well-Architected Framework sixth pillar sustainability for efficient resource use and reduced carbon emissions." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 593</span>The sixth pillar — <strong>Sustainability</strong> — was added after the deck's first five-pillar slide. Minimise idle compute, right-size clusters, use Graviton where possible, and lifecycle S3 data to colder tiers.</figcaption>
+          </figure>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Pillar</th><th>Core question</th><th>Concrete data-pipeline decision</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Operational Excellence</strong></td><td>Are you running and improving operations?</td><td>CloudWatch dashboards + EventBridge failure routing + runbooks for Glue job retries</td></tr>
+                <tr><td><strong>Security</strong></td><td>Are you protecting data and systems?</td><td>Least-privilege IAM roles for Glue, encryption at rest on S3, <a href="s13-analytics.html#lake-formation">Lake Formation</a> fine-grained access</td></tr>
+                <tr><td><strong>Reliability</strong></td><td>Can the system recover from failure?</td><td>Multi-AZ Redshift, Kinesis enhanced fan-out, idempotent writes, dead-letter queues on Lambda</td></tr>
+                <tr><td><strong>Performance Efficiency</strong></td><td>Are you using the right resources?</td><td>Partition S3 data for Athena, right-size Glue DPU count, use Parquet not JSON</td></tr>
+                <tr><td><strong>Cost Optimization</strong></td><td>Are you avoiding unnecessary spend?</td><td>S3 Intelligent-Tiering, Athena partition projection, delete idle Redshift clusters, <a href="s04-glue.html#budgets">Budgets</a></td></tr>
+                <tr><td><strong>Sustainability</strong></td><td>Are you minimising environmental impact?</td><td>Graviton Lambda/Glue workers, S3 lifecycle to Glacier, scale-to-zero serverless over always-on EC2</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Well-Architected Tool</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-594.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-594.png" alt="AWS Well-Architected Tool introduction for reviewing workloads against the framework." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 594</span>The tool is free and lives in the AWS console. You define a workload, answer pillar questions, and receive an improvement plan.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-595.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-595.png" alt="Well-Architected Tool questionnaire-based assessment with console screenshot." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 595</span>Questionnaire-based review. AWS partners can also run formal Well-Architected Reviews for customers — but the self-service tool is what the exam references.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-596.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-596.png" alt="Well-Architected Tool features: workloads, milestones, lenses, high-risk and medium-risk issues." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 596</span>Key objects. A <strong>workload</strong> is a collection of components delivering business value (e.g. "nightly sales ETL"). <strong>Milestones</strong> capture the architecture at a point in time. <strong>Lenses</strong> extend the review — the <em>Data Analytics Lens</em> adds data-specific questions. <strong>HRIs/MRIs</strong> are prioritised issues to fix.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-597.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-597.png" alt="Well-Architected Tool workflow: define workload, review, get feedback for continuous improvement and governance." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 597</span>Workflow: define → review → improve → re-assess at the next milestone. Use it before launching a new pipeline to production and again after major changes.</figcaption>
+          </figure>
+
+          <h3>AWS Trusted Advisor</h3>
+          <p>AWS Trusted Advisor inspects your account against AWS best practices and surfaces recommendations in five categories: <strong>cost optimisation</strong>, <strong>performance</strong>, <strong>security</strong>, <strong>fault tolerance</strong>, and <strong>service limits</strong>. It is a governance and planning lens, not an audit log — it tells you what to improve, not who changed what.</p>
+          <p><strong>Support plan access:</strong> all accounts get a subset of Trusted Advisor checks for free (core security and service-limit checks). The full catalogue of checks — including most cost optimisation, performance, and fault tolerance recommendations — requires a <strong>Business, Enterprise On-Ramp, or Enterprise</strong> support plan. Developer and Basic support see fewer checks; exact check counts vary and are listed in the Trusted Advisor console for your plan tier.</p>
+          <p>The <strong>service limits</strong> category is especially useful for data platforms: it flags Kinesis shard counts, Lambda concurrency headroom, VPC limits, and other quotas approaching maximum before a pipeline hits a hard wall. Pair those findings with capacity planning and Service Quotas increase requests where limits are soft.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Service</th><th>What it does</th><th>Contrast with Trusted Advisor</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Trusted Advisor</strong></td><td>Best-practice recommendations (idle resources, open security groups, limit headroom)</td><td>Point-in-time guidance; no historical configuration timeline</td></tr>
+                <tr><td><strong>AWS Config</strong></td><td>Records configuration state over time; evaluates rules for COMPLIANT / NON_COMPLIANT</td><td>Detective compliance and drift — "is encryption on?" not "you are paying for idle IPs"</td></tr>
+                <tr><td><strong>Compute Optimizer</strong></td><td>Rightsizing from CloudWatch utilisation metrics (EC2, Lambda, EBS, ECS)</td><td>Data-driven instance size recommendations — not general best-practice checklists</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>For a data engineer, Trusted Advisor complements <a href="#config">Config conformance packs</a> and Cost Explorer: use Config to enforce encryption and public-access rules, Trusted Advisor to catch under-used Redshift clusters or over-provisioned Kinesis shards, and Compute Optimizer when EMR core nodes or Lambda functions show sustained low CPU.</p>
+        </section>
+
+        <section class="section" id="iam">
+          <h2>AWS Identity and Access Management (IAM)</h2>
+          <p class="lead">IAM centrally manages <strong>who</strong> can do <strong>what</strong> to <strong>which resources</strong>. Every Glue job, Redshift COPY, Lambda invocation and cross-account Lake Formation grant depends on getting IAM right. The exam tests policy JSON, trust policies, and the evaluation order obsessively.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-598.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-598.png" alt="Course slide introducing AWS Identity and Access Management IAM." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 598</span>IAM topic header. It is foundational — Section 1 tells you to stop using the root user; this section explains the replacement model.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-599.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-599.png" alt="IAM components overview: users, groups, roles, policies for centrally managing access and permissions." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 599</span>Four building blocks. <strong>Users</strong> and <strong>roles</strong> are identities; <strong>groups</strong> bundle users; <strong>policies</strong> define permissions attached to identities or resources.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-600.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-600.png" alt="IAM principle of least privilege: no access by default, grant only what is needed." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 600</span>Least privilege is the default design principle. Start with zero permissions and add only what the workload requires — never attach <code>AdministratorAccess</code> to a Glue service role.</figcaption>
+          </figure>
+
+          <h3>Users</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-601.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-601.png" alt="IAM user types: root user, standard IAM users, and federated users from external identity providers." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 601</span>Three user types. <strong>Root</strong> has unrestricted access — use only for account setup and billing emergencies. <strong>Standard IAM users</strong> have long-lived credentials in your account. <strong>Federated users</strong> authenticate via SAML/OIDC (Active Directory, Okta) and receive temporary credentials — no IAM password stored in AWS.</figcaption>
+          </figure>
+
+          <h3>Groups</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-602.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-602.png" alt="IAM groups as collections of users with inherited policies, no credentials on the group itself." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 602</span>Groups simplify permission management — attach a policy to the "DataEngineers" group and every member inherits it. Groups cannot be referenced as principals in resource policies; they are an organisational convenience only.</figcaption>
+          </figure>
+
+          <h3>Roles: service roles versus human-assumed roles</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-603.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-603.png" alt="IAM roles as assumable permission sets with policies attached, used by services and identities." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 603</span>A role has no permanent credentials. An identity (human or service) calls <code>sts:AssumeRole</code>, receives temporary access key + secret + session token, and operates with the role's permissions for up to the max session duration.</figcaption>
+          </figure>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Role type</th><th>Who assumes it</th><th>Trust policy principal</th><th>Data-pipeline example</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Service role</strong></td><td>An AWS service on your behalf</td><td><code>glue.amazonaws.com</code>, <code>redshift.amazonaws.com</code>, <code>lambda.amazonaws.com</code></td><td>Glue crawler role that reads S3 and writes to the Data Catalog</td></tr>
+                <tr><td><strong>Human-assumed role</strong></td><td>A person or federated user</td><td>Your IAM user ARN, account root, or SAML/OIDC provider</td><td>Data engineer assumes <code>DataAnalystRole</code> to query Athena without admin access</td></tr>
+                <tr><td><strong>Cross-account role</strong></td><td>Principal in another account</td><td>Foreign account ID or role ARN</td><td>Account B's Lambda assumes Account A's role to read a shared S3 bucket</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <pre data-lang="json" data-title="IAM — Glue service role trust policy" data-explain="The trust policy lives on the role itself. It names which service may call sts:AssumeRole. Without this, Glue cannot assume the role and every crawl fails with AccessDenied."><code>{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Principal": {
+      "Service": "glue.amazonaws.com"
+    },
+    "Action": "sts:AssumeRole"
+  }]
+}</code></pre>
+
+          <p>The trust policy is only half the story. The role also needs <strong>permission policies</strong> (identity-based, attached to the role) granting e.g. <code>s3:GetObject</code> on <code>raw/*</code> and <code>glue:CreateTable</code>. The service role trust policy says <em>who may wear the hat</em>; the permission policy says <em>what the hat allows</em>.</p>
+
+          <h3>Policies</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-604.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-604.png" alt="IAM managed policies: AWS-managed and customer-managed standalone reusable policies." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 604</span><strong>Managed policies</strong> are standalone documents you attach to multiple identities. AWS-managed policies (e.g. <code>AmazonS3ReadOnlyAccess</code>) are maintained by AWS. Customer-managed policies are ones you write and version yourself.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-605.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-605.png" alt="IAM inline policies attached to a single user, not reusable." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 605</span><strong>Inline policies</strong> are embedded directly on one user, group, or role. They are deleted when the identity is deleted — useful for one-off permissions but harder to audit and reuse.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-606.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-606.png" alt="Identity-based versus resource-based IAM policies and where each attaches." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 606</span><strong>Identity-based policies</strong> attach to users, groups, or roles and say "this identity may do X". <strong>Resource-based policies</strong> attach to a resource (S3 bucket policy, SNS topic policy, KMS key policy) and say "this principal may access me". S3 bucket policies are resource-based and can grant cross-account access without a role in the other account.</figcaption>
+          </figure>
+
+          <h3>Policy JSON structure</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-607.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-607.png" alt="IAM trust policy example with Principal Action sts:AssumeRole for cross-account role assumption." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 607</span>Trust policy anatomy. <code>Principal</code> names who may assume the role. <code>Action</code> is always <code>sts:AssumeRole</code> for standard role assumption. This example trusts the entire foreign account root — in production, narrow the principal to a specific role ARN.</figcaption>
+          </figure>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>JSON element</th><th>Purpose</th></tr></thead>
+              <tbody>
+                <tr><td><code>Version</code></td><td>Policy language version — always <code>2012-10-17</code></td></tr>
+                <tr><td><code>Statement</code></td><td>Array of permission (or trust) blocks</td></tr>
+                <tr><td><code>Sid</code></td><td>Optional statement ID for your reference</td></tr>
+                <tr><td><code>Effect</code></td><td><code>Allow</code> or <code>Deny</code></td></tr>
+                <tr><td><code>Action</code></td><td>API operations — e.g. <code>s3:GetObject</code>, <code>glue:StartJobRun</code></td></tr>
+                <tr><td><code>Resource</code></td><td>ARN(s) the action applies to — <code>*</code> is valid but avoid it</td></tr>
+                <tr><td><code>Principal</code></td><td>Who the statement applies to — used in resource-based and trust policies</td></tr>
+                <tr><td><code>Condition</code></td><td>Optional constraints that must be true for the statement to apply</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Least-privilege S3 policy with Condition keys</h3>
+          <pre data-lang="json" data-title="IAM — least-privilege S3 read on raw prefix" data-explain="Grants read-only access to one bucket prefix, only when the request comes from a specific Glue job role (aws:SourceArn) and only within the caller's AWS Organization (aws:PrincipalOrgID)."><code>{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Sid": "ReadRawPrefixOnly",
+    "Effect": "Allow",
+    "Action": [
+      "s3:GetObject",
+      "s3:ListBucket"
+    ],
+    "Resource": [
+      "arn:aws:s3:::dea-lab-ab-4821",
+      "arn:aws:s3:::dea-lab-ab-4821/raw/*"
+    ],
+    "Condition": {
+      "StringLike": {
+        "s3:prefix": ["raw/*"]
+      },
+      "StringEquals": {
+        "aws:PrincipalOrgID": "o-abc1234567"
+      },
+      "ArnEquals": {
+        "aws:SourceArn": "arn:aws:glue:us-east-1:123456789012:job/customers-etl"
+      }
+    }
+  }]
+}</code></pre>
+
+          <h3>The confused deputy problem</h3>
+          <p>The <strong>confused deputy problem</strong> is a cross-service trust attack. You attach a resource-based policy to an IAM role that allows an AWS service principal — for example <code>s3.amazonaws.com</code> or <code>cloudtrail.amazonaws.com</code> — to call <code>sts:AssumeRole</code>. Without extra conditions, any resource in any account that uses that service can trick the service into assuming your role and acting on your resources. A third party creates a CloudTrail trail in their account that points at your role ARN; CloudTrail assumes your role on their behalf and could write to buckets you intended only for your own trails.</p>
+          <p>The same pattern applies to <strong>Glue and Lambda service roles</strong>: a bucket policy that trusts <code>glue.amazonaws.com</code> or <code>lambda.amazonaws.com</code> without scoping the calling resource lets a foreign account's job or function invoke your role. See <a href="s04-glue.html#job-types">Section 4 — Glue job roles</a> and <a href="s05-lambda.html#overview">Section 5 — Lambda execution roles</a> for how those roles are created; the defence lives in the role trust policy and any resource policy that grants cross-account access.</p>
+          <p>Defence: require <code>aws:SourceArn</code> and <code>aws:SourceAccount</code> in the role trust policy or resource policy so only the specific trail, bucket, job, or function you expect can trigger assumption:</p>
+
+          <pre data-lang="json" data-title="IAM — confused-deputy defence on a cross-service role trust policy" data-explain="CloudTrail may assume this role only when the request originates from trail audit-trail in account 123456789012. A foreign account trail with the same role ARN in its config is denied."><code>{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Principal": { "Service": "cloudtrail.amazonaws.com" },
+    "Action": "sts:AssumeRole",
+    "Condition": {
+      "StringEquals": {
+        "aws:SourceAccount": "123456789012"
+      },
+      "ArnLike": {
+        "aws:SourceArn": "arn:aws:cloudtrail:us-east-1:123456789012:trail/audit-trail"
+      }
+    }
+  }]
+}</code></pre>
+
+          <h3>Policy evaluation logic</h3>
+          <p>When a request arrives, AWS evaluates every applicable policy type. The rules are deterministic:</p>
+          <ol>
+            <li><strong>Explicit deny</strong> in any policy always wins — one <code>Deny</code> overrides any number of <code>Allow</code> statements.</li>
+            <li>If no explicit deny, there must be an <strong>explicit allow</strong> from at least one policy or the request is denied by default.</li>
+            <li>For same-type policies (multiple identity-based policies), the union of allows applies unless a deny exists.</li>
+            <li><strong>Permission boundaries</strong> cap the maximum permissions an identity can receive — common for delegated admin scenarios.</li>
+            <li><strong>SCPs (Service Control Policies)</strong> in AWS Organizations set guardrails at the account or OU level — they filter what identity policies can grant but never grant permissions themselves.</li>
+            <li><strong>Session policies</strong> further restrict temporary credentials when assuming a role — the intersection of role policy and session policy applies.</li>
+          </ol>
+
+          <div class="diagram">
+            <p class="diagram-title">IAM policy evaluation chain</p>
+            <div class="flow">
+              <div class="node is-source"><b>Request</b><small>API call arrives</small></div>
+              <span class="arrow">→</span>
+              <div class="node"><b>SCP</b><small>Org guardrail</small></div>
+              <span class="arrow">→</span>
+              <div class="node"><b>Permission boundary</b><small>Max cap</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-compute"><b>Identity policy</b><small>User / role</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-store"><b>Resource policy</b><small>Bucket / key</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-serve pulse"><b>Decision</b><small>Allow or Deny</small></div>
+            </div>
+          </div>
+
+          <div class="callout exam"><strong>SCPs never grant — they only filter.</strong> An SCP with <code>Effect: Deny</code> on <code>s3:DeleteBucket</code> prevents every identity in the account from deleting buckets, even admins — unless the SCP itself has an exception. An SCP cannot grant S3 access that the identity policy lacks. Exam distractors often show an SCP with Allow and expect you to know it does not work that way.</div>
+
+          <h3>Permissions boundaries</h3>
+          <p>A <strong>permissions boundary</strong> is a managed policy attached to an IAM user or role that sets the <em>maximum</em> permissions that identity can ever receive. It grants nothing on its own — there must still be an identity policy (or group policy) that allows the action. Effective permissions are the <strong>intersection</strong> of the identity policies and the boundary: if the identity policy allows <code>iam:*</code> but the boundary allows only <code>iam:CreateRole</code> and <code>iam:AttachRolePolicy</code>, the identity can create roles but cannot grant itself AdministratorAccess.</p>
+          <p>Permissions boundaries sit in the evaluation chain after SCPs and before identity policies — see the diagram above. They apply per identity in one account. Contrast with:</p>
+          <ul>
+            <li><strong>Service Control Policy (SCP)</strong> — organisation-wide guardrail on an OU or account; filters what any identity in that account can be granted, including the root user; never grants permissions.</li>
+            <li><strong>Session policy</strong> — passed at <code>AssumeRole</code> time; further restricts the temporary session; intersection of role permissions and session policy applies for that session only.</li>
+          </ul>
+          <p>The standard use case is safe permission delegation: a team lead receives <code>iam:CreateRole</code>, <code>iam:PassRole</code>, and <code>iam:AttachRolePolicy</code> plus a permissions boundary that caps which actions any role they create may perform. They can stand up Glue job roles for their squad without becoming a path to org-wide admin.</p>
+
+          <pre data-lang="json" data-title="IAM — permissions boundary for delegated role creation" data-explain="Attached as PermissionsBoundary on the team-lead role. Any role they create cannot exceed S3 and Glue actions on dea-lab prefixes, even if they attach a broader customer-managed policy to the new role."><code>{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Sid": "CapDelegatedRoles",
+    "Effect": "Allow",
+    "Action": [
+      "s3:GetObject",
+      "s3:PutObject",
+      "s3:ListBucket",
+      "glue:StartJobRun",
+      "glue:GetJob"
+    ],
+    "Resource": [
+      "arn:aws:s3:::dea-lab-ab-4821",
+      "arn:aws:s3:::dea-lab-ab-4821/*",
+      "arn:aws:glue:us-east-1:123456789012:job/*"
+    ]
+  }]
+}</code></pre>
+
+          <div class="callout exam"><strong>Developers must create roles but must not grant more than X.</strong> When a scenario says team members need to create IAM roles for Glue or Lambda but cannot escalate beyond a fixed permission set, the answer is a <strong>permissions boundary</strong> on the delegating identity (or on each created role), not an SCP alone. SCPs limit the whole account; boundaries limit what a specific power-user can delegate.</div>
+
+          <h3>IAM Access Analyzer</h3>
+          <p>IAM Access Analyzer continuously analyses resource policies (S3 buckets, IAM roles, KMS keys, Lambda functions, SQS queues) and flags resources that are accessible from outside your account or organisation. It uses <strong>zone of trust</strong> analysis — if a bucket policy grants <code>Principal: "*"</code> or a foreign account access you did not intend, Access Analyzer generates a finding. Use it after deploying a new pipeline to catch overly permissive bucket policies before data leaks.</p>
+
+          <h3>AWS Organizations and SCPs</h3>
+          <p>AWS Organizations groups multiple accounts under a management account. <strong>Service Control Policies</strong> attach to the organisation root, an OU, or an individual account. They are the guardrails that prevent junior admins from disabling CloudTrail, creating public S3 buckets, or launching expensive instance types — even if their IAM user has AdministratorAccess. Combine SCPs (what the account <em>can never do</em>) with least-privilege IAM (what each identity <em>should do</em>) for defence in depth.</p>
+        </section>
+
+        <section class="section" id="deeper">
+          <h2>Deeper detail and exam edge cases</h2>
+          <p class="lead">IaC limits, observability billing, audit log economics, and IAM evaluation edge cases — the operational layer every pipeline depends on but the deck treats as background.</p>
+
+          <h3>Limits and quotas that decide answers</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Limit</th><th>Value</th><th>Adjustable?</th><th>Why it matters</th></tr></thead>
+              <tbody>
+                <tr><td>CloudFormation resources per stack</td><td>500</td><td>Soft — split into nested stacks</td><td>Large data platforms exceed one template — use nested stacks.</td></tr>
+                <tr><td>CloudFormation template body (inline)</td><td>51,200 bytes</td><td>Upload to S3 for up to 1 MB</td><td>Big Glue/Redshift templates must use S3 template URL.</td></tr>
+                <tr><td>CloudFormation cross-stack exports</td><td>Export name fixed; imported values not updatable via import</td><td>Design exports carefully</td><td>Changing exported outputs breaks importers — use SSM Parameter Store for mutable values.</td></tr>
+                <tr><td>IAM managed policy document size</td><td>6,144 characters</td><td>Soft — split policies</td><td>Large S3 prefix lists hit the limit — use prefix conditions or ABAC.</td></tr>
+                <tr><td>Managed policies per IAM role</td><td>10 attached</td><td>No (hard)</td><td>Consolidate customer-managed policies or use inline sparingly.</td></tr>
+                <tr><td>IAM role max session duration</td><td>Up to 12 hours (default 1 hour)</td><td>Yes — role setting</td><td>Long-running jobs need higher session duration on the role.</td></tr>
+                <tr><td>Role chaining session cap</td><td>1 hour maximum</td><td>No (hard)</td><td>AssumeRole → AssumeRole again caps at one hour total.</td></tr>
+                <tr><td>CloudWatch custom metric resolution</td><td>Standard 1-minute; high-resolution 1-second</td><td>Yes — StorageResolution on put</td><td>1-second metrics cost more; use for sub-minute alerting only.</td></tr>
+                <tr><td>EC2 monitoring default</td><td>Standard 5-minute; detailed 1-minute (extra charge)</td><td>Enable detailed monitoring</td><td>Auto Scaling on CPU needs 1-minute granularity.</td></tr>
+                <tr><td>CloudWatch metric retention</td><td>1 s → 3 h; 1 min → 15 d; 5 min → 63 d; 1 h → 15 mo</td><td>No (automatic roll-up)</td><td>Long-term trend queries use coarser periods automatically.</td></tr>
+                <tr><td>CloudTrail management events</td><td>First copy free in each Region; 90-day console history</td><td>N/A</td><td>Trails to S3 for long retention; management events on by default.</td></tr>
+                <tr><td>CloudTrail data events</td><td>Off by default; billed per 100,000 events</td><td>Enable per trail selector</td><td>S3 object-level audit requires data event configuration.</td></tr>
+                <tr><td>AWS Config configuration items</td><td>Recorded per resource change; rules evaluated per check</td><td>Soft — selective recording</td><td>High-churn resources increase Config bill.</td></tr>
+                <tr><td>CloudWatch Logs Insights</td><td>Charged per GB scanned</td><td>Narrow time range and fields</td><td>Scanning all log groups for 30 days is expensive — filter first.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>What you actually pay for</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Billed dimension</th><th>Unit</th><th>How to spend less</th></tr></thead>
+              <tbody>
+                <tr><td>CloudFormation</td><td>No charge for the service itself</td><td>You pay for resources created — delete failed stack remnants.</td></tr>
+                <tr><td>CloudWatch custom metrics</td><td>Per metric per month (first 10 free)</td><td>Aggregate dimensions; use embedded metric format to batch.</td></tr>
+                <tr><td>CloudWatch high-resolution metrics</td><td>Higher rate than standard 1-minute</td><td>Reserve 1-second for critical paths only.</td></tr>
+                <tr><td>CloudWatch Logs ingestion</td><td>Per GB ingested</td><td>Reduce log verbosity; sample debug logs in production.</td></tr>
+                <tr><td>CloudWatch Logs storage</td><td>Per GB-month; Infrequent Access class lower storage rate</td><td>Set retention; move verbose audit logs to IA class after 30 days.</td></tr>
+                <tr><td>Logs Insights queries</td><td>Per GB scanned</td><td>Limit <code>@timestamp</code> range; use metric filters for recurring counts.</td></tr>
+                <tr><td>Metric filters</td><td>No extra charge beyond log ingestion</td><td>Prefer metric filters over Insights for repeated ERROR counts.</td></tr>
+                <tr><td>CloudTrail data events</td><td>Per 100,000 events (S3, Lambda, etc.)</td><td>Scope selectors to sensitive prefixes only, not entire buckets.</td></tr>
+                <tr><td>CloudTrail Lake</td><td>Ingestion + storage + query (check current us-east-1 pricing)</td><td>Use for SQL audit queries; S3 + Athena cheaper for archive-only.</td></tr>
+                <tr><td>AWS Config</td><td>Per configuration item + per rule evaluation</td><td>Record only required resource types; use conformance packs deliberately.</td></tr>
+                <tr><td>KMS (via logged APIs)</td><td>API requests on encrypted log buckets</td><td>SSE-S3 for non-sensitive log buckets; CMK only when required.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout cost"><strong>Biggest waste in this section.</strong> CloudTrail data events enabled on all S3 objects in high-traffic buckets — millions of <code>GetObject</code> calls generate a large data-event bill. Scope data events to sensitive prefixes (e.g. <code>curated/pii/</code>) only.</div>
+          <div class="callout danger"><strong>Config without remediation is visibility only.</strong> A non-compliant public bucket rule alerts you after exposure. Pair detective Config rules with Systems Manager Automation or Lambda remediation for production — and ensure CloudTrail is not disabled by an SCP gap.</div>
+
+          <h3>Traps that catch people</h3>
+          <ul>
+            <li><strong>CloudFormation import immutability —</strong> Resources imported into a stack cannot be updated the same way as created resources. Plan import for migration, not day-two changes.</li>
+            <li><strong>Deleting stack without <code>DeletionPolicy: Retain</code> —</strong> Production S3 buckets and DynamoDB tables delete with the stack unless Retain is set on the resource.</li>
+            <li><strong>Drift ignored —</strong> Console edits to bucket policies leave CloudFormation blind until drift detection runs — redeploy may overwrite manual fixes.</li>
+            <li><strong><code>INSUFFICIENT_DATA</code> alarms —</strong> New metrics or sparse pipelines keep alarms silent. Set missing-data treatment explicitly.</li>
+            <li><strong>Composite alarm without child alarms —</strong> Composite logic references metric alarms that must exist and be in ALARM state.</li>
+            <li><strong>Logs Insights for real-time alerting —</strong> Insights is query-on-demand per GB scanned. Use metric filters + alarms for continuous ERROR detection.</li>
+            <li><strong>CloudTrail management-only trail —</strong> "Who read object X?" requires S3 data events — management events only show bucket-level API calls.</li>
+            <li><strong>Lambda data events volume —</strong> Enabling Invoke data events on high-traffic functions adds cost quickly — scope to specific functions.</li>
+            <li><strong>Missing <code>iam:PassRole</code> —</strong> Admin can create Glue jobs but fails without PassRole on the execution role ARN — the permission teams forget.</li>
+            <li><strong>SCP Allow distractor —</strong> SCPs never grant access; they only filter what identity policies may allow.</li>
+            <li><strong>Role chaining beyond one hour —</strong> Chained AssumeRole sessions cap at one hour even if the target role allows 12 hours.</li>
+            <li><strong>Config rule without recorder —</strong> Rules show INSUFFICIENT_DATA if the configuration recorder is off or lacks permission to describe resources.</li>
+          </ul>
+
+          <h3>Troubleshooting playbook</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Symptom</th><th>Most likely cause</th><th>What to check / fix</th></tr></thead>
+              <tbody>
+                <tr><td>CloudFormation <code>CREATE_FAILED</code> rolled back</td><td>Resource limit, IAM, or name conflict</td><td>Stack events tab; nested stack for &gt;500 resources; IAM capability CAPABILITY_NAMED_IAM.</td></tr>
+                <tr><td>Stack update replaces resource unexpectedly</td><td>Replacing property changed (e.g. bucket name)</td><td>Change set preview; use Retain or new logical ID for immutable properties.</td></tr>
+                <tr><td>Drift detected on S3 bucket policy</td><td>Manual console edit</td><td>Drift details; import change or redeploy template; document exception.</td></tr>
+                <tr><td>Alarm stuck <code>INSUFFICIENT_DATA</code></td><td>Metric not published or wrong namespace</td><td>Metrics console; missing-data treatment; verify Glue/Lambda emits custom metric.</td></tr>
+                <tr><td>Logs Insights query expensive/slow</td><td>Wide time range or unfiltered scan</td><td>Narrow <code>@timestamp</code>; filter early; consider metric filter for repeat queries.</td></tr>
+                <tr><td>CloudTrail no S3 object events</td><td>Data events not enabled</td><td>Trail event selectors → S3 data events for bucket/prefix; wait for delivery to S3.</td></tr>
+                <tr><td>Config rule NON_COMPLIANT after fix</td><td>Evaluation delay or wrong resource scope</td><td>Re-evaluate rule; check recorder includes resource type; remediation action logs.</td></tr>
+                <tr><td>Glue <code>AccessDenied</code> on PassRole</td><td>Caller lacks <code>iam:PassRole</code> on job role</td><td>IAM policy simulator; add PassRole with <code>iam:PassedToService</code> condition for glue.amazonaws.com.</td></tr>
+                <tr><td>Cross-account S3 access fails despite bucket policy Allow</td><td>Identity policy or SCP deny; missing SourceArn condition</td><td>CloudTrail <code>AccessDenied</code>; Access Analyzer finding; add confused-deputy <code>aws:SourceArn</code> condition.</td></tr>
+                <tr><td>Composite alarm never fires</td><td>Child alarm in OK or insufficient data</td><td>Alarm widget shows child states; verify AND/OR logic matches intent.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Production patterns</h3>
+          <p>Data platforms deploy via CloudFormation nested stacks: networking, data stores, and Glue jobs as modules with exported bucket names and role ARNs. CloudWatch dashboards combine Glue job duration, SQS age, and custom <code>RowsProcessed</code> metrics; composite alarms reduce pager noise. Organisation CloudTrail with S3 data events on sensitive prefixes feeds CloudTrail Lake or Athena for audit SQL. Config conformance packs enforce encryption and public-access blocks with optional auto-remediation.</p>
+          <div class="grid-2">
+            <div class="mini-card">
+              <h4>Observability stack</h4>
+              <ul>
+                <li>Embedded metric format from Lambda/Glue for batch custom metrics.</li>
+                <li>Metric filters on ERROR patterns → alarm → SNS.</li>
+                <li>Logs IA class for verbose job logs after 30 days.</li>
+              </ul>
+            </div>
+            <div class="mini-card">
+              <h4>Governance stack</h4>
+              <ul>
+                <li>Org CloudTrail + Config aggregator across accounts.</li>
+                <li>IAM Access Analyzer on new bucket policies.</li>
+                <li>SCP deny on <code>cloudtrail:StopLogging</code>, public S3 ACLs.</li>
+              </ul>
+            </div>
+          </div>
+          <p>Anti-pattern: enabling every CloudWatch log group at INFO with indefinite retention on high-volume Kinesis consumers — ingestion and storage dominate the bill. Set retention (14–30 days for debug, 90 for audit) and use metric filters for signals, not full-text search on every request.</p>
+<pre data-lang="yaml" data-title="CloudFormation — Retain production bucket on stack delete" data-explain="DeletionPolicy Retain keeps the S3 bucket when the stack is destroyed — essential for curated data stores managed by IaC."><code>Resources:
+  CuratedBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: dea-lab-ab-4821-curated
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true</code></pre>
+
+          <h3>Where this fits with the rest of the exam</h3>
+          <p>Section 16 underpins every other section: pipelines need IAM roles, CloudWatch alarms, CloudTrail audit, and often CloudFormation deployment. Exam scenarios rarely ask "what is CloudWatch" — they ask which tool detects drift, audits object reads, or denies access.</p>
+          <ul>
+            <li><a href="s04-glue.html">Section 4 — Glue</a>: Glue job roles need PassRole, trust policy for <code>glue.amazonaws.com</code>, and CloudWatch log groups for job output.</li>
+            <li><a href="s13-analytics.html#lake-formation">Section 13 — Lake Formation</a>: LF grants layer on IAM; CloudTrail logs <code>GetDataAccess</code> for audit.</li>
+            <li><a href="s15-app-integration.html#step-functions">Section 15 — Step Functions</a>: Execution failures appear in CloudWatch; state machine role needs least privilege.</li>
+            <li><a href="s07-s3.html">Section 7 — S3</a>: Bucket policies use <code>aws:SourceArn</code> and <code>aws:PrincipalOrgID</code> for cross-service confused-deputy protection.</li>
+            <li><a href="s20-security.html">Section 20 — Security</a>: KMS encryption complements CloudTrail and Config for defence in depth.</li>
+            <li><a href="s19-vpc.html">Section 19 — VPC</a>: VPC Flow Logs to CloudWatch; interface endpoints reduce NAT costs logged separately.</li>
+          </ul>
+          <div class="callout exam"><strong>How the exam frames management services.</strong> "Detect manual changes to deployed infrastructure" → CloudFormation drift detection. "Who downloaded file X from S3?" → CloudTrail data events. "Alert when ERROR lines spike in Glue logs" → metric filter + alarm, not Logs Insights on a schedule. "Enforce encryption across accounts" → Config conformance pack. "Explicit deny wins" → IAM evaluation — one Deny beats any Allow. Do not pick CloudWatch for audit trails — that is CloudTrail.</div>
+        </section>
+
+        <section class="section" id="interview">
+          <h2>Interview questions</h2>
+          <p class="muted">Answer each one out loud before opening it.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+            <details class="qa">
+              <summary>What is the difference between a CloudWatch metric filter and a subscription filter?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p>A <strong>metric filter</strong> pattern-matches log events and publishes a numeric value to a CloudWatch custom metric. You then alarm on that metric — useful for counting ERROR lines or tracking specific log signatures.</p>
+                <p>A <strong>subscription filter</strong> forwards matching (or all) log events to a downstream destination: Kinesis Data Streams, Kinesis Data Firehose, or Lambda. Use it when you need the raw log payload elsewhere — OpenSearch dashboards, S3 archival, or real-time processing — not when you just need a number to alarm on.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>CloudTrail management events are enabled by default, but your security team wants S3 object-level auditing. What do you configure?<span class="qa-tag">Security</span></summary>
+              <div class="qa-body">
+                <p>Create or update a CloudTrail trail with a <strong>data event selector</strong> for <code>AWS::S3::Object</code>, scoped to the bucket ARNs or prefixes you care about. Management events alone never record GetObject, PutObject, or DeleteObject. Data events incur per-event charges but are the only native way to audit object access.</p>
+                <p>Deliver the trail to an S3 bucket with log file validation enabled, optionally forward to CloudWatch Logs for real-time alerting, and consider CloudTrail Lake if you need SQL queries over months of history.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>When would you use EventBridge instead of a CloudWatch Alarm to detect a failed Glue job?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>Glue publishes job state changes as <strong>events</strong> (SUCCEEDED, FAILED, TIMEOUT), not as a simple numeric metric you can threshold. EventBridge matches the event pattern <code>{"source":["aws.glue"],"detail-type":["Glue Job State Change"],"detail":{"state":["FAILED"]}}</code> and routes to SNS, Lambda, or <a href="s15-app-integration.html#step-functions">Step Functions</a> for remediation.</p>
+                <p>CloudWatch Alarms are for continuous numeric metrics — iterator age, error counts, disk usage. Use alarms when the signal is a number over time; use EventBridge when the signal is a discrete state transition.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Explain the difference between a Glue service role and a role a data engineer assumes.<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>A <strong>Glue service role</strong> is assumed by the Glue service itself (<code>Principal: glue.amazonaws.com</code>). Glue calls <code>sts:AssumeRole</code> on your behalf when a crawler or job runs. Its trust policy names the service; its permission policy grants S3, catalog, and JDBC access the job needs.</p>
+                <p>A <strong>human-assumed role</strong> is assumed by a person via the console or CLI (<code>Principal: your IAM user or federated identity</code>). The engineer gets temporary credentials scoped to e.g. Athena query access without admin rights. Mixing these up — putting a human principal in a service role trust policy — is a common deployment error.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What happens during CloudFormation stack rollback on a failed update?<span class="qa-tag">Troubleshooting</span></summary>
+              <div class="qa-body">
+                <p>CloudFormation re-applies the last known-good template state. Resources it created during the failed update are deleted; resources it modified are reverted to their previous configuration. The stack ends in <code>UPDATE_ROLLBACK_COMPLETE</code> — operational again but unchanged from before the update.</p>
+                <p>If rollback itself fails, the stack enters <code>UPDATE_ROLLBACK_FAILED</code>, which requires manual intervention — often skipping the broken resource or continuing rollback from the console. This is why change sets exist: preview the blast radius before applying.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How does AWS Config differ from CloudTrail?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p><strong>CloudTrail</strong> records <em>who did what API call when</em> — an audit log of actions. <strong>Config</strong> records <em>what the resource configuration looks like</em> at each point in time and evaluates it against compliance rules.</p>
+                <p>Example: CloudTrail shows that alice@company.com called <code>PutBucketPolicy</code> at 14:03. Config shows whether the bucket currently has encryption enabled, public access blocked, and versioning on — and marks it NON_COMPLIANT if a rule is violated.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What does an explicit deny in an IAM policy do to the evaluation result?<span class="qa-tag">Exam</span></summary>
+              <div class="qa-body">
+                <p>An explicit <code>Deny</code> always wins, regardless of how many <code>Allow</code> statements exist across identity policies, resource policies, permission boundaries, or session policies. The only thing that can restrict an SCP deny is an exception within the SCP itself — not an identity policy Allow.</p>
+                <p>Default is implicit deny: if no statement allows the action, the request fails even without an explicit Deny. This is why least privilege starts from zero permissions and adds only what is needed.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>A Kinesis consumer is falling behind and data is going stale. Which CloudWatch metric do you alarm on?<span class="qa-tag">Troubleshooting</span></summary>
+              <div class="qa-body">
+                <p><code>GetRecords.IteratorAgeMilliseconds</code> in the <code>AWS/Kinesis</code> namespace. It measures how far behind the consumer's iterator is from the tip of the stream — effectively the age of the oldest unprocessed record. Alarm when it exceeds your latency SLA (e.g. greater than 60,000 ms for one minute).</p>
+                <p>Also watch <code>IncomingRecords</code> (producer rate) and <code>WriteProvisionedThroughputExceeded</code> (shard hot-spotting). If the consumer is Lambda, check concurrent execution limits and batch size as well.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What is the purpose of a CloudFormation change set?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>A change set previews the actions CloudFormation will take before you commit an update — resources to add, modify, or delete, and whether each change requires replacement (which can mean downtime or data loss for stateful resources). It is the IaC equivalent of a dry run.</p>
+                <p>For a data pipeline stack containing an S3 bucket, Glue database and crawler, a change set might reveal that modifying the bucket name requires replacement — which would destroy data — prompting you to adjust the template before applying.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How do you deliver CloudWatch Logs from Account A to a Kinesis stream in Account B?<span class="qa-tag">Architecture</span></summary>
+              <div class="qa-body">
+                <p>Four steps: (1) create the Kinesis Data Stream in Account B; (2) create an IAM role in Account B with a trust policy allowing Account A's CloudWatch Logs service to assume it, plus <code>kinesis:PutRecord</code> permission; (3) in Account A, create a subscription filter on the log group targeting the cross-account stream ARN and role ARN; (4) optionally add a resource policy on the stream granting Account A write access.</p>
+                <p>This pattern centralises log analytics in a security or platform account without copying credentials across accounts.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What is an AWS Organizations SCP, and can it grant permissions?<span class="qa-tag">Security</span></summary>
+              <div class="qa-body">
+                <p>An SCP (Service Control Policy) is a policy attached to an organisation root, OU, or account that sets maximum permissions for all identities in that scope. It filters what identity-based and resource-based policies are allowed to grant.</p>
+                <p>SCPs cannot grant permissions — they only deny or pass through. Even if an IAM user has AdministratorAccess, an SCP denying <code>cloudtrail:StopLogging</code> prevents stopping CloudTrail. Use SCPs for organisation-wide guardrails; use IAM for fine-grained per-identity access.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Name the six Well-Architected pillars and give one data-pipeline example for Security.<span class="qa-tag">Exam</span></summary>
+              <div class="qa-body">
+                <p>Operational Excellence, Security, Reliability, Performance Efficiency, Cost Optimization, and Sustainability.</p>
+                <p>Security example: encrypt all S3 buckets with SSE-KMS, enforce least-privilege IAM roles for Glue and Redshift, enable CloudTrail data events on sensitive prefixes, use Lake Formation column-level permissions instead of broad bucket policies, and rotate access keys or eliminate them in favour of role assumption.</p>
+              </div>
+            </details>
+          </div>
+        </section>
+
+        <section class="section" id="practice">
+          <h2>Hands-on practice</h2>
+          <p class="muted">Free tier where possible. Delete everything at the end of each task.</p>
+          <ol class="practice-list">
+            <li class="practice">
+              <p class="practice-task">Create a CloudWatch metric alarm on the <code>AWS/Lambda</code> <code>Errors</code> metric for a test function. Set threshold ≥ 1 in one 5-minute period and send an SNS email notification.</p>
+              <span class="console-path">CloudWatch → Alarms → Create alarm → Select metric → Lambda → By Function Name</span>
+              <p class="practice-expect">Alarm state changes to ALARM after you invoke the function with bad input that causes an error; you receive an SNS email.</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">Console</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Create a simple Lambda that throws on event — or use an existing lab function.</li>
+                    <li><strong>SNS → Topics → Create topic</strong> → Standard → subscribe your email → confirm.</li>
+                    <li><strong>CloudWatch → Alarms → Create alarm</strong> → <code>AWS/Lambda</code> → <code>Errors</code> → select your function → period 5 min → threshold ≥ 1 → action: SNS topic.</li>
+                    <li>Invoke the function with input that triggers an error. Wait one period. Confirm ALARM state and email.</li>
+                  </ol>
+<pre data-lang="shell"><code>aws lambda invoke --function-name my-test-fn \
+  --payload '{"forceError": true}' /dev/null
+
+aws cloudwatch describe-alarms --alarm-names "lambda-errors-my-test-fn"</code></pre>
+                  <p class="muted">Cleanup: delete the alarm, SNS topic/subscription, and test Lambda.</p>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Run a CloudWatch Logs Insights query against <code>/aws/lambda/&lt;your-function&gt;</code> to find the top 10 error messages in the last hour.</p>
+              <span class="console-path">CloudWatch → Logs → Logs Insights → Select log group → Run query</span>
+              <p class="practice-expect">Query returns a table of parsed error messages sorted by count.</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">Console</span></summary>
+                <div class="qa-body">
+<pre data-lang="sql"><code>fields @timestamp, @message
+| filter @message like /ERROR|Error|Exception/
+| parse @message /.*(?&lt;errorMsg&gt;Error.*)/
+| stats count() as hits by errorMsg
+| sort hits desc
+| limit 10</code></pre>
+                  <p>Select the Lambda log group, set time range to Last 1 hour, run query. First 1 GB scanned per month is free. Adjust the filter pattern for Glue use <code>/aws-glue/jobs/error</code> instead.</p>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Write and attach a least-privilege customer-managed IAM policy that lets a Glue job role read only <code>s3://dea-lab-&lt;initials&gt;-&lt;random&gt;/raw/*</code> and write only to <code>staging/*</code>.</p>
+              <span class="console-path">IAM → Policies → Create policy → JSON</span>
+              <p class="practice-expect">Policy simulator or test job run succeeds on allowed prefixes and returns AccessDenied on <code>curated/</code>.</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">Console + CLI</span></summary>
+                <div class="qa-body">
+<pre data-lang="json"><code>{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ListBucket",
+      "Effect": "Allow",
+      "Action": "s3:ListBucket",
+      "Resource": "arn:aws:s3:::dea-lab-ab-4821",
+      "Condition": {
+        "StringLike": { "s3:prefix": ["raw/*", "staging/*"] }
+      }
+    },
+    {
+      "Sid": "ReadRaw",
+      "Effect": "Allow",
+      "Action": ["s3:GetObject", "s3:GetObjectVersion"],
+      "Resource": "arn:aws:s3:::dea-lab-ab-4821/raw/*"
+    },
+    {
+      "Sid": "WriteStaging",
+      "Effect": "Allow",
+      "Action": ["s3:PutObject", "s3:DeleteObject"],
+      "Resource": "arn:aws:s3:::dea-lab-ab-4821/staging/*"
+    }
+  ]
+}</code></pre>
+                  <p>Attach to your Glue job role. Run the policy simulator with action <code>s3:GetObject</code> on <code>curated/file.parquet</code> — expect explicit deny / not allowed.</p>
+                  <p class="muted">Cleanup: detach and delete the customer-managed policy if created only for this exercise.</p>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Enable AWS Config recorder (free tier includes basic recording), add the managed rule <code>s3-bucket-public-read-prohibited</code>, and inspect compliance for your lab bucket.</p>
+              <span class="console-path">Config → Settings → Enable → Rules → Add rule</span>
+              <p class="practice-expect">Your bucket shows COMPLIANT for the public-read rule (public access block is on by default).</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">Console</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li><strong>Config → Settings</strong> → Enable recorder → choose an S3 bucket for delivery → Create.</li>
+                    <li><strong>Rules → Add rule</strong> → search <code>s3-bucket-public-read-prohibited</code> → save.</li>
+                    <li>Wait for evaluation → <strong>Resources</strong> → filter by your bucket → check compliance status.</li>
+                  </ol>
+                  <p class="muted">Cleanup: stop the configuration recorder and delete the Config delivery bucket if you created one solely for this lab. Config charges per configuration item recorded after the free tier allowance.</p>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Publish a custom CloudWatch metric with <code>put-metric-data</code> and verify it appears on a dashboard widget.</p>
+              <span class="console-path">CloudWatch → Metrics → All metrics → Custom namespace</span>
+              <p class="practice-expect">Metric <code>RowsProcessed</code> in namespace <code>DEA/DataPipeline</code> appears with the value you sent.</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">CLI</span></summary>
+                <div class="qa-body">
+<pre data-lang="shell"><code>aws cloudwatch put-metric-data \
+  --namespace "DEA/DataPipeline" \
+  --metric-data '[{
+    "MetricName": "RowsProcessed",
+    "Value": 42,
+    "Unit": "Count"
+  }]'
+
+# Console: CloudWatch → Metrics → DEA/DataPipeline → RowsProcessed</code></pre>
+                  <p class="muted">Custom metrics: first 10 are free; beyond that charges apply. No cleanup needed for metrics — they expire after 15 months of no data.</p>
+                </div>
+              </details>
+            </li>
+          </ol>
+        </section>
+
+        <section class="section" id="recap">
+          <h2>Recap</h2>
+          <div class="recap">
+            <ul class="checklist">
+              <li>CloudFormation: template sections (Parameters, Mappings, Conditions, Resources, Outputs), stacks, change sets, drift detection, nested stacks, StackSets, rollback on failure.</li>
+              <li>CloudWatch metrics: namespaces, dimensions, standard (1 min) vs high-resolution (1 sec), custom metrics via PutMetricData, metric streams to Firehose.</li>
+              <li>Alarms: OK / ALARM / INSUFFICIENT_DATA; composite alarms; missing-data treatment; actions to SNS, Lambda, Auto Scaling.</li>
+              <li>Logs: log groups → streams → events; retention; Logs Insights queries; metric filters (→ metrics) vs subscription filters (→ Kinesis/Firehose/Lambda).</li>
+              <li>Cross-account logs: Kinesis stream + IAM role + trust policy in destination; subscription filter in source.</li>
+              <li>CloudTrail: management events (default, 90-day history) vs data events (off by default, needed for S3 object audit); trails to S3; CloudTrail Lake for SQL queries.</li>
+              <li>Config: configuration items, recorder, rules (managed vs custom Lambda/Guard), proactive vs detective, conformance packs, multi-account aggregation.</li>
+              <li>Well-Architected: six pillars; Tool workloads, lenses, milestones, HRIs/MRIs.</li>
+              <li>IAM: explicit deny wins; SCPs filter but never grant; service roles (glue.amazonaws.com) vs human-assumed roles; trust policy + permission policy.</li>
+              <li>Pipeline alerting: CloudWatch Alarms for numeric metrics; EventBridge for Glue job state changes and other discrete events.</li>
+            </ul>
+            <p style="margin-top:1rem;">
+              <button type="button" data-complete="section-16">Mark complete</button>
+            </p>
+          </div>
+        </section>
+
+      </div>
+
+      <aside class="toc" aria-label="On this page">
+        <strong>On this page</strong>
+        <ol>
+          <li><a href="#lectures">Lectures</a></li>
+          <li><a href="#cloudformation">CloudFormation</a></li>
+          <li><a href="#cloudwatch">CloudWatch</a></li>
+          <li><a href="#cloudtrail">CloudTrail</a></li>
+          <li><a href="#config">Config</a></li>
+          <li><a href="#well-architected">Well-Architected</a></li>
+          <li><a href="#iam">IAM</a></li>
+          <li><a href="#deeper">Deeper detail</a></li>
+          <li><a href="#interview">Interview questions</a></li>
+          <li><a href="#practice">Hands-on practice</a></li>
+          <li><a href="#recap">Recap</a></li>
+        </ol>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<footer class="footer">AWS Certified Data Engineer Associate (DEA-C01) · Section 16 · Offline study edition</footer>
+</body>
+</html>

@@ -1,0 +1,1322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="DEA-C01 Section 7: S3 partitioning and data-lake layout, storage classes and lifecycle, versioning, encryption, bucket policies, access points, Object Lambda, and event notifications.">
+<title>Section 7 — Storage with S3 | AWS Data Engineer DEA-C01 Notes</title>
+<link rel="stylesheet" href="assets/aws.css">
+<script defer src="assets/search-index.js"></script>
+<script defer src="assets/code-highlight.js"></script>
+<script defer src="assets/aws.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">Course section 7 of 21 · AWS Certified Data Engineer Associate</p>
+    <h1>Storage with S3</h1>
+    <p class="subtitle">How to lay out a data lake so Athena scans less, pick the right storage class and lifecycle rule for every prefix, protect data with encryption and versioning, and wire S3 into the rest of your pipeline through policies, access points and event notifications.</p>
+    <div class="hero-meta">
+      <span class="chip">61 slides · ~75min</span>
+      <span class="chip">Exam domains: Data Store Management (26%) · Data Security and Governance (18%)</span>
+      <span class="chip">Deck slides 124–184</span>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <nav class="pager" aria-label="Section navigation">
+    <a href="s06-streaming.html">← Data Streaming</a>
+    <a href="index.html">Course contents</a>
+    <a href="s08-other-storage.html">Next: Other Storage Services →</a>
+  </nav>
+
+  <main id="main">
+    <div class="layout">
+      <div class="content">
+
+        <section class="section" id="lectures">
+          <h2>Lectures in this section</h2>
+          <p class="muted">Each lecture links to the notes that cover it. Lab bucket convention: <code>dea-lab-&lt;initials&gt;-&lt;random&gt;</code>, sample file <code>data/customers.csv</code>, prefixes <code>raw/</code>, <code>staging/</code>, <code>curated/</code>.</p>
+          <ol class="lecture-list">
+            <li class="lecture">
+              <a class="lec-title" href="#partitioning">Partitioning and folder structure in a data lake</a>
+              <span class="lec-time">~12:00</span>
+              <span class="lec-src">Slides 125–131</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#storage-classes">Storage classes and lifecycle configuration</a>
+              <span class="lec-time">~18:00</span>
+              <span class="lec-src">Slides 132–145</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#versioning">S3 versioning</a>
+              <span class="lec-time">~8:00</span>
+              <span class="lec-src">Slides 146–150</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#encryption">Encryption at rest and in transit</a>
+              <span class="lec-time">~12:00</span>
+              <span class="lec-src">Slides 151–160</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#bucket-policies">Bucket policies and access evaluation</a>
+              <span class="lec-time">~6:00</span>
+              <span class="lec-src">Slides 161–162</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#access-points">Access Points, Multi-Region Access Points and Object Lambda</a>
+              <span class="lec-time">~10:00</span>
+              <span class="lec-src">Slides 163–170</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#event-notifications">S3 event notifications and EventBridge</a>
+              <span class="lec-time">~9:00</span>
+              <span class="lec-src">Slides 171–184</span>
+            </li>
+          </ol>
+        </section>
+
+        <section class="section" id="partitioning">
+          <h2>Partitioning and folder structure</h2>
+          <p class="lead">In a data lake, the prefix layout you choose when writing to S3 is the single most important design decision. It determines how much data Athena scans per query, how cheap lifecycle rules are to apply, and whether the Glue Data Catalog stays in sync with what is actually on disk.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-126.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-126.png" alt="Slide introducing S3 partitioning through bucket and folder structure." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 126</span>Partitioning is implemented entirely through S3 key prefixes — there are no real folders, only shared key prefixes that query engines treat as partitions when the catalog knows about them.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-127.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-127.png" alt="Slide comparing data management benefits and query performance benefits of good S3 folder structure." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 127</span>Good structure pays twice: lifecycle and archival rules apply to whole prefixes (delete everything under <code>raw/year=2020/</code> in one rule), and query engines skip irrelevant prefixes so you scan — and pay for — less data.</figcaption>
+          </figure>
+
+          <h3>Why prefix layout is the lake's foundation</h3>
+          <p>S3 is a flat object store. Slashes in keys are a naming convention, not filesystem directories. But every tool in the AWS analytics stack — Glue crawlers, Athena, Redshift Spectrum, EMR — interprets common prefixes as partitions when registered in the Glue Data Catalog. A query like <code>WHERE year=2024 AND month=03</code> becomes a prefix filter that skips every other year and month on disk. Get this wrong and Athena bills you for scanning the entire lake on every query.</p>
+
+          <div class="diagram">
+            <p class="diagram-title">Typical lake layout: raw → staging → curated, with lifecycle transitions</p>
+            <div class="stack">
+              <div class="layer"><b>raw/</b><small>Land source files unchanged · S3 Standard · short retention</small></div>
+              <div class="layer"><b>staging/</b><small>Converted Parquet, Hive-style partitions · Intelligent-Tiering after 30 days</small></div>
+              <div class="layer"><b>curated/</b><small>Modelled tables for Athena/Redshift · Standard-IA or Glacier Instant after 90 days</small></div>
+            </div>
+            <div class="flow" style="margin-top:14px;">
+              <div class="node is-source"><b>Ingest</b><small>Firehose · Glue · DMS</small></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-store pulse"><b>raw/</b><small>JSON · CSV · logs</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-compute"><b>staging/</b><small>Parquet · partitioned</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-serve"><b>curated/</b><small>Athena · Spectrum</small></div>
+            </div>
+          </div>
+
+          <h3>Hive-style <code>key=value</code> partitioning</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-128.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-128.png" alt="Slide showing time-based partitioning example with S3 keys like year/month/day and Glue crawler partition discovery." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 128</span>The canonical layout is <code>s3://bucket/table/year=2024/month=11/day=05/file.parquet</code>. Glue crawlers infer partition columns from the <code>key=value</code> segments; Athena uses them for partition pruning. Object tags are a separate mechanism for metadata that does not affect query pruning.</figcaption>
+          </figure>
+
+          <p>Partition columns should match your query filters, not your ingest timestamps alone. If analysts always filter by <code>region</code> and <code>event_date</code>, those are your partition keys — not <code>ingest_hour</code>. Time is the default because it aligns with retention ("drop data older than two years") and most dashboards filter by date range.</p>
+
+          <h3>Choosing partition columns by query pattern</h3>
+          <ul>
+            <li><strong>High-cardinality keys</strong> (user id, session id) create millions of tiny prefixes — avoid them as top-level partitions unless each prefix still holds megabytes of data.</li>
+            <li><strong>Low-cardinality keys</strong> (region with five values, product line) are safe and effective when combined with a time column.</li>
+            <li><strong>Order matters:</strong> put the most selective filter first in the path if your engine supports static pruning on leading columns — for Hive/Athena, all listed partition columns are pruned equally when filtered.</li>
+          </ul>
+
+          <h3>Over-partitioning and the small-files problem</h3>
+          <p>Each partition is a set of objects. Thousands of partitions each holding one 10 KB file is worse than one partition with one 128 MB Parquet file: Athena and Redshift Spectrum pay per request as well as per byte scanned, and the Glue Catalog groans under hundreds of thousands of partition entries. Target <strong>128 MB–1 GB per object</strong> for analytics formats. Compact small files with a Glue job or EMR step before querying.</p>
+
+          <div class="callout cost"><strong>Request costs dominate small-file workloads.</strong> S3 charges per 1,000 PUT, GET, LIST and SELECT requests. A Spark job writing one file per row generates millions of PUTs and LIST calls; the storage bill is trivial compared to the request bill. Batch writes, use Parquet with sensible row-group sizes, and run compaction jobs on streaming landing zones.</div>
+
+          <h3>Keeping the Glue Catalog in step with S3</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-129.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-129.png" alt="Slide title emphasising the importance of maintaining the Glue Data Catalog for metadata and partition definitions." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 129</span>Physical files on S3 and logical partitions in the Glue Data Catalog are two separate things. New data under an existing prefix layout does not automatically appear as a new partition in Athena until the catalog is updated.</figcaption>
+          </figure>
+
+          <ul>
+            <li><strong>Glue crawlers</strong> — schedule after batch loads or run on a trigger; they infer schema and register new partitions. Slow on buckets with millions of objects — scope crawlers to specific prefixes.</li>
+            <li><strong><code>MSCK REPAIR TABLE</code></strong> — Athena/Hive command that reads partition locations from S3 and adds missing entries. Fast for Hive-style layouts; run after each batch drop or automate in a pipeline step.</li>
+            <li><strong>Partition projection</strong> — table property that tells Athena to synthesise partition values from a template (e.g. <code>year=2020..2030</code>) without listing S3 at all. Eliminates crawler/repair for predictable time ranges; wrong configuration returns empty results silently.</li>
+            <li><strong><code>ALTER TABLE ADD PARTITION</code></strong> — explicit DDL when you know the exact path; preferred in controlled pipelines over crawling.</li>
+          </ul>
+
+          <p>Query patterns, partition DDL and cost maths for Athena are covered in depth in <a href="s03-athena.html">Section 3</a>. Glue crawler configuration and table definitions are in <a href="s04-glue.html">Section 4</a>.</p>
+
+          <pre data-lang="sql" data-title="Athena — repair partitions after a batch drop" data-explain="Run after landing new Hive-style partitions under an external table. MSCK reads S3 and registers any partition paths not yet in the Glue Catalog."><code>-- Table already exists with PARTITIONED BY (year, month, day)
+MSCK REPAIR TABLE sales_raw;
+
+-- Or add one partition explicitly when the path is known:
+ALTER TABLE sales_raw ADD IF NOT EXISTS
+  PARTITION (year='2026', month='08', day='03')
+  LOCATION 's3://dea-lab-ab-4821/staging/sales/year=2026/month=08/day=03/';</code></pre>
+
+          <pre data-lang="sql" data-title="Athena — partition projection (no crawler needed)" data-explain="Athena generates partition metadata from the template instead of listing S3. Ideal for continuous time-series ingest where paths are predictable."><code>ALTER TABLE events SET TBLPROPERTIES (
+  'projection.enabled' = 'true',
+  'projection.year.type' = 'integer',
+  'projection.year.range' = '2020,2030',
+  'projection.month.type' = 'integer',
+  'projection.month.range' = '1,12',
+  'projection.month.digits' = '2',
+  'projection.day.type' = 'integer',
+  'projection.day.range' = '1,31',
+  'projection.day.digits' = '2',
+  'storage.location.template' =
+    's3://dea-lab-ab-4821/staging/events/year=${year}/month=${month}/day=${day}/'
+);</code></pre>
+
+          <div class="callout warn"><strong>Partition projection gotcha.</strong> If the template does not match the actual key layout — wrong digit padding, missing column in the path — queries succeed but return zero rows with no error. Test with a known date before relying on projection in production.</div>
+
+          <h3>Object size limits worth knowing</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Limit</th><th>Value</th><th>What to do instead</th></tr></thead>
+              <tbody>
+                <tr><td>Maximum object size</td><td>5 TB</td><td>Split logically; use multipart upload for anything over 5 GB.</td></tr>
+                <tr><td>Single PUT upload</td><td>5 GB max</td><td>Multipart upload required above 5 GB; recommended above 100 MB for reliability.</td></tr>
+                <tr><td>Multipart upload</td><td>Up to 5 TB, 10,000 parts × 5 GB each</td><td>Abort incomplete multipart uploads via lifecycle rule to avoid orphan-part charges.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="section" id="storage-classes">
+          <h2>Storage classes and lifecycle</h2>
+          <p class="lead">S3 storage classes trade cost against availability, retrieval latency and minimum retention. Pick the class at write time or let Intelligent-Tiering or lifecycle rules move objects automatically as they age.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-132.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-132.png" alt="Section divider slide for storage classes and lifecycle configuration." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 132</span>Storage class choice and lifecycle rules are the primary levers for lake cost optimisation after partitioning.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-134.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-134.png" alt="Slide listing eight S3 storage classes including Standard, Intelligent-Tiering, Express One Zone, Standard-IA, One Zone-IA, and three Glacier tiers." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 134</span>The eight current storage classes. Reduced Redundancy (RRS) is legacy and not shown — it still exists on old buckets but should never be chosen for new workloads.</figcaption>
+          </figure>
+
+          <h3>Storage class comparison</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Storage class</th>
+                  <th>Durability</th>
+                  <th>Availability</th>
+                  <th>AZs</th>
+                  <th>Min storage duration</th>
+                  <th>Min billable object size</th>
+                  <th>Retrieval fee</th>
+                  <th>Retrieval time</th>
+                  <th>Typical use case</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>S3 Standard</strong></td>
+                  <td>99.999999999% (11 9s)</td>
+                  <td>99.99%</td>
+                  <td>≥ 3</td>
+                  <td>None</td>
+                  <td>None</td>
+                  <td>None</td>
+                  <td>Milliseconds</td>
+                  <td>Frequently accessed data: active lake zones, serving layers, ETL working sets</td>
+                </tr>
+                <tr>
+                  <td><strong>S3 Intelligent-Tiering</strong></td>
+                  <td>11 9s</td>
+                  <td>99.9%</td>
+                  <td>≥ 3</td>
+                  <td>30 days in Archive Access / Deep Archive Access tiers</td>
+                  <td>128 KB (monitoring fee below this)</td>
+                  <td>None for tier moves; retrieval fee in archive tiers</td>
+                  <td>Milliseconds (Frequent/Infrequent); hours for archive tiers</td>
+                  <td>Unknown or changing access patterns — no retrieval fee for auto-tiering</td>
+                </tr>
+                <tr>
+                  <td><strong>S3 Express One Zone</strong></td>
+                  <td>11 9s</td>
+                  <td>99.95%</td>
+                  <td>1 (directory bucket)</td>
+                  <td>None</td>
+                  <td>None</td>
+                  <td>None</td>
+                  <td>Single-digit ms; ~10× faster than Standard</td>
+                  <td>Latency-sensitive analytics on repeatedly accessed data in one AZ; ~50% lower request cost</td>
+                </tr>
+                <tr>
+                  <td><strong>S3 Standard-IA</strong></td>
+                  <td>11 9s</td>
+                  <td>99.9%</td>
+                  <td>≥ 3</td>
+                  <td>30 days</td>
+                  <td>128 KB</td>
+                  <td>Per GB retrieved</td>
+                  <td>Milliseconds</td>
+                  <td>Backups, disaster-recovery copies accessed monthly or less but needing rapid access when needed</td>
+                </tr>
+                <tr>
+                  <td><strong>S3 One Zone-IA</strong></td>
+                  <td>11 9s</td>
+                  <td>99.5%</td>
+                  <td>1</td>
+                  <td>30 days</td>
+                  <td>128 KB</td>
+                  <td>Per GB retrieved</td>
+                  <td>Milliseconds</td>
+                  <td>Secondary backup copies of on-premises data you can recreate elsewhere</td>
+                </tr>
+                <tr>
+                  <td><strong>S3 Glacier Instant Retrieval</strong></td>
+                  <td>11 9s</td>
+                  <td>99.9%</td>
+                  <td>≥ 3</td>
+                  <td>90 days</td>
+                  <td>128 KB</td>
+                  <td>Per GB retrieved</td>
+                  <td>Milliseconds</td>
+                  <td>Archive that still needs immediate read access — medical images, news archives</td>
+                </tr>
+                <tr>
+                  <td><strong>S3 Glacier Flexible Retrieval</strong></td>
+                  <td>11 9s</td>
+                  <td>99.99%</td>
+                  <td>≥ 3</td>
+                  <td>90 days</td>
+                  <td>40 KB (parts)</td>
+                  <td>Per GB; tier-dependent</td>
+                  <td>Expedited 1–5 min · Standard 3–5 hr · Bulk 5–12 hr (bulk free)</td>
+                  <td>Backups accessed 1–2× per year; async restore acceptable</td>
+                </tr>
+                <tr>
+                  <td><strong>S3 Glacier Deep Archive</strong></td>
+                  <td>11 9s</td>
+                  <td>99.99%</td>
+                  <td>≥ 3</td>
+                  <td>180 days</td>
+                  <td>40 KB (parts)</td>
+                  <td>Per GB</td>
+                  <td>Standard 12 hr · Bulk 48 hr</td>
+                  <td>Cheapest long-term retention; data accessed once or twice a year at most</td>
+                </tr>
+                <tr>
+                  <td><strong>Reduced Redundancy <span class="badge">legacy</span></strong></td>
+                  <td>99.99% (4 9s)</td>
+                  <td>99.99%</td>
+                  <td>≥ 3</td>
+                  <td>None</td>
+                  <td>None</td>
+                  <td>None</td>
+                  <td>Milliseconds</td>
+                  <td>Deprecated — only for reproducible, non-critical data on existing buckets; never for a lake</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="slide-row">
+            <figure class="slide-fig">
+              <a href="assets/slides/slide-135.png" target="_blank" rel="noopener">
+                <img src="assets/slides/slide-135.png" alt="Slide describing S3 Standard for frequently accessed data with low latency and high throughput." loading="lazy">
+              </a>
+              <figcaption><span class="slide-no">Slide 135</span>S3 Standard is the default for active pipeline stages. Anything queried daily or written by streaming ingest belongs here until lifecycle rules age it out.</figcaption>
+            </figure>
+            <figure class="slide-fig">
+              <a href="assets/slides/slide-136.png" target="_blank" rel="noopener">
+                <img src="assets/slides/slide-136.png" alt="Slide describing S3 Intelligent-Tiering with frequent, infrequent and archive access tiers." loading="lazy">
+              </a>
+              <figcaption><span class="slide-no">Slide 136</span>Intelligent-Tiering monitors access and moves objects between Frequent, Infrequent and optional Archive tiers with no retrieval fee for the monitoring itself — ideal when you cannot predict access patterns.</figcaption>
+            </figure>
+          </div>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-137.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-137.png" alt="Slide describing S3 Express One Zone high-performance single-AZ storage in directory buckets." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 137</span>Express One Zone lives in S3 <em>directory buckets</em> — a different bucket type optimised for high request rates and low latency within one Availability Zone. Not a lifecycle transition target for general-purpose buckets.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-138.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-138.png" alt="Slide comparing S3 Standard-IA and S3 One Zone-IA infrequent access classes." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 138</span>Both IA classes charge retrieval fees and enforce a 30-day minimum. Standard-IA survives an AZ loss; One Zone-IA is ~20% cheaper but data is lost if that AZ fails — acceptable only for reproducible secondary copies.</figcaption>
+          </figure>
+
+          <div class="slide-row">
+            <figure class="slide-fig">
+              <a href="assets/slides/slide-139.png" target="_blank" rel="noopener">
+                <img src="assets/slides/slide-139.png" alt="Slide introducing three S3 Glacier storage classes for archiving." loading="lazy">
+              </a>
+              <figcaption><span class="slide-no">Slide 139</span>The Glacier family is purpose-built for archive. The exam discriminates on retrieval time: Instant = milliseconds, Flexible = minutes to hours, Deep Archive = up to 48 hours.</figcaption>
+            </figure>
+            <figure class="slide-fig">
+              <a href="assets/slides/slide-140.png" target="_blank" rel="noopener">
+                <img src="assets/slides/slide-140.png" alt="Slide describing S3 Glacier Instant Retrieval for archive data needing millisecond access." loading="lazy">
+              </a>
+              <figcaption><span class="slide-no">Slide 140</span>Glacier Instant Retrieval is the bridge between IA pricing and archive retention — same retrieval speed as Standard but with a 90-day minimum and higher storage cost than Flexible/Deep Archive.</figcaption>
+            </figure>
+          </div>
+
+          <div class="slide-row">
+            <figure class="slide-fig">
+              <a href="assets/slides/slide-141.png" target="_blank" rel="noopener">
+                <img src="assets/slides/slide-141.png" alt="Slide describing S3 Glacier Flexible Retrieval with configurable restore times and free bulk retrievals." loading="lazy">
+              </a>
+              <figcaption><span class="slide-no">Slide 141</span>Flexible Retrieval offers Expedited, Standard and Bulk tiers — Bulk restores are free but take hours. Use for compliance archives where restores are rare and planned.</figcaption>
+            </figure>
+            <figure class="slide-fig">
+              <a href="assets/slides/slide-142.png" target="_blank" rel="noopener">
+                <img src="assets/slides/slide-142.png" alt="Slide describing S3 Glacier Deep Archive as the cheapest option with 12-hour restore." loading="lazy">
+              </a>
+              <figcaption><span class="slide-no">Slide 142</span>Deep Archive is the cheapest storage on AWS — 180-day minimum, 12-hour Standard restore. The exam's "lowest cost long-term retention" answer when immediate access is not required.</figcaption>
+            </figure>
+          </div>
+
+          <h3>Lifecycle configuration</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-144.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-144.png" alt="Slide defining lifecycle configuration as transition and expiration actions on groups of objects." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 144</span>A lifecycle configuration is a set of rules, each scoped by prefix, tag or object size, that apply <strong>transition actions</strong> (move to another class) or <strong>expiration actions</strong> (delete).</figcaption>
+          </figure>
+
+          <ul>
+            <li><strong>Transition actions</strong> — move current objects to a cheaper class after N days. Cannot transition back to Standard from Glacier without a restore and re-upload.</li>
+            <li><strong>Expiration actions</strong> — permanently delete current objects after N days.</li>
+            <li><strong>Noncurrent version transitions/expirations</strong> — apply to older versions when versioning is on; essential for controlling version-storage costs.</li>
+            <li><strong>Abort incomplete multipart uploads</strong> — delete orphan parts after N days; always set this to 7 days on ingest buckets.</li>
+            <li><strong>Filters</strong> — scope rules by prefix (<code>raw/</code>), object tags (<code>team=finance</code>), or minimum/maximum object size.</li>
+          </ul>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-145.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-145.png" alt="Diagram of supported lifecycle transitions between S3 storage classes from Standard down to Glacier Deep Archive." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 145</span>Valid transition paths flow downward in cost. Standard can reach any class; Glacier tiers can only move deeper. Intelligent-Tiering handles Frequent↔Infrequent↔Archive moves itself — lifecycle rules to IA are unnecessary for objects already in Intelligent-Tiering.</figcaption>
+          </figure>
+
+          <div class="callout exam"><strong>Intelligent-Tiering vs lifecycle.</strong> If access patterns are unpredictable, put objects in Intelligent-Tiering and skip manual transitions to Standard-IA. If patterns are predictable ("raw data is never read after 30 days"), a lifecycle rule from Standard → Glacier Flexible is cheaper because you skip the monitoring fee.</div>
+
+          <pre data-lang="json" data-title="S3 lifecycle configuration — raw prefix ages to Glacier, abort stale multipart uploads" data-explain="Attach to a bucket to transition objects under raw/ to Glacier Flexible Retrieval after 90 days, expire them after 365 days, and clean up failed multipart uploads after 7 days."><code>{
+  "Rules": [
+    {
+      "ID": "raw-to-glacier-then-expire",
+      "Status": "Enabled",
+      "Filter": { "Prefix": "raw/" },
+      "Transitions": [
+        { "Days": 90, "StorageClass": "GLACIER" }
+      ],
+      "Expiration": { "Days": 365 }
+    },
+    {
+      "ID": "abort-incomplete-multipart",
+      "Status": "Enabled",
+      "Filter": { "Prefix": "" },
+      "AbortIncompleteMultipartUpload": { "DaysAfterInitiation": 7 }
+    },
+    {
+      "ID": "expire-noncurrent-versions",
+      "Status": "Enabled",
+      "Filter": { "Prefix": "curated/" },
+      "NoncurrentVersionTransitions": [
+        { "NoncurrentDays": 30, "StorageClass": "STANDARD_IA" }
+      ],
+      "NoncurrentVersionExpiration": { "NoncurrentDays": 90 }
+    }
+  ]
+}</code></pre>
+
+          <pre data-lang="shell" data-title="AWS CLI — apply lifecycle and verify" data-explain="put-bucket-lifecycle-configuration replaces the entire lifecycle config — merge existing rules before applying."><code>BUCKET=dea-lab-ab-4821
+
+aws s3api put-bucket-lifecycle-configuration \
+  --bucket $BUCKET \
+  --lifecycle-configuration file://lifecycle.json
+
+aws s3api get-bucket-lifecycle-configuration --bucket $BUCKET</code></pre>
+
+          <h3>S3 Replication (CRR and SRR)</h3>
+          <p>Replication copies objects — and optionally metadata, tags and ACLs — to a bucket in another Region (CRR) or the same Region (SRR). Requires versioning on both buckets. Use cases: lower-latency reads in another Region, compliance copies, and aggregating logs from multiple buckets into one.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Feature</th><th>CRR (cross-Region)</th><th>SRR (same-Region)</th></tr></thead>
+              <tbody>
+                <tr><td>Destination</td><td>Bucket in a different AWS Region</td><td>Bucket in the same Region (different account or isolation boundary)</td></tr>
+                <tr><td>Primary use</td><td>Disaster recovery, global read latency, compliance residency copy</td><td>Log aggregation, separating prod/test copies, same-Region redundancy</td></tr>
+                <tr><td>Versioning required</td><td>Yes, on source and destination</td><td>Yes, on source and destination</td></tr>
+                <tr><td>RTC available</td><td>Yes — 15-minute SLA</td><td>Yes — 15-minute SLA</td></tr>
+                <tr><td>Transfer cost</td><td>Inter-Region data transfer per GB</td><td>No inter-Region charge; storage in both buckets</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <ul>
+            <li><strong>Replication Time Control (RTC)</strong> — guarantees 99.99% of objects replicate within 15 minutes; extra charge per GB.</li>
+            <li><strong>Replica modification sync</strong> — keeps metadata changes on the replica in sync when the source is updated (requires RTC).</li>
+            <li><strong>Replication metrics</strong> — CloudWatch tracks bytes pending, operations failed and latency; alarm on a growing pending-replication backlog.</li>
+            <li><strong>What IS replicated:</strong> new objects after rule activation, metadata, tags, ACLs (if configured), object lock retention (if enabled on both buckets).</li>
+            <li><strong>What is NOT replicated:</strong> objects that existed before replication was enabled (unless you run a batch replication job), objects in lifecycle transition, objects encrypted with SSE-C, delete markers unless configured, and objects in Glacier or Deep Archive unless restored first.</li>
+            <li><strong>Two-way replication</strong> — bidirectional rules for active/active setups; watch for replication loops with delete markers.</li>
+          </ul>
+
+          <h3>Auditing lake storage: Storage Lens and Inventory</h3>
+          <p><strong>S3 Storage Lens</strong> gives account- and bucket-level dashboards: storage by class, incomplete multipart uploads, encryption status, and activity metrics. Free metrics cover the last 14 days at account level; advanced metrics add activity by prefix, cost optimisation recommendations and 15 months of retention. <strong>S3 Inventory</strong> delivers CSV/ORC/Parquet manifests of every object on a daily or weekly schedule — feed it to Athena to find unencrypted objects, stale prefixes or cost outliers. Both are exam answers for "how do you audit storage across hundreds of buckets".</p>
+
+          <pre data-lang="sql" data-title="Athena — find unencrypted objects from S3 Inventory" data-explain="Inventory manifests land in a reporting bucket. Create an external table over the Parquet manifests and query encryption status across the estate."><code>SELECT bucket, key, size, storage_class, encryption_status
+FROM   inventory_reports
+WHERE  encryption_status = 'NOT-SSE'
+   OR  encryption_status IS NULL
+ORDER  BY size DESC
+LIMIT  100;</code></pre>
+        </section>
+
+        <section class="section" id="versioning">
+          <h2>Versioning</h2>
+          <p class="lead">Versioning keeps every overwrite and delete as a recoverable history. It is essential for replication, Object Lock and accidental-delete protection — but every retained version is billed at the storage class rate.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-147.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-147.png" alt="Slide introducing S3 versioning for update safety and delete protection." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 147</span>Versioning preserves every revision of an object. Update safety means you can roll back a bad overwrite; delete protection means a delete adds a marker instead of erasing data.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-148.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-148.png" alt="Slide stating versioning is disabled by default and can be enabled via console, CLI or SDK." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 148</span>Versioning is off by default. Once enabled it cannot be fully disabled — only suspended, which stops creating new versions but keeps existing ones.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-149.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-149.png" alt="Diagram showing S3 object versions with null version ID and subsequent version IDs after enabling versioning." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 149</span>Objects uploaded before versioning was enabled carry a <code>null</code> version ID. After enable, every PUT creates a new version with a unique opaque ID.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-150.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-150.png" alt="Console screenshot showing S3 object versions including a delete marker on home.JPG." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 150</span>With versioning on, a normal DELETE creates a <strong>delete marker</strong> (0 bytes) as the current version — the object appears gone but older versions remain. Permanently delete a specific version with <code>DeleteObject</code> + <code>VersionId</code>.</figcaption>
+          </figure>
+
+          <h3>Enable, suspend and MFA Delete</h3>
+          <ul>
+            <li><strong>Enabled</strong> — every PUT writes a new version; DELETE adds a delete marker.</li>
+            <li><strong>Suspended</strong> — no new versions; overwrites replace the null version; deletes remove the null version permanently.</li>
+            <li><strong>MFA Delete</strong> — requires MFA to change versioning state or permanently delete a version. Can only be enabled by the root user via CLI/API, not the console. Exam favourite for compliance scenarios.</li>
+          </ul>
+
+          <h3>Cost and lifecycle for noncurrent versions</h3>
+          <p>Every retained version is a full object billed at its storage class. A daily overwrite of a 1 GB file keeps 365 GB after a year unless lifecycle rules expire noncurrent versions. Use <code>NoncurrentVersionExpiration</code> and <code>NoncurrentVersionTransitions</code> on curated prefixes — keep three noncurrent versions or 30 days, whichever comes first.</p>
+
+          <pre data-lang="shell" data-title="AWS CLI — list object versions" data-explain="Shows every version and delete marker for a key — use VersionId from here to permanently delete a specific version."><code>aws s3api list-object-versions \
+  --bucket dea-lab-ab-4821 \
+  --prefix curated/customers/customers.csv \
+  --output table</code></pre>
+
+          <h3>S3 Object Lock and legal holds</h3>
+          <p>Object Lock enforces WORM (write once, read many) on a versioned bucket. <strong>Governance mode</strong> lets privileged users override; <strong>Compliance mode</strong> prevents anyone, including root, from deleting until retention expires. A <strong>legal hold</strong> blocks deletion indefinitely until explicitly removed. Required for SEC 17a-4 and similar regulations. Object Lock must be enabled at bucket creation; it cannot be added later.</p>
+        </section>
+
+        <section class="section" id="encryption">
+          <h2>Encryption</h2>
+          <p class="lead">S3 encrypts data at rest by default and supports four server-side modes plus client-side encryption. The exam tests which mode gives you audit trails, key control and policy enforcement — not the cryptography itself.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-153.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-153.png" alt="Diagram showing encryption in transit between client and S3 bucket using SSL TLS." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 153</span>Encryption in transit uses HTTPS (TLS). Data is encrypted on the wire and decrypted at the S3 endpoint. Enforce it with a bucket policy condition <code>aws:SecureTransport = true</code>.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-154.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-154.png" alt="Slide describing encryption at rest on server side or client side with default encryption on all buckets." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 154</span>Encryption at rest happens either on the server (SSE) before the bits hit disk, or on the client (CSE) before the upload leaves your network.</figcaption>
+          </figure>
+
+          <div class="callout info"><strong>Default encryption since January 2023.</strong> All new S3 buckets automatically apply SSE-S3 (AES-256) to every new object. You do not need to set a bucket policy to get baseline encryption — but you still should set an explicit default and deny unencrypted uploads if compliance requires provable enforcement.</div>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-155.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-155.png" alt="Slide listing four server-side encryption methods SSE-S3 SSE-KMS DSSE-KMS and SSE-C." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 155</span>The four SSE modes. Client-side encryption (CSE) is a fifth option not listed on this slide — the client encrypts before upload and S3 stores ciphertext only.</figcaption>
+          </figure>
+
+          <h3>Encryption mode comparison</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Mode</th>
+                  <th>Key holder</th>
+                  <th>Who encrypts</th>
+                  <th>Request headers / SDK params</th>
+                  <th>KMS API cost</th>
+                  <th>KMS throttling risk</th>
+                  <th>S3 Bucket Key</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>SSE-S3</strong></td>
+                  <td>AWS (S3-managed)</td>
+                  <td>S3</td>
+                  <td><code>x-amz-server-side-encryption: AES256</code> (or default)</td>
+                  <td>None</td>
+                  <td>None</td>
+                  <td>N/A</td>
+                </tr>
+                <tr>
+                  <td><strong>SSE-KMS</strong></td>
+                  <td>AWS KMS (customer-managed or aws/s3)</td>
+                  <td>S3 calls KMS</td>
+                  <td><code>aws:kms</code> + <code>x-amz-server-side-encryption-aws-kms-key-id</code></td>
+                  <td>~$0.03 per 10,000 requests</td>
+                  <td>Yes — hot buckets can hit KMS TPS limits</td>
+                  <td>Yes — reduces KMS calls ~99%</td>
+                </tr>
+                <tr>
+                  <td><strong>DSSE-KMS</strong></td>
+                  <td>AWS KMS (two independent layers)</td>
+                  <td>S3 calls KMS twice</td>
+                  <td><code>aws:kms:dsse</code> + KMS key ID</td>
+                  <td>Double KMS requests per object</td>
+                  <td>Higher than SSE-KMS</td>
+                  <td>Yes</td>
+                </tr>
+                <tr>
+                  <td><strong>SSE-C</strong></td>
+                  <td>Customer (you generate and store keys)</td>
+                  <td>S3 with key you send per request</td>
+                  <td><code>x-amz-server-side-encryption-customer-algorithm</code>, <code>-customer-key</code>, <code>-customer-key-MD5</code></td>
+                  <td>None</td>
+                  <td>None</td>
+                  <td>No</td>
+                </tr>
+                <tr>
+                  <td><strong>CSE</strong></td>
+                  <td>Customer</td>
+                  <td>Client SDK before upload</td>
+                  <td>Client-side — S3 sees only ciphertext</td>
+                  <td>None (unless you use KMS on client)</td>
+                  <td>None on S3 path</td>
+                  <td>No</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="slide-row">
+            <figure class="slide-fig">
+              <a href="assets/slides/slide-156.png" target="_blank" rel="noopener">
+                <img src="assets/slides/slide-156.png" alt="Diagram of SSE-S3 with S3 managed key encrypting object inside bucket." loading="lazy">
+              </a>
+              <figcaption><span class="slide-no">Slide 156</span>SSE-S3: plaintext arrives over TLS, S3 encrypts with its own key before persisting. Simplest option; no CloudTrail KMS events.</figcaption>
+            </figure>
+            <figure class="slide-fig">
+              <a href="assets/slides/slide-157.png" target="_blank" rel="noopener">
+                <img src="assets/slides/slide-157.png" alt="Diagram of SSE-KMS with KMS managed key encrypting object in S3." loading="lazy">
+              </a>
+              <figcaption><span class="slide-no">Slide 157</span>SSE-KMS: S3 calls KMS to generate a data key. CloudTrail logs every KMS usage — the audit trail answer for "who accessed the key".</figcaption>
+            </figure>
+          </div>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-158.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-158.png" alt="Diagram of DSSE-KMS applying two layers of KMS encryption to an object." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 158</span>DSSE-KMS applies two independent KMS encryption layers to the same object. Regulated industries requiring dual encryption at rest — rare on the exam but distinct from SSE-KMS.</figcaption>
+          </figure>
+
+          <div class="slide-row">
+            <figure class="slide-fig">
+              <a href="assets/slides/slide-159.png" target="_blank" rel="noopener">
+                <img src="assets/slides/slide-159.png" alt="Diagram of SSE-C with customer-provided key sent over HTTPS for server-side encryption." loading="lazy">
+              </a>
+              <figcaption><span class="slide-no">Slide 159</span>SSE-C: you send the key in request headers over HTTPS; S3 encrypts and immediately forgets the key. You must supply the same key on every GET. Not compatible with replication or S3 Inventory default settings.</figcaption>
+            </figure>
+            <figure class="slide-fig">
+              <a href="assets/slides/slide-160.png" target="_blank" rel="noopener">
+                <img src="assets/slides/slide-160.png" alt="Diagram of client-side encryption where user encrypts data before upload to S3." loading="lazy">
+              </a>
+              <figcaption><span class="slide-no">Slide 160</span>CSE: encryption happens in your application. S3 never sees plaintext. Maximum control; you own key rotation, access and performance overhead entirely.</figcaption>
+            </figure>
+          </div>
+
+          <h3>S3 Bucket Keys</h3>
+          <p>With SSE-KMS, every object upload and download can call KMS — expensive and throttle-prone at scale. A <strong>S3 Bucket Key</strong> uses a bucket-level key that S3 rotates automatically, reducing KMS API calls by up to 99%. Enable in default encryption settings. CloudTrail still logs via S3 rather than per-object KMS events.</p>
+
+          <h3>Policy enforcement: TLS and encryption headers</h3>
+          <p>Combine bucket default encryption with a deny policy so non-compliant uploads fail rather than relying on defaults alone:</p>
+          <ul>
+            <li><code>aws:SecureTransport = false</code> → deny (blocks HTTP).</li>
+            <li><code>s3:x-amz-server-side-encryption</code> not <code>AES256</code> or <code>aws:kms</code> → deny unencrypted uploads.</li>
+            <li><code>s3:x-amz-server-side-encryption-aws-kms-key-id</code> → restrict to a specific CMK ARN.</li>
+          </ul>
+
+          <pre data-lang="shell" data-title="AWS CLI — set default bucket encryption with Bucket Key" data-explain="Sets SSE-KMS as the default for all new objects and enables the bucket key to cut KMS costs."><code>aws s3api put-bucket-encryption \
+  --bucket dea-lab-ab-4821 \
+  --server-side-encryption-configuration '{
+    "Rules": [{
+      "ApplyServerSideEncryptionByDefault": {
+        "SSEAlgorithm": "aws:kms",
+        "KMSMasterKeyID": "arn:aws:kms:us-east-1:123456789012:key/abcd-1234"
+      },
+      "BucketKeyEnabled": true
+    }]
+  }'</code></pre>
+
+          <div class="callout info"><strong>S3 Select is deprecated.</strong> S3 Select let you run simple SQL against a single CSV/JSON object and retrieve filtered rows. AWS recommends Athena instead — it handles multi-file tables, partitions and standard SQL. If an exam question mentions filtering data in S3 without a catalog, Athena over Parquet is the modern answer unless the scenario explicitly requires sub-object retrieval on one huge object.</div>
+        </section>
+
+        <section class="section" id="bucket-policies">
+          <h2>Bucket policies</h2>
+          <p class="lead">A bucket policy is a resource-based IAM policy attached to the bucket. It controls who can reach the bucket from outside your account, enforces encryption and TLS, and complements identity-based IAM policies and ACLs.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-162.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-162.png" alt="Slide explaining bucket policy JSON structure with Principal Action Resource and Condition for IP and SecureTransport." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 162</span>Bucket policies are JSON documents specifying Effect, Principal, Action, Resource and optional Condition keys. The example allows public GetObject only from a CIDR range over HTTPS.</figcaption>
+          </figure>
+
+          <h3>How policies combine: evaluation order</h3>
+          <ol>
+            <li><strong>Explicit deny</strong> in any applicable policy (bucket, IAM, SCP, session policy) → request denied. Deny always wins.</li>
+            <li><strong>Explicit allow</strong> in bucket policy or IAM policy → allowed if no deny matched.</li>
+            <li><strong>Implicit deny</strong> → default if nothing allows the action.</li>
+          </ol>
+          <p>IAM identity policies grant users/roles permission to act. Bucket policies grant the bucket permission to be acted upon by specified principals — essential for cross-account access and public reads. ACLs are legacy; new designs use bucket policies and Block Public Access.</p>
+
+          <h3>Block Public Access</h3>
+          <p>Four account- and bucket-level switches that override any policy attempting public access. Turn them on at account level for data-lake accounts. Exam scenario: "bucket policy grants public read but objects are inaccessible" → Block Public Access is on.</p>
+
+          <h3>Worked examples</h3>
+          <pre data-lang="json" data-title="Bucket policy — deny unencrypted uploads and non-TLS requests" data-explain="Two Deny statements: reject any request not using HTTPS, and reject PUT/POST without SSE-S3 or SSE-KMS headers. Combine with an Allow for your IAM roles."><code>{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DenyInsecureTransport",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": "s3:*",
+      "Resource": [
+        "arn:aws:s3:::dea-lab-ab-4821",
+        "arn:aws:s3:::dea-lab-ab-4821/*"
+      ],
+      "Condition": {
+        "Bool": { "aws:SecureTransport": "false" }
+      }
+    },
+    {
+      "Sid": "DenyUnencryptedUploads",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": ["s3:PutObject", "s3:PostObject"],
+      "Resource": "arn:aws:s3:::dea-lab-ab-4821/*",
+      "Condition": {
+        "StringNotEquals": {
+          "s3:x-amz-server-side-encryption": ["AES256", "aws:kms"]
+        }
+      }
+    }
+  ]
+}</code></pre>
+
+          <pre data-lang="json" data-title="Bucket policy — restrict access to a VPC endpoint" data-explain="Only principals connecting through the specified VPC endpoint can access objects — common for private lake access from Redshift or EC2 without public internet."><code>{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Sid": "RestrictToVPCE",
+    "Effect": "Deny",
+    "Principal": "*",
+    "Action": "s3:*",
+    "Resource": "arn:aws:s3:::dea-lab-ab-4821/*",
+    "Condition": {
+      "StringNotEquals": {
+        "aws:SourceVpce": "vpce-0abc1234def567890"
+      }
+    }
+  }]
+}</code></pre>
+
+          <pre data-lang="json" data-title="Bucket policy — cross-account read for a data consumer" data-explain="Account B can list and get objects under curated/ without making the bucket public. The consumer account still needs an IAM policy allowing s3:GetObject on the ARN."><code>{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Sid": "AllowCrossAccountCuratedRead",
+    "Effect": "Allow",
+    "Principal": { "AWS": "arn:aws:iam::999888777666:role/DataConsumer" },
+    "Action": ["s3:GetObject", "s3:ListBucket"],
+    "Resource": [
+      "arn:aws:s3:::dea-lab-ab-4821",
+      "arn:aws:s3:::dea-lab-ab-4821/curated/*"
+    ]
+  }]
+}</code></pre>
+
+          <h3>Other access controls</h3>
+          <ul>
+            <li><strong>Requester Pays</strong> — the downloader pays request and data-transfer costs instead of the bucket owner. Enable on shared datasets; callers must include <code>x-amz-request-payer: requester</code>.</li>
+            <li><strong>Transfer Acceleration</strong> — uploads route through CloudFront edge locations to the bucket Region over optimised paths. Costs extra; use for global uploads to a single Region, not for intra-Region traffic.</li>
+          </ul>
+        </section>
+
+        <section class="section" id="access-points">
+          <h2>Access Points and Object Lambda</h2>
+          <p class="lead">When one bucket serves many applications with different permissions, a single bucket policy becomes unmaintainable. S3 Access Points give each application its own hostname and policy. Object Lambda transforms objects on GET without storing a second copy.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-165.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-165.png" alt="Diagram showing one S3 bucket with multiple access points for different users." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 165</span>Each access point is a named entry with its own policy. Application A reaches <code>arn:aws:s3:us-east-1:123:accesspoint/ap-a</code> and sees only the prefixes you allow — without editing the bucket policy for every new consumer.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-166.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-166.png" alt="Slide listing access point features: DNS name, access point policy, customized permissions, scalability and security." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 166</span>Each access point has a unique DNS name (Internet Origin or VPC Origin), its own resource policy, and scales independently. VPC-only access points restrict traffic to a specific VPC — no bucket-policy IP gymnastics.</figcaption>
+          </figure>
+
+          <h3>Multi-Region Access Points</h3>
+          <p>MRAP provides a single global endpoint that routes requests to buckets in multiple Regions. Failover is automatic when you enable cross-Region replication behind the MRAP. Use for global applications that need low-latency reads from the nearest copy without client-side Region logic.</p>
+
+          <h3>Object Lambda</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-168.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-168.png" alt="Slide listing Object Lambda use cases: filter sensitive data, convert formats, augment data." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 168</span>Object Lambda transforms data as it is retrieved — redact PII, convert XML to JSON, enrich from DynamoDB — without writing a transformed copy back to S3.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-169.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-169.png" alt="Architecture diagram of Object Lambda access point invoking Lambda function on GET request before returning data to user." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 169</span>Request flow: user → Object Lambda Access Point → Lambda (transform) → standard Access Point → bucket. Lambda runs in the request path on every GET; size and latency limits apply.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-170.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-170.png" alt="Slide listing Object Lambda use cases for PII redaction, format conversion and data augmentation." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 170</span>Concrete exam scenarios: redact PII for analytics users who should not see raw fields; convert legacy XML exports to JSON on the fly; append reference data from another service at read time.</figcaption>
+          </figure>
+
+          <div class="callout exam"><strong>Access Point vs bucket policy.</strong> "Three teams share one lake bucket with different prefix permissions and one team must be VPC-only" → three Access Points, not three bucket policies with conflicting statements. "Transform CSV to JSON at read time without duplicating data" → Object Lambda.</div>
+
+          <h3>Access Point policy example</h3>
+          <pre data-lang="json" data-title="Access Point policy — analytics team read-only on curated/" data-explain="Attached to the access point, not the bucket. Principals use the access point ARN as the resource in IAM policies."><code>{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Principal": { "AWS": "arn:aws:iam::123456789012:role/AnalyticsReader" },
+    "Action": ["s3:GetObject", "s3:ListBucket"],
+    "Resource": [
+      "arn:aws:s3:us-east-1:123456789012:accesspoint/dea-curated-ap/object/curated/*",
+      "arn:aws:s3:us-east-1:123456789012:accesspoint/dea-curated-ap"
+    ]
+  }]
+}</code></pre>
+        </section>
+
+        <section class="section" id="event-notifications">
+          <h2>Event notifications</h2>
+          <p class="lead">S3 can notify downstream systems when objects are created, removed, restored or transitioned. Direct notifications go to SNS, SQS or Lambda; EventBridge adds richer filtering, more targets and replay.</p>
+
+          <p class="muted">The deck covers event notifications twice (slides 172–177 and again as 179–184 with identical content). It is listed once here.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-172.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-172.png" alt="Section divider for S3 event notifications." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 172</span>Event notifications decouple ingest from processing — the standard pattern for triggering Glue jobs, Lambda transforms or SQS-buffered workers when new files land.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-173.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-173.png" alt="Slide listing S3 event types: object created, removed, restore and replication events." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 173</span>Core event families: <code>s3:ObjectCreated:*</code>, <code>s3:ObjectRemoved:*</code>, <code>s3:ObjectRestore:*</code>, and replication events. Lifecycle and tagging events are on the next slide.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-174.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-174.png" alt="Slide listing additional S3 events: lifecycle expiration and transition, Intelligent-Tiering archival, tagging and ACL PUT." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 174</span>Lifecycle expiration/transition events, Intelligent-Tiering automatic archival, object tagging changes and ACL PUT events — available through EventBridge; only a subset work with legacy SNS/SQS/Lambda destinations.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-175.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-175.png" alt="Slide showing S3 event notification destinations SNS SQS Lambda and EventBridge." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 175</span>Legacy destinations: SNS (fan-out), SQS (buffer and batch), Lambda (direct invoke). EventBridge is the superset — enable it on the bucket and route anywhere EventBridge supports.</figcaption>
+          </figure>
+
+          <div class="diagram">
+            <p class="diagram-title">Event notification fan-out from one bucket upload</p>
+            <div class="flow">
+              <div class="node is-source"><b>S3 PUT</b><small>raw/customers/file.csv</small></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-store pulse"><b>S3 bucket</b><small>event rule matched</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-compute"><b>SNS</b><small>fan-out alert</small></div>
+            </div>
+            <div class="flow" style="margin-top:10px;">
+              <div class="node is-compute"><b>SQS</b><small>buffer for workers</small></div>
+              <div class="node is-compute"><b>Lambda</b><small>transform now</small></div>
+              <div class="node is-serve"><b>EventBridge</b><small>20+ targets · archive</small></div>
+            </div>
+          </div>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-176.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-176.png" alt="Slide explaining S3 event name wildcards and prefix suffix filters for notifications." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 176</span>Event names support type wildcards (<code>s3:ObjectCreated:*</code>) but prefix/suffix filters are literal — there is no glob beyond matching a fixed prefix like <code>raw/</code> or suffix like <code>.csv</code>.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-177.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-177.png" alt="Diagram showing S3 ObjectCreated Put event triggering Lambda to insert row into RDS database." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 177</span>Classic pattern: file lands in S3 → Lambda triggered → metadata row inserted into RDS. In production, SQS between S3 and Lambda absorbs bursts and enables retry with a DLQ.</figcaption>
+          </figure>
+
+          <h3>Configuration requirements</h3>
+          <ul>
+            <li><strong>Resource-based policy on destination</strong> — SNS topic, SQS queue and Lambda function each need a policy allowing <code>s3.amazonaws.com</code> to publish/invoke, scoped to the bucket ARN.</li>
+            <li><strong>At-least-once delivery</strong> — duplicate events are normal. Make consumers idempotent: use the object ETag or version ID as a dedup key.</li>
+            <li><strong>Same-Region</strong> — bucket and SNS/SQS/Lambda destination must be in the same Region (EventBridge can cross Regions with a rule).</li>
+            <li><strong>No wildcard prefixes</strong> — filter on prefix <code>raw/customers/</code> or suffix <code>.csv</code>; you cannot do <code>*.csv</code> across arbitrary paths in one rule (use EventBridge content filtering for richer patterns).</li>
+          </ul>
+
+          <h3>Why EventBridge is the richer option</h3>
+          <ul>
+            <li>More event types including lifecycle and Intelligent-Tiering transitions.</li>
+            <li>20+ targets: Step Functions, Kinesis, ECS, cross-account buses, API destinations.</li>
+            <li>Content-based filtering on event fields without re-publishing from Lambda.</li>
+            <li>Archive and replay — rebuild downstream state after an outage.</li>
+          </ul>
+
+          <pre data-lang="json" data-title="S3 notification configuration (SQS destination on raw/ prefix)" data-explain="Attach via console or put-bucket-notification-configuration. The SQS queue policy must allow s3.amazonaws.com to SendMessage for this bucket ARN."><code>{
+  "QueueConfigurations": [{
+    "Id": "raw-upload-to-sqs",
+    "QueueArn": "arn:aws:sqs:us-east-1:123456789012:dea-lab-ingest-queue",
+    "Events": ["s3:ObjectCreated:Put"],
+    "Filter": {
+      "Key": {
+        "FilterRules": [
+          { "Name": "prefix", "Value": "raw/" },
+          { "Name": "suffix", "Value": ".csv" }
+        ]
+      }
+    }
+  }]
+}</code></pre>
+
+          <pre data-lang="json" data-title="S3 event notification payload (ObjectCreated Put)" data-explain="What Lambda or SQS receives when a new object is uploaded. Records is an array — batch size can be greater than one when using SQS."><code>{
+  "Records": [{
+    "eventVersion": "2.1",
+    "eventSource": "aws:s3",
+    "awsRegion": "us-east-1",
+    "eventTime": "2026-08-03T12:34:56.000Z",
+    "eventName": "ObjectCreated:Put",
+    "s3": {
+      "bucket": {
+        "name": "dea-lab-ab-4821",
+        "arn": "arn:aws:s3:::dea-lab-ab-4821"
+      },
+      "object": {
+        "key": "raw/customers/customers.csv",
+        "size": 818,
+        "eTag": "d41d8cd98f00b204e9800998ecf8427e"
+      }
+    }
+  }]
+}</code></pre>
+        </section>
+
+        <section class="section" id="deeper">
+          <h2>Deeper detail and exam edge cases</h2>
+          <p class="lead">Request-rate scaling, minimum billable sizes, transition economics, and consistency rules — the S3 operational facts that turn a cheap lake design into a throttled or over-billed one.</p>
+
+          <h3>Limits and quotas that decide answers</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Limit</th><th>Value</th><th>Adjustable?</th><th>Why it matters</th></tr></thead>
+              <tbody>
+                <tr><td>Request rate per prefix</td><td>3,500 PUT/COPY/POST/DELETE and 5,500 GET/HEAD per second</td><td>Yes — spread keys across prefixes; S3 scales automatically</td><td>Hot prefix throttles with HTTP 503; randomise suffixes in key names for high-parallel ingest.</td></tr>
+                <tr><td>Maximum object size</td><td>5 TB</td><td>No (hard)</td><td>Logical split required above practical single-object limits.</td></tr>
+                <tr><td>Single PUT upload</td><td>5 GB max</td><td>No (hard) — use multipart above 5 GB</td><td>Exam scenarios with 10 GB objects require multipart upload API.</td></tr>
+                <tr><td>Multipart upload</td><td>Up to 10,000 parts; 5 MB minimum part size (last part excepted); max 5 GB per part</td><td>No (hard)</td><td>Abort incomplete uploads via lifecycle — orphan parts bill silently.</td></tr>
+                <tr><td>Buckets per account (default)</td><td>100 soft limit; up to 1,000 via quota increase</td><td>Yes — Service Quotas request</td><td>Multi-tenant lakes sometimes hit this before storage limits.</td></tr>
+                <tr><td>Lifecycle rules per bucket</td><td>1,000</td><td>No (hard)</td><td>Consolidate rules with prefix patterns and tags instead of one rule per folder.</td></tr>
+                <tr><td>Minimum storage duration — Standard-IA / One Zone-IA</td><td>30 days</td><td>No (hard) — billed even if deleted early</td><td>Early delete triggers pro-rated charge for remaining days.</td></tr>
+                <tr><td>Minimum storage duration — Glacier Instant / Flexible</td><td>90 days</td><td>No (hard)</td><td>Transitioning small objects before 90 days often costs more than staying in Standard.</td></tr>
+                <tr><td>Minimum storage duration — Glacier Deep Archive</td><td>180 days</td><td>No (hard)</td><td>Compliance archive only — retrieval takes up to 48 hours.</td></tr>
+                <tr><td>Minimum billable object size — IA / Intelligent-Tiering</td><td>128 KB</td><td>No (hard)</td><td>Smaller objects are charged as 128 KB — lifecycle transition of tiny files is uneconomic.</td></tr>
+                <tr><td>Intelligent-Tiering monitoring</td><td>Per-object fee for objects ≥ 128 KB</td><td>No (hard)</td><td>Skip Intelligent-Tiering for millions of sub-128 KB objects.</td></tr>
+                <tr><td>Versioning + delete marker</td><td>Each version is a full object</td><td>N/A — design choice</td><td>Overwrites double storage until noncurrent expiration rules run.</td></tr>
+                <tr><td>Replication scope</td><td>New objects after rule activation only (unless batch replication job)</td><td>N/A — requires versioning on source and destination</td><td>Pre-existing backlog is not retroactively replicated.</td></tr>
+                <tr><td>Object Lock Compliance mode</td><td>Retention cannot be shortened; mode cannot be reverted to Governance</td><td>No (hard) — bucket must enable Object Lock at creation</td><td>WORM for regulated data; mistakes lock objects until retention expires.</td></tr>
+                <tr><td>Consistency — object operations</td><td>Read-after-write strong for new objects; overwrite PUT/DELETE eventually consistent historically — now strong for all object operations</td><td>N/A</td><td>Bucket-level configuration (policy, lifecycle) remains eventually consistent — exam still tests the distinction.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>What you actually pay for</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Billed dimension</th><th>Unit</th><th>How to spend less</th></tr></thead>
+              <tbody>
+                <tr><td>Storage (per class)</td><td>GB-month by storage class</td><td>Lifecycle to IA/Glacier only when minimum duration and object size justify it; avoid IA for sub-128 KB objects.</td></tr>
+                <tr><td>PUT / POST / LIST / transition requests</td><td>Per 1,000 requests</td><td>Lifecycle transition of millions of small objects costs more in request fees than storage saved — batch or aggregate first.</td></tr>
+                <tr><td>GET / SELECT requests</td><td>Per 1,000 requests</td><td>CloudFront or S3 Express One Zone for hot small-object read patterns; fewer LIST calls in pipelines.</td></tr>
+                <tr><td>Intelligent-Tiering monitoring</td><td>Per 1,000 objects per month (objects ≥ 128 KB)</td><td>Use fixed lifecycle rules when access pattern is known; Intelligent-Tiering when unpredictable.</td></tr>
+                <tr><td>Retrieval — Standard-IA / One Zone-IA</td><td>Per GB retrieved</td><td>Do not query IA objects like Standard — Athena over IA curated data adds retrieval line item.</td></tr>
+                <tr><td>Glacier Flexible retrieval tiers</td><td>Expedited (1–5 min), Standard (3–5 hr), Bulk (5–12 hr, free tier of retrievals)</td><td>Plan restore jobs with Bulk for large rehydrates; Expedited for urgent single-object restores.</td></tr>
+                <tr><td>Glacier Deep Archive retrieval</td><td>Standard (~12 hr) or Bulk (~48 hr)</td><td>Lowest storage cost; highest retrieval latency — wrong class if dashboards read daily.</td></tr>
+                <tr><td>Cross-Region replication / transfer</td><td>Replication PUT charges plus inter-Region data transfer per GB</td><td>Replicate only required prefixes; SRR instead of CRR when compliance allows same-Region copy.</td></tr>
+                <tr><td>SSE-KMS without Bucket Key</td><td>KMS API request per object operation</td><td>Enable S3 Bucket Key on SSE-KMS buckets — up to 99% fewer KMS calls.</td></tr>
+                <tr><td>Storage Lens advanced</td><td>Per million objects monitored per month</td><td>Free tier covers account-level metrics; enable advanced only on buckets needing prefix-level activity metrics.</td></tr>
+                <tr><td>S3 Inventory reports</td><td>Per million objects listed per report</td><td>Weekly inventory on large buckets is cheaper than daily LIST in custom scripts at scale.</td></tr>
+                <tr><td>Requester Pays</td><td>Downloader pays GET and data transfer</td><td>Enable on public datasets so bucket owner is not charged for external scrapers.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout cost"><strong>Biggest S3 lake leak.</strong> Millions of small JSON files in Standard with no lifecycle, plus Athena full-prefix scans. Storage is cheap; request charges, Intelligent-Tiering monitoring on tiny objects, and terabytes scanned dominate.</div>
+          <div class="callout danger"><strong>Lifecycle transition of tiny objects.</strong> Moving 10 million 4 KB files to Standard-IA costs transition PUT fees and bills each object as 128 KB — you pay more, not less. Aggregate to Parquet first, then transition.</div>
+
+          <h3>Traps that catch people</h3>
+          <ul>
+            <li><strong>Hot prefix throttling —</strong> All workers writing to <code>output/part-00000.parquet</code> share one prefix limit (3,500 PUT/s). Use hive partitions or random salt prefixes (<code>year=…/shard=…/</code>) so S3 scales horizontally.</li>
+            <li><strong>Versioning doubles storage silently —</strong> Daily overwrite of a 1 GB object without noncurrent expiration retains every version. Delete markers hide objects from LIST but versions still bill.</li>
+            <li><strong>Replication is not retroactive —</strong> Enabling CRR today does not copy yesterday's backlog unless you run S3 Batch Replication. Exam distractors propose replication for existing archive — wrong without batch job.</li>
+            <li><strong>Object Lock bucket creation only —</strong> Object Lock and Compliance mode cannot be enabled on an existing bucket. Plan WORM before the first PUT.</li>
+            <li><strong>Compliance mode is irreversible —</strong> Once set, you cannot downgrade to Governance or delete locked objects until retention expires — even root cannot override.</li>
+            <li><strong>Presigned URL inherits creator permissions —</strong> The URL works only while the signer had <code>s3:GetObject</code> (or Put) and the credentials remain valid. Revoking the IAM user invalidates URLs they signed.</li>
+            <li><strong>Bucket-level vs object-level consistency —</strong> New object GETs are strongly consistent. Creating a bucket then immediately listing it may not show the bucket — configuration changes propagate eventually.</li>
+            <li><strong>SSE-C and replication —</strong> Customer-provided keys are incompatible with replication and default Inventory — exam questions pairing SSE-C with CRR have no valid configuration.</li>
+            <li><strong>Glacier Instant vs Flexible —</strong> Both have 90-day minimum; Instant allows millisecond retrieval at higher storage rate. Flexible is cheaper storage but minutes-to-hours restore — wrong pick for interactive dashboards.</li>
+            <li><strong>Requester Pays forgotten header —</strong> Downloaders receive 403 until they send <code>x-amz-request-payer: requester</code> — common break when sharing public research datasets.</li>
+          </ul>
+
+          <h3>Troubleshooting playbook</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Symptom</th><th>Most likely cause</th><th>What to check / fix</th></tr></thead>
+              <tbody>
+                <tr><td>HTTP 503 Slow Down on PUT/GET</td><td>Request rate exceeded on a single prefix</td><td>CloudWatch <code>4xxErrors</code>; randomise key suffixes; spread writers across partition prefixes.</td></tr>
+                <tr><td>Athena scan cost spike after new ingest</td><td>Non-partitioned layout or wrong storage class with retrieval fees</td><td>Storage Lens or Inventory for prefix sizes; verify Hive partitions; check IA retrieval on curated queries.</td></tr>
+                <tr><td>Replication lag growing</td><td>Large objects, KMS throttling, or missing destination permissions</td><td>Metrics <code>OperationsPendingReplication</code>; verify destination bucket policy and KMS key policy; check RTC if SLA requires 15 min.</td></tr>
+                <tr><td>Lifecycle rule not transitioning objects</td><td>Object size below 128 KB for IA; rule prefix mismatch; minimum days not met</td><td><code>GetBucketLifecycleConfiguration</code>; S3 Inventory for object sizes; wait full minimum duration.</td></tr>
+                <tr><td>KMS AccessDenied on encrypted bucket</td><td>Caller lacks <code>kms:Decrypt</code> or key policy denies S3</td><td>Key policy + IAM; enable Bucket Key; check cross-account replication KMS settings.</td></tr>
+                <tr><td>Presigned URL returns 403</td><td>Expired URL, clock skew, or signer lost permission</td><td>Regenerate with shorter expiry; verify IAM policy; for PUT URLs check content-type headers signed in URL.</td></tr>
+                <tr><td>Multipart upload storage growing with no objects</td><td>Incomplete multipart uploads not aborted</td><td>Lifecycle rule <code>AbortIncompleteMultipartUpload</code> after 7 days; list in-progress uploads with <code>list-multipart-uploads</code>.</td></tr>
+                <tr><td>Unexpected charges after "deleting" bucket contents</td><td>Versioned delete markers; incomplete multipart parts</td><td>List object versions; permanently delete noncurrent versions; run multipart abort lifecycle.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Production patterns</h3>
+          <p>Production lakes partition by query filter columns, land <strong>Parquet with Snappy</strong> in <code>curated/</code>, enforce default SSE-KMS with Bucket Key, and use lifecycle only on prefixes where minimum size and duration math works. Ingest buckets get abort-multipart lifecycle, event notifications to SQS, and replication only for compliance prefixes — not the entire raw zone.</p>
+          <div class="grid-2">
+            <div class="mini-card">
+              <h4>Cost-aware lifecycle</h4>
+              <ul>
+                <li>Raw JSON → Standard 30 days → Glacier Flexible at 90 days if replay window allows.</li>
+                <li>Noncurrent version expiration on curated after 3 versions or 30 days.</li>
+                <li>Storage Lens advanced on production buckets monthly for orphan prefix detection.</li>
+              </ul>
+            </div>
+            <div class="mini-card">
+              <h4>Anti-pattern</h4>
+              <p>Single-prefix <code>data/</code> dump of millions of small CSV files with Intelligent-Tiering and daily Athena <code>SELECT *</code>. Hits monitoring fees, retrieval fees, and scan costs simultaneously.</p>
+            </div>
+          </div>
+<pre data-lang="shell" data-title="Presigned GET URL — time-limited access without bucket policy change" data-explain="URL inherits the signer's IAM permissions; expiry is enforced by X-Amz-Expires. Use for partner delivery instead of public bucket policies."><code>aws s3 presign s3://dea-lab-ab-4821/curated/customers/part-000.parquet \
+  --expires-in 3600
+
+# Downloader needs no IAM user if they possess the URL before expiry</code></pre>
+
+          <h3>Where this fits with the rest of the exam</h3>
+          <p>S3 is the default <strong>durability and cost anchor</strong> for Domain 2 (26%). Nearly every pipeline section assumes objects land here first.</p>
+          <ul>
+            <li><a href="s03-athena.html">Section 3 — Athena</a> — partition layout and storage class directly determine scan cost and retrieval fees.</li>
+            <li><a href="s04-glue.html">Section 4 — Glue</a> — crawlers, bookmarks, and ETL writes that must align with S3 prefix conventions.</li>
+            <li><a href="s05-lambda.html">Section 5 — Lambda</a> — event-driven processing on <code>raw/</code> uploads; idempotent keys and notification semantics.</li>
+            <li><a href="s06-streaming.html">Section 6 — Data Streaming</a> — Firehose delivery destinations and dynamic partitioning into hive-style prefixes.</li>
+            <li><a href="s10-redshift.html#spectrum">Section 10 — Redshift Spectrum</a> — external tables over the same curated prefixes; IA/Glacier classes affect eligibility.</li>
+          </ul>
+          <div class="callout exam"><strong>Exam framing.</strong> "Lowest cost archive with retrieval in hours" → Glacier Flexible or Deep Archive, not Standard-IA. "Immediate read after unpredictable access" → Intelligent-Tiering or Standard, not Glacier. "Shared dataset — downloader pays" → Requester Pays. "Immutable compliance retention" → Object Lock Compliance at bucket creation. S3 wins almost every durability question; wrong answers are usually wrong class, wrong consistency assumption, or wrong replication scope.</div>
+        </section>
+
+        <section class="section" id="interview">
+          <h2>Interview questions</h2>
+          <p class="muted">Answer each one out loud before opening it.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+            <details class="qa">
+              <summary>Why is S3 prefix layout the most important decision in a data lake design?<span class="qa-tag">Architecture</span></summary>
+              <div class="qa-body">
+                <p>Prefixes are how query engines prune data. A Hive-style layout like <code>year=2024/month=03/region=eu/</code> lets Athena read only the partitions your WHERE clause needs. Bad layout — too flat, too granular, or keys that do not match query filters — forces full-bucket scans on every query, which is slow and billed per terabyte scanned.</p>
+                <p>Prefixes also scope lifecycle rules: expire everything under <code>raw/year=2020/</code> in one action. The Glue Catalog must mirror the physical layout; if they diverge, queries return stale or empty results.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>When would you choose S3 Intelligent-Tiering over a lifecycle rule to Standard-IA?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p>Intelligent-Tiering when access patterns are unpredictable or change over time — it moves objects between Frequent and Infrequent tiers automatically with no retrieval fee for the move itself, and optional Archive tiers after 90/180 days of no access.</p>
+                <p>A lifecycle rule to Standard-IA when you <em>know</em> data becomes cold after a fixed period (e.g. raw logs never read after 30 days). Lifecycle is cheaper because you skip the per-object monitoring fee Intelligent-Tiering charges for objects under 128 KB and for every object monitored.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What happens when you delete an object in a versioned bucket?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>A normal DELETE does not remove data. S3 inserts a <strong>delete marker</strong> as the new current version — a zero-byte placeholder. GET without a VersionId returns 404. Previous versions remain stored and billable until you permanently delete each version by VersionId or expire noncurrent versions with lifecycle rules.</p>
+                <p>To truly remove data you call DELETE with a specific <code>VersionId</code>, or suspend versioning and delete the null version — but suspension does not delete existing versions.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>SSE-S3 versus SSE-KMS — what does the exam want you to compare?<span class="qa-tag">Security</span></summary>
+              <div class="qa-body">
+                <p>SSE-S3: AWS manages keys entirely, no KMS cost, no per-object CloudTrail KMS events, simplest setup. SSE-KMS: customer-managed or AWS-managed KMS key, every encrypt/decrypt can call KMS (cost and throttle risk), CloudTrail audit trail of key usage, supports key rotation and cross-account key policies.</p>
+                <p>Choose SSE-KMS when compliance requires knowing who used the key and when. Enable S3 Bucket Keys with SSE-KMS to cut KMS API calls. DSSE-KMS adds a second encryption layer for dual-encrypt requirements — rare but distinct from SSE-KMS.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How do bucket policies and IAM policies work together for S3 access?<span class="qa-tag">Security</span></summary>
+              <div class="qa-body">
+                <p>IAM identity policies attach to users/roles and say "this principal may PerformAction on this resource". Bucket policies attach to the bucket and say "these principals may access this bucket". For access to succeed, <em>some</em> policy must allow it AND no policy may explicitly deny it.</p>
+                <p>Explicit deny always wins. Cross-account access typically needs both: a bucket policy allowing the external account's role, and an IAM policy on that role allowing the S3 actions. Block Public Access overrides any Allow that would make objects public.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Why use an S3 Access Point instead of expanding the bucket policy?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>Access Points give each application its own hostname and resource policy scoped to that point's allowed prefixes and actions. As teams multiply, one bucket policy accumulates conflicting statements and hits size limits. Access Points scale organisationally: onboard a team by creating a VPC-only access point without touching other teams' permissions.</p>
+                <p>Multi-Region Access Points add a global endpoint with automatic failover across replicated buckets — something bucket policies alone cannot provide.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>S3 event notification to Lambda versus EventBridge — when is EventBridge better?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p>Direct Lambda notification is fine for a single target reacting to ObjectCreated on a prefix. EventBridge is better when you need lifecycle or Intelligent-Tiering events, multiple targets from one event, content-based filtering, cross-account routing, or archive/replay after an outage.</p>
+                <p>Both deliver at-least-once. Either way, design idempotent handlers — duplicate events are expected, not exceptional.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>A Glue crawler finds schema but Athena returns no rows for a new date partition. What do you check?<span class="qa-tag">Troubleshooting</span></summary>
+              <div class="qa-body">
+                <p>First: does data exist at the expected S3 path with correct Hive-style naming (<code>year=2026/month=08/day=03/</code>)? Second: is the partition registered — run <code>MSCK REPAIR TABLE</code> or <code>ALTER TABLE ADD PARTITION</code>, or re-run the crawler on that prefix. Third: if using partition projection, verify the projection range includes the date and the template matches the actual key layout.</p>
+                <p>Also check Lake Formation permissions if enabled — the catalog can know about a partition the IAM role still cannot read.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Your Athena bill spiked after a new ingest job started. S3 storage barely changed. What happened?<span class="qa-tag">Cost</span></summary>
+              <div class="qa-body">
+                <p>Small files. The job probably writes thousands of tiny objects — each query lists and opens many files, multiplying S3 GET requests and Athena scan overhead even if total bytes are modest. Check average object size under the affected prefix; run a compaction Glue job to merge files toward 128 MB–1 GB Parquet blocks.</p>
+                <p>Also verify queries filter on partition columns — a missing WHERE on a new wide table scans everything. Storage Lens and Inventory help find the offending prefix.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What is the difference between Glacier Instant Retrieval and Glacier Flexible Retrieval?<span class="qa-tag">Exam</span></summary>
+              <div class="qa-body">
+                <p>Glacier Instant Retrieval: millisecond access like Standard, 90-day minimum, higher storage cost than Flexible — for archive that must be readable immediately without a restore job.</p>
+                <p>Glacier Flexible Retrieval: async restore in minutes to hours (Expedited/Standard/Bulk), cheaper storage, 90-day minimum — for backups accessed once or twice a year where you can wait for restore. Deep Archive is cheaper still with 12–48 hour restore.</p>
+              </div>
+            </details>
+          </div>
+        </section>
+
+        <section class="section" id="practice">
+          <h2>Hands-on practice</h2>
+          <p class="muted">Free tier where possible. Delete everything at the end of each task.</p>
+          <ol class="practice-list">
+            <li class="practice">
+              <p class="practice-task">On bucket <code>dea-lab-&lt;initials&gt;-&lt;random&gt;</code>, create the <code>raw/</code>, <code>staging/</code> and <code>curated/</code> prefixes by uploading <code>data/customers.csv</code> to each. Add a lifecycle rule transitioning <code>raw/</code> to Standard-IA after 30 days and aborting incomplete multipart uploads after 7 days.</p>
+              <span class="console-path">S3 → Buckets → Management → Lifecycle rules</span>
+              <p class="practice-expect"><code>get-bucket-lifecycle-configuration</code> returns your rule IDs; three prefixes each contain <code>customers.csv</code>.</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">Console + CLI</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Create or reuse bucket in <code>us-east-1</code>.</li>
+                    <li>Upload the sample file to three keys under <code>raw/</code>, <code>staging/</code>, <code>curated/</code>.</li>
+                    <li>S3 → bucket → <strong>Management</strong> → <em>Create lifecycle rule</em> → scope prefix <code>raw/</code> → transition to Standard-IA after 30 days.</li>
+                    <li>Add second rule: abort incomplete multipart uploads after 7 days, all prefixes.</li>
+                  </ol>
+<pre data-lang="shell"><code>BUCKET=dea-lab-ab-7392
+
+aws s3 cp data/customers.csv s3://$BUCKET/raw/customers/customers.csv
+aws s3 cp data/customers.csv s3://$BUCKET/staging/customers/customers.csv
+aws s3 cp data/customers.csv s3://$BUCKET/curated/customers/customers.csv
+
+aws s3api put-bucket-lifecycle-configuration \
+  --bucket $BUCKET \
+  --lifecycle-configuration file://lifecycle.json
+
+aws s3api get-bucket-lifecycle-configuration --bucket $BUCKET</code></pre>
+                  <p class="muted">Cleanup: delete lifecycle rules under Management, then empty and delete the bucket if you created it for this task only.</p>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Enable versioning on the lab bucket. Upload two versions of <code>curated/customers/customers.csv</code>, delete the object, then list versions and confirm a delete marker appeared. Permanently delete one old version by VersionId.</p>
+              <span class="console-path">S3 → Buckets → Properties → Bucket Versioning</span>
+              <p class="practice-expect"><code>list-object-versions</code> shows at least two data versions plus a delete marker; GET without VersionId returns 404.</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">CLI</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Enable versioning on the bucket.</li>
+                    <li>Upload <code>customers.csv</code> twice to the same key (modify the file between uploads or touch locally).</li>
+                    <li><code>aws s3 rm s3://$BUCKET/curated/customers/customers.csv</code> — creates delete marker.</li>
+                    <li>List versions, copy a non-current VersionId, permanently delete it.</li>
+                  </ol>
+<pre data-lang="shell"><code>aws s3api put-bucket-versioning \
+  --bucket $BUCKET \
+  --versioning-configuration Status=Enabled
+
+aws s3 cp data/customers.csv s3://$BUCKET/curated/customers/customers.csv
+# edit file or wait, then upload again
+aws s3 cp data/customers.csv s3://$BUCKET/curated/customers/customers.csv
+
+aws s3 rm s3://$BUCKET/curated/customers/customers.csv
+
+aws s3api list-object-versions \
+  --bucket $BUCKET --prefix curated/customers/customers.csv
+
+# Permanent delete of one version (replace VERSION_ID):
+aws s3api delete-object \
+  --bucket $BUCKET \
+  --key curated/customers/customers.csv \
+  --version-id VERSION_ID</code></pre>
+                  <p class="muted">Cleanup: delete all versions and delete markers, then suspend versioning if you prefer buckets without version storage costs.</p>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Set default bucket encryption to SSE-S3 (or SSE-KMS with Bucket Key if you have a CMK). Apply the deny-unencrypted-and-insecure-transport bucket policy from this section. Verify HTTP upload fails and HTTPS upload with encryption succeeds.</p>
+              <span class="console-path">S3 → Buckets → Properties → Default encryption · Permissions → Bucket policy</span>
+              <p class="practice-expect">CLI upload over HTTPS with <code>--server-side-encryption AES256</code> succeeds; curl over <code>http://</code> gets 403.</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">Console + CLI</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Properties → Default encryption → SSE-S3.</li>
+                    <li>Paste the deny policy JSON from the bucket policies section; replace bucket name.</li>
+                    <li>Test allowed upload, then attempt insecure transport (should fail).</li>
+                  </ol>
+<pre data-lang="shell"><code>aws s3api put-bucket-encryption \
+  --bucket $BUCKET \
+  --server-side-encryption-configuration \
+'{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]}'
+
+aws s3api put-bucket-policy \
+  --bucket $BUCKET \
+  --policy file://deny-insecure.json
+
+aws s3 cp data/customers.csv s3://$BUCKET/raw/test.csv \
+  --server-side-encryption AES256</code></pre>
+                  <p class="muted">Cleanup: remove the bucket policy and revert default encryption if other labs need different settings.</p>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Configure an S3 event notification on <code>raw/</code> prefix for ObjectCreated events to an SQS queue. Upload a file and read the message body. Delete the queue and notification when done.</p>
+              <span class="console-path">S3 → Properties → Event notifications · SQS → Create queue</span>
+              <p class="practice-expect">SQS receives a JSON message with <code>eventName: ObjectCreated:Put</code> and the object key.</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">Console</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Create standard SQS queue in the same Region.</li>
+                    <li>Add queue policy allowing <code>s3.amazonaws.com</code> to <code>sqs:SendMessage</code> from your bucket ARN.</li>
+                    <li>S3 → Event notifications → create rule: prefix <code>raw/</code>, event type PUT, destination SQS.</li>
+                    <li>Upload to <code>raw/</code>, poll queue, inspect JSON payload matching the example in these notes.</li>
+                  </ol>
+                  <p class="muted">Cleanup: delete the event notification, purge and delete the SQS queue.</p>
+                </div>
+              </details>
+            </li>
+          </ol>
+        </section>
+
+        <section class="section" id="recap">
+          <h2>Recap</h2>
+          <div class="recap">
+            <ul class="checklist">
+              <li>Prefix layout drives Athena cost — Hive-style <code>key=value</code> partitions matching query filters; avoid over-partitioning and small files.</li>
+              <li>Register partitions via crawlers, <code>MSCK REPAIR</code>, projection or explicit DDL — S3 paths alone are invisible to Athena.</li>
+              <li>Standard for hot data; Intelligent-Tiering for unknown access; IA/Glacier tiers for predictable cold data — watch minimum durations and retrieval fees.</li>
+              <li>Lifecycle: transitions down the cost ladder, expiration, noncurrent-version rules, abort incomplete multipart uploads after 7 days.</li>
+              <li>Versioning: delete = delete marker; permanent delete needs VersionId; lifecycle expires noncurrent versions to control cost.</li>
+              <li>Default encryption is SSE-S3 on all new buckets since Jan 2023; SSE-KMS + Bucket Key for audit and scale; deny policies enforce TLS and encryption headers.</li>
+              <li>Bucket policy deny beats allow; Block Public Access overrides public Allows; cross-account needs bucket policy + IAM allow.</li>
+              <li>Access Points scale permissions per application; Object Lambda transforms on GET without duplicating data.</li>
+              <li>Event notifications: at-least-once, prefix/suffix filters (no true wildcards), destination resource policy required; EventBridge for richer routing and replay.</li>
+              <li>5 TB max object; multipart above 5 GB; request costs hurt small-file workloads — compact to 128 MB+ Parquet.</li>
+            </ul>
+            <p style="margin-top:1rem;">
+              <button type="button" data-complete="section-07">Mark complete</button>
+            </p>
+          </div>
+        </section>
+
+      </div>
+
+      <aside class="toc" aria-label="On this page">
+        <strong>On this page</strong>
+        <ol>
+          <li><a href="#lectures">Lectures</a></li>
+          <li><a href="#partitioning">Partitioning</a></li>
+          <li><a href="#storage-classes">Storage classes</a></li>
+          <li><a href="#versioning">Versioning</a></li>
+          <li><a href="#encryption">Encryption</a></li>
+          <li><a href="#bucket-policies">Bucket policies</a></li>
+          <li><a href="#access-points">Access Points</a></li>
+          <li><a href="#event-notifications">Event notifications</a></li>
+          <li><a href="#deeper">Deeper detail</a></li>
+          <li><a href="#interview">Interview questions</a></li>
+          <li><a href="#practice">Hands-on practice</a></li>
+          <li><a href="#recap">Recap</a></li>
+        </ol>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<footer class="footer">AWS Certified Data Engineer Associate (DEA-C01) · Section 7 · Offline study edition</footer>
+</body>
+</html>

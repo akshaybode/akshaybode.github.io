@@ -1,0 +1,1330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="dbt bootcamp Section 6: Snowflake environment setup, loading the Airbnb raw dataset, Python with uv, installing dbt Core, profiles.yml, dbt init, dbt debug, and the devcontainer workflow.">
+<title>Section 6 — Setup and the Airbnb Project | The Complete dbt Bootcamp Notes</title>
+<link rel="stylesheet" href="assets/dbt.css">
+<script defer src="assets/search-index.js"></script>
+<script defer src="assets/code-highlight.js"></script>
+<script defer src="assets/dbt.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">Course section 6 of 22 · The Complete dbt Bootcamp: Zero to Hero</p>
+    <h1>Setup and the Airbnb Project</h1>
+    <p class="subtitle">Everything between theory and your first model: a Snowflake account with the three raw Airbnb tables loaded, a Python virtual environment managed by uv, dbt Core 1.11 with the Snowflake adapter, a working <code>profiles.yml</code>, and a scaffolded <code>airbnb</code> project ready for <code>dbt debug</code> to pass.</p>
+    <div class="hero-meta">
+      <span class="chip">12 lectures · ~55min</span>
+      <span class="chip">Airbnb project bootstrap</span>
+      <span class="chip">dbt environment setup</span>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <nav class="pager" aria-label="Section navigation">
+    <a href="s05-dimensional-modelling.html">← Dimensional Modelling and SCDs</a>
+    <a href="index.html">Course contents</a>
+    <a href="s07-models.html">Next: dbt Models →</a>
+  </nav>
+
+  <main id="main">
+    <div class="layout">
+      <div class="content">
+
+        <section class="section" id="lectures">
+          <h2>Lectures in this section</h2>
+          <ol class="lecture-list">
+            <li class="lecture">
+              <a class="lec-title" href="#snowflake-setup">Finding your Snowflake account URL</a>
+              <span class="lec-time">~3:00</span>
+              <span class="lec-src">course-resources.md · Introduction and Environment Setup</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#snowflake-setup">Automated Snowflake setup</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">course-resources.md · Automated Snowflake Setup</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#loading-data">Manual Snowflake data import</a>
+              <span class="lec-time">~8:00</span>
+              <span class="lec-src">course-resources.md · Snowflake data import (manual)</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#snowflake-setup">Snowflake roles, users and permissions</a>
+              <span class="lec-time">~8:00</span>
+              <span class="lec-src">course-resources.md · Snowflake user creation</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#loading-data">Airstats capstone tables</a>
+              <span class="lec-time">~3:00</span>
+              <span class="lec-src">course-resources.md · Airstats tables - Capstone Setup</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#python-uv">Python and uv installation</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">course-resources.md · dbt installation</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#python-uv">Creating and activating the virtual environment</a>
+              <span class="lec-time">~4:00</span>
+              <span class="lec-src">course-resources.md · uv Environment Setup</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#installing-dbt">Installing dbt Core and the Snowflake adapter</a>
+              <span class="lec-time">~4:00</span>
+              <span class="lec-src">pyproject.toml</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#profiles-yml">profiles.yml and connection targets</a>
+              <span class="lec-time">~6:00</span>
+              <span class="lec-src">EXAMPLE-profiles.yml · _prod_profiles/profiles.yml</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#dbt-init">dbt init and project file anatomy</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">course-resources.md · dbt Project Setup · dbt_project.yml</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#dbt-debug">dbt debug and verifying the connection</a>
+              <span class="lec-time">~4:00</span>
+              <span class="lec-src">course-resources.md · dbt Project Setup</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#devcontainer">Devcontainer workflow</a>
+              <span class="lec-time">~4:00</span>
+              <span class="lec-src">.devcontainer/devcontainer.json</span>
+            </li>
+          </ol>
+          <p class="muted">This is the first practical section. Every command from here on runs from the <code>airbnb</code> folder with your virtualenv active. <a href="s07-models.html">Section&nbsp;7</a> adds the first models on top of what you set up here.</p>
+        </section>
+
+        <section class="section" id="snowflake-setup">
+          <h2>Snowflake environment setup</h2>
+          <p class="lead">dbt needs a warehouse that already holds your raw data and a service account with permission to create objects in a development schema. The course uses Snowflake with an <code>AIRBNB</code> database, a <code>RAW</code> schema for untouched source tables, and a <code>DEV</code> schema where dbt builds models.</p>
+
+          <h3>Finding your Snowflake account URL</h3>
+          <p>The account identifier in <code>profiles.yml</code> is not the full URL you paste into a browser. Take the string from your Snowflake registration email that appears <em>before</em> <code>.snowflakecomputing.com</code>. In the instructor's example that is <code>frgcsyo-ie17820</code>. Some accounts include a cloud region suffix such as <code>frgcsyo-ie17820.aws</code> &mdash; copy exactly what Snowflake shows you, because a missing <code>.aws</code> segment is one of the most common reasons <code>dbt debug</code> fails with a connection error.</p>
+
+          <p>dbt Labs documents the same confusion in their Snowflake connection guide. On BigQuery you would use a project ID and dataset; on Databricks a host and HTTP path; on Postgres a hostname and database name. The pattern is the same: the adapter needs the identifier your platform expects, not a URL you guessed.</p>
+
+          <div class="callout tip"><strong>Write your account identifier down before you touch profiles.yml.</strong> You will need it twice &mdash; once when configuring Snowflake and again when pasting into the profile. Students who skip this step often paste the full browser URL and spend twenty minutes debugging a connection that was never going to work.</div>
+
+          <h3>What automated setup creates step by step</h3>
+          <p>The Streamlit app at dbtsetup.nordquant.com walks you through RSA key upload and account connection, then runs the same SQL the manual scripts contain. Understanding the output helps when something is missing later.</p>
+
+          <ol>
+            <li><strong>Warehouse</strong> &mdash; creates or reuses <code>COMPUTE_WH</code> and grants OPERATE to the transformation role.</li>
+            <li><strong>Database and schemas</strong> &mdash; creates <code>AIRBNB</code> with <code>RAW</code> (sources) and <code>DEV</code> (dbt build target during learning).</li>
+            <li><strong>Raw tables</strong> &mdash; defines <code>raw_listings</code>, <code>raw_reviews</code>, <code>raw_hosts</code> and loads CSV data from the public S3 bucket.</li>
+            <li><strong>TRANSFORM role and dbt user</strong> &mdash; service account with RSA key auth, ALL privileges on the database for modeling work.</li>
+            <li><strong>REPORTER role and PRESET user</strong> &mdash; read-only access to <code>DEV</code> for the Preset dashboard lesson in Section 15.</li>
+            <li><strong>profiles.yml download</strong> &mdash; a pre-filled profile you drop into the <code>airbnb</code> folder after <code>dbt init</code>.</li>
+          </ol>
+
+          <p>If the primary URL fails, the backup at udemy-dbt-setup.streamlit.app runs the same application. Both require a Snowflake trial or paid account with ACCOUNTADMIN access for the initial grant scripts.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>What you see</th><th>What goes in <code>account:</code></th><th>Common mistake</th></tr></thead>
+              <tbody>
+                <tr><td><code>https://frgcsyo-ie17820.snowflakecomputing.com</code></td><td><code>frgcsyo-ie17820</code></td><td>Pasting the full URL including <code>https://</code></td></tr>
+                <tr><td><code>frgcsyo-ie17820.aws.snowflakecomputing.com</code></td><td><code>frgcsyo-ie17820.aws</code></td><td>Dropping the <code>.aws</code> region suffix</td></tr>
+                <tr><td>Account locator in Snowflake UI under Admin</td><td>Copy the account identifier field exactly</td><td>Using the organization name instead of account locator</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Automated versus manual setup</h3>
+          <p>The course strongly recommends the automated Snowflake setup at <a href="https://dbtsetup.nordquant.com/">dbtsetup.nordquant.com</a>. It creates the warehouse, database, schemas, raw tables, roles, users and grants in one step. If that service is unavailable, a backup runs at <a href="https://udemy-dbt-setup.streamlit.app/">udemy-dbt-setup.streamlit.app</a>.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Approach</th><th>What it creates</th><th>When to use it</th></tr></thead>
+              <tbody>
+                <tr><td>Automated setup</td><td>Full environment: <code>COMPUTE_WH</code>, <code>AIRBNB</code> database, <code>RAW</code> and <code>DEV</code> schemas, three raw tables with data, <code>TRANSFORM</code> and <code>REPORTER</code> roles, <code>dbt</code> and <code>PRESET</code> service users</td><td>Default choice for every student</td></tr>
+                <tr><td>Manual SQL scripts</td><td>Same objects, executed statement by statement in a Snowflake worksheet</td><td>When automated setup fails, or you need to understand the grants</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="diagram">
+            <p class="diagram-title">Snowflake setup flow from empty account to dbt-ready</p>
+            <div class="flow">
+              <div class="node is-compute"><b>Automated setup</b><small>dbtsetup.nordquant.com</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-store"><b>AIRBNB database</b><small>RAW + DEV schemas</small></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-source"><b>raw_listings</b><small>raw_reviews · raw_hosts</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-model pulse"><b>dbt user</b><small>TRANSFORM role · RSA key</small></div>
+            </div>
+          </div>
+
+          <h3>Roles, users, warehouse and schemas</h3>
+          <p>Manual setup creates two roles with different privilege levels. <code>TRANSFORM</code> is what dbt runs as: full control over the <code>AIRBNB</code> database so it can create and replace models. <code>REPORTER</code> is read-only on the <code>DEV</code> schema, used later by Preset for dashboards.</p>
+
+          <p>The <code>dbt</code> user is a service account (<code>TYPE=SERVICE</code>) authenticated with an RSA key pair, not a password. Snowflake key-pair auth is documented on the Snowflake site; on Windows, PuTTYgen is a common way to generate the pair. Paste the public key content into the SQL below where indicated.</p>
+
+<pre data-lang="sql" data-title="course-resources.md · Snowflake user creation" data-explain="Creates TRANSFORM and REPORTER roles, the dbt service user with RSA auth, and the PRESET read-only user. Run as ACCOUNTADMIN."><code>-- Use an admin role
+USE ROLE ACCOUNTADMIN;
+
+-- Create the `transform` role
+DROP ROLE IF EXISTS TRANSFORM;
+CREATE ROLE TRANSFORM;
+GRANT ROLE TRANSFORM TO ROLE ACCOUNTADMIN;
+
+-- Create the default warehouse if necessary
+GRANT OPERATE ON WAREHOUSE COMPUTE_WH TO ROLE TRANSFORM;
+
+-- Create the `dbt` user and assign to role
+DROP USER IF EXISTS dbt;
+CREATE USER IF NOT EXISTS dbt
+  LOGIN_NAME='dbt'
+  TYPE=SERVICE
+  RSA_PUBLIC_KEY="&lt;&lt;Add Your Public Key File's content here&gt;&gt;"
+  DEFAULT_ROLE=TRANSFORM
+  DEFAULT_WAREHOUSE='COMPUTE_WH'
+  DEFAULT_NAMESPACE='AIRBNB.RAW'
+  COMMENT='DBT user used for data transformation';
+
+GRANT ROLE TRANSFORM to USER dbt;
+
+-- Set up permissions to role `transform`
+GRANT ALL ON WAREHOUSE COMPUTE_WH TO ROLE TRANSFORM;
+GRANT ALL ON DATABASE AIRBNB to ROLE TRANSFORM;
+GRANT ALL ON ALL SCHEMAS IN DATABASE AIRBNB to ROLE TRANSFORM;
+GRANT ALL ON FUTURE SCHEMAS IN DATABASE AIRBNB to ROLE TRANSFORM;
+GRANT ALL ON ALL TABLES IN SCHEMA AIRBNB.RAW to ROLE TRANSFORM;
+GRANT ALL ON FUTURE TABLES IN SCHEMA AIRBNB.RAW to ROLE TRANSFORM;
+
+-- Create the user and permissions for Preset.io
+USE ROLE ACCOUNTADMIN;
+
+DROP ROLE IF EXISTS REPORTER;
+CREATE ROLE REPORTER;
+
+DROP USER IF EXISTS PRESET;
+CREATE USER PRESET
+  LOGIN_NAME='preset'
+  TYPE=SERVICE
+  RSA_PUBLIC_KEY="&lt;&lt;Add Your Public Key File's content here&gt;&gt;"
+  DEFAULT_WAREHOUSE='COMPUTE_WH'
+  DEFAULT_ROLE=REPORTER
+  DEFAULT_NAMESPACE='AIRBNB.DEV'
+ COMMENT='Preset user for creating reports';
+
+GRANT ROLE REPORTER TO USER PRESET;
+GRANT ROLE REPORTER TO ROLE ACCOUNTADMIN;
+GRANT ALL ON WAREHOUSE COMPUTE_WH TO ROLE REPORTER;
+GRANT USAGE ON DATABASE AIRBNB TO ROLE REPORTER;
+GRANT USAGE ON ALL SCHEMAS IN DATABASE AIRBNB to ROLE REPORTER;
+GRANT USAGE ON FUTURE SCHEMAS IN DATABASE AIRBNB to ROLE REPORTER;
+GRANT SELECT ON ALL TABLES IN SCHEMA AIRBNB.DEV to ROLE REPORTER;
+GRANT SELECT ON FUTURE TABLES IN SCHEMA AIRBNB.DEV to ROLE REPORTER;</code></pre>
+
+          <p>Notice the separation: dbt writes into schemas it controls; Preset reads from <code>DEV</code> only. That is the pattern a real team uses &mdash; transformation and consumption get different roles so a misconfigured dashboard cannot drop a table.</p>
+
+          <div class="callout info"><strong>On Postgres or BigQuery the role model differs.</strong> Postgres uses database users and <code>GRANT</code> on schemas directly. BigQuery uses IAM roles on datasets. The course uses Snowflake roles because they map cleanly to dbt's <code>role:</code> profile field, but the principle &mdash; a write role for dbt and a read role for BI &mdash; is universal.</div>
+
+          <h3>Generating RSA key pairs for Snowflake</h3>
+          <p>Snowflake key-pair authentication requires a 2048-bit RSA key pair. The public key is registered on the Snowflake user; the private key goes into <code>profiles.yml</code>. On Windows the course points students to PuTTYgen; on Mac and Linux, OpenSSL is standard.</p>
+
+<pre data-lang="shell" data-title="OpenSSL key generation (Mac/Linux)" data-explain="Generates an encrypted private key and extracts the public key for Snowflake user registration."><code>openssl genrsa 2048 | openssl pkcs8 -topk8 -v2 des3 -inform PEM -out rsa_key.p8
+openssl rsa -in rsa_key.p8 -pubout -out rsa_key.pub</code></pre>
+
+          <p>Snowflake expects the public key as a single line without header/footer lines. Copy the base64 content between the BEGIN and END markers. The private key in profiles.yml must include the full PEM block with newlines written as <code>\n</code> inside the YAML string, exactly as the EXAMPLE-profiles file demonstrates.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Object</th><th>Where it lives</th><th>Who uses it</th></tr></thead>
+              <tbody>
+                <tr><td>Public key</td><td>Snowflake user definition (<code>RSA_PUBLIC_KEY</code>)</td><td>Snowflake validates JWT signatures against it</td></tr>
+                <tr><td>Private key</td><td><code>profiles.yml</code> (never git)</td><td>dbt signs JWT tokens on each connection</td></tr>
+                <tr><td>Passphrase</td><td><code>private_key_passphrase</code> in profile</td><td>Decrypts the private key if encrypted</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="analogy"><strong>Everyday analogy —</strong> the RSA key pair works like a mailbox: the public key is the slot anyone can drop mail into (Snowflake holds it), and the private key is the key only you hold to retrieve mail (dbt presents it to prove identity). There is no password to forget, but losing the private key means generating a new pair and updating both sides.</div>
+
+          <h3>WAREHOUSE, DATABASE and schema layout</h3>
+          <p>Manual import creates <code>COMPUTE_WH</code> if it does not exist, drops and recreates the <code>AIRBNB</code> database, and creates two schemas:</p>
+
+          <ul>
+            <li><strong><code>RAW</code></strong> &mdash; landing zone for CSV data loaded from S3. dbt reads from here via <code>source()</code> but never writes here.</li>
+            <li><strong><code>DEV</code></strong> &mdash; where dbt builds models during development. The example profile sets <code>schema: DEV</code>; in production the course later switches to per-developer schemas like <code>DBT_YOURNAME</code>.</li>
+          </ul>
+
+          <div class="diagram">
+            <p class="diagram-title">Snowflake object hierarchy for the Airbnb project</p>
+            <div class="stack">
+              <div class="layer"><strong>COMPUTE_WH</strong> &mdash; virtual warehouse; all dbt queries run here and bill here</div>
+              <div class="layer"><strong>AIRBNB</strong> database</div>
+              <div class="layer"><strong>RAW</strong> schema &mdash; raw_listings, raw_reviews, raw_hosts (source data, never modified by dbt)</div>
+              <div class="layer"><strong>DEV</strong> schema &mdash; models dbt creates: views, tables, snapshots, test failures</div>
+            </div>
+          </div>
+
+          <h3>COMPUTE_WH sizing and auto-suspend</h3>
+          <p>The manual import script creates <code>COMPUTE_WH</code> if it does not already exist. For learning, the default X-Small size is sufficient &mdash; the Airbnb dataset is small and dbt debug runs a single lightweight query. What matters more than size during setup is auto-suspend: set the warehouse to suspend after 60 seconds of idle time so a forgotten session does not burn trial credits overnight.</p>
+
+          <p>In the Snowflake UI: Admin &rarr; Warehouses &rarr; COMPUTE_WH &rarr; set Auto Suspend to 60 and Auto Resume to On. Every dbt command that touches the warehouse may incur a minimum billing window when the warehouse resumes from suspended state. That is normal and is why <code>dbt debug</code> can appear to "hang" for a few seconds before returning OK.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Role</th><th>User</th><th>Default namespace</th><th>Privileges on AIRBNB</th></tr></thead>
+              <tbody>
+                <tr><td><code>TRANSFORM</code></td><td><code>dbt</code></td><td><code>AIRBNB.RAW</code></td><td>ALL on database, schemas, tables (present and future)</td></tr>
+                <tr><td><code>REPORTER</code></td><td><code>PRESET</code></td><td><code>AIRBNB.DEV</code></td><td>USAGE on database and schemas; SELECT on DEV tables only</td></tr>
+                <tr><td><code>ACCOUNTADMIN</code></td><td>Your login</td><td>Varies</td><td>Used only to run setup scripts; dbt should not run as admin</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="section" id="loading-data">
+          <h2>Loading the Airbnb dataset</h2>
+          <p class="lead">The course project reads three CSV files from a public S3 bucket. Automated setup loads them for you; manual setup runs <code>COPY INTO</code> statements that Snowflake executes directly against S3.</p>
+
+          <h3>Raw table definitions and COPY INTO</h3>
+          <p>Each raw table mirrors the CSV structure. Listings carry a string <code>price</code> column (with a dollar sign) that dbt cleans later. Reviews include a <code>sentiment</code> column. Hosts track superhost status as a string.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Table</th><th>Key columns</th><th>Downstream use</th></tr></thead>
+              <tbody>
+                <tr><td><code>raw_listings</code></td><td><code>id</code>, <code>host_id</code>, <code>price</code> (string), <code>minimum_nights</code></td><td>Dimension model; price cast to NUMBER in Section 7</td></tr>
+                <tr><td><code>raw_reviews</code></td><td><code>listing_id</code>, <code>date</code>, <code>sentiment</code></td><td>Incremental fact table; largest table by row count</td></tr>
+                <tr><td><code>raw_hosts</code></td><td><code>id</code>, <code>name</code>, <code>is_superhost</code></td><td>Host dimension; snapshotted in Section 10</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>Source data locations are documented in the course repo at <code>_course_resources/source-data-locations.md</code>. The S3 paths used in the import script are:</p>
+
+          <ul>
+            <li><code>s3://dbt-datasets/listings.csv</code></li>
+            <li><code>s3://dbt-datasets/reviews.csv</code></li>
+            <li><code>s3://dbt-datasets/hosts.csv</code></li>
+          </ul>
+
+<pre data-lang="sql" data-title="course-resources.md · Snowflake data import (manual)" data-explain="Creates the AIRBNB database, RAW and DEV schemas, defines three raw tables and loads CSV data from S3. Only run if you skipped automated setup."><code>-- Set up the defaults
+CREATE WAREHOUSE IF NOT EXISTS COMPUTE_WH;
+USE WAREHOUSE COMPUTE_WH;
+
+DROP DATABASE IF EXISTS AIRBNB CASCADE;
+
+CREATE DATABASE AIRBNB;
+
+CREATE SCHEMA IF NOT EXISTS AIRBNB.RAW;
+CREATE SCHEMA IF NOT EXISTS AIRBNB.DEV;
+
+USE DATABASE AIRBNB;
+USE SCHEMA RAW;
+
+-- Create our three tables and import the data from S3
+CREATE OR REPLACE TABLE raw_listings
+                    (id integer,
+                     listing_url string,
+                     name string,
+                     room_type string,
+                     minimum_nights integer,
+                     host_id integer,
+                     price string,
+                     created_at datetime,
+                     updated_at datetime);
+
+COPY INTO raw_listings (id,
+                        listing_url,
+                        name,
+                        room_type,
+                        minimum_nights,
+                        host_id,
+                        price,
+                        created_at,
+                        updated_at)
+                   from 's3://dbt-datasets/listings.csv'
+                    FILE_FORMAT = (type = 'CSV' skip_header = 1
+                    FIELD_OPTIONALLY_ENCLOSED_BY = '"');
+
+
+CREATE OR REPLACE TABLE raw_reviews
+                    (listing_id integer,
+                     date datetime,
+                     reviewer_name string,
+                     comments string,
+                     sentiment string);
+
+COPY INTO raw_reviews (listing_id, date, reviewer_name, comments, sentiment)
+                   from 's3://dbt-datasets/reviews.csv'
+                    FILE_FORMAT = (type = 'CSV' skip_header = 1
+                    FIELD_OPTIONALLY_ENCLOSED_BY = '"');
+
+
+CREATE OR REPLACE TABLE raw_hosts
+                    (id integer,
+                     name string,
+                     is_superhost string,
+                     created_at datetime,
+                     updated_at datetime);
+
+COPY INTO raw_hosts (id, name, is_superhost, created_at, updated_at)
+                   from 's3://dbt-datasets/hosts.csv'
+                    FILE_FORMAT = (type = 'CSV' skip_header = 1
+                    FIELD_OPTIONALLY_ENCLOSED_BY = '"');</code></pre>
+
+          <p>After import, verify row counts in a worksheet:</p>
+
+<pre data-lang="sql" data-explain="Quick sanity check that all three tables loaded. Expect thousands of listings, many more reviews, and hundreds of hosts."><code>SELECT 'raw_listings' AS tbl, COUNT(*) AS rows FROM AIRBNB.RAW.raw_listings
+UNION ALL
+SELECT 'raw_reviews', COUNT(*) FROM AIRBNB.RAW.raw_reviews
+UNION ALL
+SELECT 'raw_hosts', COUNT(*) FROM AIRBNB.RAW.raw_hosts;</code></pre>
+
+          <div class="callout warn"><strong>DROP DATABASE AIRBNB CASCADE destroys everything.</strong> The manual script starts by dropping the database so you get a clean slate. On a shared Snowflake account or any environment with existing work, remove that line or you will delete another student's models.</div>
+
+          <h3>Airstats capstone tables</h3>
+          <p>If you skipped automated setup and plan to complete the optional capstone project later, additional tables are defined in the <a href="https://github.com/nordquant/dbtlearn-snowflake-importer/blob/main/capstone-resources.md">capstone-resources.md</a> script in the dbtlearn-snowflake-importer repository. These are not required for the main Airbnb project but extend the dataset for the airstats exercise.</p>
+
+          <div class="diagram">
+            <p class="diagram-title">Raw Airbnb tables and their downstream role in dbt</p>
+            <div class="dag">
+              <div class="dag-col">
+                <p class="dag-label">RAW schema</p>
+                <div class="node is-source"><b>raw_listings</b></div>
+                <div class="node is-source"><b>raw_reviews</b></div>
+                <div class="node is-source"><b>raw_hosts</b></div>
+              </div>
+              <div class="dag-col">
+                <p class="dag-label">Section 7 staging</p>
+                <div class="node is-model"><b>src_listings</b></div>
+                <div class="node is-model"><b>src_reviews</b></div>
+                <div class="node is-model"><b>src_hosts</b></div>
+              </div>
+              <div class="dag-col">
+                <p class="dag-label">Section 7+ models</p>
+                <div class="node is-mart"><b>dim_listings_cleansed</b></div>
+                <div class="node is-mart"><b>fct_reviews</b></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="section" id="python-uv">
+          <h2>Python environment with uv</h2>
+          <p class="lead">dbt Core is a Python package. The course uses <a href="https://docs.astral.sh/uv/">uv</a> to create a virtual environment and install pinned dependencies from <code>pyproject.toml</code>, rather than managing pip and requirements.txt by hand.</p>
+
+          <h3>Why uv instead of pip</h3>
+          <p>uv reads <code>pyproject.toml</code>, resolves dependencies, creates a <code>venv/</code> folder, and installs everything in one command. That matters because dbt's adapter must match the Core version exactly &mdash; a mismatched <code>dbt-snowflake</code> is a common source of cryptic import errors.</p>
+
+          <p>Supported Python versions for dbt Core are listed on the dbt docs compatibility page. The course repo requires Python <code>&gt;=3.10,&lt;3.14</code>.</p>
+
+          <h3>Installing uv and syncing the environment</h3>
+          <p>Install uv following the Astral getting-started guide, clone the student repo (<a href="https://github.com/nordquant/dbt-student-repo">nordquant/dbt-student-repo</a>) or the full bootcamp repo, and run sync from the repo root where <code>pyproject.toml</code> lives:</p>
+
+<pre data-lang="shell" data-title="course-resources.md · uv Environment Setup" data-explain="Creates the virtualenv and installs all pinned packages including dbt-core and dbt-snowflake."><code>uv sync
+# Activate virtualenv on Windows (PowerShell):
+venv\Scripts\activate
+# Activate virtualenv on Mac:
+source venv/bin/activate</code></pre>
+
+          <div class="callout tip"><strong>PowerShell execution policy errors on Windows.</strong> If activation fails with a permission error, run <code>Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass</code> in the same session, then activate again. This affects some corporate laptops; it does not change your permanent policy.</div>
+
+          <h3>Verifying the environment</h3>
+          <p>After activation your prompt should show <code>(venv)</code>. Confirm Python and dbt are reachable:</p>
+
+          <div class="terminal">
+            <p class="term-head">Verify Python and dbt versions</p>
+            <pre class="term-body"><span class="tt-cmd">python --version</span>
+<span class="tt-ok">Python 3.12.4</span>
+<span class="tt-cmd">dbt --version</span>
+<span class="tt-dim">Core:</span>
+<span class="tt-ok">  - installed: 1.11.x</span>
+<span class="tt-dim">Plugins:</span>
+<span class="tt-ok">  - snowflake: 1.11.x</span></pre>
+          </div>
+
+          <p>On Mac and Linux, use <code>source venv/bin/activate</code>. On Windows CMD (not PowerShell), activation is <code>venv\Scripts\activate.bat</code>. Every subsequent dbt command in this course assumes the virtualenv is active.</p>
+
+          <h3>Student repo versus full bootcamp repo</h3>
+          <p>The course references two GitHub repositories. The student repo is a minimal starting point; the full bootcamp repo contains the completed Airbnb project on the <code>main</code> branch and the instructor script at <code>_course_resources/course-resources.md</code>.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Repository</th><th>URL</th><th>When to use it</th></tr></thead>
+              <tbody>
+                <tr><td>Student repo</td><td><code>nordquant/dbt-student-repo</code></td><td>Starting from scratch alongside the videos; contains <code>pyproject.toml</code> and empty scaffold</td></tr>
+                <tr><td>Full bootcamp repo</td><td><code>nordquant/complete-dbt-bootcamp-zero-to-hero</code></td><td>Comparing your work to the finished project; reading course-resources.md; devcontainer</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+<pre data-lang="shell" data-title="Clone the full bootcamp repository" data-explain="Gets the completed project, devcontainer, pyproject.toml and instructor script in one clone."><code>git clone https://github.com/nordquant/complete-dbt-bootcamp-zero-to-hero.git
+cd complete-dbt-bootcamp-zero-to-hero
+uv sync
+venv\Scripts\activate          # Windows PowerShell
+# source venv/bin/activate     # Mac/Linux</code></pre>
+
+          <p>These notes quote from the full bootcamp repo. If you started from the student repo, copy <code>dbt_project.yml</code> from the finished <code>airbnb/</code> folder once you scaffold your project, or follow along as Section 7 adds models file by file.</p>
+
+          <div class="grid-2">
+            <div class="mini-card">
+              <h4>Windows path</h4>
+              <p>Install Python 3.10&ndash;3.13, install uv from the Astral docs, clone the repo, run <code>uv sync</code>, activate with <code>venv\Scripts\activate</code>. Use PowerShell or Windows Terminal; CMD works with <code>activate.bat</code>.</p>
+            </div>
+            <div class="mini-card">
+              <h4>Mac path</h4>
+              <p>Same flow with <code>source venv/bin/activate</code>. Homebrew Python or pyenv both work; uv respects <code>requires-python = "&gt;=3.10,&lt;3.14"</code> in pyproject.toml.</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="section" id="installing-dbt">
+          <h2>Installing dbt Core and dbt-snowflake</h2>
+          <p class="lead">You do not pip-install dbt manually in this course. <code>uv sync</code> reads the pinned versions in <code>pyproject.toml</code> and installs the matching Core and adapter together.</p>
+
+          <h3>Pinned versions in pyproject.toml</h3>
+          <p>The course repo pins dbt Core and the Snowflake adapter to the 1.11 line. The tilde constraint (<code>~=1.11.0</code>) allows patch releases (1.11.1, 1.11.12) but not 1.12.</p>
+
+<pre data-lang="yaml" data-title="pyproject.toml" data-explain="Project metadata and pinned dbt packages. uv install resolves dbt-core and dbt-snowflake together."><code>[project]
+name = "dbt-bootcamp"
+version = "1.11.0"
+requires-python = "&gt;=3.10,&lt;3.14"
+dependencies = [
+    "dbt-core~=1.11.0",
+    "dbt-snowflake~=1.11.0",
+    "dbt-autofix~=0.18.0",
+    "dagster-dbt~=0.28.0",
+    "dagster-webserver~=1.12.0",
+]</code></pre>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Package</th><th>Version constraint</th><th>Role in the course</th></tr></thead>
+              <tbody>
+                <tr><td><code>dbt-core~=1.11.0</code></td><td>1.11.x</td><td>The CLI, parser, compiler and runner</td></tr>
+                <tr><td><code>dbt-snowflake~=1.11.0</code></td><td>1.11.x</td><td>Snowflake adapter: connection, materializations, macros</td></tr>
+                <tr><td><code>dbt-autofix~=0.18.0</code></td><td>0.18.x</td><td>Migrates deprecated syntax (used in later sections)</td></tr>
+                <tr><td><code>dagster-dbt~=0.28.0</code></td><td>0.28.x</td><td>Orchestration in Section 18</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout info"><strong>Adapter must match Core.</strong> Installing <code>dbt-core==1.11.12</code> with <code>dbt-snowflake==1.10.0</code> produces import errors or missing features. uv's lockfile prevents that; if you install by hand, pin both to the same minor version.</div>
+
+          <h3>Installing on other warehouses</h3>
+          <p>The pattern is identical: install <code>dbt-core</code> plus one adapter package (<code>dbt-bigquery</code>, <code>dbt-redshift</code>, <code>dbt-postgres</code>, <code>dbt-databricks</code>). Only the adapter and the <code>type:</code> field in <code>profiles.yml</code> change. The project SQL in this course is Snowflake-specific in places (double-colon casts, <code>COPY INTO</code>), but the dbt concepts transfer directly.</p>
+        </section>
+
+        <section class="section" id="profiles-yml">
+          <h2>profiles.yml and targets</h2>
+          <p class="lead"><code>profiles.yml</code> holds warehouse credentials and tells dbt which database, schema, role and warehouse to use. It lives outside the project by default (<code>~/.dbt/profiles.yml</code>), but the course places a copy inside the <code>airbnb</code> folder for convenience.</p>
+
+          <h3>The example dev profile</h3>
+          <p>After <code>dbt init</code>, drop the downloaded <code>profiles.yml</code> into the <code>airbnb</code> folder. Replace <code>your-snowflake-account</code> with your account identifier and paste your encrypted private key.</p>
+
+<pre data-lang="yaml" data-title="EXAMPLE-profiles.yml" data-explain="Development target connecting as the dbt service user with RSA key auth to AIRBNB.DEV."><code>airbnb:
+  outputs:
+    dev:
+      type: snowflake
+      account: your-snowflake-account
+      user: dbt
+
+      role: TRANSFORM
+      private_key: "[!! Change this to your own private key: !!]-----BEGIN ENCRYPTED PRIVATE KEY-----\n...\n-----END ENCRYPTED PRIVATE KEY-----\n"
+      private_key_passphrase: q
+
+      database: AIRBNB
+      schema: DEV
+      threads: 1
+      warehouse: COMPUTE_WH
+  target: dev</code></pre>
+
+          <p>Key fields and what they control:</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Field</th><th>What it does</th><th>Course value</th></tr></thead>
+              <tbody>
+                <tr><td><code>type</code></td><td>Which adapter dbt loads</td><td><code>snowflake</code></td></tr>
+                <tr><td><code>account</code></td><td>Snowflake account identifier (not full URL)</td><td>Your registration prefix</td></tr>
+                <tr><td><code>user</code></td><td>Login name</td><td><code>dbt</code></td></tr>
+                <tr><td><code>role</code></td><td>Snowflake role assumed on connect</td><td><code>TRANSFORM</code></td></tr>
+                <tr><td><code>private_key</code></td><td>RSA private key for key-pair auth</td><td>Your generated key, escaped newlines as <code>\n</code></td></tr>
+                <tr><td><code>database</code></td><td>Default database</td><td><code>AIRBNB</code></td></tr>
+                <tr><td><code>schema</code></td><td>Default schema for models without custom schema config</td><td><code>DEV</code> in dev; per-user in production</td></tr>
+                <tr><td><code>warehouse</code></td><td>Compute warehouse for queries</td><td><code>COMPUTE_WH</code></td></tr>
+                <tr><td><code>threads</code></td><td>Parallel models per run</td><td><code>1</code> here; raised to <code>4</code> in production profile</td></tr>
+                <tr><td><code>target</code></td><td>Which output block is active by default</td><td><code>dev</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Dev versus prod targets (preview)</h3>
+          <p>The example profile has a single <code>dev</code> target. By Section 19 the course introduces a production layout with environment variables and separate schemas. This is what that looks like in the finished repo &mdash; you do not need it on day one, but understanding the shape early prevents surprises.</p>
+
+<pre data-lang="yaml" data-title="airbnb/_prod_profiles/profiles.yml" data-explain="Production-oriented profile with dev, staging and prod targets. Credentials come from environment variables, not hard-coded keys."><code>airbnb:
+  outputs:
+    staging:
+      type: snowflake
+      account: "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
+      user: "{{ env_var('DBT_USER') }}"
+      role: TRANSFORM
+      private_key: "{{ env_var('PRIVATE_KEY') }}"
+      private_key_passphrase: "{{ env_var('PRIVATE_KEY_PASSPHRASE') }}"
+      database: AIRBNB
+      schema: STAGING
+      threads: 4
+      warehouse: COMPUTE_WH
+    prod:
+      type: snowflake
+      account: "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
+      user: "{{ env_var('DBT_USER') }}"
+      role: TRANSFORM
+      private_key: "{{ env_var('PRIVATE_KEY') }}"
+      private_key_passphrase: "{{ env_var('PRIVATE_KEY_PASSPHRASE') }}"
+      database: AIRBNB
+      schema: PROD
+      threads: 4
+      warehouse: COMPUTE_WH
+    dev:
+      type: snowflake
+      account: "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
+      user: "{{ env_var('DBT_USER') }}"
+      role: TRANSFORM
+      private_key: "{{ env_var('PRIVATE_KEY') }}"
+      private_key_passphrase: "{{ env_var('PRIVATE_KEY_PASSPHRASE') }}"
+      database: AIRBNB
+      schema: "DBT_{{ env_var('DBT_ENV_NAME') | upper | trim }}"
+      threads: 4
+      warehouse: COMPUTE_WH
+  target: dev</code></pre>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Target</th><th>Schema</th><th>Purpose</th></tr></thead>
+              <tbody>
+                <tr><td><code>dev</code></td><td><code>DBT_YOURNAME</code> (dynamic)</td><td>Each developer builds into their own schema</td></tr>
+                <tr><td><code>staging</code></td><td><code>STAGING</code></td><td>Pre-production validation</td></tr>
+                <tr><td><code>prod</code></td><td><code>PROD</code></td><td>What dashboards and downstream tools read</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout danger"><strong>Never commit profiles.yml to a public repository.</strong> It contains private keys. The course puts it in the project folder for learning convenience; a real team stores credentials in environment variables or a secrets manager and adds <code>profiles.yml</code> to <code>.gitignore</code>.</div>
+
+          <h3>Profile name must match the project</h3>
+          <p>The top-level key in <code>profiles.yml</code> (<code>airbnb:</code>) must match the <code>profile:</code> field in <code>dbt_project.yml</code>. A mismatch produces <em>Profile 'airbnb' not found</em> even when every credential is correct.</p>
+
+          <h3>Where profiles.yml can live</h3>
+          <p>dbt searches for connection config in a fixed order. The course places <code>profiles.yml</code> inside the <code>airbnb</code> project folder so everything travels together while you learn. Production teams use a different layout.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Location</th><th>How dbt finds it</th><th>Typical use</th></tr></thead>
+              <tbody>
+                <tr><td><code>~/.dbt/profiles.yml</code></td><td>Default on Mac/Linux</td><td>One profile file shared across all local dbt projects</td></tr>
+                <tr><td><code>%USERPROFILE%\.dbt\profiles.yml</code></td><td>Default on Windows</td><td>Same as above on Windows</td></tr>
+                <tr><td><code>airbnb/profiles.yml</code></td><td>Current working directory when you run from <code>airbnb/</code></td><td>Course convention; convenient but risky for git</td></tr>
+                <tr><td>Custom path via <code>DBT_PROFILES_DIR</code></td><td>Environment variable overrides search path</td><td>CI pipelines pointing at a secrets mount</td></tr>
+                <tr><td><code>dbt debug --profiles-dir _prod_profiles</code></td><td>CLI flag per invocation</td><td>Testing production profile layout locally (Section 19)</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>When <code>dbt debug</code> prints <em>Using profiles dir at ...</em>, confirm that path is where you intended. A stale copy in <code>~/.dbt/</code> can override a file you edited in the project folder if you run dbt from the wrong directory or without the course's convention of keeping the profile next to <code>dbt_project.yml</code>.</p>
+
+          <div class="callout exam"><strong>Certification:</strong> expect a question on which file holds warehouse credentials versus project settings, and where the default <code>profiles.yml</code> path is on a developer machine. The project file never contains passwords or private keys.</div>
+        </section>
+
+        <section class="section" id="dbt-init">
+          <h2>dbt init and project anatomy</h2>
+          <p class="lead"><code>dbt init</code> scaffolds a project directory with the folder structure dbt expects. The course skips the interactive profile setup because you already have <code>profiles.yml</code>.</p>
+
+          <h3>Creating the airbnb project</h3>
+          <p>Run from the repository root (where <code>pyproject.toml</code> lives), not from inside an existing project:</p>
+
+<pre data-lang="shell" data-title="course-resources.md · dbt Project Setup" data-explain="Scaffolds the airbnb folder without generating a new profile interactively."><code>dbt init --skip-profile-setup airbnb</code></pre>
+
+          <p>Then copy your <code>profiles.yml</code> into the new <code>airbnb</code> folder. From this point forward, every dbt command runs from inside <code>airbnb</code>:</p>
+
+<pre data-lang="shell" data-explain="The working directory rule for the rest of the course."><code>cd airbnb
+dbt debug</code></pre>
+
+          <div class="callout tip"><strong>cd airbnb first, always.</strong> The course script states explicitly: once <code>profiles.yml</code> is in place, execute every <code>dbt ...</code> command from the <code>airbnb</code> folder. Running from the repo root gives <em>Could not run dbt: fatal: Not a dbt project</em>.</div>
+
+          <h3>Initial project file tree</h3>
+          <p>After init the project is mostly empty folders waiting for models. The finished course repo fills these in over the next fifteen sections.</p>
+
+          <div class="filetree">
+            <ul>
+              <li><span class="dir">airbnb/</span>
+                <ul>
+                  <li><span class="file">dbt_project.yml</span> <span class="new">← project config</span></li>
+                  <li><span class="file">profiles.yml</span> <span class="new">← you add this</span></li>
+                  <li><span class="dir">models/</span> <span class="note">empty until Section 7</span></li>
+                  <li><span class="dir">macros/</span></li>
+                  <li><span class="dir">seeds/</span></li>
+                  <li><span class="dir">snapshots/</span></li>
+                  <li><span class="dir">tests/</span></li>
+                  <li><span class="dir">analyses/</span></li>
+                  <li><span class="dir">target/</span> <span class="note">generated; gitignored</span></li>
+                </ul>
+              </li>
+            </ul>
+          </div>
+
+          <h3>dbt_project.yml anatomy</h3>
+          <p>The course replaces the scaffold default with a project file that sets materialization defaults, folder-level configs, hooks and test settings. Read it top to bottom before writing your first model.</p>
+
+<pre data-lang="yaml" data-title="airbnb/dbt_project.yml" data-explain="Full project configuration: paths, model defaults by folder, on-run-start hook, grants and test failure storage."><code># Name your project! Project names should contain only lowercase characters
+# and underscores. A good package name should reflect your organization's
+# name or the intended use of these models
+name: 'airbnb'
+version: '1.0.0'
+
+# This setting configures which "profile" dbt uses for this project.
+profile: 'airbnb'
+
+# These configurations specify where dbt should look for different types of files.
+# The `model-paths` config, for example, states that models in this project can be
+# found in the "models/" directory. You probably won't need to change these!
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+asset-paths: ["assets"]
+
+clean-targets:         # directories to be removed by `dbt clean`
+  - "target"
+  - "dbt_packages"
+
+# Configuring models
+# Full documentation: https://docs.getdbt.com/docs/configuring-models
+
+# In this example config, we tell dbt to build all models in the example/ directory
+# as tables. These settings can be overridden in the individual model files
+# using the `{{ config(...) }}` macro.
+on-run-start:
+  - "CREATE TABLE IF NOT EXISTS {{ target.schema }}.audit_log ( model_name STRING, run_timestamp TIMESTAMP )"
+
+models:
+  airbnb:
+    +grants:
+      select: ["transform", "reporter"]
+    +post-hook:
+      - "INSERT INTO {{ target.schema }}.audit_log VALUES ('{{ this }}', CURRENT_TIMESTAMP)"
+    +materialized: view
+    dim:
+      +materialized: table
+    src:
+      +materialized: ephemeral
+    fct:
+      +tags: ['fact']
+data_tests:
+  +store_failures: true
+  +schema: _test_failures</code></pre>
+
+          <p>What each block means at setup time:</p>
+
+          <ul>
+            <li><strong><code>name</code> and <code>profile</code></strong> &mdash; project identifier and link to <code>profiles.yml</code>.</li>
+            <li><strong>Path lists</strong> &mdash; where dbt looks for models, tests, seeds, macros, snapshots and analyses. Changing a folder name without updating these breaks discovery.</li>
+            <li><strong><code>on-run-start</code></strong> &mdash; SQL executed before any model runs; here it creates an audit log table.</li>
+            <li><strong><code>models: airbnb:</code></strong> &mdash; folder-level defaults: views by default, tables in <code>dim/</code>, ephemeral in <code>src/</code>, facts tagged.</li>
+            <li><strong><code>data_tests:</code></strong> &mdash; failed test rows are stored in <code>_test_failures</code> schema for inspection.</li>
+          </ul>
+
+          <div class="callout info"><strong>Older tutorials use <code>tests:</code> instead of <code>data_tests:</code>.</strong> dbt 1.8 renamed the key; both parse in 1.11, but new projects should use <code>data_tests:</code>. See the version table in the deeper section below.</div>
+
+          <h3>on-run-start hook and Jinja in project config</h3>
+          <p>The <code>on-run-start</code> block in the course <code>dbt_project.yml</code> runs before any model builds. It creates an audit log table in the active target schema:</p>
+
+<pre data-lang="sql" data-explain="Executed once at the start of every dbt run invocation; {{ target.schema }} resolves to DEV (or your dev schema name)."><code>CREATE TABLE IF NOT EXISTS {{ target.schema }}.audit_log (
+  model_name STRING,
+  run_timestamp TIMESTAMP
+)</code></pre>
+
+          <p>At parse time dbt renders <code>{{ target.schema }}</code> from the active profile target. That is why debug must pass before your first run: the hook touches the warehouse immediately. If TRANSFORM lacks CREATE TABLE on the target schema, the run fails before any model SQL executes.</p>
+
+          <p>The matching <code>+post-hook</code> on every model inserts a row into that audit table after each model completes. You will revisit hooks in <a href="s15-analyses-hooks-exposures.html">Section 15</a>; at setup time the important point is that project YAML can contain Jinja, not only model files.</p>
+
+          <h3>Finished project tree versus day-one scaffold</h3>
+          <p>After init you have empty folders. The course repo at the end of Section 20 looks like this — use it as a map of what is coming, not something you need on day one.</p>
+
+          <div class="filetree">
+            <ul>
+              <li><span class="dir">complete-dbt-bootcamp-zero-to-hero/</span>
+                <ul>
+                  <li><span class="file">pyproject.toml</span> <span class="note">uv dependencies at repo root</span></li>
+                  <li><span class="dir">.devcontainer/</span> <span class="note">optional Docker workflow</span></li>
+                  <li><span class="dir">_course_resources/</span> <span class="note">course-resources.md · EXAMPLE-profiles.yml</span></li>
+                  <li><span class="dir">airbnb/</span>
+                    <ul>
+                      <li><span class="file">dbt_project.yml</span></li>
+                      <li><span class="file">profiles.yml</span></li>
+                      <li><span class="file">packages.yml</span> <span class="note">Section 13</span></li>
+                      <li><span class="dir">models/src/</span> <span class="note">3 ephemeral staging models</span></li>
+                      <li><span class="dir">models/dim/</span> <span class="note">dimensions + Python models</span></li>
+                      <li><span class="dir">models/fct/</span> <span class="note">incremental fact</span></li>
+                      <li><span class="dir">models/mart/</span> <span class="note">full-moon mart</span></li>
+                      <li><span class="dir">snapshots/</span> <span class="note">YAML snapshots, Section 10</span></li>
+                      <li><span class="dir">seeds/</span> <span class="note">full moon dates CSV</span></li>
+                      <li><span class="dir">tests/</span> <span class="note">singular + generic tests</span></li>
+                      <li><span class="dir">macros/</span></li>
+                      <li><span class="dir">analyses/</span></li>
+                    </ul>
+                  </li>
+                </ul>
+              </li>
+            </ul>
+          </div>
+        </section>
+
+        <section class="section" id="dbt-debug">
+          <h2>dbt debug and first connection</h2>
+          <p class="lead"><code>dbt debug</code> is the first command to run after setup. It validates the profile, tests the warehouse connection, and confirms dbt can find <code>dbt_project.yml</code> &mdash; three separate checks that fail for three different reasons.</p>
+
+          <h3>Running dbt debug</h3>
+          <p>From the <code>airbnb</code> directory with your virtualenv active:</p>
+
+          <div class="terminal">
+            <p class="term-head">dbt debug — successful connection</p>
+            <pre class="term-body"><span class="tt-cmd">cd airbnb
+dbt debug</span>
+<span class="tt-dim">09:14:22  Running with dbt=1.11.12</span>
+<span class="tt-dim">09:14:22  dbt version: 1.11.12</span>
+<span class="tt-dim">09:14:22  python version: 3.12.4</span>
+<span class="tt-dim">09:14:22  python path: ...\venv\Scripts\python.exe</span>
+<span class="tt-dim">09:14:22  os info: Windows-11-10.0.26200</span>
+<span class="tt-dim">09:14:23  Using profiles dir at C:\...\airbnb</span>
+<span class="tt-dim">09:14:23  Using profiles.yml file at C:\...\airbnb\profiles.yml</span>
+<span class="tt-dim">09:14:23  Using dbt_project.yml file at C:\...\airbnb\dbt_project.yml</span>
+<span class="tt-ok">09:14:23  Configuration:</span>
+<span class="tt-ok">09:14:23    profiles.yml file [OK found and valid]</span>
+<span class="tt-ok">09:14:23    dbt_project.yml file [OK found and valid]</span>
+<span class="tt-ok">09:14:24  Connection:</span>
+<span class="tt-ok">09:14:24    account: frgcsyo-ie17820</span>
+<span class="tt-ok">09:14:24    user: dbt</span>
+<span class="tt-ok">09:14:24    database: AIRBNB</span>
+<span class="tt-ok">09:14:24    schema: DEV</span>
+<span class="tt-ok">09:14:24    warehouse: COMPUTE_WH</span>
+<span class="tt-ok">09:14:24    role: TRANSFORM</span>
+<span class="tt-ok">09:14:25    Connection test: [OK connection ok]</span>
+<span class="tt-ok">09:14:25  All checks passed</span></pre>
+          </div>
+
+          <h3>What each check validates</h3>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Check</th><th>What failed looks like</th><th>Typical fix</th></tr></thead>
+              <tbody>
+                <tr><td>profiles.yml found</td><td><em>Could not find profiles.yml</em></td><td>Place file in <code>airbnb/</code> or set <code>--profiles-dir</code></td></tr>
+                <tr><td>dbt_project.yml found</td><td><em>Could not find dbt_project.yml</em></td><td><code>cd airbnb</code></td></tr>
+                <tr><td>Profile name match</td><td><em>Profile 'airbnb' not found</em></td><td>Align top-level key with <code>profile:</code> in project file</td></tr>
+                <tr><td>Connection test</td><td><em>250001: Could not connect to Snowflake</em></td><td>Account identifier, key format, network</td></tr>
+                <tr><td>Role and grants</td><td><em>003001: SQL access control error</em></td><td>Verify TRANSFORM role grants from setup script</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="terminal">
+            <p class="term-head">dbt debug — connection failure example</p>
+            <pre class="term-body"><span class="tt-cmd">dbt debug</span>
+<span class="tt-dim">09:22:01  Running with dbt=1.11.12</span>
+<span class="tt-ok">09:22:02    profiles.yml file [OK found and valid]</span>
+<span class="tt-ok">09:22:02    dbt_project.yml file [OK found and valid]</span>
+<span class="tt-err">09:22:04    Connection test: [ERROR]</span>
+<span class="tt-err">09:22:04  250001 (08001): Failed to connect to DB: frgcsyo-ie17820.snowflakecomputing.com:443. JWT token is invalid.</span>
+<span class="tt-warn">09:22:04  1 check failed: connection</span></pre>
+          </div>
+
+          <p>An invalid JWT almost always means the private key in <code>profiles.yml</code> does not match the public key registered on the Snowflake user, or the key string lost its newline escaping. Compare against the key-pair auth docs and regenerate if needed.</p>
+
+          <div class="diagram">
+            <p class="diagram-title">dbt debug validation sequence</p>
+            <div class="flow">
+              <div class="node is-compute"><b>Parse profiles.yml</b><small>adapter type, credentials</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-compute"><b>Load dbt_project.yml</b><small>profile name match</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-store pulse"><b>Test connection</b><small>open session, run query</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-model"><b>All checks passed</b><small>ready for dbt run</small></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="section" id="devcontainer">
+          <h2>Devcontainer workflow</h2>
+          <p class="lead">If local Python setup is fighting you, the course repo ships a devcontainer that pre-installs Python, uv and dbt inside a Docker image. Open the repo in VS Code or Cursor with the Dev Containers extension and let the container build.</p>
+
+          <h3>devcontainer.json configuration</h3>
+
+<pre data-lang="json" data-title=".devcontainer/devcontainer.json" data-explain="Dev container definition: pre-built image, port forwarding, post-create sync of Python dependencies."><code>{
+	"name": "dbt Zero to Hero",
+	"image": "ghcr.io/nordquant/complete-dbt-bootcamp-zero-to-hero/dbt-bootcamp-devcontainer:latest",
+	"forwardPorts": [
+		5000
+	],
+	"postCreateCommand": "uv sync --frozen --no-install-project",
+	"customizations": {
+		"vscode": {
+			"settings": {
+				"python.defaultInterpreterPath": "/opt/venv/bin/python",
+				"extensions.ignoreRecommendations": true,
+				"settingsSync.enabled": false,
+				"python.terminal.useEnvFile": false
+			}
+		}
+	}
+}</code></pre>
+
+          <p>The container uses a published image from GitHub Container Registry, forwards port 5000 (used by Dagster in Section 18), and runs <code>uv sync --frozen --no-install-project</code> on first create to install the exact locked dependency versions.</p>
+
+          <h3>When to use the devcontainer</h3>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Situation</th><th>Local venv</th><th>Devcontainer</th></tr></thead>
+              <tbody>
+                <tr><td>Windows with Python 3.12 already installed</td><td>Fastest path</td><td>Optional</td></tr>
+                <tr><td>Corporate laptop blocking pip/uv</td><td>May fail</td><td>Often works via Docker</td></tr>
+                <tr><td>Need identical env to instructor</td><td>Close with uv lockfile</td><td>Exact match</td></tr>
+                <tr><td>Apple Silicon Mac with adapter issues</td><td>Usually fine</td><td>Fallback option</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>Inside the container, the Python interpreter is at <code>/opt/venv/bin/python</code>. You still need your own Snowflake credentials in <code>profiles.yml</code> &mdash; the container does not include those. Clone the repo, open in the devcontainer, copy profiles, <code>cd airbnb</code>, run <code>dbt debug</code>.</p>
+
+          <div class="callout tip"><strong>Devcontainer does not replace Snowflake setup.</strong> You still need raw tables and a service user whether you develop locally or in Docker. The container only standardises the Python side.</div>
+
+          <h3>IDE dbt extension</h3>
+          <p>The course README lists IDE dbt extension installation alongside virtualenv setup. The official dbt extension (or Fusion-powered successor in Section 20) adds syntax highlighting, compile-on-save, lineage preview and go-to-definition for <code>ref()</code> calls. Install it after Python and dbt are working locally.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Editor</th><th>Extension</th><th>What it needs</th></tr></thead>
+              <tbody>
+                <tr><td>VS Code / Cursor</td><td>dbt Power User or official dbt extension</td><td>Python interpreter pointing at your venv; <code>dbt_project.yml</code> in workspace</td></tr>
+                <tr><td>Devcontainer</td><td>Same extensions via devcontainer.json customizations</td><td>Container built; interpreter at <code>/opt/venv/bin/python</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>Point the extension at the <code>airbnb</code> folder as the workspace root (or open the whole repo with <code>airbnb</code> as the dbt project path). It reads the same <code>profiles.yml</code> as the CLI. If compile fails in the IDE but <code>dbt debug</code> passes, the extension is usually pointed at the wrong Python or wrong project directory.</p>
+
+          <div class="diagram">
+            <p class="diagram-title">Local development stack after Section 6 setup</p>
+            <div class="stack">
+              <div class="layer"><strong>Snowflake</strong> &mdash; AIRBNB database, RAW sources, DEV target schema, COMPUTE_WH</div>
+              <div class="layer"><strong>profiles.yml</strong> &mdash; credentials and target (schema DEV, role TRANSFORM)</div>
+              <div class="layer"><strong>airbnb/dbt_project.yml</strong> &mdash; paths, materialization defaults, hooks</div>
+              <div class="layer"><strong>Python venv</strong> &mdash; dbt-core 1.11.x + dbt-snowflake 1.11.x via uv</div>
+              <div class="layer"><strong>IDE extension</strong> &mdash; optional compile assistance and lineage (Section 20 expands Fusion)</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="section" id="deeper">
+          <h2>Deeper detail and edge cases</h2>
+          <p class="lead">Setup looks straightforward until something fails at 11pm before a deadline. This block covers version drift, warehouse costs during bootstrap, the mistakes that waste an hour each, and how real teams wire credentials.</p>
+
+          <h3>Version notes</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Behaviour</th><th>Before</th><th>Now</th><th>Version</th></tr></thead>
+              <tbody>
+                <tr><td>dbt project config tests key</td><td><code>tests:</code></td><td><code>data_tests:</code></td><td>1.8</td></tr>
+                <tr><td>Interactive profile generation</td><td><code>dbt init</code> prompts for adapter credentials</td><td><code>dbt init --skip-profile-setup</code> recommended; profiles managed separately</td><td>1.5+</td></tr>
+                <tr><td>Snowflake key-pair auth</td><td>Password-based users common</td><td>Service users with <code>TYPE=SERVICE</code> and RSA keys</td><td>Snowflake policy</td></tr>
+                <tr><td>Python packaging</td><td><code>pip install dbt-snowflake</code></td><td>uv/poetry with pinned <code>dbt-core~=1.11.0</code></td><td>Course 2025+</td></tr>
+                <tr><td>Default threads in dev</td><td>Often unset (adapter default)</td><td>Course example uses <code>threads: 1</code> for safety; production uses <code>4</code></td><td>—</td></tr>
+                <tr><td>Schema naming in dev</td><td>Shared <code>DEV</code> schema</td><td>Per-developer <code>DBT_{{ env_var('DBT_ENV_NAME') }}</code></td><td>Section 19</td></tr>
+                <tr><td>Devcontainer base</td><td>Manual Dockerfile per student</td><td>Published GHCR image with frozen uv lockfile</td><td>Course 2025+</td></tr>
+                <tr><td>dbt Cloud vs Core setup</td><td>Cloud generates profiles automatically</td><td>Core requires local <code>profiles.yml</code></td><td>—</td></tr>
+                <tr><td>Snowflake account URL format</td><td>Legacy <code>&lt;account&gt;</code> only</td><td>Region cloud suffixes (<code>.aws</code>, <code>.gcp</code>) required on some accounts</td><td>Snowflake</td></tr>
+                <tr><td>Encrypted private keys in YAML</td><td>Plain PEM files referenced by path</td><td>Inline with <code>\n</code> escaping and optional passphrase</td><td>dbt-snowflake</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>What it costs to run</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>What runs</th><th>Where the cost lands</th><th>How to spend less</th></tr></thead>
+              <tbody>
+                <tr><td><code>COPY INTO</code> from S3 (manual setup)</td><td>Snowflake compute for parsing CSV</td><td>Use automated setup once; do not re-import unnecessarily</td></tr>
+                <tr><td><code>dbt debug</code> connection test</td><td>One tiny query; warehouse may resume from suspended</td><td>Expect a 60-second minimum if warehouse was idle</td></tr>
+                <tr><td><code>on-run-start</code> audit table creation</td><td>DDL on first <code>dbt run</code></td><td>Negligible; table is tiny</td></tr>
+                <tr><td>Idle <code>COMPUTE_WH</code></td><td>Snowflake bills until auto-suspend kicks in</td><td>Set auto-suspend to 60 seconds during learning</td></tr>
+                <tr><td>Snowflake trial credits</td><td>All of the above draws from trial balance</td><td>Suspend warehouse when not studying</td></tr>
+                <tr><td>Devcontainer Docker</td><td>Local CPU/RAM, not Snowflake</td><td>Stop container when finished</td></tr>
+                <tr><td>Multiple setup attempts</td><td>Each <code>DROP DATABASE CASCADE</code> plus re-import</td><td>Use automated setup to avoid repeat imports</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout cost"><strong>The biggest setup waste is leaving COMPUTE_WH running overnight.</strong> dbt debug and an empty project consume almost no compute, but a resumed warehouse sitting idle still accrues cost until it suspends. Check the warehouse status in Snowflake after each session.</div>
+
+          <h3>Traps that catch people</h3>
+          <ul>
+            <li><strong>Full URL as account identifier —</strong> pasting <code>https://xy12345.snowflakecomputing.com</code> into <code>account:</code> fails JWT authentication. Use only the account prefix Snowflake documents, sometimes with a region suffix.</li>
+            <li><strong>Public and private key mismatch —</strong> regenerating keys on your laptop but not updating the <code>CREATE USER</code> statement leaves the JWT invalid. The error mentions JWT, not "wrong key", which sends people to network debugging first.</li>
+            <li><strong>Newlines in private_key —</strong> YAML requires escaped <code>\n</code> for multiline keys. A PEM pasted with literal line breaks often parses incorrectly. Follow the EXAMPLE-profiles format exactly.</li>
+            <li><strong>Running dbt outside airbnb —</strong> the project root contains <code>dbt_project.yml</code>. Commands from the repo root fail with "Not a dbt project" even when profiles.yml is correct in a subdirectory.</li>
+            <li><strong>Profile name mismatch —</strong> <code>profile: 'airbnb'</code> in the project file must match the top-level key in profiles.yml. Renaming one without the other fails before connection is tested.</li>
+            <li><strong>Forgetting to activate venv —</strong> a system Python without dbt installed gives "dbt is not recognized". Always activate after <code>uv sync</code>.</li>
+            <li><strong>Shared DEV schema collisions —</strong> building into <code>DEV</code> means two students overwrite each other's models. Per-developer schemas (Section 19) exist to fix this.</li>
+            <li><strong>Committing profiles.yml —</strong> convenience of keeping it in the project folder leads to pushing private keys to GitHub. Use env vars or gitignore before any remote push.</li>
+            <li><strong>Skipping raw data verification —</strong> proceeding to models when <code>COPY INTO</code> loaded zero rows produces empty staging models that "work" but teach nothing. Always count rows first.</li>
+            <li><strong>Adapter/Core version skew —</strong> upgrading dbt-core without dbt-snowflake causes import errors. Pin both in pyproject.toml and use uv.</li>
+            <li><strong>Wrong Snowflake role default —</strong> the dbt user defaults to TRANSFORM, but if your personal login runs setup scripts and forgets to <code>USE ROLE TRANSFORM</code> when testing, you see objects created under ACCOUNTADMIN that the dbt user cannot see. Always verify with <code>SHOW GRANTS TO USER dbt</code>.</li>
+            <li><strong>COPY INTO silently loading zero rows —</strong> wrong S3 stage permissions or a typo in the file format leaves an empty table. Row count queries after import are mandatory, not optional.</li>
+          </ul>
+
+          <h3>Troubleshooting playbook</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Symptom</th><th>Most likely cause</th><th>What to check / fix</th></tr></thead>
+              <tbody>
+                <tr><td><em>Could not run dbt: fatal: Not a dbt project</em></td><td>Wrong working directory</td><td><code>cd airbnb</code>; confirm <code>dbt_project.yml</code> is present</td></tr>
+                <tr><td><em>dbt: command not found</em></td><td>Virtualenv not activated</td><td><code>venv\Scripts\activate</code> or <code>source venv/bin/activate</code></td></tr>
+                <tr><td><em>JWT token is invalid</em></td><td>Key pair mismatch or bad PEM formatting</td><td>Re-export key with <code>\n</code> escaping; re-run <code>ALTER USER dbt SET RSA_PUBLIC_KEY=...</code></td></tr>
+                <tr><td><em>250001: Could not connect to DB</em></td><td>Wrong account identifier</td><td>Compare with registration email; try adding <code>.aws</code> suffix</td></tr>
+                <tr><td><em>003001: SQL access control error</em></td><td>Missing grants on TRANSFORM role</td><td>Re-run grant block from setup script; <code>SHOW GRANTS TO ROLE TRANSFORM</code></td></tr>
+                <tr><td><em>Profile 'airbnb' not found</em></td><td>profiles.yml key ≠ project profile name</td><td>Align names; or pass <code>--profile</code></td></tr>
+                <tr><td><em>Could not find profile named 'airbnb'</em></td><td>profiles.yml not in expected directory</td><td>Copy to <code>airbnb/</code> or set <code>DBT_PROFILES_DIR</code></td></tr>
+                <tr><td>dbt debug OK but <code>dbt run</code> fails on audit_log</td><td>Role lacks CREATE TABLE on DEV schema</td><td>Verify <code>GRANT ALL ON SCHEMA AIRBNB.DEV</code> to TRANSFORM</td></tr>
+                <tr><td>Permission error activating venv on Windows</td><td>PowerShell execution policy</td><td><code>Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass</code></td></tr>
+                <tr><td>uv sync fails on Python version</td><td>Python outside <code>&gt;=3.10,&lt;3.14</code></td><td>Install 3.11 or 3.12; point uv at it</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Production patterns</h3>
+          <p>Teams treat setup as two separable problems: warehouse infrastructure (roles, schemas, raw data ingestion) and developer tooling (Python env, dbt project, CI). The course combines them for learning; production splits them cleanly. A platform team owns Snowflake roles and the raw layer; analytics engineers clone the dbt repo and never run <code>CREATE USER</code> themselves.</p>
+
+          <p>Credentials never live in the repo. The pattern from <code>_prod_profiles/profiles.yml</code> &mdash; <code>{{ env_var('PRIVATE_KEY') }}</code> and separate targets for dev, staging and prod &mdash; is the minimum for any shared git remote. CI systems inject secrets at runtime; developers export them locally or use a secrets manager wrapper.</p>
+
+          <div class="grid-2">
+            <div class="mini-card">
+              <h4>Convention worth adopting early</h4>
+              <p>One schema per developer in dev (<code>DBT_FIRSTNAME</code>), a shared <code>STAGING</code> for pre-prod, and <code>PROD</code> for consumption. Same project code, different target, no manual editing.</p>
+            </div>
+            <div class="mini-card">
+              <h4>Anti-pattern: shared dev schema forever</h4>
+              <p>Everyone building into <code>DEV</code> works until two people run <code>dbt run</code> concurrently and overwrite each other's tables. The failure is silent until someone's model disappears.</p>
+            </div>
+          </div>
+
+          <div class="diagram">
+            <p class="diagram-title">Production credential flow versus course local setup</p>
+            <div class="flow">
+              <div class="node is-source"><b>Secrets manager</b><small>CI / developer machine</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-compute"><b>env_var in profiles</b><small>no keys in git</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-model pulse"><b>dbt debug in CI</b><small>gate before merge</small></div>
+            </div>
+          </div>
+
+<pre data-lang="yaml" data-title="Recommended .gitignore entries" data-explain="Prevent credentials and generated artifacts from reaching git."><code># dbt generated
+target/
+dbt_packages/
+logs/
+
+# credentials
+profiles.yml
+.env</code></pre>
+
+          <h3>Certification pointers</h3>
+          <p>The exam assumes you can set up a dbt project from scratch: where <code>profiles.yml</code> lives relative to <code>dbt_project.yml</code>, what the <code>profile</code> and <code>target</code> keys do, and which files define project structure versus connection details. Expect distinction questions between project-level config (<code>dbt_project.yml</code>) and connection config (<code>profiles.yml</code>).</p>
+
+          <ul>
+            <li><a href="s07-models.html">Section 7</a> &mdash; first models assume debug passed; connection and schema defaults determine where models land.</li>
+            <li><a href="s19-production.html">Section 19</a> &mdash; multi-target profiles, env vars and CI are the production evolution of what you set up here.</li>
+            <li><a href="s16-debugging-logging.html">Section 16</a> &mdash; when debug passes but runs fail, logs and compiled SQL become the next tool.</li>
+          </ul>
+
+          <div class="callout exam"><strong>Certification:</strong> know which config file owns which settings. Materialization defaults and model paths are in <code>dbt_project.yml</code>; account, role, warehouse and schema target are in <code>profiles.yml</code>. Mixing them up is a common exam distractor.</div>
+        </section>
+
+        <section class="section" id="interview">
+          <h2>Interview questions</h2>
+          <p class="muted">Answer each one out loud before opening it.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+
+            <details class="qa">
+              <summary>What is the difference between dbt_project.yml and profiles.yml?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p><code>dbt_project.yml</code> is project configuration checked into git: model paths, default materializations, hooks, tests and project name. It describes <em>how the project behaves</em> and is identical for every developer.</p>
+                <p><code>profiles.yml</code> is connection configuration: warehouse credentials, target database, schema, role and threads. It describes <em>where and as whom</em> the project runs, differs per developer and environment, and should not be committed with secrets. The <code>profile:</code> key in the project file links the two by name.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Why does the course use a TRANSFORM role and a separate REPORTER role?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>Least privilege. dbt needs write access to create and replace models; BI tools need read access only. Granting SELECT on the mart schema to REPORTER while TRANSFORM holds DDL rights means a compromised dashboard credential cannot drop a fact table.</p>
+                <p>The pattern scales: ingestion roles write to RAW, transformation roles write to modeled schemas, consumption roles read from marts. The exam occasionally tests whether you understand that dbt runs with elevated privileges compared to end users.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Walk me through what dbt debug actually tests.<span class="qa-tag">Troubleshooting</span></summary>
+              <div class="qa-body">
+                <p>Three layers. First, it locates and parses <code>profiles.yml</code>, validating the adapter type and required fields for that adapter. Second, it locates and parses <code>dbt_project.yml</code>, confirming the profile name referenced in the project exists. Third, it opens a real connection to the warehouse and runs a lightweight query to verify credentials, role, warehouse and network access.</p>
+                <p>A failure at layer one or two is a local config problem. A failure at layer three is credentials, grants or network. The command is deliberately run before any models exist because connection problems should be solved before you write SQL.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Why use RSA key-pair authentication instead of a password for the dbt user?<span class="qa-tag">Production</span></summary>
+              <div class="qa-body">
+                <p>Service accounts should not use passwords that expire, appear in logs or get shared in chat. RSA keys are designed for machine-to-machine auth: the private key lives in a secret store or env var, the public key is registered once on the Snowflake user, and rotation means updating both sides deliberately.</p>
+                <p>Snowflake encourages <code>TYPE=SERVICE</code> users for automation. Password auth still works but is discouraged for anything running in CI or on a schedule.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What does threads control in profiles.yml and what happens if you set it too high?<span class="qa-tag">Performance</span></summary>
+              <div class="qa-body">
+                <p><code>threads</code> is the maximum number of models dbt builds in parallel during one invocation. Independent models at the same DAG depth can run concurrently up to that limit.</p>
+                <p>Too high for your warehouse size causes query queuing, memory pressure or credit spikes. Too low serialises everything and makes even small projects feel slow. The course starts at 1 for safety during learning; production uses 4. The right value depends on warehouse size and model count — watch the warehouse query history and adjust.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Explain the RAW versus DEV schema split.<span class="qa-tag">Modelling</span></summary>
+              <div class="qa-body">
+                <p>RAW is the landing zone: data arrives from ingestion unchanged and dbt reads it via <code>source()</code> but never writes there. DEV is where dbt creates models during development. Separating them makes lineage clear, lets you drop and rebuild the modeled layer without touching source data, and mirrors the medallion pattern (bronze/silver/gold) at a small scale.</p>
+                <p>In production the names change (<code>PROD</code>, per-developer schemas) but the principle holds: sources and transformations live in different namespaces with different retention and access policies.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Your colleague's dbt debug fails with "JWT token is invalid". How do you help?<span class="qa-tag">Troubleshooting</span></summary>
+              <div class="qa-body">
+                <p>Work through the key pair systematically. Confirm the public key registered on the Snowflake user matches the private key in profiles.yml — regenerating keys on the laptop without updating Snowflake is the most common cause. Check the private key formatting: PEM content with newlines escaped as <code>\n</code> in YAML, including the BEGIN and END lines.</p>
+                <p>If the key is encrypted, verify <code>private_key_passphrase</code> matches. As a last resort, generate a fresh pair, update both Snowflake and profiles.yml, and debug again. Do not assume a network problem until the key pair is verified.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Why does the course pin dbt-core~=1.11.0 instead of installing latest?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p>Reproducibility. A tutorial written for 1.11 may use syntax that changed in 1.12 (selector flags, YAML keys, default behaviours). Pinning the minor version ensures every student and the CI pipeline run the same compiler, adapter and deprecation warnings.</p>
+                <p>The tilde allows patch releases (bug fixes) without jumping to a new minor. Teams upgrade deliberately after reading release notes, not because pip decided to.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What is uv and why use it over pip for dbt?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>uv is a Python package manager from Astral (the Ruff team). It resolves dependencies from <code>pyproject.toml</code>, creates a virtualenv, and installs locked versions quickly. For dbt, the critical benefit is installing Core and the adapter together at compatible versions.</p>
+                <p>pip works too, but students frequently end up with a mismatched adapter or a system Python that conflicts with dbt's supported range. uv's lockfile and single <code>uv sync</code> command remove that class of error.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>When would you choose the devcontainer over a local virtualenv?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p>When the local machine cannot reliably run Python 3.10–3.13 with dbt's dependencies — corporate policy blocking installs, inconsistent system Python, or repeated "works on my machine" issues across the team. The devcontainer provides a known-good image with uv and dbt pre-configured.</p>
+                <p>It does not help with Snowflake credentials or data setup; those are still your problem. Local venv is faster to iterate when your machine is already configured.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What happens if you run dbt commands from the repository root instead of airbnb?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p>dbt looks for <code>dbt_project.yml</code> in the current working directory and its parents. The repo root contains <code>pyproject.toml</code> but not a dbt project file, so the CLI exits with <em>Could not run dbt: fatal: Not a dbt project</em>. This happens even when <code>airbnb/profiles.yml</code> exists and is correct.</p>
+                <p>The fix is always <code>cd airbnb</code> first. Some teams open only the <code>airbnb</code> subfolder in their IDE to make the default terminal path correct. CI pipelines use <code>working-directory: airbnb</code> for the same reason.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How does the course load raw Airbnb data without dbt?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>dbt does not load CSVs from S3. Snowflake's <code>COPY INTO</code> runs inside the warehouse during manual or automated setup, landing files into <code>AIRBNB.RAW</code>. dbt enters the picture later when models reference those tables via <code>source()</code> in Section 9, or hard-coded schema names in Section 7 staging models before sources are declared.</p>
+                <p>That separation reinforces the ELT pattern: load first with warehouse-native or ingestion tooling; transform second with dbt. Seeds are the one exception — dbt can load small CSVs from the project — but the three main Airbnb tables are too large and arrive through Snowflake, not the repo.</p>
+              </div>
+            </details>
+
+          </div>
+        </section>
+
+        <section class="section" id="practice">
+          <h2>Hands-on practice</h2>
+          <p class="muted">Run these from the <code>airbnb</code> folder with your virtualenv active.</p>
+          <ol class="practice-list">
+
+            <li class="practice">
+              <p class="practice-task">Verify your Snowflake raw layer loaded correctly by querying row counts for all three source tables.</p>
+              <span class="console-path">Snowflake worksheet · AIRBNB.RAW</span>
+              <p class="practice-expect">Three non-zero counts: listings in the low thousands, reviews substantially more, hosts in the hundreds.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Open a Snowflake worksheet as a role with SELECT on RAW (ACCOUNTADMIN works during setup).</li>
+                    <li>Run the count query below.</li>
+                    <li>If any table shows zero rows, re-run the <code>COPY INTO</code> for that table or use automated setup.</li>
+                  </ol>
+<pre data-lang="sql"><code>SELECT 'raw_listings' AS tbl, COUNT(*) AS rows FROM AIRBNB.RAW.raw_listings
+UNION ALL
+SELECT 'raw_reviews', COUNT(*) FROM AIRBNB.RAW.raw_reviews
+UNION ALL
+SELECT 'raw_hosts', COUNT(*) FROM AIRBNB.RAW.raw_hosts;</code></pre>
+                  <p class="muted">Undo: read-only query; nothing to undo.</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">Run <code>dbt debug</code> from the airbnb folder and confirm all checks pass. If any fail, fix the underlying issue before continuing to Section 7.</p>
+              <span class="console-path">airbnb/</span>
+              <p class="practice-expect">Terminal ends with <code>All checks passed</code> and <code>Connection test: [OK connection ok]</code>.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Activate your virtualenv from the repo root.</li>
+                    <li><code>cd airbnb</code></li>
+                    <li>Confirm <code>profiles.yml</code> and <code>dbt_project.yml</code> are both in this directory.</li>
+                    <li>Run <code>dbt debug</code> and read each check line.</li>
+                  </ol>
+<pre data-lang="shell"><code>venv\Scripts\activate
+cd airbnb
+dbt debug</code></pre>
+                  <p class="muted">Undo: nothing to undo; debug is read-only.</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">Inspect <code>dbt_project.yml</code> and write down which materialization applies to models in <code>models/src/</code>, <code>models/dim/</code>, and the project default.</p>
+              <span class="console-path">airbnb/dbt_project.yml</span>
+              <p class="practice-expect">You can state: default view, dim folder table, src folder ephemeral — without opening the file again.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Open <code>dbt_project.yml</code> and find the <code>models: airbnb:</code> block.</li>
+                    <li>Project default: <code>+materialized: view</code></li>
+                    <li><code>dim:</code> overrides to <code>table</code></li>
+                    <li><code>src:</code> overrides to <code>ephemeral</code></li>
+                  </ol>
+                  <p>These defaults mean staging models compile inline as CTEs, dimensions persist as tables, and anything without a folder override builds as a view. <a href="s08-materializations.html">Section 8</a> explains when to override further.</p>
+                  <p class="muted">Undo: read-only exercise; nothing to undo.</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">Add a temporary misspelled account identifier to profiles.yml, run <code>dbt debug</code>, observe the failure, then restore the correct value.</p>
+              <span class="console-path">airbnb/profiles.yml</span>
+              <p class="practice-expect">Debug reports a connection error with the misspelled account; after restoring, all checks pass again.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Change <code>account:</code> to <code>wrong-account-id</code></li>
+                    <li>Run <code>dbt debug</code> — expect connection failure</li>
+                    <li>Restore your real account identifier</li>
+                    <li>Run <code>dbt debug</code> again — expect success</li>
+                  </ol>
+                  <p>This teaches you to recognise connection failures versus config file problems. Profile parse succeeds even when the account is wrong; only the connection test catches it.</p>
+                  <p class="muted">Undo: restore the correct <code>account:</code> value in profiles.yml (step 3 above).</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">Run <code>dbt clean</code> then <code>dbt compile</code> on the empty project and inspect what lands in <code>target/</code> before any models exist.</p>
+              <span class="console-path">airbnb/target/</span>
+              <p class="practice-expect"><code>target/manifest.json</code> exists and lists zero models; no compiled SQL under <code>target/compiled/models/</code> yet.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>From <code>airbnb/</code> with venv active: <code>dbt clean</code> removes prior artifacts.</li>
+                    <li>Run <code>dbt compile</code> — parses the project without executing model SQL against the warehouse (hooks may still run on a full <code>dbt run</code>; compile is safe on an empty project).</li>
+                    <li>Open <code>target/manifest.json</code> and search for <code>"nodes"</code> — an empty scaffold has no model entries.</li>
+                    <li>Note the path dbt prints for profiles dir and project dir in the log output.</li>
+                  </ol>
+<pre data-lang="shell"><code>cd airbnb
+dbt clean
+dbt compile</code></pre>
+                  <p class="muted">Undo: <code>dbt clean</code> removes <code>target/</code> again if you want an empty tree; no warehouse objects are created by compile alone on an empty project.</p>
+                </div>
+              </details>
+            </li>
+
+          </ol>
+        </section>
+
+        <section class="section" id="recap">
+          <h2>Recap</h2>
+          <div class="recap">
+            <ul class="checklist">
+              <li>Snowflake account identifier is the prefix before <code>.snowflakecomputing.com</code>, sometimes with a cloud suffix like <code>.aws</code>.</li>
+              <li>Automated setup at dbtsetup.nordquant.com creates warehouse, database, RAW/DEV schemas, raw tables, roles and service users in one step.</li>
+              <li>Manual setup runs DDL plus <code>COPY INTO</code> from <code>s3://dbt-datasets/</code> and creates TRANSFORM (write) and REPORTER (read) roles.</li>
+              <li>Three raw tables &mdash; <code>raw_listings</code>, <code>raw_reviews</code>, <code>raw_hosts</code> &mdash; land in <code>AIRBNB.RAW</code> and are read by dbt via <code>source()</code> from Section 9 onwards.</li>
+              <li><code>uv sync</code> installs pinned <code>dbt-core~=1.11.0</code> and <code>dbt-snowflake~=1.11.0</code>; activate <code>venv</code> before every session.</li>
+              <li><code>dbt init --skip-profile-setup airbnb</code> scaffolds the project; copy <code>profiles.yml</code> into the folder and run all commands from <code>cd airbnb</code>.</li>
+              <li><code>profiles.yml</code> holds credentials and targets; <code>dbt_project.yml</code> holds project behaviour. The <code>profile:</code> name links them.</li>
+              <li>Dev target uses schema <code>DEV</code>; production later uses per-developer schemas and env vars for secrets.</li>
+              <li><code>dbt debug</code> validates profile parse, project parse and live warehouse connection &mdash; run it before writing models.</li>
+              <li>Devcontainer standardises Python when local setup fails; it does not replace Snowflake configuration.</li>
+              <li>Never commit <code>profiles.yml</code> with real keys to a remote repository.</li>
+              <li><a href="s07-models.html">Section 7</a> adds the first staging models reading from these raw tables.</li>
+            </ul>
+            <p style="margin-top:1rem;">
+              <button type="button" data-complete="section-06">Mark complete</button>
+            </p>
+          </div>
+        </section>
+
+      </div>
+
+      <aside class="toc" aria-label="On this page">
+        <strong>On this page</strong>
+        <ol>
+          <li><a href="#lectures">Lectures</a></li>
+          <li><a href="#snowflake-setup">Snowflake setup</a></li>
+          <li><a href="#loading-data">Loading data</a></li>
+          <li><a href="#python-uv">Python and uv</a></li>
+          <li><a href="#installing-dbt">Installing dbt</a></li>
+          <li><a href="#profiles-yml">profiles.yml</a></li>
+          <li><a href="#dbt-init">dbt init</a></li>
+          <li><a href="#dbt-debug">dbt debug</a></li>
+          <li><a href="#devcontainer">Devcontainer</a></li>
+          <li><a href="#deeper">Deeper detail</a></li>
+          <li><a href="#interview">Interview questions</a></li>
+          <li><a href="#practice">Hands-on practice</a></li>
+          <li><a href="#recap">Recap</a></li>
+        </ol>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<footer class="footer">The Complete dbt Bootcamp: Zero to Hero · Section 6 · Offline study edition</footer>
+</body>
+</html>

@@ -1,0 +1,922 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="COF-C03 Section 10: RBAC framework, system roles, role hierarchy, database roles, secondary and functional roles, masking and row access policies.">
+<title>Section 10 — Access Control | Snowflake COF-C03 Course Notes</title>
+<link rel="stylesheet" href="assets/snowflake.css">
+<script defer src="assets/search-index.js"></script>
+<script defer src="assets/sql-glossary.js"></script>
+<script defer src="assets/sql-highlight.js"></script>
+<script defer src="assets/snowflake.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">Course section 10 of 17 · SnowPro Core (COF-C03)</p>
+    <h1>Access Control</h1>
+    <p class="subtitle">How Snowflake decides who can do what: the access-control framework, system and custom roles, database roles, secondary and functional roles, grants and ownership, plus dynamic masking and row access policies.</p>
+    <div class="hero-meta">
+      <span class="chip">14 lectures · 1hr 1min</span>
+      <span class="chip">Exam domain: Security &amp; Access Control</span>
+      <span class="chip">Last verified: 28 Jul 2026</span>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <nav class="pager" aria-label="Section navigation">
+    <a href="s09-performance.html">← Snowflake Performance</a>
+    <a href="../index.html">Course contents</a>
+    <a href="s11-security-auth.html">Next: Security →</a>
+  </nav>
+
+  <main id="main">
+    <div class="layout">
+      <div class="content">
+
+        <section class="section" id="lectures">
+          <h2>Lectures in this section</h2>
+          <p class="muted">Every lecture below links to the notes that cover it.</p>
+          <ol class="lecture-list">
+            <li class="lecture">
+              <a class="lec-title" href="#framework">Access Control Framework Concept</a>
+              <span class="lec-time">6:20</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#system-roles">System Defined Roles</a>
+              <span class="lec-time">5:43</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#role-hierarchy">Demo : Role Hierarchy And Privilege Inheritance</a>
+              <span class="lec-time">3:30</span>
+              <span class="lec-src">Access Control/Role Hirarchy.txt</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#framework">Demo : Access Control Framework</a>
+              <span class="lec-time">10:08</span>
+              <span class="lec-src">Access Control/Access Control Framework.txt</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#role-hierarchy">Role Hierarchy And Privilege Inheritance Concept</a>
+              <span class="lec-time">3:36</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#database-roles">Database Role Concept</a>
+              <span class="lec-time">1:41</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#database-roles">Demo : Database Role</a>
+              <span class="lec-time">5:22</span>
+              <span class="lec-src">Access Control/DB Role.txt</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#secondary-roles">[COF-CO3] Demo : Secondary Role</a>
+              <span class="lec-time">4:26</span>
+              <span class="lec-src">Access Control/Secondary Role.txt</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#functional-roles">[COF-CO3] Functional Role</a>
+              <span class="lec-time">3:02</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#functional-roles">[COF-CO3] Demo : Functional Role</a>
+              <span class="lec-time">4:44</span>
+              <span class="lec-src">Access Control/Functional Role.txt</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#masking">Data Masking Policy Concept</a>
+              <span class="lec-time">1:05</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#masking">Demo : Data Masking Policy</a>
+              <span class="lec-time">4:24</span>
+              <span class="lec-src">Access Control/Data Masking.txt</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#row-access">Row Level Masking Concept</a>
+              <span class="lec-time">1:42</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#row-access">Demo : Row Level Masking</a>
+              <span class="lec-time">4:54</span>
+              <span class="lec-src">Access Control/ROW LEVEL ACCESS.txt</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#recap">Quiz</a>
+            </li>
+          </ol>
+        </section>
+
+        <section class="section" id="framework">
+          <h2>Access Control Framework</h2>
+          <p class="lead">Snowflake combines two models. <strong>Discretionary access control (DAC)</strong> means every object has an owner who can grant access to it. <strong>Role-based access control (RBAC)</strong> means access privileges are assigned to roles, which are in turn assigned to users. Default stance: <strong>deny unless granted</strong> — unless a grant allows access, it is denied.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-221-access-framework.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-221-access-framework.png" alt="Access control framework diagram: securable objects owned by roles, privileges granted with GRANT privilege ON object TO role, roles granted to other roles and to users" loading="lazy" width="1920" height="1080">
+            </a>
+            <figcaption><span class="slide-no">Slide 221</span>Privileges flow to roles, roles nest in roles, and users assume roles — object owners control grants.</figcaption>
+          </figure>
+
+          <div class="analogy">
+            <strong>Everyday analogy — office badge system:</strong> A <em>user</em> is a person. A <em>role</em> is their job title (Analyst, Engineer). <em>Privileges</em> are door permissions (read lab, open server room). The <em>owner</em> of a room can hand out keys. RBAC means you give keys to job titles, not individually to every employee.
+          </div>
+
+          <div class="grid-2">
+            <div class="mini-card">
+              <h4>Securable object</h4>
+              <p>An entity to which access can be granted — table, view, warehouse, database, integration, policy. Unless allowed by a grant, access is denied.</p>
+            </div>
+            <div class="mini-card">
+              <h4>Privilege</h4>
+              <p>A defined level of access to an object. Multiple distinct privileges control the granularity of access granted — e.g. <code>SELECT</code>, <code>DELETE</code>, <code>OWNERSHIP</code>.</p>
+            </div>
+            <div class="mini-card">
+              <h4>Role</h4>
+              <p>An entity to which privileges are granted. Roles are assigned to users, and can also be assigned to other roles, creating a role hierarchy.</p>
+            </div>
+            <div class="mini-card">
+              <h4>User</h4>
+              <p>A user identity recognised by Snowflake, whether associated with a person or a program.</p>
+            </div>
+          </div>
+
+          <h3>Grant plumbing</h3>
+          <p>Three grant patterns wire the framework together:</p>
+          <ul>
+            <li><code>GRANT &lt;privilege&gt; ON &lt;object&gt; TO &lt;role&gt;</code> — give a role access to an object.</li>
+            <li><code>GRANT &lt;role&gt; TO &lt;role&gt;</code> — build a role hierarchy.</li>
+            <li><code>GRANT &lt;role&gt; TO &lt;user&gt;</code> — assign a role to a user.</li>
+          </ul>
+
+          <h3>Account roles vs database roles</h3>
+          <p><strong>Account roles</strong> permit SQL actions on any object in your account — grant privileges on the object to an account role. <strong>Database roles</strong> limit actions to a single database and the objects inside it — grant privileges on the object to a database role in the same database.</p>
+          <div class="callout info">
+            <strong>Current status:</strong> Older course material labels database roles as "Preview". They are generally available now — use them to scope privileges within one database without exposing account-wide access.
+          </div>
+
+          <h3>Primary vs secondary active roles</h3>
+          <p>Each session has one <strong>primary role</strong> — the default assumed role, set with <code>USE ROLE &lt;role name&gt;</code>. You can activate any number of <strong>secondary roles</strong> alongside it to combine privileges without switching primary. See <a href="#secondary-roles">Secondary roles</a> for session commands and <code>DEFAULT_SECONDARY_ROLES</code> behaviour.</p>
+
+          <h3>Table privileges</h3>
+          <p>Privileges are granted to roles, and roles are granted to users, to specify the operations users can perform on objects. Table-level examples include <code>SELECT</code>, <code>TRUNCATE</code>, <code>DELETE</code>, and <code>OWNERSHIP</code>:</p>
+          <pre><code>GRANT SELECT ON TABLE &lt;table&gt; TO ROLE &lt;role&gt;;</code></pre>
+          <p class="muted">Full privilege list: <a href="https://docs.snowflake.com/en/user-guide/security-access-control-privileges">Snowflake access-control privileges documentation</a>.</p>
+
+          <h3>Grants, ownership &amp; future grants</h3>
+          <pre><code>-- Privilege on object to role
+GRANT SELECT ON TABLE study_security.lab.sales TO ROLE analyst;
+
+-- Role to role (hierarchy)
+GRANT ROLE analyst TO ROLE sysadmin;
+
+-- Role to user
+GRANT ROLE analyst TO USER &lt;username&gt;;
+
+-- Future grants (apply to objects created later)
+GRANT SELECT ON FUTURE TABLES IN SCHEMA study_security.lab TO ROLE analyst;
+
+-- Transfer ownership (reassign owner + grants option)
+GRANT OWNERSHIP ON TABLE study_security.lab.sales TO ROLE etl REVOKE CURRENT GRANTS;</code></pre>
+
+          <h3>Managed access schemas</h3>
+          <p>In a managed access schema, only the schema owner (or <code>MANAGE GRANTS</code>) can grant privileges on objects inside — prevents object owners from over-sharing sensitive tables.</p>
+          <pre><code>CREATE SCHEMA study_security.secure_data WITH MANAGED ACCESS;</code></pre>
+
+          <p class="muted">Course file: <code>Access Control/Access Control Framework.txt</code></p>
+          <div class="callout warn">
+            <strong>Source correction:</strong> Course lab uses <code>PASSWORD='abc123'</code> — never use demo passwords. Create users with <code>MUST_CHANGE_PASSWORD = TRUE</code> and strong secrets or SSO (see <a href="s11-security-auth.html">Section 11</a>).
+          </div>
+          <pre><code>USE ROLE SYSADMIN;
+CREATE OR REPLACE DATABASE dummy;
+USE DATABASE dummy;
+CREATE OR REPLACE SCHEMA dummy_sc;
+
+CREATE OR REPLACE TABLE dummy.dummy_sc.cust_det (
+  id INT,
+  name VARCHAR(255)
+);
+
+USE ROLE USERADMIN;
+CREATE USER user1 PASSWORD='&lt;STRONG_TEMP_PASSWORD&gt;' MUST_CHANGE_PASSWORD = TRUE;
+
+USE ROLE SECURITYADMIN;
+CREATE ROLE dummy_role;
+GRANT ROLE dummy_role TO USER user1;
+
+GRANT USAGE ON DATABASE dummy TO ROLE dummy_role;
+GRANT USAGE ON SCHEMA dummy.dummy_sc TO ROLE dummy_role;
+GRANT SELECT ON TABLE dummy.dummy_sc.cust_det TO ROLE dummy_role;
+GRANT USAGE ON WAREHOUSE COMPUTE_WH TO ROLE dummy_role;
+
+GRANT SELECT ON FUTURE TABLES IN SCHEMA dummy.dummy_sc TO ROLE dummy_role;
+GRANT ROLE dummy_role TO ROLE sysadmin;
+
+SHOW GRANTS TO ROLE dummy_role;</code></pre>
+
+          <div class="callout tip">
+            <strong>Inspect grants:</strong> <code>SHOW GRANTS TO USER u;</code> lists effective access. <code>SHOW GRANTS ON USER u;</code> lists who can modify the user object.
+          </div>
+        </section>
+
+        <section class="section" id="system-roles">
+          <h2>System-Defined Roles</h2>
+          <p>Fixed roles shipped with every account. Custom production roles should generally be granted <strong>to SYSADMIN</strong> in the hierarchy so administrators inherit them.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-233-system-roles.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-233-system-roles.png" alt="System-defined role hierarchy: ORGADMIN above ACCOUNTADMIN, which parents SECURITYADMIN and SYSADMIN, with USERADMIN under SECURITYADMIN, PUBLIC at the bottom, and custom roles attached under SYSADMIN" loading="lazy" width="1920" height="1080">
+            </a>
+            <figcaption><span class="slide-no">Slide 233</span>System roles form a fixed hierarchy; custom roles attach under SYSADMIN.</figcaption>
+          </figure>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Role</th><th>Purpose</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>ORGADMIN</code></td>
+                  <td>Manages operations at organisation level. Can create accounts in the organisation. Can view all accounts and all enabled regions via <code>SHOW ORGANIZATION ACCOUNTS</code> and <code>SHOW REGIONS</code>. Can check usage information across the organisation. Has access to account properties but not account data.</td>
+                </tr>
+                <tr>
+                  <td><code>ACCOUNTADMIN</code></td>
+                  <td>Parent to <code>SYSADMIN</code> and <code>SECURITYADMIN</code>. Should be assigned to a limited number of people.</td>
+                </tr>
+                <tr>
+                  <td><code>SECURITYADMIN</code></td>
+                  <td>Can manage any grant globally. Can create, manage, and monitor users and roles. Inherits the privileges of <code>USERADMIN</code>.</td>
+                </tr>
+                <tr>
+                  <td><code>SYSADMIN</code></td>
+                  <td>Role that has privileges to create warehouses and databases (and other objects) in an account. Assign all custom roles to <code>SYSADMIN</code> so administrators can manage them.</td>
+                </tr>
+                <tr>
+                  <td><code>USERADMIN</code></td>
+                  <td>Granted the <code>CREATE USER</code> and <code>CREATE ROLE</code> security privileges. Can create users and roles in the account.</td>
+                </tr>
+                <tr>
+                  <td><code>PUBLIC</code></td>
+                  <td>Pseudo-role automatically granted to all users and roles. Everyone has access to objects owned by <code>PUBLIC</code>. Used when explicit access control is not needed.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="diagram" role="img" aria-label="System role hierarchy ORGADMIN to ACCOUNTADMIN to SECURITYADMIN and SYSADMIN">
+            <div class="stack">
+              <div class="layer">ORGADMIN</div>
+              <div class="layer pulse">ACCOUNTADMIN</div>
+              <div class="layer" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                <span>SECURITYADMIN → USERADMIN</span>
+                <span>SYSADMIN → custom roles</span>
+              </div>
+              <div class="layer">PUBLIC (all users)</div>
+            </div>
+          </div>
+
+          <div class="callout exam">
+            <strong>Exam tip:</strong> <code>SECURITYADMIN</code> manages grants; <code>SYSADMIN</code> owns most created objects by default. <code>ACCOUNTADMIN</code> should be rare and MFA-protected — authentication details in <a href="s11-security-auth.html">Section 11</a>.
+          </div>
+        </section>
+
+        <section class="section" id="role-hierarchy">
+          <h2>Role Hierarchy &amp; Privilege Inheritance</h2>
+          <p>Roles can be granted to other roles. A user assuming a parent role inherits all privileges from child roles in the hierarchy. Always grant custom roles to <code>SYSADMIN</code> (or appropriate parent) so they are not orphaned. Database roles can sit alongside account roles in the same hierarchy.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-239-privilege-inheritance.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-239-privilege-inheritance.png" alt="Privilege inheritance diagram: privileges granted on securable objects to roles, roles granted to other roles forming a hierarchy, and a role granted to a user at the top" loading="lazy" width="1920" height="1080">
+            </a>
+            <figcaption><span class="slide-no">Slide 239</span>Privileges accumulate up the role hierarchy — a user inherits everything granted to roles below them.</figcaption>
+          </figure>
+
+          <div class="diagram" role="img" aria-label="Grant flow from user through functional and access roles to objects">
+            <div class="flow">
+              <div class="node">User</div>
+              <span class="arrow" aria-hidden="true">→</span>
+              <div class="node pulse">Functional role</div>
+              <span class="arrow" aria-hidden="true">→</span>
+              <div class="node">Access roles</div>
+              <span class="arrow" aria-hidden="true">→</span>
+              <div class="node">Privileges on objects</div>
+              <span class="packet" aria-hidden="true"></span>
+            </div>
+          </div>
+
+          <p class="muted">Course file: <code>Access Control/Role Hirarchy.txt</code></p>
+          <pre><code>USE ROLE SECURITYADMIN;
+
+CREATE OR REPLACE ROLE dummy_role;
+GRANT USAGE ON DATABASE &lt;YOUR_DB&gt; TO ROLE dummy_role;
+GRANT USAGE ON SCHEMA &lt;YOUR_DB&gt;.&lt;YOUR_SCHEMA&gt; TO ROLE dummy_role;
+GRANT USAGE ON WAREHOUSE COMPUTE_WH TO ROLE dummy_role;
+
+CREATE OR REPLACE ROLE dummy_role2;
+GRANT USAGE ON SCHEMA &lt;YOUR_DB&gt;.&lt;YOUR_SCHEMA2&gt; TO ROLE dummy_role2;
+
+GRANT ROLE dummy_role TO ROLE dummy_role2;
+GRANT ROLE dummy_role2 TO ROLE sysadmin;
+
+SHOW GRANTS TO ROLE dummy_role2;
+
+GRANT ROLE dummy_role2 TO USER &lt;your_user&gt;;
+USE ROLE dummy_role2;
+
+GRANT SELECT ON TABLE &lt;YOUR_DB&gt;.&lt;YOUR_SCHEMA&gt;.customers TO ROLE dummy_role;</code></pre>
+        </section>
+
+        <section class="section" id="database-roles">
+          <h2>Database Roles</h2>
+          <p><strong>Database roles</strong> are scoped to a single database — ideal for limiting admin blast radius. To limit SQL actions to a single database and any object in it, grant privileges on the object to a database role in the same database, then grant the database role to account roles.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-241-database-roles.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-241-database-roles.png" alt="Database roles diagram: separate database roles scoped to Database1 and Database2, each with custom roles underneath, isolated from each other" loading="lazy" width="1920" height="1080">
+            </a>
+            <figcaption><span class="slide-no">Slide 241</span>Database roles confine privileges to one database — actions in Database1 do not spill into Database2.</figcaption>
+          </figure>
+
+          <p class="muted">Course file: <code>Access Control/DB Role.txt</code></p>
+          <pre><code>USE ROLE ACCOUNTADMIN;
+CREATE OR REPLACE DATABASE study_security;
+CREATE OR REPLACE SCHEMA study_security.lab;
+
+USE DATABASE study_security;
+CREATE OR REPLACE DATABASE ROLE reader;
+
+GRANT USAGE ON DATABASE study_security TO DATABASE ROLE study_security.reader;
+GRANT USAGE ON SCHEMA study_security.lab TO DATABASE ROLE study_security.reader;
+GRANT SELECT ON ALL TABLES IN SCHEMA study_security.lab TO DATABASE ROLE study_security.reader;
+
+CREATE OR REPLACE ROLE data_reader;
+GRANT DATABASE ROLE study_security.reader TO ROLE data_reader;
+GRANT ROLE data_reader TO USER &lt;your_user&gt;;
+
+SHOW DATABASE ROLES IN DATABASE study_security;</code></pre>
+
+          <div class="callout warn">
+            <strong>Common mistake:</strong> Database role name mismatch — grant with <code>DATABASE ROLE study_security.reader</code>, not a different DB prefix. Database roles cannot be granted across databases.
+          </div>
+        </section>
+
+        <section class="section" id="secondary-roles">
+          <h2>Primary &amp; Secondary Roles</h2>
+          <p>Each session has one <strong>primary</strong> role (<code>USE ROLE</code>). <strong>Secondary</strong> roles add privileges without switching primary — useful when a user holds multiple team roles.</p>
+
+          <p>Since the <code>DEFAULT_SECONDARY_ROLES</code> behaviour change, users and roles inherit <code>DEFAULT_SECONDARY_ROLES = ('ALL')</code> when the property is unset — all granted roles are active at login. To disable secondary roles at login for a user, set an empty list: <code>ALTER USER … SET DEFAULT_SECONDARY_ROLES = ()</code>. For the <strong>current session only</strong>, run <code>USE SECONDARY ROLES NONE</code>.</p>
+
+          <p class="muted">Course file: <code>Access Control/Secondary Role.txt</code></p>
+          <pre><code>USE ROLE ACCOUNTADMIN;
+CREATE OR REPLACE DATABASE demo_db;
+CREATE OR REPLACE SCHEMA demo_db.demo_fin;
+CREATE OR REPLACE SCHEMA demo_db.demo_sales;
+
+CREATE OR REPLACE TABLE demo_db.demo_fin.customers (c_custkey INT, c_name STRING);
+CREATE OR REPLACE TABLE demo_db.demo_sales.orders (o_orderkey INT, o_custkey INT, o_totalprice NUMBER(10,2));
+
+USE ROLE SECURITYADMIN;
+CREATE OR REPLACE ROLE role_fin;
+CREATE OR REPLACE ROLE role_sales;
+
+GRANT USAGE ON DATABASE demo_db TO ROLE role_fin;
+GRANT USAGE ON SCHEMA demo_db.demo_fin TO ROLE role_fin;
+GRANT SELECT ON TABLE demo_db.demo_fin.customers TO ROLE role_fin;
+
+GRANT USAGE ON DATABASE demo_db TO ROLE role_sales;
+GRANT USAGE ON SCHEMA demo_db.demo_sales TO ROLE role_sales;
+GRANT SELECT ON TABLE demo_db.demo_sales.orders TO ROLE role_sales;
+
+GRANT ROLE role_fin TO USER &lt;your_user&gt;;
+GRANT ROLE role_sales TO USER &lt;your_user&gt;;
+
+USE ROLE role_fin;
+USE SECONDARY ROLES NONE;
+SELECT * FROM demo_db.demo_fin.customers;  -- OK
+
+USE ROLE role_fin;
+USE SECONDARY ROLES role_sales;
+SELECT c.c_custkey, c.c_name, o.o_orderkey, o.o_totalprice
+FROM demo_db.demo_fin.customers c
+JOIN demo_db.demo_sales.orders o ON c.c_custkey = o.o_custkey;</code></pre>
+        </section>
+
+        <section class="section" id="functional-roles">
+          <h2>Functional vs Access Roles</h2>
+          <ul>
+            <li><strong>Access role</strong> — what can be done (e.g. <code>DB_FIN_RW</code>, <code>DB_HR_R</code>).</li>
+            <li><strong>Functional role</strong> — who in the org (e.g. <code>IT_ANALYST</code>, <code>IT_DEV</code>) receives access roles.</li>
+          </ul>
+
+          <p class="muted">Course file: <code>Access Control/Functional Role.txt</code></p>
+          <pre><code>USE ROLE SECURITYADMIN;
+
+CREATE ROLE IF NOT EXISTS it_analyst;
+CREATE ROLE IF NOT EXISTS it_dev;
+CREATE ROLE IF NOT EXISTS db_fi_rw;
+CREATE ROLE IF NOT EXISTS db_hr_r;
+
+GRANT USAGE ON DATABASE finance_db TO ROLE db_fi_rw;
+GRANT USAGE ON SCHEMA finance_db.fi_schema TO ROLE db_fi_rw;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA finance_db.fi_schema TO ROLE db_fi_rw;
+
+GRANT USAGE ON DATABASE hr_db TO ROLE db_hr_r;
+GRANT USAGE ON SCHEMA hr_db.hr_schema TO ROLE db_hr_r;
+GRANT SELECT ON ALL TABLES IN SCHEMA hr_db.hr_schema TO ROLE db_hr_r;
+
+GRANT ROLE db_hr_r TO ROLE it_analyst;
+GRANT ROLE db_fi_rw TO ROLE it_dev;
+
+CREATE USER newuser1 PASSWORD='&lt;STRONG_TEMP_PASSWORD&gt;' MUST_CHANGE_PASSWORD = TRUE;
+GRANT ROLE it_analyst TO USER newuser1;
+
+USE ROLE it_analyst;
+SELECT * FROM hr_db.hr_schema.employees;  -- OK
+-- CREATE TABLE finance_db.fi_schema.temp (id INT);  -- fails</code></pre>
+        </section>
+
+        <section class="section" id="masking">
+          <h2>Column-Level Security</h2>
+          <p>Column-level security controls what values appear in query results at the column grain. Snowflake offers two mechanisms: dynamic data masking inside the platform, and external tokenization for sensitive data stored as tokens.</p>
+
+          <div class="grid-2">
+            <div class="mini-card">
+              <h4>Dynamic Data Masking</h4>
+              <p>Requires <strong>Enterprise edition or higher</strong>. Use masking policies to selectively mask column data at query time based on the viewer's role or other context.</p>
+            </div>
+            <div class="mini-card">
+              <h4>External Tokenization</h4>
+              <p>Tokenization removes sensitive data by replacing it with an undecipherable token. The original value lives outside Snowflake; only authorised detokenisation reveals it.</p>
+            </div>
+          </div>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-244-masking.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-244-masking.png" alt="Dynamic data masking diagram: a masking policy attached to a column evaluates the querying role and returns either the real value or a masked substitute" loading="lazy" width="1920" height="1080">
+            </a>
+            <figcaption><span class="slide-no">Slide 244</span>Masking policies attach to columns and evaluate at query time — no duplicate tables required.</figcaption>
+          </figure>
+
+          <h3>Dynamic Data Masking</h3>
+          <p>A <strong>masking policy</strong> is a reusable function attached to a column. At query time Snowflake evaluates the viewer's role (or other context) and returns either the real value or a masked substitute — without creating duplicate tables.</p>
+
+          <div class="diagram" role="img" aria-label="Masking policy flow from query through policy to masked or clear result">
+            <p class="muted" style="text-align:center;margin:0 0 14px;font-size:.85rem;">Masking at query time</p>
+            <div class="flow">
+              <div class="node">User runs SELECT</div>
+              <span class="arrow" aria-hidden="true">→</span>
+              <div class="node pulse">Masking policy</div>
+              <span class="arrow" aria-hidden="true">→</span>
+              <div class="node">Clear or masked value</div>
+            </div>
+          </div>
+
+          <ul>
+            <li>Create with <code>CREATE MASKING POLICY … AS (val) RETURNS …</code></li>
+            <li>Attach with <code>ALTER TABLE … MODIFY COLUMN … SET MASKING POLICY …</code></li>
+            <li>Inspect attachments via <code>TABLE(INFORMATION_SCHEMA.POLICY_REFERENCES(…))</code></li>
+            <li>Update body with <code>ALTER MASKING POLICY … SET BODY -&gt;</code> (different syntax than CREATE)</li>
+            <li>Detach before drop: <code>ALTER TABLE … UNSET MASKING POLICY</code></li>
+          </ul>
+
+          <p class="muted">Course file: <code>Access Control/Data Masking.txt</code></p>
+          <pre><code>CREATE OR REPLACE TABLE cust (
+  id INT,
+  name VARCHAR(255),
+  email VARCHAR(255),
+  credit_card_number VARCHAR(255)
+);
+
+CREATE OR REPLACE MASKING POLICY cc_mask AS (val STRING) RETURNS STRING -&gt;
+  CASE
+    WHEN CURRENT_ROLE() IN ('ACCOUNTADMIN') THEN val
+    ELSE '************'
+  END;
+
+ALTER TABLE cust MODIFY COLUMN credit_card_number SET MASKING POLICY cc_mask;
+
+SELECT * FROM TABLE(
+  INFORMATION_SCHEMA.POLICY_REFERENCES(POLICY_NAME =&gt; 'CC_MASK')
+);
+
+USE ROLE &lt;limited_role&gt;;
+SELECT * FROM cust;  -- credit_card masked</code></pre>
+
+          <div class="callout danger">
+            <strong>Security note:</strong> Masking is not encryption. Users with raw stage access, EXPORT privileges, or ability to create unmasked copies can bypass masking if RBAC is too broad. Combine masking with least-privilege roles.
+          </div>
+        </section>
+
+        <section class="section" id="row-access">
+          <h2>Row Access Policies</h2>
+          <p><strong>Row access policies</strong> (course title: Row Level Security) return TRUE or FALSE per row. If FALSE, the row is hidden from that user's query result — even if they have SELECT on the table. Requires <strong>Enterprise edition or higher</strong>.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-249-row-access.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-249-row-access.png" alt="Row access policy diagram: a table with Sales, Marketing, and IT department rows filtered so each role sees only its own department's rows" loading="lazy" width="1920" height="1080">
+            </a>
+            <figcaption><span class="slide-no">Slide 249</span>Row access policies hide entire rows — Sales, Marketing, and IT each see only their department's data.</figcaption>
+          </figure>
+
+          <p>The deck's worked illustration uses three departments — <strong>Sales</strong>, <strong>Marketing</strong>, and <strong>IT</strong> — on one table. A row access policy keyed on the <code>department</code> column ensures each role sees only rows matching its department. The lab below implements the same pattern with a mapping table.</p>
+
+          <div class="analogy">
+            <strong>Everyday analogy — floor access in a building:</strong> Your badge (role) opens only certain floors. Row access is the elevator logic: you may enter the building (SELECT granted), but you only see floors on your access list.
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Feature</th><th>Masking policy</th><th>Row access policy</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Granularity</td>
+                  <td>Column values transformed</td>
+                  <td>Entire rows included or excluded</td>
+                </tr>
+                <tr>
+                  <td>Returns</td>
+                  <td>Masked string/number/etc.</td>
+                  <td>BOOLEAN (visible or not)</td>
+                </tr>
+                <tr>
+                  <td>Typical use</td>
+                  <td>Hide SSN, email, salary amount</td>
+                  <td>Multi-tenant, department, region isolation</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p class="muted">Course file: <code>Access Control/ROW LEVEL ACCESS.txt</code></p>
+          <pre><code>CREATE OR REPLACE TABLE cust_row (
+  id INT,
+  name VARCHAR(255),
+  email VARCHAR(255),
+  department VARCHAR(255)
+);
+
+CREATE OR REPLACE TABLE mapping_tab (
+  curr_role VARCHAR(255),
+  dept VARCHAR(255)
+);
+
+INSERT INTO mapping_tab VALUES
+  ('DUMMY_SALES', 'Sales'),
+  ('DUMMY_MARK', 'Marketing'),
+  ('DUMMY_IT', 'IT');
+
+CREATE OR REPLACE ROW ACCESS POLICY dept_policy
+  AS (department VARCHAR) RETURNS BOOLEAN -&gt;
+    CURRENT_ROLE() = 'ACCOUNTADMIN'
+    OR EXISTS (
+      SELECT 1 FROM mapping_tab m
+      WHERE m.curr_role = CURRENT_ROLE()
+        AND m.dept = department
+    );
+
+ALTER TABLE cust_row ADD ROW ACCESS POLICY dept_policy ON (department);
+
+USE ROLE dummy_sales;
+SELECT * FROM cust_row;  -- expect Sales row only</code></pre>
+
+          <div class="callout warn">
+            <strong>Common mistake:</strong> Dropping a policy while still attached to a column or table fails. Always <code>UNSET</code> / <code>DROP ROW ACCESS POLICY</code> from every object first.
+          </div>
+
+          <h4>Cleanup</h4>
+          <pre><code>ALTER TABLE IF EXISTS cust MODIFY COLUMN credit_card_number UNSET MASKING POLICY;
+ALTER TABLE IF EXISTS cust_row DROP ROW ACCESS POLICY dept_policy;
+DROP MASKING POLICY IF EXISTS cc_mask;
+DROP ROW ACCESS POLICY IF EXISTS dept_policy;
+DROP DATABASE IF EXISTS demo_db CASCADE;</code></pre>
+        </section>
+
+        <section class="section" id="mistakes">
+          <h2>Common Mistakes</h2>
+          <ul>
+            <li>Granting <code>ACCOUNTADMIN</code> widely — use functional roles and least privilege.</li>
+            <li>Leaving objects owned by <code>PUBLIC</code> — effectively visible to everyone.</li>
+            <li>Forgetting <code>USAGE</code> on database/schema before table <code>SELECT</code>.</li>
+            <li>Assuming secondary roles are off by default — unset <code>DEFAULT_SECONDARY_ROLES</code> now means <code>('ALL')</code> at login.</li>
+            <li>Confusing <code>USE SECONDARY ROLES NONE</code> with a user property — login default with no secondaries is <code>DEFAULT_SECONDARY_ROLES = ()</code>.</li>
+            <li>Assuming masking replaces RBAC — users who own the table can still see raw data paths.</li>
+            <li>Embedding passwords in worksheets or using course demo passwords.</li>
+          </ul>
+        </section>
+
+        <section class="section" id="interview">
+          <h2>Interview questions</h2>
+          <p class="muted">Try to answer each one before opening it.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+            <details class="qa">
+              <summary>How do discretionary access control and role-based access control work together in Snowflake?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>Snowflake combines both models. <strong>DAC</strong> means every securable object has an owner who can grant privileges on it. <strong>RBAC</strong> means privileges attach to roles, and roles attach to users — you grant to job titles, not individuals. Default stance is deny unless granted. In practice, object owners (often via <code>SYSADMIN</code>) create objects and grant privileges to access roles; functional roles receive those access roles up the hierarchy.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What are the system-defined roles and what is the difference between USERADMIN and SECURITYADMIN?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p><code>ORGADMIN</code> manages organisation-level accounts and regions. <code>ACCOUNTADMIN</code> is the top account role, parenting both <code>SECURITYADMIN</code> and <code>SYSADMIN</code>. <code>SECURITYADMIN</code> manages grants globally and inherits <code>USERADMIN</code> — it is for privilege governance. <code>USERADMIN</code> has <code>CREATE USER</code> and <code>CREATE ROLE</code> only. <code>SYSADMIN</code> creates warehouses, databases, and most objects. <code>PUBLIC</code> is on every user automatically. USERADMIN creates identities; SECURITYADMIN wires them to data through grants.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Why should SYSADMIN own objects, and what is an orphaned role?<span class="qa-tag">Scenario</span></summary>
+              <div class="qa-body">
+                <p>Custom production roles should be granted to <code>SYSADMIN</code> in the hierarchy so administrators inherit them and can manage lifecycle. If a role is granted only to a single user and that user leaves, or never parented under SYSADMIN, it becomes <strong>orphaned</strong> — hard to discover and govern. Objects created under a user's personal role instead of a team role create the same problem. Always grant custom roles up to SYSADMIN (or an appropriate parent) and use functional/access role patterns.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How does privilege inheritance flow through a role hierarchy?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>Roles can be granted to other roles: <code>GRANT ROLE analyst TO ROLE sysadmin</code>. When a user assumes a parent role, they inherit all privileges from every child role granted below it in the hierarchy. Privileges do not flow downward — granting SYSADMIN to analyst does not give analyst SYSADMIN powers. Inspect effective access with <code>SHOW GRANTS TO ROLE role_name</code> and <code>SHOW GRANTS TO USER u</code>.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Why do users fail with "insufficient privileges" even after GRANT SELECT on a table?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p>You almost always forgot <code>USAGE</code> on the parent database and schema. Snowflake requires the privilege chain: <code>USAGE</code> on database, <code>USAGE</code> on schema, then <code>SELECT</code> on the table — plus <code>USAGE</code> on a warehouse to run queries. Grant all three levels explicitly:</p>
+                <pre><code>GRANT USAGE ON DATABASE dummy TO ROLE dummy_role;
+GRANT USAGE ON SCHEMA dummy.dummy_sc ON ROLE dummy_role;
+GRANT SELECT ON TABLE dummy.dummy_sc.cust_det TO ROLE dummy_role;</code></pre>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What is the difference between future grants and GRANT … ON ALL?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p><code>GRANT SELECT ON ALL TABLES IN SCHEMA s TO ROLE r</code> applies to objects that <strong>already exist</strong> at grant time. <code>GRANT SELECT ON FUTURE TABLES IN SCHEMA s TO ROLE r</code> applies to tables <strong>created later</strong>. You often need both — ALL for the current inventory, FUTURE for ongoing automation. Neither retroactively applies the other direction; new tables after an ALL grant still need a FUTURE grant to inherit automatically.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How do you transfer ownership and what REVOKE do you also need?<span class="qa-tag">Scenario</span></summary>
+              <div class="qa-body">
+                <p>Use <code>GRANT OWNERSHIP ON TABLE t TO ROLE new_owner REVOKE CURRENT GRANTS</code> to transfer ownership and optionally strip existing grants in one step. Without <code>REVOKE CURRENT GRANTS</code>, the old owner's grants may remain. The new owner can then re-grant as needed. For managed access schemas, only the schema owner (or holders of <code>MANAGE GRANTS</code>) can grant on objects inside — preventing object owners from over-sharing.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How do database roles differ from account roles, and why do they matter for sharing?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>Database roles are scoped to a single database — created with <code>CREATE DATABASE ROLE reader</code> inside that DB. Privileges are granted to <code>DATABASE ROLE study_security.reader</code>, then the database role is granted to an account role: <code>GRANT DATABASE ROLE study_security.reader TO ROLE data_reader</code>. They limit admin blast radius within one database and align with share boundaries — you can package database-scoped reader access without exposing account-wide privileges. Database roles cannot be granted across databases.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What problem do secondary roles solve, and what changed with DEFAULT_SECONDARY_ROLES?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p>Secondary roles let a user combine privileges from multiple roles in one session without switching primary role — e.g. join finance customers with sales orders via <code>USE SECONDARY ROLES role_sales</code>. Since the behaviour change, unset <code>DEFAULT_SECONDARY_ROLES</code> now defaults to <code>('ALL')</code> at login — all granted roles are active. To restrict at login, set <code>ALTER USER u SET DEFAULT_SECONDARY_ROLES = ()</code>. For the current session only, use <code>USE SECONDARY ROLES NONE</code>.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Explain the functional role versus access role design pattern.<span class="qa-tag">Scenario</span></summary>
+              <div class="qa-body">
+                <p><strong>Access roles</strong> describe what can be done on specific data — e.g. <code>DB_FI_RW</code> (read/write on finance), <code>DB_HR_R</code> (read-only on HR). <strong>Functional roles</strong> describe who in the org — e.g. <code>IT_ANALYST</code>, <code>IT_DEV</code>. Grant access roles to functional roles: <code>GRANT ROLE db_hr_r TO ROLE it_analyst</code>. Users receive one functional role at login and inherit the right data access without a grant per person per table. Keeps RBAC auditable as teams and databases grow.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How do masking policies work, including conditional-column forms?<span class="qa-tag">Security</span></summary>
+              <div class="qa-body">
+                <p>A masking policy is a reusable function attached to a column. At query time Snowflake evaluates the viewer's context (typically <code>CURRENT_ROLE()</code>) and returns the real value or a substitute. Create with <code>CREATE MASKING POLICY cc_mask AS (val STRING) RETURNS STRING -&gt; CASE WHEN CURRENT_ROLE() IN ('ACCOUNTADMIN') THEN val ELSE '************' END</code>, attach with <code>ALTER TABLE t MODIFY COLUMN col SET MASKING POLICY cc_mask</code>. Conditional-column variants can mask only when another column meets a condition — useful for partial redaction. Requires Enterprise edition or higher. Masking is not encryption — users with raw stage access or broad ownership can bypass it if RBAC is too loose.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How do row access policies work, and in what order do masking and row access apply?<span class="qa-tag">Security</span></summary>
+              <div class="qa-body">
+                <p>Row access policies return BOOLEAN per row — FALSE hides the entire row even if SELECT is granted. A mapping-table pattern joins <code>CURRENT_ROLE()</code> to allowed departments via <code>EXISTS (SELECT 1 FROM mapping_tab m WHERE m.curr_role = CURRENT_ROLE() AND m.dept = department)</code>. Attach with <code>ALTER TABLE t ADD ROW ACCESS POLICY p ON (department)</code>. <strong>Row access is evaluated first</strong> — ineligible rows are removed before masking runs on remaining rows. Both require Enterprise+. Always unset policies before dropping them.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What is the difference between dynamic data masking and external tokenization?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p><strong>Dynamic data masking</strong> (Enterprise+) attaches a policy to a column inside Snowflake. At query time the policy evaluates the viewer's role and returns either the real value or a masked substitute — the underlying data stays in Snowflake. <strong>External tokenization</strong> replaces sensitive values with undecipherable tokens; the original data is removed and stored outside Snowflake. Tokenization is stronger for data that should never exist in clear text in the warehouse. Masking is simpler for role-based redaction of values that authorised roles still need to see.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>When would you choose a database role over an account role?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>Use an <strong>account role</strong> when privileges must span multiple databases — e.g. a platform admin who creates warehouses and manages grants account-wide. Use a <strong>database role</strong> when privileges should be confined to one database and its objects — e.g. a reader role for a shared analytics database. Grant privileges to <code>DATABASE ROLE db.reader</code> inside that database, then grant the database role to an account role. Database roles limit blast radius and align with share boundaries. They cannot be granted across databases.</p>
+              </div>
+            </details>
+          </div>
+        </section>
+
+        <section class="section" id="practice">
+          <h2>Hands-on practice</h2>
+          <p class="muted">Run these in a trial account on an X-Small warehouse with <code>AUTO_SUSPEND = 60</code>. Clean up when you finish.</p>
+          <ol class="practice-list">
+            <li class="practice">
+              <p class="practice-task">Recreate the access-control framework lab: database <code>dummy</code>, schema <code>dummy_sc</code>, table <code>cust_det</code>, role <code>dummy_role</code>, and user <code>user1</code>. Grant USAGE on database, schema, warehouse, and SELECT on the table plus a future-table grant. Verify with <code>SHOW GRANTS TO ROLE dummy_role</code>.</p>
+              <p class="practice-expect"><code>SHOW GRANTS TO ROLE dummy_role</code> lists USAGE on database, schema, warehouse, SELECT on <code>cust_det</code>, and SELECT on future tables in the schema.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">SQL</span></summary>
+                <div class="qa-body">
+<pre><code>USE ROLE SYSADMIN;
+CREATE OR REPLACE DATABASE dummy;
+USE DATABASE dummy;
+CREATE OR REPLACE SCHEMA dummy_sc;
+CREATE OR REPLACE TABLE dummy.dummy_sc.cust_det (id INT, name VARCHAR(255));
+
+USE ROLE USERADMIN;
+CREATE USER IF NOT EXISTS user1 PASSWORD='&lt;STRONG_TEMP_PASSWORD&gt;' MUST_CHANGE_PASSWORD = TRUE;
+
+USE ROLE SECURITYADMIN;
+CREATE OR REPLACE ROLE dummy_role;
+GRANT ROLE dummy_role TO USER user1;
+GRANT USAGE ON DATABASE dummy TO ROLE dummy_role;
+GRANT USAGE ON SCHEMA dummy.dummy_sc TO ROLE dummy_role;
+GRANT SELECT ON TABLE dummy.dummy_sc.cust_det TO ROLE dummy_role;
+GRANT USAGE ON WAREHOUSE COMPUTE_WH TO ROLE dummy_role;
+GRANT SELECT ON FUTURE TABLES IN SCHEMA dummy.dummy_sc TO ROLE dummy_role;
+GRANT ROLE dummy_role TO ROLE sysadmin;
+
+SHOW GRANTS TO ROLE dummy_role;</code></pre>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Build a two-level role hierarchy: <code>dummy_role</code> with access to one schema, <code>dummy_role2</code> granted <code>dummy_role</code> and access to a second schema. Grant <code>dummy_role2</code> to SYSADMIN and to your user, then switch to <code>dummy_role2</code> and confirm inherited privileges.</p>
+              <p class="practice-expect">As <code>dummy_role2</code>, you can reach objects in both schemas because child-role privileges inherit upward through the grant chain.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">SQL</span></summary>
+                <div class="qa-body">
+<pre><code>USE ROLE SECURITYADMIN;
+
+CREATE OR REPLACE ROLE dummy_role2;
+GRANT ROLE dummy_role TO ROLE dummy_role2;
+GRANT ROLE dummy_role2 TO ROLE sysadmin;
+GRANT ROLE dummy_role2 TO USER &lt;your_user&gt;;
+
+USE ROLE dummy_role2;
+SHOW GRANTS TO ROLE dummy_role2;</code></pre>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Create database <code>demo_db</code> with schemas <code>demo_fin</code> and <code>demo_sales</code>, roles <code>role_fin</code> and <code>role_sales</code>, and demonstrate secondary roles by joining customers to orders.</p>
+              <p class="practice-expect">With primary role <code>role_fin</code> and <code>USE SECONDARY ROLES NONE</code>, the cross-schema join fails. With <code>USE SECONDARY ROLES role_sales</code>, the join returns matching rows.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">SQL</span></summary>
+                <div class="qa-body">
+<pre><code>USE ROLE ACCOUNTADMIN;
+CREATE OR REPLACE DATABASE demo_db;
+CREATE OR REPLACE SCHEMA demo_db.demo_fin;
+CREATE OR REPLACE SCHEMA demo_db.demo_sales;
+CREATE OR REPLACE TABLE demo_db.demo_fin.customers (c_custkey INT, c_name STRING);
+CREATE OR REPLACE TABLE demo_db.demo_sales.orders (o_orderkey INT, o_custkey INT, o_totalprice NUMBER(10,2));
+INSERT INTO demo_db.demo_fin.customers VALUES (1, 'Alice');
+INSERT INTO demo_db.demo_sales.orders VALUES (100, 1, 99.99);
+
+USE ROLE SECURITYADMIN;
+CREATE OR REPLACE ROLE role_fin;
+CREATE OR REPLACE ROLE role_sales;
+GRANT USAGE ON DATABASE demo_db TO ROLE role_fin;
+GRANT USAGE ON SCHEMA demo_db.demo_fin TO ROLE role_fin;
+GRANT SELECT ON TABLE demo_db.demo_fin.customers TO ROLE role_fin;
+GRANT USAGE ON DATABASE demo_db TO ROLE role_sales;
+GRANT USAGE ON SCHEMA demo_db.demo_sales TO ROLE role_sales;
+GRANT SELECT ON TABLE demo_db.demo_sales.orders TO ROLE role_sales;
+GRANT ROLE role_fin TO USER &lt;your_user&gt;;
+GRANT ROLE role_sales TO USER &lt;your_user&gt;;
+
+USE ROLE role_fin;
+USE SECONDARY ROLES role_sales;
+SELECT c.c_custkey, c.c_name, o.o_orderkey, o.o_totalprice
+FROM demo_db.demo_fin.customers c
+JOIN demo_db.demo_sales.orders o ON c.c_custkey = o.o_custkey;</code></pre>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Create masking policy <code>cc_mask</code> on a <code>cust</code> table's <code>credit_card_number</code> column. Switch to a limited role and confirm masking; query <code>INFORMATION_SCHEMA.POLICY_REFERENCES</code>.</p>
+              <p class="practice-expect">As ACCOUNTADMIN, credit card numbers appear in clear text. As a limited role, the column shows <code>************</code>. Policy references lists the attachment on <code>credit_card_number</code>.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">SQL</span></summary>
+                <div class="qa-body">
+<pre><code>CREATE OR REPLACE TABLE cust (
+  id INT, name VARCHAR(255), email VARCHAR(255), credit_card_number VARCHAR(255)
+);
+INSERT INTO cust VALUES (1, 'Test', 'test@example.com', '4111111111111111');
+
+CREATE OR REPLACE MASKING POLICY cc_mask AS (val STRING) RETURNS STRING -&gt;
+  CASE WHEN CURRENT_ROLE() IN ('ACCOUNTADMIN') THEN val ELSE '************' END;
+
+ALTER TABLE cust MODIFY COLUMN credit_card_number SET MASKING POLICY cc_mask;
+
+SELECT * FROM TABLE(INFORMATION_SCHEMA.POLICY_REFERENCES(POLICY_NAME =&gt; 'CC_MASK'));</code></pre>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Grant table privileges explicitly: create a role with <code>SELECT</code> only (no <code>DELETE</code> or <code>TRUNCATE</code>) on a test table, then confirm <code>DELETE</code> fails while <code>SELECT</code> succeeds.</p>
+              <p class="practice-expect">The role can read rows but receives an insufficient-privileges error on <code>DELETE</code> and <code>TRUNCATE</code> — demonstrating that privileges are granular, not all-or-nothing.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">SQL</span></summary>
+                <div class="qa-body">
+<pre><code>USE ROLE SECURITYADMIN;
+CREATE OR REPLACE ROLE read_only_demo;
+GRANT SELECT ON TABLE dummy.dummy_sc.cust_det TO ROLE read_only_demo;
+
+USE ROLE read_only_demo;
+SELECT * FROM dummy.dummy_sc.cust_det;  -- OK
+-- DELETE FROM dummy.dummy_sc.cust_det;  -- insufficient privileges</code></pre>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Create row access policy <code>dept_policy</code> on <code>cust_row</code> using mapping table <code>mapping_tab</code>, then drop all lab objects in the correct order.</p>
+              <p class="practice-expect">As role <code>dummy_sales</code>, only rows where <code>department = 'Sales'</code> appear. Cleanup succeeds only after unsetting policies before drops.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">SQL</span></summary>
+                <div class="qa-body">
+<pre><code>CREATE OR REPLACE TABLE cust_row (
+  id INT, name VARCHAR(255), email VARCHAR(255), department VARCHAR(255)
+);
+INSERT INTO cust_row VALUES
+  (1, 'Sales Rep', 's@example.com', 'Sales'),
+  (2, 'Marketer', 'm@example.com', 'Marketing');
+
+CREATE OR REPLACE TABLE mapping_tab (curr_role VARCHAR(255), dept VARCHAR(255));
+INSERT INTO mapping_tab VALUES ('DUMMY_SALES', 'Sales');
+
+CREATE OR REPLACE ROW ACCESS POLICY dept_policy
+  AS (department VARCHAR) RETURNS BOOLEAN -&gt;
+    CURRENT_ROLE() = 'ACCOUNTADMIN'
+    OR EXISTS (
+      SELECT 1 FROM mapping_tab m
+      WHERE m.curr_role = CURRENT_ROLE() AND m.dept = department
+    );
+
+ALTER TABLE cust_row ADD ROW ACCESS POLICY dept_policy ON (department);
+
+-- Cleanup (revoke/unset before drop)
+ALTER TABLE IF EXISTS cust MODIFY COLUMN credit_card_number UNSET MASKING POLICY;
+ALTER TABLE IF EXISTS cust_row DROP ROW ACCESS POLICY dept_policy;
+DROP MASKING POLICY IF EXISTS cc_mask;
+DROP ROW ACCESS POLICY IF EXISTS dept_policy;
+DROP TABLE IF EXISTS cust;
+DROP TABLE IF EXISTS cust_row;
+DROP TABLE IF EXISTS mapping_tab;
+DROP DATABASE IF EXISTS demo_db CASCADE;
+DROP DATABASE IF EXISTS dummy CASCADE;</code></pre>
+                </div>
+              </details>
+            </li>
+          </ol>
+        </section>
+
+        <section class="section" id="recap">
+          <h2>Recap</h2>
+          <div class="recap">
+            <ul class="checklist">
+              <li>DAC + RBAC: object owners grant; privileges attach to roles, roles to users; deny unless granted.</li>
+              <li>Grant patterns: <code>GRANT privilege ON object TO role</code>, <code>GRANT role TO role</code>, <code>GRANT role TO user</code>.</li>
+              <li>Account roles = account-wide; database roles = single database (generally available).</li>
+              <li>Primary role via <code>USE ROLE</code>; secondary roles combine privileges in one session.</li>
+              <li>System roles: ORGADMIN (org ops, no data), ACCOUNTADMIN (limited membership), SECURITYADMIN (grants), SYSADMIN (objects + custom roles), USERADMIN (create users/roles), PUBLIC (pseudo-role).</li>
+              <li>Table privileges are granular: SELECT, TRUNCATE, DELETE, OWNERSHIP, etc.</li>
+              <li>Column security: masking (Enterprise+) masks at query time; tokenization replaces with tokens.</li>
+              <li>Row access hides whole rows by department/tenant (Enterprise+); evaluated before masking.</li>
+              <li>Authentication, network policies, and encryption live in <a href="s11-security-auth.html">Section 11</a>.</li>
+            </ul>
+            <p style="margin-top:1rem;">
+              <button type="button" data-complete="section-10">Mark complete</button>
+            </p>
+          </div>
+        </section>
+
+      </div>
+
+      <aside class="toc" aria-label="On this page">
+        <strong>On this page</strong>
+        <ol>
+          <li><a href="#lectures">Lectures</a></li>
+          <li><a href="#framework">Framework</a></li>
+          <li><a href="#system-roles">System roles</a></li>
+          <li><a href="#role-hierarchy">Role hierarchy</a></li>
+          <li><a href="#database-roles">Database roles</a></li>
+          <li><a href="#secondary-roles">Secondary roles</a></li>
+          <li><a href="#functional-roles">Functional roles</a></li>
+          <li><a href="#masking">Masking</a></li>
+          <li><a href="#row-access">Row access</a></li>
+          <li><a href="#mistakes">Common mistakes</a></li>
+          <li><a href="#interview">Interview questions</a></li>
+          <li><a href="#practice">Hands-on practice</a></li>
+          <li><a href="#recap">Recap</a></li>
+        </ol>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<footer class="footer">Snowflake COF-C03 Course Notes · Section 10 · Offline study edition</footer>
+</body>
+</html>

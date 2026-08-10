@@ -1,0 +1,1044 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="dbt bootcamp Section 15: analyses folder, pre and post hooks, on-run-start and on-run-end, grants, building a Preset dashboard on mart_fullmoon_reviews, and exposures in the lineage DAG.">
+<title>Section 15 — Analyses, Hooks and Exposures | The Complete dbt Bootcamp Notes</title>
+<link rel="stylesheet" href="assets/dbt.css">
+<script defer src="assets/search-index.js"></script>
+<script defer src="assets/code-highlight.js"></script>
+<script defer src="assets/dbt.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">Course section 15 of 22 · The Complete dbt Bootcamp: Zero to Hero</p>
+    <h1>Analyses, Hooks and Exposures</h1>
+    <p class="subtitle">Version-controlled ad-hoc SQL that compiles but never materialises, run-level and model-level hooks for audit logging and housekeeping, warehouse grants applied on build, a Preset dashboard wired to Snowflake, and exposures that extend the lineage graph to downstream consumers.</p>
+    <div class="hero-meta">
+      <span class="chip">7 lectures · ~35min</span>
+      <span class="chip">Preset dashboard</span>
+      <span class="chip">exposures in the DAG</span>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <nav class="pager" aria-label="Section navigation">
+    <a href="s14-documentation.html">← Documentation</a>
+    <a href="index.html">Course contents</a>
+    <a href="s16-debugging-logging.html">Next: Debugging and Logging →</a>
+  </nav>
+
+  <main id="main">
+    <div class="layout">
+      <div class="content">
+
+        <section class="section" id="lectures">
+          <h2>Lectures in this section</h2>
+          <p class="muted">Seven lectures span roughly 35 minutes. They add the <code>analyses/</code> folder, hook and grant configuration in <code>dbt_project.yml</code>, a live BI connection through Preset, and an exposure YAML file that links models to a dashboard URL in the docs lineage graph.</p>
+          <ol class="lecture-list">
+            <li class="lecture">
+              <a class="lec-title" href="#analyses">The analyses folder and what analyses are for</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">course-resources.md · Analyses</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#analyses">full_moon_no_sleep.sql and dbt compile</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">analyses/full_moon_no_sleep.sql</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#hooks">Pre-hooks and post-hooks on models</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">dbt_project.yml · +post-hook</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#hooks">on-run-start and on-run-end</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">dbt_project.yml · on-run-start</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#grants">Grants applied on model build</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">dbt_project.yml · +grants</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#preset-dashboard">Building a dashboard in Preset</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">course-resources.md · Preset · mart_fullmoon_reviews</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#exposures">Declaring exposures and the DAG</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">models/dashboards.yml</span>
+            </li>
+          </ol>
+          <p class="muted"><a href="s14-documentation.html">Section 14</a> showed how the lineage graph renders models and sources. This section adds the right-hand side: a declared dashboard exposure pointing at <code>dim_listings_w_hosts</code> and <code>mart_fullmoon_reviews</code>, so impact analysis includes BI consumers. <a href="s09-seeds-sources.html">Section 9</a> built <code>mart_fullmoon_reviews</code>; the analysis here aggregates it by full-moon flag and sentiment. Together, analyses, hooks, grants, Preset, and exposures close the loop from ad-hoc SQL through governed builds to documented downstream dashboards.</p>
+        </section>
+
+        <section class="section" id="analyses">
+          <h2>Analyses</h2>
+          <p class="lead">An analysis is a <code>.sql</code> file under <code>analyses/</code> that dbt parses, compiles with Jinja, and stores in the project graph &mdash; but never runs or materialises in the warehouse during <code>dbt run</code>. It is version-controlled ad-hoc SQL: the exploratory query you would paste into a worksheet, kept next to the models it references.</p>
+
+          <p>Models create relations. Analyses do not. That distinction matters for cost, scheduling, and CI: <code>dbt run</code> and <code>dbt build</code> skip analyses entirely. You execute the compiled SQL yourself in the warehouse UI, a notebook, or a BI tool after reviewing what dbt generated.</p>
+
+          <div class="filetree">
+            <ul>
+              <li><span class="dir">airbnb/</span>
+                <ul>
+                  <li><span class="dir">analyses/</span> <span class="new">&larr; analysis-paths in dbt_project.yml</span>
+                    <ul>
+                      <li><span class="file">full_moon_no_sleep.sql</span> <span class="note">ad-hoc aggregation on mart_fullmoon_reviews</span></li>
+                    </ul>
+                  </li>
+                  <li><span class="dir">models/</span>
+                    <ul>
+                      <li><span class="dir">mart/</span>
+                        <ul>
+                          <li><span class="file">mart_fullmoon_reviews.sql</span> <span class="note">upstream ref() target</span></li>
+                        </ul>
+                      </li>
+                    </ul>
+                  </li>
+                  <li><span class="file">dbt_project.yml</span> <span class="note">analysis-paths: ["analyses"]</span></li>
+                </ul>
+              </li>
+            </ul>
+          </div>
+
+          <h3>What analyses are not</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Resource</th><th>Materialises in warehouse</th><th>Runs on dbt run</th><th>Uses ref()</th><th>Typical use</th></tr></thead>
+              <tbody>
+                <tr><td>Model</td><td>Yes (table/view/incremental)</td><td>Yes</td><td>Yes</td><td>Production datasets</td></tr>
+                <tr><td>Analysis</td><td>No</td><td>No</td><td>Yes</td><td>Exploratory SQL, one-off investigations</td></tr>
+                <tr><td>Seed</td><td>Yes (loaded table)</td><td>On seed/run</td><td>N/A</td><td>Static reference CSVs</td></tr>
+                <tr><td>Singular test</td><td>No (query only)</td><td>On test</td><td>Yes</td><td>Assert rows meet a rule</td></tr>
+                <tr><td>Ephemeral model</td><td>No (inlined CTE)</td><td>Yes (as dependency)</td><td>Yes</td><td>Shared staging logic</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout info"><strong>BigQuery and Postgres behave the same at the dbt layer.</strong> Analyses compile to SQL strings under <code>target/compiled/</code> regardless of adapter. The course uses Snowflake; on BigQuery the compiled path is still <code>target/compiled/airbnb/analyses/</code>, and you paste the result into the BigQuery console.</div>
+
+          <h3>full_moon_no_sleep.sql</h3>
+          <p>The course hypothesis (stated tongue-in-cheek in the lecture title) is whether Airbnb guests leave worse reviews during a full moon. Rather than building a mart for a throwaway question, the instructor adds an analysis that aggregates <code>mart_fullmoon_reviews</code> by <code>is_full_moon</code> and <code>review_sentiment</code>.</p>
+
+<pre data-lang="sql" data-title="analyses/full_moon_no_sleep.sql" data-explain="Real analysis from the course repo: ref() resolves mart_fullmoon_reviews; the GROUP BY produces counts you run manually in the warehouse."><code>WITH fullmoon_reviews AS (
+    SELECT * FROM {{ ref('mart_fullmoon_reviews') }}
+)
+SELECT
+    is_full_moon,
+    review_sentiment,
+    COUNT(*) as reviews
+FROM
+    fullmoon_reviews
+GROUP BY
+    is_full_moon,
+    review_sentiment
+ORDER BY
+    is_full_moon,
+    review_sentiment</code></pre>
+
+          <p>Every construct here is standard dbt SQL: a CTE reading from <code>{{ ref('mart_fullmoon_reviews') }}</code>, then a grouped aggregation. Because <code>mart_fullmoon_reviews</code> already joins reviews to full-moon dates (see <a href="s09-seeds-sources.html">Section 9</a>), the analysis stays thin &mdash; it asks a business question without adding another permanent table.</p>
+
+          <h3>dbt compile and where compiled SQL lives</h3>
+          <p>To see warehouse-ready SQL without executing it, run <code>dbt compile</code>. dbt resolves all Jinja, replaces <code>ref()</code> with fully-qualified relation names for your target, and writes one file per analysis under <code>target/compiled/&lt;project&gt;/analyses/</code>.</p>
+
+<div class="terminal">
+  <p class="term-head">dbt compile</p>
+  <pre class="term-body"><span class="tt-cmd">dbt compile --select full_moon_no_sleep</span>
+<span class="tt-dim">15:08:12  Running with dbt=1.11.12</span>
+<span class="tt-dim">15:08:14  Found 18 models, 1 analysis, 2 seeds, 12 data tests, 2 snapshots, 3 sources</span>
+<span class="tt-ok">15:08:14  Concurrency: 4 threads (target='dev')</span>
+<span class="tt-ok">15:08:15  Compiled node 'full_moon_no_sleep' is:</span>
+<span class="tt-dim">15:08:15  target/compiled/airbnb/analyses/full_moon_no_sleep.sql</span></pre>
+</div>
+
+          <p>Open that file and copy the SQL into Snowflake. You will see <code>ref()</code> replaced with something like <code>AIRBNB.DEV.MART_FULLMOON_REVIEWS</code> (exact casing depends on your database config). The analysis node also appears in <code>manifest.json</code> with resource type <code>analysis</code>, so lineage tools can show the dependency edge even though no relation exists.</p>
+
+          <div class="diagram">
+            <p class="diagram-title">Analysis compile path: parse, compile, manual execute</p>
+            <div class="flow">
+              <div class="node is-model"><b>full_moon_no_sleep.sql</b><small>analyses/</small></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-compute pulse"><b>dbt compile</b><small>Jinja + ref() resolved</small></div>
+              <span class="arrow">&rarr;</span>
+              <div class="node is-store"><b>target/compiled/...</b><small>plain SQL file</small></div>
+              <span class="arrow">&rarr;</span>
+              <div class="node is-serve"><b>Snowflake worksheet</b><small>you run it</small></div>
+            </div>
+          </div>
+
+          <div class="callout tip"><strong>When to use an analysis versus a model.</strong> If the result should refresh on a schedule, be tested, and appear in the DAG as a queryable table, build a model (often a mart). If the SQL is exploratory, tied to a one-time investigation, or a scratchpad for an analyst, use an analysis. Promote to a model when stakeholders ask for it weekly.</div>
+
+          <h3>Storing analysis results without a model</h3>
+          <p>Teams sometimes paste compiled analysis SQL into a worksheet and save results as a CSV for a slide deck. That output is not tracked by dbt. If the investigation recurs, either keep re-running the analysis (cheap when the upstream mart is small) or promote to a model. Avoid creating "temporary" tables by hand in the warehouse without a dbt model to manage them &mdash; they become orphan relations nobody dares drop.</p>
+
+          <h3>Analyses versus singular tests</h3>
+          <p>Both live outside <code>models/</code> and compile without materialising by default, but tests assert something (<code>dbt test</code> fails the run when rows return) while analyses produce a result set for human inspection. The course's <code>tests/dim_listings_minimum_nights.sql</code> from <a href="s11-tests.html">Section 11</a> is a singular test; <code>full_moon_no_sleep.sql</code> is read-only exploration with no pass/fail semantics.</p>
+
+          <h3>Upstream context: mart_fullmoon_reviews</h3>
+          <p>The analysis depends on a mart built in <a href="s09-seeds-sources.html">Section 9</a> that joins fact reviews to a seed of full-moon calendar dates. By Section 15 the mart may be configured as a microbatch incremental model in the custom <code>mart</code> schema, but the analysis file does not change &mdash; <code>ref('mart_fullmoon_reviews')</code> always resolves to whatever relation dbt currently builds.</p>
+
+<pre data-lang="sql" data-title="models/mart/mart_fullmoon_reviews.sql (excerpt)" data-explain="The mart adds is_full_moon by left joining seed_full_moon_dates; the analysis aggregates this column."><code>WITH fct_reviews AS (
+    SELECT * FROM {{ ref('fct_reviews') }}
+),
+full_moon_dates AS (
+    SELECT * FROM {{ ref('seed_full_moon_dates') }}
+)
+
+SELECT
+  r.*,
+  CASE
+    WHEN fm.full_moon_date IS NULL THEN 'not full moon'
+    ELSE 'full moon'
+  END AS is_full_moon
+FROM
+  fct_reviews r
+  LEFT JOIN full_moon_dates fm
+  ON (TO_DATE(r.review_date) = DATEADD(DAY, 1, fm.full_moon_date))</code></pre>
+
+          <p>The join uses <code>DATEADD(DAY, 1, fm.full_moon_date)</code> because the seed stores the astronomical full-moon instant while reviews are dated on the calendar day guests checked out. The analysis does not need to know that detail &mdash; it reads the finished <code>is_full_moon</code> label. That separation is deliberate: business rules live in the mart; the analysis asks a question on top.</p>
+
+          <h3>Selecting and listing analyses</h3>
+          <p>Analyses participate in the selector syntax from <a href="s17-selectors-commands.html">Section 17</a> with resource type <code>analysis</code>. Useful commands during development:</p>
+
+<div class="terminal">
+  <p class="term-head">Analysis CLI commands</p>
+  <pre class="term-body"><span class="tt-cmd">dbt ls --resource-type analysis</span>
+<span class="tt-dim">full_moon_no_sleep</span>
+
+<span class="tt-cmd">dbt compile --select full_moon_no_sleep</span>
+<span class="tt-ok">Compiled node 'full_moon_no_sleep'</span>
+
+<span class="tt-cmd">dbt list --select analysis:*</span>
+<span class="tt-dim">Lists every file under analyses/</span></pre>
+</div>
+
+          <p><code>dbt run --select full_moon_no_sleep</code> does nothing useful for an analysis &mdash; there is no node to materialise. If you accidentally include analyses in a large <code>dbt build</code> selector union, dbt skips them without error. They still appear in <code>manifest.json</code> under <code>nodes</code> with keys like <code>analysis.airbnb.full_moon_no_sleep</code>, which external catalog tools can ingest for dependency tracking even when the SQL never ran.</p>
+
+          <div class="analogy"><strong>Everyday analogy &mdash;</strong> a model is a recipe the kitchen cooks every night; an analysis is a recipe card in the binder for when the chef wants to experiment on a slow Tuesday. The ingredients (<code>ref()</code> targets) are the same; only the commitment to serving it nightly differs.</div>
+        </section>
+
+        <section class="section" id="hooks">
+          <h2>Hooks</h2>
+          <p class="lead">Hooks are SQL (or macro calls) dbt executes at defined points in a run: before or after individual models, or once at the start or end of the entire invocation. The course uses them to create an audit log table and insert one row per model built &mdash; a pattern teams extend for grants, logging, and housekeeping.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Hook</th><th>Scope</th><th>When it runs</th><th>Typical use</th></tr></thead>
+              <tbody>
+                <tr><td><code>pre-hook</code></td><td>Single model</td><td>Before the model's main DDL/DML</td><td>Truncate staging, set session vars, acquire locks</td></tr>
+                <tr><td><code>post-hook</code></td><td>Single model</td><td>After the model succeeds</td><td>Audit rows, secondary indexes, ANALYZE</td></tr>
+                <tr><td><code>on-run-start</code></td><td>Entire invocation</td><td>Once before any model</td><td>Create scratch tables, log run start</td></tr>
+                <tr><td><code>on-run-end</code></td><td>Entire invocation</td><td>Once after all models (success or partial)</td><td>Notify Slack, vacuum, aggregate run stats</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>on-run-start: create the audit table</h3>
+          <p>The course adds a project-level <code>on-run-start</code> hook in <code>dbt_project.yml</code> that creates an <code>audit_log</code> table in the target schema if it does not exist. This runs once at the beginning of every <code>dbt run</code>, <code>dbt build</code>, or any command that executes models.</p>
+
+<pre data-lang="yaml" data-title="dbt_project.yml (on-run-start)" data-explain="Runs before any model; {{ target.schema }} resolves to your dev or prod schema. Jinja in the SQL string is rendered at compile time."><code>on-run-start:
+  - "CREATE TABLE IF NOT EXISTS {{ target.schema }}.audit_log ( model_name STRING, run_timestamp TIMESTAMP )"</code></pre>
+
+          <p>The hook is a list of strings, each treated as a SQL statement (or macro invocation). dbt sends them to the warehouse in order. Using <code>IF NOT EXISTS</code> makes the hook idempotent: the second run does not fail if the table is already there.</p>
+
+          <div class="callout warn"><strong>on-run-start runs even when you select one model.</strong> Any invocation that builds models triggers it. Keep start hooks lightweight &mdash; a heavy scan here adds latency to every partial run.</div>
+
+          <h3>post-hook: log each model name</h3>
+          <p>Under <code>models.airbnb</code>, the course sets a <code>+post-hook</code> that inserts into <code>audit_log</code> after every model in the project succeeds. The <code>+</code> prefix merges this config with folder-level and model-level settings.</p>
+
+<pre data-lang="yaml" data-title="dbt_project.yml (hooks and grants excerpt)" data-explain="Real excerpt from the course repo after Section 15 changes. post-hook runs after each model; grants apply on build."><code>on-run-start:
+  - "CREATE TABLE IF NOT EXISTS {{ target.schema }}.audit_log ( model_name STRING, run_timestamp TIMESTAMP )"
+
+models:
+  airbnb:
+    +grants:
+      select: ["transform", "reporter"]
+    +post-hook:
+      - "INSERT INTO {{ target.schema }}.audit_log VALUES ('{{ this }}', CURRENT_TIMESTAMP)"
+    +materialized: view
+    dim:
+      +materialized: table
+    src:
+      +materialized: ephemeral
+    fct:
+      +tags: ['fact']</code></pre>
+
+          <p><code>{{ this }}</code> inside a post-hook resolves to the relation identifier of the model that just finished &mdash; the same object you would reference when configuring incremental strategies. Each successful model append one audit row with its name and a timestamp.</p>
+
+<div class="terminal">
+  <p class="term-head">dbt run (audit side effect)</p>
+  <pre class="term-body"><span class="tt-cmd">dbt run --select dim_listings_cleansed</span>
+<span class="tt-dim">15:22:01  Running with dbt=1.11.12</span>
+<span class="tt-dim">15:22:02  1 of 1 START sql table model DEV.dim_listings_cleansed .............. [RUN]</span>
+<span class="tt-ok">15:22:04  1 of 1 OK created sql table model DEV.dim_listings_cleansed .......... [SUCCESS 1 in 1.84s]</span>
+<span class="tt-ok">15:22:04  Completed successfully</span></pre>
+</div>
+
+          <p>After this run, querying <code>SELECT * FROM &lt;your_schema&gt;.audit_log ORDER BY run_timestamp DESC</code> shows a row for <code>dim_listings_cleansed</code>. Failed models do not run post-hooks on the failed step &mdash; dbt stops the model's hook chain when the main statement errors.</p>
+
+          <h3>Pre-hooks and on-run-end</h3>
+          <p>The course focuses on <code>on-run-start</code> and <code>post-hook</code>, but the same mechanics apply to <code>pre-hook</code> (list under a model or folder config) and <code>on-run-end</code> (project-level list like <code>on-run-start</code>). Common production patterns:</p>
+
+          <ul>
+            <li><strong>pre-hook</strong> &mdash; <code>DELETE FROM staging WHERE load_date = CURRENT_DATE</code> before reloading a daily staging model.</li>
+            <li><strong>post-hook</strong> &mdash; <code>GRANT SELECT ON {{ this }} TO ROLE analyst</code> when adapter-native grants are not used (prefer the grants config when supported).</li>
+            <li><strong>on-run-start</strong> &mdash; create temp tables, set warehouse size via session parameter (adapter-specific).</li>
+            <li><strong>on-run-end</strong> &mdash; insert a summary row into an operations table with <code>run_started_at</code>, model count, and status from <code>run_results</code> via a macro.</li>
+          </ul>
+
+          <div class="diagram">
+            <p class="diagram-title">Hook execution order for one model in a run</p>
+            <div class="flow">
+              <div class="node is-compute"><b>on-run-start</b><small>once per invocation</small></div>
+              <span class="arrow">&rarr;</span>
+              <div class="node is-model"><b>pre-hook</b><small>this model</small></div>
+              <span class="arrow">&rarr;</span>
+              <div class="node is-model pulse"><b>main model SQL</b><small>CREATE TABLE AS...</small></div>
+              <span class="arrow">&rarr;</span>
+              <div class="node is-model"><b>post-hook</b><small>audit INSERT</small></div>
+              <span class="arrow">&rarr;</span>
+              <div class="node is-compute"><b>on-run-end</b><small>after all models</small></div>
+            </div>
+          </div>
+
+          <div class="callout danger"><strong>Hooks run in the same transaction context as the model on some adapters and separately on others.</strong> On Snowflake, a failed post-hook can leave the model built but the hook errored &mdash; read adapter docs before putting business-critical logic only in hooks. Prefer idempotent statements and test hooks in dev first.</div>
+
+          <h3>Hooks as macro calls</h3>
+          <p>Hook entries can invoke macros: <code>- "{{ log_model_run() }}"</code>. That keeps complex logic in <code>macros/</code> and leaves YAML readable. <a href="s16-debugging-logging.html">Section 16</a> expands logging macros; the audit pattern here is the lightweight precursor.</p>
+
+          <h3>Config precedence for hooks</h3>
+          <p>Hooks merge the same way as materialization config. A model file can override project defaults:</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Level</th><th>Example</th><th>Effect</th></tr></thead>
+              <tbody>
+                <tr><td>Project root</td><td><code>on-run-start:</code> in <code>dbt_project.yml</code></td><td>Every model invocation in the project</td></tr>
+                <tr><td>Folder</td><td><code>models.airbnb.mart.+post-hook</code></td><td>Only marts get the hook</td></tr>
+                <tr><td>Model SQL</td><td><code>{{ config(post_hook=[...]) }}</code></td><td>Overrides or appends per model file</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>Multiple hooks in a list run sequentially. If both project and model define <code>post-hook</code>, dbt merges lists unless the model uses a config that replaces rather than extends &mdash; check the docs for your dbt version when mixing <code>+post-hook</code> (append) with inline <code>config(post_hook=...)</code> in SQL.</p>
+
+<pre data-lang="sql" data-title="Pattern: disable post-hook on one model" data-explain="A model can opt out of inherited hooks when audit logging would be noise for ephemeral rebuilds."><code>{{ config(
+  post_hook=[]
+) }}
+
+SELECT * FROM {{ ref('src_listings') }}</code></pre>
+
+          <h3>on-run-end for run summaries</h3>
+          <p>The course does not add <code>on-run-end</code>, but it is the natural place for a single INSERT summarising the whole run instead of one row per model. A macro can read <code>results</code> from the context dbt passes to on-run-end hooks and write aggregate status. That reduces warehouse chatter compared to fifty per-model INSERTs on large projects.</p>
+
+<pre data-lang="yaml" data-title="dbt_project.yml (on-run-end pattern)" data-explain="Illustrative pattern not in the course repo; shows macro-based end hook."><code>on-run-end:
+  - "{{ log_run_summary() }}"</code></pre>
+        </section>
+
+        <section class="section" id="grants">
+          <h2>Grants</h2>
+          <p class="lead">dbt can apply warehouse privileges when it creates or replaces a relation. The course grants <code>SELECT</code> on every model to the <code>transform</code> and <code>reporter</code> roles &mdash; aligning dbt-managed objects with the Snowflake roles set up in Section 6 for the transform pipeline and Preset read access.</p>
+
+<pre data-lang="yaml" data-title="dbt_project.yml (+grants block)" data-explain="Applied when each model is built; dbt emits GRANT statements after CREATE. Role names must exist in Snowflake."><code>models:
+  airbnb:
+    +grants:
+      select: ["transform", "reporter"]</code></pre>
+
+          <p>The <code>+grants</code> config sits beside <code>+materialized</code> under <code>models.airbnb</code>, so all models inherit it unless overridden. Supported keys depend on the adapter; on Snowflake, <code>select</code> maps to <code>GRANT SELECT ON TABLE/VIEW ... TO ROLE ...</code>. The <code>reporter</code> role was created for the Preset service user in the Snowflake setup script:</p>
+
+<pre data-lang="sql" data-title="Snowflake setup (reporter role excerpt)" data-explain="From course-resources.md Section 6: REPORTER role and PRESET user for BI read access."><code>CREATE ROLE REPORTER;
+
+CREATE USER PRESET
+  LOGIN_NAME='preset'
+  TYPE=SERVICE
+  RSA_PUBLIC_KEY="&lt;&lt;Add Your Public Key File's content here&gt;&gt;"
+  DEFAULT_WAREHOUSE='COMPUTE_WH'
+  DEFAULT_ROLE=REPORTER
+  DEFAULT_NAMESPACE='AIRBNB.DEV';
+
+GRANT ROLE REPORTER TO USER PRESET;
+GRANT SELECT ON ALL TABLES IN SCHEMA AIRBNB.DEV to ROLE REPORTER;
+GRANT SELECT ON FUTURE TABLES IN SCHEMA AIRBNB.DEV to ROLE REPORTER;</code></pre>
+
+          <p>Without <code>+grants</code>, new models would inherit only default role ownership (typically the role in your profile). BI users would lack access until someone ran manual GRANTs. Applying grants on build keeps permissions in git next to the model definitions.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Approach</th><th>Pros</th><th>Cons</th></tr></thead>
+              <tbody>
+                <tr><td><code>+grants</code> in dbt_project.yml</td><td>Version controlled; applied every build; per-folder overrides</td><td>Adapter-specific keys; re-grants on every full refresh</td></tr>
+                <tr><td>Snowflake FUTURE GRANTs</td><td>One-time admin setup</td><td>Not in git; easy to drift from dbt project intent</td></tr>
+                <tr><td>post-hook GRANT SQL</td><td>Full SQL flexibility</td><td>Harder to read; duplicates adapter logic</td></tr>
+                <tr><td>IAM / data catalog product</td><td>Central policy</td><td>Outside dbt; may fight dbt grants if both apply</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout info"><strong>BigQuery uses dataset ACLs and IAM, not GRANT ROLE.</strong> dbt-bigquery supports a different grants shape (<code>roles/bigquery.dataViewer</code> etc.). The course pattern is Snowflake-native; translate role names to IAM bindings on BigQuery datasets.</div>
+
+          <h3>Config precedence for grants</h3>
+          <p>Like materialization, grants merge from project &rarr; folder &rarr; model file <code>config()</code>. A sensitive mart can narrow grants in its SQL file while the project default stays broad. If grants seem ignored, check whether the model uses a custom schema macro from <a href="s19-production.html">Section 19</a> &mdash; grants apply to the built relation in that schema.</p>
+
+          <h3>How dbt grants relate to Section 6 Snowflake setup</h3>
+          <p>The bootcamp Snowflake script creates two roles relevant here. <code>TRANSFORM</code> is the dbt developer and CI role with broad DDL rights. <code>REPORTER</code> is read-only for BI. The dbt profile typically uses <code>TRANSFORM</code> (or a personal role with transform privileges) to build models. Preset connects as <code>PRESET</code> user with default role <code>REPORTER</code>.</p>
+
+          <p>When dbt builds a model with <code>+grants: { select: ["transform", "reporter"] }</code>, Snowflake receives GRANT statements after CREATE. That complements the script's <code>GRANT SELECT ON FUTURE TABLES</code> for REPORTER &mdash; dbt grants cover the specific relation immediately, while future grants cover objects created outside dbt. Teams standardise on one mechanism to avoid redundant GRANT churn in query history.</p>
+
+<pre data-lang="yaml" data-title="dbt_project.yml (full models block excerpt)" data-explain="Complete Section 15 project config context: paths, hooks, grants, and folder materializations together."><code>analysis-paths: ["analyses"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+
+on-run-start:
+  - "CREATE TABLE IF NOT EXISTS {{ target.schema }}.audit_log ( model_name STRING, run_timestamp TIMESTAMP )"
+
+models:
+  airbnb:
+    +grants:
+      select: ["transform", "reporter"]
+    +post-hook:
+      - "INSERT INTO {{ target.schema }}.audit_log VALUES ('{{ this }}', CURRENT_TIMESTAMP)"
+    +materialized: view
+    dim:
+      +materialized: table
+    src:
+      +materialized: ephemeral
+    fct:
+      +tags: ['fact']
+data_tests:
+  +store_failures: true
+  +schema: _test_failures</code></pre>
+
+          <div class="callout tip"><strong>Verify grants after your first hooked run.</strong> In Snowflake, run <code>SHOW GRANTS TO ROLE REPORTER</code> or inspect the table's grants. If Preset later returns "insufficient privileges", the fix is almost always a missing SELECT grant or wrong schema in the connection, not the chart definition.</div>
+        </section>
+
+        <section class="section" id="preset-dashboard">
+          <h2>Building a dashboard in Preset</h2>
+          <p class="lead">dbt builds the tables; a BI tool consumes them. The course connects Preset (hosted Apache Superset) to Snowflake using the same credentials as your local profile, then charts <code>mart_fullmoon_reviews</code> to explore full-moon review patterns visually &mdash; the same data the analysis aggregates in SQL.</p>
+
+          <h3>Snowflake credentials for Preset</h3>
+          <p>Preset needs a database connection: account identifier, user, role, warehouse, database, and schema. The instructor copies values from the local dbt profile rather than retyping from memory.</p>
+
+<div class="terminal">
+  <p class="term-head">Read profiles.yml</p>
+  <pre class="term-body"><span class="tt-cmd">cat ~/.dbt/profiles.yml</span>
+<span class="tt-dim"># Mac / Linux / Windows PowerShell</span>
+
+<span class="tt-cmd">type %USERPROFILE%\.dbt\profiles.yml</span>
+<span class="tt-dim"># Windows CMD alternative</span></pre>
+</div>
+
+          <p>From <code>profiles.yml</code>, map fields into Preset's Snowflake connection form: <code>account</code>, <code>user</code> (often the <code>PRESET</code> service user rather than your personal login), <code>role</code> (<code>REPORTER</code>), <code>warehouse</code>, <code>database</code> (<code>AIRBNB</code>), <code>schema</code> (<code>DEV</code> or your target schema). The course uses key-pair auth for the service user; Preset accepts the public key registration matching the Snowflake user definition.</p>
+
+          <h3>Preset workflow (course demonstration)</h3>
+          <ol>
+            <li><strong>Create a Preset workspace</strong> (or use the course trial instance) and add a Snowflake database connection with the reporter credentials.</li>
+            <li><strong>Test the connection</strong> &mdash; Preset runs a lightweight query; failures are usually wrong account URL, role not granted, or missing warehouse usage.</li>
+            <li><strong>Add a dataset</strong> pointing at <code>AIRBNB.&lt;schema&gt;.MART_FULLMOON_REVIEWS</code> (or browse schemas after connection).</li>
+            <li><strong>Create charts</strong> &mdash; for example a bar chart of review counts by <code>is_full_moon</code>, or sentiment breakdown filtered to full-moon nights.</li>
+            <li><strong>Assemble a dashboard</strong> combining listing metrics from <code>dim_listings_w_hosts</code> and full-moon review charts from the mart.</li>
+            <li><strong>Copy the dashboard URL</strong> for the exposure declaration in the next section.</li>
+          </ol>
+
+          <div class="diagram">
+            <p class="diagram-title">From dbt mart to Preset chart</p>
+            <div class="dag">
+              <div class="dag-col">
+                <p class="dag-label">dbt build</p>
+                <div class="node is-mart"><b>mart_fullmoon_reviews</b><small>mart schema</small></div>
+                <div class="node is-mart"><b>dim_listings_w_hosts</b><small>dim table</small></div>
+              </div>
+              <div class="dag-col">
+                <p class="dag-label">Snowflake</p>
+                <div class="node is-store"><b>AIRBNB.DEV</b><small>REPORTER role SELECT</small></div>
+              </div>
+              <div class="dag-col">
+                <p class="dag-label">Preset</p>
+                <div class="node is-serve pulse"><b>Executive Dashboard</b><small>charts + filters</small></div>
+              </div>
+            </div>
+          </div>
+
+          <p><code>mart_fullmoon_reviews</code> carries review-level rows with an <code>is_full_moon</code> column derived from the seed in Section 9. Preset does not read dbt's manifest; it reads the physical table. That is why grants and a successful <code>dbt run --select mart_fullmoon_reviews</code> must precede chart creation.</p>
+
+<pre data-lang="sql" data-title="Example chart query in Preset (logical SQL)" data-explain="Not a dbt file — the kind of aggregation Preset generates against the mart table."><code>SELECT
+  is_full_moon,
+  review_sentiment,
+  COUNT(*) AS review_count
+FROM AIRBNB.DEV.MART_FULLMOON_REVIEWS
+GROUP BY 1, 2
+ORDER BY 1, 2</code></pre>
+
+          <div class="callout tip"><strong>The analysis and the dashboard answer the same question different ways.</strong> <code>full_moon_no_sleep.sql</code> is for analysts in the warehouse; Preset is for stakeholders who need filters and sharing. Both depend on the same mart.</div>
+
+          <div class="callout cost"><strong>Preset queries bill your Snowflake warehouse.</strong> Every chart refresh and dashboard load runs SQL as the connected role. Use a small warehouse for BI, cache in Preset where available, and avoid scanning wide fact tables without filters on large deployments.</div>
+
+          <h3>Mapping profiles.yml to Preset connection fields</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>profiles.yml key (airbnb profile)</th><th>Preset Snowflake field</th><th>Course value (typical)</th></tr></thead>
+              <tbody>
+                <tr><td><code>account</code></td><td>Account identifier</td><td>Your Snowflake account locator</td></tr>
+                <tr><td><code>user</code></td><td>User</td><td><code>PRESET</code> for BI (not your personal user)</td></tr>
+                <tr><td><code>role</code></td><td>Role</td><td><code>REPORTER</code></td></tr>
+                <tr><td><code>warehouse</code></td><td>Warehouse</td><td><code>COMPUTE_WH</code></td></tr>
+                <tr><td><code>database</code></td><td>Database</td><td><code>AIRBNB</code></td></tr>
+                <tr><td><code>schema</code></td><td>Schema</td><td><code>DEV</code> (or your target schema)</td></tr>
+                <tr><td><code>private_key_path</code></td><td>RSA key pair auth</td><td>Service user key registered in Snowflake</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Chart ideas for mart_fullmoon_reviews</h3>
+          <p>The course builds at least one chart on the full-moon mart. Concrete starting points that match the analysis logic:</p>
+
+          <ul>
+            <li><strong>Grouped bar chart</strong> &mdash; X axis <code>is_full_moon</code>, series <code>review_sentiment</code>, metric <code>COUNT(*)</code>. Mirrors <code>full_moon_no_sleep.sql</code> visually.</li>
+            <li><strong>Big number</strong> &mdash; count of reviews where <code>is_full_moon = 'full moon'</code> and sentiment is negative; good for a headline KPI tile.</li>
+            <li><strong>Time series</strong> &mdash; reviews per week coloured by full-moon flag; needs <code>review_date</code> from the mart's underlying fact columns.</li>
+            <li><strong>Table</strong> &mdash; raw sample rows for executives who want to read individual reviews on full-moon nights.</li>
+          </ul>
+
+          <p>Combine with <code>dim_listings_w_hosts</code> on a dashboard for listing- and host-level filters (room type, price band) while full-moon metrics update in a separate chart row. The exposure in the next section declares both models as dependencies because the executive dashboard uses both datasets.</p>
+
+          <div class="callout info"><strong>Tableau, Looker, and Metabase follow the same pattern.</strong> dbt does not care which BI tool queries the mart. Preset is the course choice because it connects quickly to Snowflake with a service user; the architecture is always "dbt builds, BI reads".</div>
+        </section>
+
+        <section class="section" id="exposures">
+          <h2>Exposures</h2>
+          <p class="lead">An exposure declares a downstream consumer of dbt models &mdash; a dashboard, application, or ML pipeline &mdash; in YAML. It does not run in the warehouse. It adds nodes and edges to the lineage graph so <code>dbt docs</code> and manifest consumers show what breaks when a model changes.</p>
+
+          <p>The course file is <code>models/dashboards.yml</code> (plural). It defines one exposure named <code>executive_dashboard</code> that links to the Preset URL and lists model dependencies.</p>
+
+<pre data-lang="yaml" data-title="models/dashboards.yml" data-explain="Real file from the course repo. depends_on uses ref() syntax; owner documents stewardship."><code>exposures:
+  - name: executive_dashboard
+    label: Executive Dashboard
+    type: dashboard
+    maturity: low
+    url: https://00d200da.us1a.app.preset.io/superset/dashboard/8/?edit=true&amp;native_filters_key=fnn_HJZ0z42ZJtoX06x7gRbd9oBFgFLbnPlOCW2o_aiBeZJi3bZuyfQuXE96xfgB
+    description: Executive Dashboard about Airbnb listings and hosts
+
+
+    depends_on:
+      - ref('dim_listings_w_hosts')
+      - ref('mart_fullmoon_reviews')
+
+    owner:
+      name: Zoltan C. Toth
+      email: dbtstudent@gmail.com</code></pre>
+
+          <h3>Exposure fields</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Field</th><th>Required</th><th>Purpose</th></tr></thead>
+              <tbody>
+                <tr><td><code>name</code></td><td>Yes</td><td>Unique identifier in the project (snake_case)</td></tr>
+                <tr><td><code>type</code></td><td>Yes</td><td><code>dashboard</code>, <code>notebook</code>, <code>analysis</code>, <code>ml</code>, <code>application</code></td></tr>
+                <tr><td><code>depends_on</code></td><td>Yes</td><td>List of <code>ref('model')</code> or <code>source('src','tbl')</code></td></tr>
+                <tr><td><code>owner</code></td><td>Recommended</td><td>Contact for breakage questions</td></tr>
+                <tr><td><code>url</code></td><td>Optional</td><td>Link to live dashboard or app</td></tr>
+                <tr><td><code>label</code></td><td>Optional</td><td>Human display name in docs UI</td></tr>
+                <tr><td><code>maturity</code></td><td>Optional</td><td><code>high</code>, <code>medium</code>, <code>low</code> &mdash; communicates stability</td></tr>
+                <tr><td><code>description</code></td><td>Optional</td><td>Markdown in docs</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Why exposures appear in the DAG</h3>
+          <p>During parsing, dbt creates exposure nodes and edges from each entry in <code>depends_on</code> to the referenced models. In <code>dbt docs serve</code>, the lineage graph shows the exposure on the right with arrows from <code>dim_listings_w_hosts</code> and <code>mart_fullmoon_reviews</code>. Selecting a model and viewing downstream impact now includes the executive dashboard &mdash; something that would be invisible if the BI tool were only documented in a wiki.</p>
+
+          <div class="diagram">
+            <p class="diagram-title">Exposure edges in the docs lineage graph</p>
+            <div class="dag">
+              <div class="dag-col">
+                <p class="dag-label">Models</p>
+                <div class="node is-model"><b>dim_listings_w_hosts</b></div>
+                <div class="node is-mart"><b>mart_fullmoon_reviews</b></div>
+              </div>
+              <div class="dag-col">
+                <p class="dag-label">Exposure</p>
+                <div class="node is-serve pulse"><b>executive_dashboard</b><small>type: dashboard</small></div>
+              </div>
+            </div>
+          </div>
+
+          <p>Exposures do not participate in <code>dbt run</code> ordering &mdash; they are metadata. They do appear in <code>dbt ls --resource-type exposure</code> and in manifest JSON for tools like Metaplane, Monte Carlo, or internal impact scripts.</p>
+
+          <div class="callout exam"><strong>Certification:</strong> know that exposures are declared in YAML, use <code>depends_on</code> with <code>ref()</code>, appear in lineage as consumer nodes, and are not executed by dbt. Distinguish them from analyses (SQL files) and models (materialised relations).</div>
+
+          <h3>depends_on and incomplete graphs</h3>
+          <p>Only declared dependencies draw edges. If the Preset dashboard also queries <code>fct_reviews</code> directly but you omit it from <code>depends_on</code>, the docs graph under-reports blast radius. Teams audit BI query logs or use catalog integrations to reconcile. When in doubt, list every model the dashboard dataset references.</p>
+
+          <p>Exposures can depend on sources as well: <code>- source('airbnb', 'raw_listings')</code>. That is rare for dashboards fed only from marts but useful when documenting apps reading raw landing tables.</p>
+
+          <h3>Exposure types and maturity</h3>
+          <p>The <code>type</code> field categorises the consumer for docs filtering and for teams ingesting manifest JSON. Valid values include <code>dashboard</code>, <code>notebook</code>, <code>analysis</code>, <code>ml</code>, and <code>application</code>. The course uses <code>dashboard</code> for the Preset executive board.</p>
+
+          <p><code>maturity: low</code> signals the dashboard is new or experimental &mdash; it renders as metadata in the docs UI and helps prioritise which consumers need notice before breaking schema changes. Raise to <code>high</code> when the dashboard is executive-critical and listed in change-management runbooks.</p>
+
+          <h3>Listing exposures from the CLI</h3>
+
+<div class="terminal">
+  <p class="term-head">Exposure commands</p>
+  <pre class="term-body"><span class="tt-cmd">dbt ls --resource-type exposure</span>
+<span class="tt-dim">executive_dashboard</span>
+
+<span class="tt-cmd">dbt ls --select +exposure:executive_dashboard</span>
+<span class="tt-dim">dim_listings_w_hosts</span>
+<span class="tt-dim">mart_fullmoon_reviews</span>
+
+<span class="tt-cmd">dbt docs generate &amp;&amp; dbt docs serve</span>
+<span class="tt-ok">Open lineage → select dim_listings_w_hosts → show downstream exposure</span></pre>
+</div>
+
+          <p>The selector <code>+exposure:executive_dashboard</code> returns upstream models the exposure depends on &mdash; useful for slim CI or impact checks before merging a pull request that renames a column those models expose.</p>
+
+          <h3>Where exposures live in manifest.json</h3>
+          <p>After <code>dbt parse</code>, exposure nodes appear under <code>exposures</code> in <code>manifest.json</code> with fields mirroring the YAML: <code>url</code>, <code>owner</code>, <code>depends_on.nodes</code> listing model unique IDs. The docs site reads this to draw edges from models to the exposure node on the right side of the lineage canvas.</p>
+
+          <div class="diagram">
+            <p class="diagram-title">Full Airbnb chain from seed to exposure</p>
+            <div class="dag">
+              <div class="dag-col">
+                <p class="dag-label">Seeds / facts</p>
+                <div class="node is-seed"><b>seed_full_moon_dates</b></div>
+                <div class="node is-model"><b>fct_reviews</b></div>
+              </div>
+              <div class="dag-col">
+                <p class="dag-label">Marts / dims</p>
+                <div class="node is-mart"><b>mart_fullmoon_reviews</b></div>
+                <div class="node is-model"><b>dim_listings_w_hosts</b></div>
+              </div>
+              <div class="dag-col">
+                <p class="dag-label">Consumers</p>
+                <div class="node is-serve pulse"><b>executive_dashboard</b><small>exposure</small></div>
+                <div class="node is-compute"><b>full_moon_no_sleep</b><small>analysis</small></div>
+              </div>
+            </div>
+          </div>
+
+          <p>The analysis node also connects upstream to <code>mart_fullmoon_reviews</code> but is not listed in the exposure's <code>depends_on</code> &mdash; analyses and exposures are independent resource types. If the executive dashboard truly used only the mart, you would not need to declare the analysis at all.</p>
+
+          <div class="callout warn"><strong>YAML file name is dashboards.yml in the repo.</strong> The lesson script once referenced <code>dashboard.yml</code> (singular). dbt loads any <code>.yml</code> under <code>models/</code>; the filename does not matter, only the <code>exposures:</code> key.</div>
+
+          <h3>Owner metadata and governance</h3>
+          <p>The <code>owner</code> block with <code>name</code> and <code>email</code> does not send mail automatically. It surfaces in the docs UI so an engineer doing impact analysis knows whom to notify before renaming <code>mart_fullmoon_reviews</code> columns. Some teams add <code>meta:</code> on exposures for Slack channels or PagerDuty services, ingested by catalog products the same way model <code>meta</code> is.</p>
+        </section>
+
+        <section class="section" id="deeper">
+          <h2>Deeper detail and edge cases</h2>
+          <p class="lead">Hook transaction semantics, grant re-application cost, analysis promotion paths, exposure drift, and the operational patterns teams adopt when BI and dbt share a warehouse.</p>
+
+          <h3>Version notes</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Behaviour</th><th>Before</th><th>Now</th><th>Version</th></tr></thead>
+              <tbody>
+                <tr><td>Exposures</td><td>YAML only</td><td>Same; semantic exposures added for metrics in Cloud</td><td>1.0+</td></tr>
+                <tr><td>Grants config</td><td>Undocumented experiment</td><td>Supported on Snowflake, BigQuery, Redshift, Postgres adapters</td><td>1.0+</td></tr>
+                <tr><td>Analysis nodes in manifest</td><td>Present</td><td>resource_type <code>analysis</code>; no catalog entry until manual run</td><td>1.x</td></tr>
+                <tr><td>on-run-start hooks</td><td>SQL strings only</td><td>Macro calls encouraged; log package integration</td><td>1.x</td></tr>
+                <tr><td>Hook failure behaviour</td><td>Adapter-specific</td><td>Document per adapter; Snowflake post-hook failure surface in run results</td><td>1.x</td></tr>
+                <tr><td>dbt Cloud exposures</td><td>Manual YAML</td><td>Some auto-discovery from Cloud dashboard links</td><td>Cloud</td></tr>
+                <tr><td>Presets / Superset</td><td>Separate product</td><td>Preset hosts Superset; connection pattern unchanged</td><td>N/A</td></tr>
+                <tr><td>Grants + custom schema macro</td><td>Same</td><td>Grants follow <code>generate_schema_name</code> output relation</td><td>1.x</td></tr>
+                <tr><td>Analysis selection</td><td><code>dbt compile --select analysis_name</code></td><td>Also <code>dbt ls --resource-type analysis</code></td><td>1.5+</td></tr>
+                <tr><td>Exposure maturity field</td><td>Optional metadata</td><td>Rendered in docs UI badge</td><td>1.3+</td></tr>
+                <tr><td>Post-hook and incremental</td><td>Runs after merge</td><td>Runs after each incremental batch when microbatch enabled</td><td>1.9+</td></tr>
+                <tr><td>Future grants vs dbt grants</td><td>Both used</td><td>Teams pick one source of truth to avoid duplicate GRANT noise</td><td>N/A</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>What it costs to run</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>What runs</th><th>Where the cost lands</th><th>How to spend less</th></tr></thead>
+              <tbody>
+                <tr><td><code>dbt compile</code> on analyses</td><td>Negligible CPU locally; no warehouse</td><td>Compile in CI instead of habitually in prod targets</td></tr>
+                <tr><td>Manual analysis execution</td><td>Full scan of referenced marts</td><td>Filter date ranges; run against dev schema</td></tr>
+                <tr><td>on-run-start CREATE TABLE</td><td>One DDL per invocation</td><td>Use lightweight DDL; avoid scans in start hooks</td></tr>
+                <tr><td>post-hook INSERT per model</td><td>N rows &times; M models per run</td><td>Batch logging in on-run-end macro instead</td></tr>
+                <tr><td>+grants on every build</td><td>Extra GRANT DDL after each model</td><td>Rely on FUTURE GRANTs in prod; dbt grants in dev only</td></tr>
+                <tr><td>Preset dashboard refresh</td><td>Snowflake warehouse per chart</td><td>Lower warehouse size; enable cache; materialise heavy metrics in dbt</td></tr>
+                <tr><td>Exposure parsing</td><td>Free at runtime</td><td>N/A &mdash; metadata only</td></tr>
+                <tr><td>Full run with hooks on 50 models</td><td>50 audit INSERTs + 50 GRANTs</td><td>Scope post-hooks to marts folder only</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout cost"><strong>The biggest waste is a project-wide post-hook that writes one row per model on every CI slim run.</strong> Scope hooks with folder config: audit only production marts, not ephemeral staging rebuilt twenty times a day in pull request jobs.</div>
+
+          <h3>Traps that catch people</h3>
+          <ul>
+            <li><strong>Expecting analyses to run on dbt run —</strong> they never materialise; only compile unless you execute SQL manually. CI jobs that only run <code>dbt build</code> never touch analyses.</li>
+            <li><strong>ref() typo in analysis —</strong> compile fails the same as in models; the error points at the analysis file, which some teams forget is in the graph.</li>
+            <li><strong>post-hook runs on view replacement —</strong> each full refresh of a table fires the hook; incremental models fire after each successful merge, which can multiply audit rows.</li>
+            <li><strong>audit_log string quoting —</strong> model names with quotes in hook SQL break INSERT statements; use macros to escape or log relation names from <code>adapter.get_relation</code>.</li>
+            <li><strong>Grants to non-existent roles —</strong> run fails at GRANT time on Snowflake; create roles in infra before adding to YAML.</li>
+            <li><strong>REPORTER role without future grants —</strong> tables built before FUTURE GRANT setup may lack access; dbt <code>+grants</code> fixes new builds but not old tables until rebuild.</li>
+            <li><strong>Preset connected as TRANSFORM —</strong> over-privileged BI connection violates least privilege; use REPORTER user from setup script.</li>
+            <li><strong>Exposure URL rot —</strong> dashboard moved in Preset but YAML still points at old link; docs mislead during incidents.</li>
+            <li><strong>depends_on missing hidden dependencies —</strong> dashboard uses SQL with joins to undeclared models; lineage under-states impact.</li>
+            <li><strong>on-run-start in parse-only CI —</strong> if a job mistakenly runs models against prod with a destructive start hook, damage is project-specific; review hook SQL in code review.</li>
+            <li><strong>Analysis promoted without tests —</strong> copying analysis SQL into a model without adding tests ships exploratory logic to production.</li>
+            <li><strong>Hook order with multiple entries —</strong> pre-hooks run in list order; later hooks see effects of earlier ones; order matters for truncate-then-load patterns.</li>
+          </ul>
+
+          <h3>Troubleshooting playbook</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Symptom</th><th>Most likely cause</th><th>What to check / fix</th></tr></thead>
+              <tbody>
+                <tr><td><code>dbt compile</code> cannot find analysis</td><td>File outside <code>analysis-paths</code></td><td>Confirm <code>analysis-paths: ["analyses"]</code> in <code>dbt_project.yml</code></td></tr>
+                <tr><td>Compiled SQL still shows <code>{{ ref(...) }}</code></td><td>Compile error or wrong target</td><td>Read compile stderr; run <code>dbt debug</code></td></tr>
+                <tr><td><code>audit_log</code> empty after run</td><td>post-hook not configured or models skipped</td><td>Check <code>+post-hook</code> under <code>models.airbnb</code>; verify run actually built models</td></tr>
+                <tr><td>Run fails on INSERT to audit_log</td><td>on-run-start did not run or wrong schema</td><td>Confirm table exists in <code>target.schema</code>; run start hook SQL manually once</td></tr>
+                <tr><td><code>GRANT ... TO ROLE reporter</code> fails</td><td>Role missing or typo in case</td><td>Snowflake: <code>SHOW ROLES LIKE 'REPORTER'</code>; match YAML casing to adapter expectations</td></tr>
+                <tr><td>Preset cannot see new mart</td><td>Grants or schema mismatch</td><td><code>dbt run --select mart_fullmoon_reviews</code>; verify REPORTER has SELECT</td></tr>
+                <tr><td>Exposure missing from lineage</td><td>YAML parse error or not in model path</td><td>Run <code>dbt parse</code>; place YAML under <code>models/</code></td></tr>
+                <tr><td><code>depends_on ref not found</code></td><td>Model name typo</td><td>Match exact model <code>name</code> from SQL file</td></tr>
+                <tr><td>Hook runs in dev but not prod</td><td>Different project config or disabled hooks in prod target</td><td>Compare <code>dbt_project.yml</code> and env-specific packages</td></tr>
+                <tr><td>Duplicate audit rows explosion</td><td>post-hook on high-frequency incremental</td><td>Move to daily summary job or filter incremental hook</td></tr>
+                <tr><td>Analysis in manifest but no lineage edge</td><td>Analysis uses hard-coded table not ref()</td><td>Replace with <code>ref()</code> or <code>source()</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Production patterns</h3>
+          <p>Mature teams keep exploratory SQL in <code>analyses/</code> with a naming convention (<code>investigation_YYYYMMDD_topic.sql</code>) and delete or promote within two sprints. Promotion means a new model under <code>models/mart/</code>, tests, and removal of the analysis to avoid duplicate logic.</p>
+
+          <p>Hooks centralise in macros invoked from thin YAML lists; production uses <code>on-run-end</code> to emit structured JSON logs to an observability table rather than per-model INSERTs. Grants in YAML cover dev and CI schemas; production relies on Terraform-managed Snowflake roles plus optional dbt grants only on marts exported to BI.</p>
+
+          <div class="grid-2">
+            <div class="mini-card">
+              <h4>Pattern: exposures owned by domain</h4>
+              <p>Each dashboard YAML entry lists an <code>owner</code> email matching a Slack channel. Impact analysis from manifest feeds weekly stale-dashboard reviews.</p>
+            </div>
+            <div class="mini-card">
+              <h4>Anti-pattern: hooks as business logic</h4>
+              <p>Complex transformations hidden in post-hooks are invisible in compiled model SQL and break lineage. Keep hooks operational; keep business rules in models.</p>
+            </div>
+          </div>
+
+<pre data-lang="yaml" data-title="Pattern: scope post-hook to marts only" data-explain="Folder-level config limits audit INSERTs to production-facing models instead of every staging view."><code>models:
+  airbnb:
+    mart:
+      +post-hook:
+        - "{{ log_mart_build(this) }}"</code></pre>
+
+          <h3>Certification pointers</h3>
+          <p>The exam asks what analyses are (compile, do not materialise), the four hook types and their scope, how grants in project config relate to built relations, and what exposures add to the DAG. Expect comparison questions: analysis vs model, exposure vs source, pre-hook vs on-run-start.</p>
+          <ul>
+            <li><a href="s09-seeds-sources.html">Section 9</a> — <code>mart_fullmoon_reviews</code> and seed join logic the analysis and dashboard consume.</li>
+            <li><a href="s14-documentation.html">Section 14</a> — lineage graph that exposures extend downstream.</li>
+            <li><a href="s16-debugging-logging.html">Section 16</a> — structured logging macros that replace raw audit INSERT hooks.</li>
+            <li><a href="s19-production.html">Section 19</a> — custom schemas and CI; grants must match prod role naming.</li>
+            <li><a href="s06-setup.html">Section 6</a> — Snowflake REPORTER role and PRESET user creation.</li>
+          </ul>
+          <div class="callout exam"><strong>Certification:</strong> memorise that analyses live in <code>analysis-paths</code>, hooks run at model or invocation scope, <code>+grants</code> applies on build, and exposures declare <code>depends_on</code> with <code>ref()</code> without executing SQL.</div>
+
+          <h3>Cross-adapter notes</h3>
+          <p>Hooks execute arbitrary SQL strings; syntax must match your warehouse. The course audit table uses Snowflake types (<code>STRING</code>, <code>TIMESTAMP</code>). On Postgres you would use <code>TEXT</code> and <code>TIMESTAMPTZ</code>; on BigQuery you might log to a partitioned table in a dedicated dataset instead of <code>{{ target.schema }}</code>.</p>
+
+          <p>Grants config keys differ: Snowflake uses role names; BigQuery maps to IAM roles. Exposures and analyses behave identically across adapters because they are parse-time metadata or compile-only SQL.</p>
+
+          <h3>When to skip hooks entirely</h3>
+          <p>Serverless warehouses, read-only CI roles, and federated projects sometimes cannot run DDL in hooks. Alternatives: Terraform owns grants and audit tables; dbt Cloud job webhooks emit run metadata; observability platforms ingest <code>run_results.json</code> from <code>target/</code> after each invocation. The course hooks teach the mechanism; production often moves logging out of warehouse INSERTs for cost and separation of concerns.</p>
+        </section>
+
+        <section class="section" id="interview">
+          <h2>Interview questions</h2>
+          <p class="muted">Answer each one out loud before opening it.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+
+            <details class="qa">
+              <summary>What is a dbt analysis and how is it different from a model?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>An analysis is a <code>.sql</code> file under <code>analyses/</code> (configured by <code>analysis-paths</code>). dbt parses and compiles it with Jinja, resolves <code>ref()</code>, and writes compiled SQL to <code>target/compiled/</code>, but never creates a warehouse relation during <code>dbt run</code>.</p>
+                <p>A model materialises (table, view, incremental, etc.) and participates in the build schedule. Use analyses for exploratory, version-controlled SQL; promote to a model when the logic needs tests, scheduling, and a stable relation name.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How do you run or inspect an analysis?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>Run <code>dbt compile</code> (optionally <code>--select analysis_name</code>). Open the file under <code>target/compiled/&lt;project&gt;/analyses/</code> and execute that SQL in your warehouse client. List analyses with <code>dbt ls --resource-type analysis</code>.</p>
+                <p>There is no <code>dbt run --select analysis</code> materialisation step. The analysis node appears in <code>manifest.json</code> for lineage but not in <code>catalog.json</code> unless you manually create a relation from the compiled SQL.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Explain the four hook types and when you would use each.<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p><code>pre-hook</code> and <code>post-hook</code> attach to individual models (or folders via config) and run immediately before or after that model's main statement. Use for model-scoped setup or audit rows tied to a specific relation.</p>
+                <p><code>on-run-start</code> and <code>on-run-end</code> are project-level lists that run once at the beginning or end of an invocation. Use for creating shared scratch objects, run-level logging, or notifications after all models finish.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What does the course audit_log pattern demonstrate?<span class="qa-tag">Production</span></summary>
+              <div class="qa-body">
+                <p><code>on-run-start</code> creates <code>audit_log</code> in <code>{{ target.schema }}</code> if missing. A project-wide <code>+post-hook</code> inserts <code>(model_name, run_timestamp)</code> after each successful model build using <code>{{ this }}</code> for the relation name.</p>
+                <p>It shows hooks as operational metadata capture without changing model SQL. Production teams often replace raw INSERT hooks with macros writing to an observability schema or streaming logs.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How do grants in dbt_project.yml work on Snowflake?<span class="qa-tag">Production</span></summary>
+              <div class="qa-body">
+                <p>The <code>+grants:</code> config under a project or folder instructs dbt to emit privilege statements when building relations. <code>select: ["transform", "reporter"]</code> grants SELECT to those roles on each created table or view.</p>
+                <p>Roles must exist beforehand. This keeps BI access (REPORTER) and transform access in git. Adapter support and grant keys differ on BigQuery (IAM) and Postgres (role names).</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What is an exposure and why declare one?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>An exposure is a YAML-declared downstream consumer (dashboard, app, notebook) with a <code>type</code>, optional <code>url</code>, <code>owner</code>, and <code>depends_on</code> list referencing models or sources via <code>ref()</code> / <code>source()</code>.</p>
+                <p>It does not execute in the warehouse. It adds consumer nodes to the lineage graph for impact analysis and documentation, linking dbt models to the Preset dashboard that reads them.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Your lineage graph shows a dashboard exposure but changing a model did not alert the owner. Why?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p>Exposures are documentation metadata unless integrated with an external tool that monitors manifest changes. dbt docs shows the dependency edge but sends no notifications by itself.</p>
+                <p>Also verify <code>depends_on</code> lists every model the dashboard actually queries. Undeclared dependencies break the graph silently. Owner email in YAML is for humans reading docs, not automated alerting.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>When would you promote an analysis to a model?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>When the SQL must run on a schedule, be tested in CI, grant SELECT to BI roles automatically, and appear as a stable relation for Preset or other tools. Repeated manual execution of the same compiled analysis is a signal to promote.</p>
+                <p>Promotion steps: create <code>models/mart/your_model.sql</code> with the analysis logic, add tests in <code>schema.yml</code>, run <code>dbt build</code>, update exposures, delete or archive the analysis file.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How do hooks interact with failed model runs?<span class="qa-tag">Troubleshooting</span></summary>
+              <div class="qa-body">
+                <p>If a model's main statement fails, its post-hook does not run for that model. Pre-hook may have already executed depending on adapter transaction boundaries. Dependent downstream models skip unless force-run.</p>
+                <p><code>on-run-end</code> still runs after the invocation completes (with partial success), which is why teams put failure summaries there rather than assuming every post-hook fired.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Compare singular tests, analyses, and ephemeral models.<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p>Singular tests assert data quality; failure fails <code>dbt test</code>. Analyses explore data; no pass/fail. Ephemeral models are models inlined as CTEs; they run as dependencies but are not queryable relations.</p>
+                <p>All three can use <code>ref()</code>. Only models (non-ephemeral) and seeds materialise to named tables or views consumers query directly.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How would you connect a BI tool to dbt-built Snowflake tables?<span class="qa-tag">Production</span></summary>
+              <div class="qa-body">
+                <p>Create a least-privilege service user and role (REPORTER in the course), grant SELECT on marts (via dbt <code>+grants</code> and/or Snowflake FUTURE GRANTs), run models to create relations, then configure the BI tool with account, role, warehouse, database, schema from profiles or infra docs.</p>
+                <p>Declare the dashboard as an exposure with <code>depends_on</code> for lineage. dbt does not push charts to Preset; it only builds tables the tool queries.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What happens if on-run-start and post-hook both touch audit_log?<span class="qa-tag">SQL</span></summary>
+              <div class="qa-body">
+                <p>Start hook ensures the table exists once per invocation. Each successful model post-hook appends a row. Order is guaranteed: start before any model, post after each model. A run building ten models yields up to ten INSERTs plus one CREATE IF NOT EXISTS.</p>
+                <p>Failed CREATE (permissions) aborts the run early. Failed INSERT (constraint, typo in hook SQL) fails that model's hook step; fix hook SQL or table schema in dev before promoting.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Can an analysis use source() instead of ref()?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>Yes. Analyses support the same Jinja functions as models: <code>ref()</code>, <code>source()</code>, <code>var()</code>, and macros. Lineage edges appear for declared sources and refs when you compile or parse.</p>
+                <p>Prefer <code>ref()</code> for dbt-managed models so the analysis respects environment schema routing. Querying raw sources directly in an analysis bypasses staging cleanses and duplicates the hard-coding problem <code>ref()</code> exists to prevent.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Why does the course grant SELECT to both transform and reporter?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p><code>TRANSFORM</code> is the build role; it already owns or can access objects it creates. Including it in grants documents intent explicitly and covers edge cases where ownership differs (shared schemas, post-build role switching).</p>
+                <p><code>REPORTER</code> is the BI role Preset uses. Without it in grants, each new mart would need manual GRANTs before dashboards work. Listing both in git keeps transform and consume permissions auditable in the same pull request as the model.</p>
+              </div>
+            </details>
+
+          </div>
+        </section>
+
+        <section class="section" id="practice">
+          <h2>Hands-on practice</h2>
+          <p class="muted">Run these from the <code>airbnb</code> folder with your virtualenv active.</p>
+          <ol class="practice-list">
+
+            <li class="practice">
+              <p class="practice-task">Compile <code>full_moon_no_sleep</code>, open the compiled SQL, and run it in Snowflake. Compare row counts by <code>is_full_moon</code> and <code>review_sentiment</code>.</p>
+              <span class="console-path">airbnb/analyses/full_moon_no_sleep.sql · target/compiled/</span>
+              <p class="practice-expect">Query returns grouped counts; compiled file shows fully-qualified <code>mart_fullmoon_reviews</code> with no Jinja.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Ensure <code>mart_fullmoon_reviews</code> exists: <code>dbt run --select mart_fullmoon_reviews</code>.</li>
+                    <li>Run <code>dbt compile --select full_moon_no_sleep</code>.</li>
+                    <li>Open <code>target/compiled/airbnb/analyses/full_moon_no_sleep.sql</code>.</li>
+                    <li>Paste into a Snowflake worksheet and execute.</li>
+                  </ol>
+<pre data-lang="shell" data-title="Terminal"><code>dbt compile --select full_moon_no_sleep</code></pre>
+                  <p class="muted">Undo: nothing to revert; analysis does not change warehouse state.</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">Add the course <code>on-run-start</code> and <code>+post-hook</code> to <code>dbt_project.yml</code>, run one model, and verify <code>audit_log</code> rows.</p>
+              <span class="console-path">airbnb/dbt_project.yml</span>
+              <p class="practice-expect"><code>SELECT * FROM &lt;schema&gt;.audit_log</code> shows the model name and a recent timestamp after <code>dbt run --select dim_listings_cleansed</code>.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Copy the hooks block from the course repo excerpt in this section.</li>
+                    <li>Run <code>dbt run --select dim_listings_cleansed</code>.</li>
+                    <li>Query <code>audit_log</code> in your target schema.</li>
+                  </ol>
+<pre data-lang="yaml" data-title="dbt_project.yml (hooks)"><code>on-run-start:
+  - "CREATE TABLE IF NOT EXISTS {{ target.schema }}.audit_log ( model_name STRING, run_timestamp TIMESTAMP )"
+
+models:
+  airbnb:
+    +post-hook:
+      - "INSERT INTO {{ target.schema }}.audit_log VALUES ('{{ this }}', CURRENT_TIMESTAMP)"</code></pre>
+                  <p class="muted">Undo: drop <code>audit_log</code> with <code>DROP TABLE IF EXISTS &lt;schema&gt;.audit_log</code>; revert YAML hooks.</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">Add <code>+grants: { select: ["transform", "reporter"] }</code> under <code>models.airbnb</code>, rebuild a dim model, and confirm GRANT in Snowflake query history or <code>SHOW GRANTS</code>.</p>
+              <span class="console-path">airbnb/dbt_project.yml · Snowflake</span>
+              <p class="practice-expect">REPORTER role can <code>SELECT</code> from the rebuilt table; dbt run log shows grant statements or succeeds without permission errors.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Add <code>+grants</code> block matching the course repo.</li>
+                    <li>Ensure REPORTER role exists from Section 6 setup.</li>
+                    <li>Run <code>dbt run --select dim_listings_cleansed --full-refresh</code>.</li>
+                    <li>In Snowflake: <code>SHOW GRANTS ON TABLE &lt;schema&gt;.DIM_LISTINGS_CLEANSED</code>.</li>
+                  </ol>
+                  <p class="muted">Undo: revert grants config; manual REVOKE if needed in dev only.</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">Copy <code>models/dashboards.yml</code> from the course repo, run <code>dbt docs generate</code>, and locate <code>executive_dashboard</code> in the lineage graph downstream of both mart models.</p>
+              <span class="console-path">airbnb/models/dashboards.yml · dbt docs serve</span>
+              <p class="practice-expect">Lineage shows exposure node with edges from <code>dim_listings_w_hosts</code> and <code>mart_fullmoon_reviews</code>; exposure page lists owner and URL.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Add <code>dashboards.yml</code> under <code>models/</code>.</li>
+                    <li>Run <code>dbt parse</code> then <code>dbt docs generate</code> and <code>dbt docs serve</code>.</li>
+                    <li>Search <code>executive_dashboard</code> or open Exposures in the docs UI.</li>
+                    <li>Enable downstream view from either dependency model and confirm the dashboard node appears.</li>
+                  </ol>
+<pre data-lang="yaml" data-title="models/dashboards.yml (depends_on excerpt)"><code>    depends_on:
+      - ref('dim_listings_w_hosts')
+      - ref('mart_fullmoon_reviews')</code></pre>
+                  <p class="muted">Undo: delete <code>dashboards.yml</code>; regenerate docs.</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">Write a new analysis that filters <code>mart_fullmoon_reviews</code> to only full-moon rows with negative sentiment, compile it, and compare with the Preset-style aggregation from this section.</p>
+              <span class="console-path">airbnb/analyses/</span>
+              <p class="practice-expect">Compiled SQL runs in Snowflake; result is a subset of the full_moon_no_sleep grouping.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Create <code>analyses/full_moon_negative.sql</code> with a WHERE clause on <code>is_full_moon</code> and <code>review_sentiment</code>.</li>
+                    <li>Run <code>dbt compile --select full_moon_negative</code>.</li>
+                    <li>Execute compiled SQL and compare counts to the unfiltered analysis.</li>
+                  </ol>
+<pre data-lang="sql" data-title="analyses/full_moon_negative.sql"><code>SELECT
+  review_sentiment,
+  COUNT(*) AS reviews
+FROM {{ ref('mart_fullmoon_reviews') }}
+WHERE is_full_moon = 'full moon'
+  AND review_sentiment = 'negative'
+GROUP BY 1</code></pre>
+                  <p class="muted">Undo: delete the new analysis file.</p>
+                </div>
+              </details>
+            </li>
+
+          </ol>
+        </section>
+
+        <section class="section" id="recap">
+          <h2>Recap</h2>
+          <div class="recap">
+            <ul class="checklist">
+              <li>Analyses live in <code>analyses/</code> (configured by <code>analysis-paths</code>); they compile but do not materialise on <code>dbt run</code>.</li>
+              <li><code>dbt compile</code> writes warehouse-ready SQL to <code>target/compiled/.../analyses/</code>; you execute it manually.</li>
+              <li><code>full_moon_no_sleep.sql</code> aggregates <code>mart_fullmoon_reviews</code> by full-moon flag and sentiment.</li>
+              <li><code>pre-hook</code> / <code>post-hook</code> run before and after each model; <code>on-run-start</code> / <code>on-run-end</code> run once per invocation.</li>
+              <li>The course creates <code>audit_log</code> on run start and inserts one row per successful model in a post-hook using <code>{{ this }}</code>.</li>
+              <li><code>+grants: { select: [...] }</code> applies SELECT privileges when models build; course grants <code>transform</code> and <code>reporter</code>.</li>
+              <li>REPORTER role and PRESET user connect BI with least privilege to <code>AIRBNB.DEV</code> tables.</li>
+              <li>Preset connects to Snowflake using profile credentials; charts query physical marts such as <code>mart_fullmoon_reviews</code>.</li>
+              <li>Exposures in YAML declare dashboards or apps with <code>depends_on</code> refs; they appear in the lineage graph but do not run in dbt.</li>
+              <li><code>models/dashboards.yml</code> defines <code>executive_dashboard</code> depending on <code>dim_listings_w_hosts</code> and <code>mart_fullmoon_reviews</code>.</li>
+              <li>Complete <code>depends_on</code> lists keep impact analysis accurate; undeclared BI dependencies are invisible to dbt.</li>
+              <li>Promote analyses to models when logic needs tests, scheduling, and stable relations for production BI.</li>
+            </ul>
+            <p style="margin-top:1rem;">
+              <button type="button" data-complete="section-15">Mark complete</button>
+            </p>
+          </div>
+        </section>
+
+      </div>
+
+      <aside class="toc" aria-label="On this page">
+        <strong>On this page</strong>
+        <ol>
+          <li><a href="#lectures">Lectures</a></li>
+          <li><a href="#analyses">Analyses</a></li>
+          <li><a href="#hooks">Hooks</a></li>
+          <li><a href="#grants">Grants</a></li>
+          <li><a href="#preset-dashboard">Preset dashboard</a></li>
+          <li><a href="#exposures">Exposures</a></li>
+          <li><a href="#deeper">Deeper detail</a></li>
+          <li><a href="#interview">Interview questions</a></li>
+          <li><a href="#practice">Hands-on practice</a></li>
+          <li><a href="#recap">Recap</a></li>
+        </ol>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<footer class="footer">The Complete dbt Bootcamp: Zero to Hero · Section 15 · Offline study edition</footer>
+</body>
+</html>

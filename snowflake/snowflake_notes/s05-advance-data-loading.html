@@ -1,0 +1,1554 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="SnowPro Core COF-C03 Section 5: file formats, Snowpipe, streams, tasks, COPY INTO options, validation, load transforms, UDFs, stored procedures, and zero-copy cloning.">
+<title>Section 5 — Advance Data Loading | Snowflake COF-C03 Course Notes</title>
+<link rel="stylesheet" href="assets/snowflake.css">
+<script defer src="assets/search-index.js"></script>
+<script defer src="assets/sql-glossary.js"></script>
+<script defer src="assets/sql-highlight.js"></script>
+<script defer src="assets/snowflake.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">Course section 5 of 17 · SnowPro Core (COF-C03)</p>
+    <h1>Advance Data Loading</h1>
+    <p class="subtitle">Beyond basic bulk load: file format objects, continuous ingestion with Snowpipe, change capture with streams, scheduled tasks, COPY INTO options and validation, load-time transforms, UDFs and stored procedures, and zero-copy cloning.</p>
+    <div class="hero-meta">
+      <span class="chip">18 lectures · 1hr 58min</span>
+      <span class="chip">Exam domain: Data Loading, Unloading &amp; Connectivity</span>
+      <span class="chip">Last verified: 28 Jul 2026</span>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <nav class="pager" aria-label="Section navigation">
+    <a href="s04-data-loading-unloading.html">← Data Loading</a>
+    <a href="../index.html">Course contents</a>
+    <a href="s06-semi-unstructured.html">Next: Semi-structured Data →</a>
+  </nav>
+
+  <main id="main">
+    <div class="layout">
+      <div class="content">
+
+        <section class="section" id="lectures">
+          <h2>Lectures in this section</h2>
+          <p class="muted">Every lecture below links to the notes that cover it. Stages, PUT/GET, and basic COPY INTO are in <a href="s04-data-loading-unloading.html">Section 4</a>.</p>
+          <ol class="lecture-list">
+            <li class="lecture">
+              <a class="lec-title" href="#bulk-continuous">Bulk and Continuous Data Loading Concept</a>
+              <span class="lec-time">2:06</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#load-transforms">Demo : Bulk Load Data Transformation II</a>
+              <span class="lec-time">6:46</span>
+              <span class="lec-src">Advance Data Loading/Bulk Load Transform.txt</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#load-transforms">Loading Quiz</a>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#file-format">Demo : File Format</a>
+              <span class="lec-time">4:49</span>
+              <span class="lec-src">Advance Data Loading/File Format.txt</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#file-format">File Format Quiz</a>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#snowpipe">Snowpipe Concept</a>
+              <span class="lec-time">4:24</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#snowpipe">Demo : Snowpipe</a>
+              <span class="lec-time">8:02</span>
+              <span class="lec-src">Advance Data Loading/Snowpipe.txt</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#snowpipe">Quiz</a>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#streams">Streams Concept</a>
+              <span class="lec-time">7:08</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#streams">Demo : Streams</a>
+              <span class="lec-time">10:57</span>
+              <span class="lec-src">Advance Data Loading/Stream.txt</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#streams">Streams Quiz</a>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#tasks">Task Concept</a>
+              <span class="lec-time">4:48</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#tasks">Demo : Tasks</a>
+              <span class="lec-time">11:10</span>
+              <span class="lec-src">Advance Data Loading/TASKS.txt</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#tasks">Demo : Tasks ||</a>
+              <span class="lec-time">1:46</span>
+              <span class="lec-src">Advance Data Loading/TASKS.txt</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#tasks">Tasks Quiz</a>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#copy-into-options">Demo : COPY INTO I</a>
+              <span class="lec-time">7:21</span>
+              <span class="lec-src">Advance Data Loading/COPY INTO OPTIONS.txt</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#copy-into-options">Demo : COPY INTO II</a>
+              <span class="lec-time">6:38</span>
+              <span class="lec-src">Advance Data Loading/COPY INTO OPTIONS.txt</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#validation">Demo : Validation Mode and Validate</a>
+              <span class="lec-time">8:04</span>
+              <span class="lec-src">Advance Data Loading/VALIDATION.txt</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#validation">COPY INTO and Validation Quiz</a>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#udf-sp">UDF and Store Procedure Concept</a>
+              <span class="lec-time">6:00</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#udf-sp">Demo : UDF and Store Procedure</a>
+              <span class="lec-time">9:34</span>
+              <span class="lec-src">Advance Data Loading/UDF SP.txt</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#udf-sp">UDF and SP Quiz</a>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#cloning">Cloning Concept</a>
+              <span class="lec-time">8:21</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#cloning">Demo : Cloning I</a>
+              <span class="lec-time">4:06</span>
+              <span class="lec-src">Advance Data Loading/CLONE.txt</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#cloning">Demo : Cloning II</a>
+              <span class="lec-time">6:24</span>
+              <span class="lec-src">Advance Data Loading/CLONE.txt</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#cloning">Cloning Quiz</a>
+            </li>
+          </ol>
+        </section>
+
+        <section class="section" id="bulk-continuous">
+          <h2>Bulk and Continuous Data Loading Concept</h2>
+          <p class="lead"><a href="s04-data-loading-unloading.html">Section 4</a> covered bulk <code>COPY INTO</code> on demand. This section adds <strong>continuous</strong> ingestion (Snowpipe), <strong>change tracking</strong> (streams), and <strong>scheduling</strong> (tasks) to automate the pipeline. Both paths load the same supported file types: <strong>CSV, TSV, JSON, Parquet, Avro, ORC, and XML</strong>.</p>
+
+          <div class="analogy">
+            <strong>Everyday analogy — newspaper delivery:</strong> Bulk COPY is driving to the warehouse to pick up today's papers. Snowpipe is a subscription — new editions arrive automatically. Streams are sticky notes logging what changed on each article. Tasks are the alarm clock that tells the editor to process those notes.
+          </div>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-085-bulk-vs-continuous.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-085-bulk-vs-continuous.png" alt="Bulk loading uses COPY command on large data with user-managed warehouse and 64-day load metadata; continuous loading uses Snowpipe plus COPY on small chunks with serverless compute, 14-day metadata, and key-pair JWT authentication" loading="lazy" width="1920" height="1080">
+            </a>
+            <figcaption><span class="slide-no">Slide 85</span>The course's side-by-side split: bulk COPY on your warehouse versus Snowpipe micro-batches on serverless compute.</figcaption>
+          </figure>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Aspect</th><th>Bulk loading</th><th>Continuous loading (Snowpipe)</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>Mechanism</td><td><code>COPY INTO</code> command</td><td>Snowpipe wrapping <code>COPY INTO</code></td></tr>
+                <tr><td>Typical data volume</td><td>Large batches</td><td>Small chunks / frequent files</td></tr>
+                <tr><td>Compute</td><td>User-managed virtual warehouse</td><td>Serverless (managed by Snowflake)</td></tr>
+                <tr><td>Load metadata retention</td><td><strong>64 days</strong> on the target table</td><td><strong>14 days</strong></td></tr>
+                <tr><td>Authentication</td><td>Done by the client (password, SSO, key-pair, etc.)</td><td>Requires <strong>key-pair authentication with a JSON Web Token</strong></td></tr>
+                <tr><td>Trigger</td><td>Manual or task-scheduled</td><td>File arrival (cloud events) or <code>ALTER PIPE … REFRESH</code></td></tr>
+                <tr><td><code>ON_ERROR</code> default</td><td><code>ABORT_STATEMENT</code></td><td><code>SKIP_FILE</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Bulk loading capabilities</h3>
+          <p>Bulk <code>COPY INTO</code> is not limited to one-to-one column mapping. During load you can <strong>reorder columns</strong>, <strong>omit columns</strong>, apply <strong>casts</strong>, and <strong>truncate text strings</strong> that exceed the target column length (via <code>TRUNCATECOLUMNS</code> or shorter VARCHAR definitions). Snowflake also performs <strong>automatic duplicate-file detection</strong>: after a successful load it records which files were ingested in load metadata stored on the target table for <strong>64 days</strong>. That history appears in the <code>COPY INTO</code> result set, which is why a repeat COPY against the same files returns zero rows unless you set <code>FORCE = TRUE</code>.</p>
+
+          <div class="diagram" role="img" aria-label="CDC pipeline with stream and task">
+            <p class="muted" style="text-align:center;margin:0 0 14px;font-size:.85rem;text-transform:uppercase;letter-spacing:.08em;">Classic CDC orchestration</p>
+            <div class="flow">
+              <div class="node pulse">Source table<br><small class="muted">DML changes</small></div>
+              <span class="arrow" aria-hidden="true">→</span>
+              <div class="node">Stream<br><small class="muted">change log</small></div>
+              <span class="arrow" aria-hidden="true">→</span>
+              <div class="node">Task<br><small class="muted">MERGE on schedule</small></div>
+              <span class="arrow" aria-hidden="true">→</span>
+              <div class="node">Target table</div>
+              <span class="packet" aria-hidden="true"></span>
+            </div>
+          </div>
+
+          <div class="callout exam">
+            <strong>COF-C03 exam tip:</strong> Snowpipe uses <strong>serverless compute</strong> (not your warehouse). Streams expose <code>METADATA$ACTION</code> and <code>METADATA$ISUPDATE</code>. A stream goes <strong>stale</strong> when source data ages past Time Travel retention — see <a href="s03-time-travel-views.html">Section 3</a>. Tasks start in <strong>suspended</strong> state; you must <code>RESUME</code> them. Declarative pipelines with dynamic tables are covered in <a href="s15-cof-c03-exclusive.html">Section 15</a>.
+          </div>
+        </section>
+
+        <section class="section" id="load-transforms">
+          <h2>Demo : Bulk Load Data Transformation II</h2>
+          <p class="muted">Course file: <code>Advance Data Loading/Bulk Load Transform.txt</code></p>
+          <p>Instead of loading every column as-is, use a <code>SELECT</code> subquery in <code>COPY INTO</code> to reorder columns, concatenate fields, cast types, or add computed values — all during the load. Prerequisites: a named stage with MOCK.csv uploaded — see <a href="s04-data-loading-unloading.html">Section 4</a>.</p>
+
+          <pre><code>USE ROLE SYSADMIN;
+USE WAREHOUSE COMPUTE_WH;
+USE DATABASE la_db;
+USE SCHEMA la_schema;
+
+LIST @internal_named_stage;
+
+-- Preview staged columns
+SELECT t.$1, t.$2, t.$4
+FROM @internal_named_stage/MOCK.csv t;
+
+SELECT t.$1, CONCAT(t.$2, ' ', t.$3), t.$4, t.$7
+FROM @internal_named_stage/MOCK.csv t;
+
+CREATE OR REPLACE TABLE new_table2 (
+  customer   VARCHAR,
+  full_name  VARCHAR,
+  region     VARCHAR,
+  email      VARCHAR,
+  gender     VARCHAR,
+  "ORDER"    INTEGER
+);
+
+-- Reorder columns and build full_name from first + last
+COPY INTO new_table2 (customer, full_name, region, gender, email)
+FROM (
+  SELECT t.$1, CONCAT(t.$2, ' ', t.$3), t.$4, t.$6, t.$5
+  FROM @internal_named_stage/MOCK.csv t
+)
+FILE_FORMAT = (TYPE = CSV SKIP_HEADER = 1)
+FORCE = TRUE;</code></pre>
+
+          <pre><code>-- Cast order column; add BINARY column
+CREATE OR REPLACE TABLE new_table2 (
+  customer   VARCHAR,
+  full_name  VARCHAR,
+  region     VARCHAR,
+  email      VARCHAR,
+  gender     VARCHAR,
+  "ORDER"    DECIMAL(15, 3),
+  extra_col  BINARY
+);
+
+COPY INTO new_table2 (customer, full_name, region, email, gender, "ORDER", extra_col)
+FROM (
+  SELECT
+    t.$1,
+    CONCAT(t.$2, ' ', t.$3),
+    t.$4, t.$5, t.$6,
+    CAST(t.$7 AS INTEGER),
+    TO_BINARY(t.$4, 'utf-8')
+  FROM @internal_named_stage/MOCK.csv t
+)
+FILE_FORMAT = (TYPE = CSV SKIP_HEADER = 1)
+FORCE = TRUE;</code></pre>
+
+          <pre><code>-- AUTOINCREMENT column (populated by Snowflake, not from file)
+CREATE OR REPLACE TABLE new_table2 (
+  index_col  NUMBER AUTOINCREMENT START 2 INCREMENT 10,
+  customer   VARCHAR,
+  full_name  VARCHAR,
+  region     VARCHAR,
+  email      VARCHAR,
+  gender     VARCHAR,
+  "ORDER"    DECIMAL(15, 3),
+  extra_col  BINARY
+);
+
+COPY INTO new_table2 (customer, full_name, region, email, gender, "ORDER", extra_col)
+FROM (
+  SELECT t.$1, CONCAT(t.$2, ' ', t.$3), t.$4, t.$5, t.$6,
+         CAST(t.$7 AS INTEGER), TO_BINARY(t.$4, 'utf-8')
+  FROM @internal_named_stage/MOCK.csv t
+)
+FILE_FORMAT = (TYPE = CSV SKIP_HEADER = 1)
+FORCE = TRUE;
+
+-- TRUNCATECOLUMNS when target VARCHAR is shorter than source
+CREATE OR REPLACE TABLE new_table2 (
+  index_col  NUMBER AUTOINCREMENT START 1 INCREMENT 1,
+  customer   VARCHAR,
+  full_name  VARCHAR(8),
+  region     VARCHAR,
+  email      VARCHAR,
+  gender     VARCHAR,
+  "ORDER"    DECIMAL(15, 3),
+  extra_col  BINARY
+);
+
+COPY INTO new_table2 (customer, full_name, region, email, gender, "ORDER", extra_col)
+FROM (
+  SELECT t.$1, CONCAT(t.$2, ' ', t.$3), t.$4, t.$5, t.$6,
+         CAST(t.$7 AS INTEGER), TO_BINARY(t.$4, 'utf-8')
+  FROM @internal_named_stage/MOCK.csv t
+)
+FILE_FORMAT = (TYPE = CSV SKIP_HEADER = 1)
+TRUNCATECOLUMNS = TRUE
+FORCE = TRUE;</code></pre>
+
+          <div class="callout warn">
+            <strong>Load-time transform limits:</strong> Only scalar functions allowed in the transform subquery — no aggregate or window functions. See <a href="s08-more-features.html">Section 8</a> for the supported-functions overview.
+          </div>
+        </section>
+
+        <section class="section" id="file-format">
+          <h2>Demo : File Format</h2>
+          <p class="muted">Course file: <code>Advance Data Loading/File Format.txt</code></p>
+          <p>A file format object tells Snowflake how to parse files: delimiter, headers, compression, null handling, and type. Snowflake supports <strong>CSV, TSV, JSON, Parquet, Avro, ORC, and XML</strong> for loading. You can attach a format to a stage, reference it in <code>COPY INTO</code>, or override options inline.</p>
+
+          <div class="grid-3 card-grid">
+            <div class="mini-card">
+              <h4>CSV / TSV</h4>
+              <p>Structured delimited text. Use <code>SKIP_HEADER</code>, <code>FIELD_OPTIONALLY_ENCLOSED_BY</code>, <code>NULL_IF</code>.</p>
+            </div>
+            <div class="mini-card">
+              <h4>JSON / XML</h4>
+              <p>Semi-structured. For JSON arrays use <code>STRIP_OUTER_ARRAY = TRUE</code> when the file is a top-level array.</p>
+            </div>
+            <div class="mini-card">
+              <h4>Parquet / Avro / ORC</h4>
+              <p>Columnar or binary formats. Parquet supports <code>INFER_SCHEMA</code> from file headers automatically.</p>
+            </div>
+          </div>
+
+          <pre><code>CREATE OR REPLACE FILE FORMAT my_csv_ff
+  TYPE = CSV
+  FIELD_DELIMITER = ','
+  SKIP_HEADER = 1
+  NULL_IF = ('NULL', 'null')
+  EMPTY_FIELD_AS_NULL = TRUE
+  COMPRESSION = NONE;
+
+CREATE OR REPLACE FILE FORMAT my_json_ff TYPE = JSON;
+
+CREATE OR REPLACE FILE FORMAT my_parquet_ff
+  TYPE = PARQUET
+  COMPRESSION = SNAPPY;
+
+COPY INTO customers_named
+FROM @internal_named_stage
+FILE_FORMAT = my_csv_ff
+FORCE = TRUE;
+
+-- Attach default format to a stage
+CREATE OR REPLACE STAGE my_int_stage FILE_FORMAT = my_csv_ff;
+
+ALTER FILE FORMAT my_csv_ff RENAME TO my_csv_ff_new;
+ALTER FILE FORMAT my_csv_ff_new SET FIELD_DELIMITER = '|';
+
+DESC FILE FORMAT my_csv_ff_new;
+SHOW FILE FORMATS;</code></pre>
+
+          <pre><code>-- Override at COPY time without changing the object
+COPY INTO customers_named
+FROM @internal_named_stage
+FILE_FORMAT = (FORMAT_NAME = my_csv_ff, SKIP_HEADER = 1);
+
+-- Infer schema for table DDL from staged files
+CREATE TABLE mytable
+USING TEMPLATE (
+  SELECT ARRAY_AGG(OBJECT_CONSTRUCT(*))
+  WITHIN GROUP (ORDER BY ORDER_ID)
+  FROM TABLE(
+    INFER_SCHEMA(
+      LOCATION => '@internal_named_stage',
+      FILE_FORMAT => 'my_csv_ff'
+    )
+  )
+);</code></pre>
+
+          <div class="callout exam">
+            <strong>Exam note:</strong> File formats can be defined at three levels: (1) inline in <code>COPY INTO</code>, (2) on the stage definition, (3) inferred via <code>INFER_SCHEMA</code> for table DDL. Stage-level defaults apply when COPY does not specify otherwise.
+          </div>
+        </section>
+
+        <section class="section" id="snowpipe">
+          <h2>Snowpipe Concept &amp; Demo</h2>
+          <p class="muted">Course file: <code>Advance Data Loading/Snowpipe.txt</code></p>
+          <p>Snowpipe is Snowflake's <strong>continuous loading</strong> service. It wraps a <code>COPY INTO</code> statement in a pipe object and loads arriving files in <strong>micro-batches within about a minute</strong>, using <strong>serverless compute</strong> that Snowflake manages — not your virtual warehouse. Snowpipe pairs naturally with <strong>streams</strong> and <strong>tasks</strong> to build end-to-end CDC pipelines.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-087-snowpipe-arch.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-087-snowpipe-arch.png" alt="Snowpipe continuous loading architecture diagram sourced from Snowflake documentation" loading="lazy" width="1920" height="1080">
+            </a>
+            <figcaption><span class="slide-no">Slide 87</span>Snowpipe sits between cloud storage notifications and the COPY statement that lands rows in your table.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-089-snowpipe-flow.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-089-snowpipe-flow.png" alt="Continuous loading flow: internal stage to Snowpipe to staging table to target table" loading="lazy" width="1920" height="1080">
+            </a>
+            <figcaption><span class="slide-no">Slide 89</span>Files land on an internal stage; Snowpipe loads them through a staging step into the target table.</figcaption>
+          </figure>
+
+          <h3>File-sizing considerations</h3>
+          <p>Snowpipe parallelises work across files, so tuning file size directly affects throughput and reliability:</p>
+          <ul>
+            <li>The number of parallel load operations <strong>cannot exceed the number of data files</strong> — more files means more parallelism.</li>
+            <li><strong>Split very large files</strong> into smaller ones; <strong>combine tiny files</strong> into larger batches.</li>
+            <li>Ideal compressed size is <strong>100–250 MB or larger</strong>.</li>
+            <li>Loading a <strong>single file of 100 GB or more is not recommended</strong>.</li>
+            <li>On large files, choose <code>ON_ERROR</code> carefully — a bad row can affect a huge file.</li>
+            <li>If a load runs <strong>past 24 hours</strong>, Snowflake can cancel it with <strong>no data loaded</strong>.</li>
+            <li>Aim to accumulate source files at roughly a <strong>one-minute cadence</strong> to match Snowpipe's micro-batch rhythm.</li>
+          </ul>
+
+          <div class="callout info">
+            <strong>Load metadata window:</strong> Snowpipe retains load metadata for <strong>14 days</strong> (versus 64 days for bulk COPY). Duplicate-file skipping still applies within that window.
+          </div>
+
+          <pre><code>CREATE OR REPLACE TABLE new_pipe_table (
+  customer   VARCHAR,
+  first_name VARCHAR,
+  last_name  VARCHAR,
+  region     VARCHAR,
+  email      VARCHAR,
+  gender     VARCHAR,
+  "ORDER"    INTEGER
+);
+
+LIST @internal_named_stage;
+
+CREATE OR REPLACE PIPE mypipe
+  AUTO_INGEST = FALSE   -- TRUE when S3 event notifications configured
+AS
+COPY INTO new_pipe_table
+FROM @internal_named_stage
+FILE_FORMAT = (TYPE = CSV SKIP_HEADER = 1);
+
+SHOW PIPES;
+DESC PIPE mypipe;
+
+SELECT SYSTEM$PIPE_STATUS('MYPIPE');
+
+ALTER PIPE mypipe REFRESH;
+
+SELECT COUNT(*) FROM new_pipe_table;</code></pre>
+
+          <div class="callout tip">
+            <strong>Automating refresh with a task:</strong> When <code>AUTO_INGEST = FALSE</code>, schedule <code>ALTER PIPE … REFRESH</code> via a task (see <a href="#tasks">Tasks</a> below).
+          </div>
+
+          <div class="callout warn">
+            <strong>Common mistakes:</strong>
+            <ul>
+              <li>Expecting Snowpipe to use your warehouse — it uses serverless compute billed separately.</li>
+              <li>Forgetting <code>ALTER PIPE … REFRESH</code> when <code>AUTO_INGEST = FALSE</code>.</li>
+              <li>Not monitoring the pipe — use <code>SYSTEM$PIPE_STATUS</code> and load history views.</li>
+            </ul>
+          </div>
+        </section>
+
+        <section class="section" id="streams">
+          <h2>Streams Concept &amp; Demo</h2>
+          <p class="muted">Course file: <code>Advance Data Loading/Stream.txt</code></p>
+          <p>A stream is a Snowflake object that provides <strong>change data capture (CDC)</strong> — it tracks the <strong>delta</strong> of inserts and DML changes on a source table so downstream logic can act on only what changed. Critically, a stream does <strong>not copy table data</strong>; it stores an <strong>offset</strong> pointing into the source table's micro-partitions. When you query or consume the stream, Snowflake reconstructs the changed rows from the source.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-091-stream-offset.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-091-stream-offset.png" alt="Stream offset model: source table with an offset marker; consuming the stream advances the offset without duplicating data" loading="lazy" width="1920" height="1080">
+            </a>
+            <figcaption><span class="slide-no">Slide 91</span>The stream tracks an offset into the source — it is a pointer, not a copy of the data.</figcaption>
+          </figure>
+
+          <h3>Worked example: insert, update, and delete</h3>
+          <p>Suppose <code>raw_data</code> holds four rows. After the stream is created, three DML operations run: insert row 5 (Mike, 45), update row 1's age from 25 to 27, and delete row 4. The source table ends up with rows 1–3 and 5; the stream exposes four change rows.</p>
+
+          <div class="slide-row">
+            <figure class="slide-fig">
+              <a href="assets/slides/slide-092-stream-change.png" target="_blank" rel="noopener">
+                <img src="assets/slides/slide-092-stream-change.png" alt="Before and after tables showing insert of row 5, update of row 1 age to 27, delete of row 4, and resulting stream change set" loading="lazy" width="1920" height="1080">
+              </a>
+              <figcaption><span class="slide-no">Slide 92</span>Three DML operations produce four rows in the stream's change set.</figcaption>
+            </figure>
+            <figure class="slide-fig">
+              <a href="assets/slides/slide-093-stream-metadata.png" target="_blank" rel="noopener">
+                <img src="assets/slides/slide-093-stream-metadata.png" alt="Stream query result with METADATA$ACTION, METADATA$ISUPDATE, and METADATA$ROW_ID columns for insert, update-as-delete-plus-insert, and delete rows" loading="lazy" width="1920" height="1080">
+              </a>
+              <figcaption><span class="slide-no">Slide 93</span>An update appears as a DELETE + INSERT pair sharing the same <code>METADATA$ROW_ID</code> with <code>ISUPDATE = TRUE</code>.</figcaption>
+            </figure>
+          </div>
+
+          <h3>Stream metadata columns</h3>
+          <ul>
+            <li><code>METADATA$ACTION</code> — <code>INSERT</code> or <code>DELETE</code> (updates appear as DELETE + INSERT pair).</li>
+            <li><code>METADATA$ISUPDATE</code> — <code>TRUE</code> when the row is part of an update; <code>FALSE</code> for pure insert/delete.</li>
+            <li><code>METADATA$ROW_ID</code> — unique row identifier for the change.</li>
+          </ul>
+
+          <pre><code>CREATE OR REPLACE TABLE raw_data (id INT, name VARCHAR(50), age INT);
+CREATE OR REPLACE TABLE processed_data (id INT, name VARCHAR(50), age VARCHAR(10));
+
+INSERT INTO raw_data VALUES
+  (1, 'John', 25), (2, 'Mary', 30), (3, 'Peter', 40), (4, 'Jane', 35);
+
+-- One-time baseline load before CDC
+INSERT INTO processed_data SELECT id, name, CAST(age AS VARCHAR) FROM raw_data;
+
+CREATE OR REPLACE STREAM raw_data_stream ON TABLE raw_data;
+
+SELECT * FROM raw_data_stream;  -- empty until DML after stream creation
+
+INSERT INTO raw_data VALUES (5, 'Mike', 45);
+SELECT * FROM raw_data_stream;
+
+INSERT INTO processed_data (id, name, age)
+SELECT id, name, age FROM raw_data_stream;
+
+SELECT * FROM raw_data_stream;  -- empty — stream consumed</code></pre>
+
+          <h3>MERGE pattern for CDC (handles updates &amp; deletes)</h3>
+          <pre><code>UPDATE raw_data SET age = 27 WHERE id = 1;
+DELETE FROM raw_data WHERE id = 4;
+INSERT INTO raw_data VALUES (6, 'Mike', 65);
+
+MERGE INTO processed_data p
+USING raw_data_stream s ON p.id = s.id
+WHEN MATCHED AND s.metadata$action = 'DELETE' AND s.metadata$isupdate = FALSE
+  THEN DELETE
+WHEN MATCHED AND s.metadata$action = 'INSERT' AND s.metadata$isupdate = TRUE
+  THEN UPDATE SET p.name = s.name, p.age = s.age
+WHEN NOT MATCHED AND s.metadata$action = 'INSERT' AND s.metadata$isupdate = FALSE
+  THEN INSERT (id, name, age) VALUES (s.id, s.name, s.age);</code></pre>
+
+          <h3>Append-only and insert-only streams</h3>
+          <pre><code>CREATE OR REPLACE STREAM raw_data_stream2
+  ON TABLE raw_data
+  APPEND_ONLY = TRUE;
+
+-- For external tables use INSERT_ONLY = TRUE instead</code></pre>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Stream type</th><th>Tracks</th><th>Typical use</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><strong>Standard</strong> (default)</td><td>Inserts, updates, and deletes</td><td>Full CDC on native tables</td></tr>
+                <tr><td><strong>Append-only</strong> (<code>APPEND_ONLY = TRUE</code>)</td><td>Inserts only</td><td>Append-only sources where updates/deletes are irrelevant</td></tr>
+                <tr><td><strong>Insert-only</strong> (<code>INSERT_ONLY = TRUE</code>)</td><td>New rows from external files</td><td>External tables (only new files arrive)</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>Streams can be created on <strong>standard tables</strong>, <strong>directory tables</strong>, <strong>external tables</strong>, and the <strong>underlying tables of a view</strong>.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-095-stream-stale.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-095-stream-stale.png" alt="Stream staleness diagram: source table retention period versus stream STALE_AFTER date" loading="lazy" width="1920" height="1080">
+            </a>
+            <figcaption><span class="slide-no">Slide 95</span>Consume streams before <code>STALE_AFTER</code> — once stale, the stream stops tracking changes.</figcaption>
+          </figure>
+
+          <div class="callout danger">
+            <strong>Stale streams:</strong> Check <code>STALE_AFTER</code> in <code>SHOW STREAMS</code> or <code>DESC STREAM</code>. A stream goes stale when the source table's data falls <strong>outside Time Travel retention</strong> — Snowflake can no longer reconstruct the delta, so the stream <strong>stops tracking changes</strong>. Consume streams within the retention period — see <a href="s03-time-travel-views.html">Section 3</a>.
+          </div>
+        </section>
+
+        <section class="section" id="tasks">
+          <h2>Task Concept &amp; Demos</h2>
+          <p class="muted">Course file: <code>Advance Data Loading/TASKS.txt</code></p>
+          <p>Tasks schedule and orchestrate SQL work. A task can execute exactly one of the following:</p>
+          <ul>
+            <li>A <strong>single SQL statement</strong></li>
+            <li>A <strong>call to a stored procedure</strong></li>
+            <li><strong>Procedural logic</strong> using Snowflake Scripting</li>
+          </ul>
+          <p>New tasks are created in <strong>suspended</strong> state — run <code>ALTER TASK … RESUME</code> to activate.</p>
+
+          <div class="slide-row">
+            <figure class="slide-fig">
+              <a href="assets/slides/slide-098-task-types.png" target="_blank" rel="noopener">
+                <img src="assets/slides/slide-098-task-types.png" alt="Side-by-side user-managed tasks versus serverless tasks diagram" loading="lazy" width="1920" height="1080">
+              </a>
+              <figcaption><span class="slide-no">Slide 98</span>User-managed tasks bind to your warehouse; serverless tasks spin up task compute automatically.</figcaption>
+            </figure>
+            <figure class="slide-fig">
+              <a href="assets/slides/slide-099-task-compare.png" target="_blank" rel="noopener">
+                <img src="assets/slides/slide-099-task-compare.png" alt="Comparison table: serverless tasks for low warehouse utilisation and strict schedules versus user-managed for predictable spikes" loading="lazy" width="1920" height="1080">
+              </a>
+              <figcaption><span class="slide-no">Slide 99</span>Pick serverless when schedule timing matters and you cannot fully utilise a warehouse; pick user-managed when the warehouse stays busy.</figcaption>
+            </figure>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Category</th><th>Serverless task</th><th>User-managed task</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>Utilisation</td><td>When you cannot fully utilise a warehouse</td><td>When you can fully utilise the warehouse</td></tr>
+                <tr><td>Workload</td><td>Predictable load</td><td>May have spikes</td></tr>
+                <tr><td>Scheduling</td><td>When schedule timing is important</td><td>When schedule timing is less important</td></tr>
+                <tr><td>Syntax</td><td><code>USER_TASK_MANAGED_INITIAL_WAREHOUSE_SIZE = 'XSMALL'</code></td><td><code>WAREHOUSE = COMPUTE_WH</code></td></tr>
+                <tr><td>Limitations</td><td>Max warehouse size <strong>XXLARGE</strong>; cannot run Java/Python UDFs or Scala stored procedures inside the task body</td><td>Uses your warehouse's full size range</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <pre><code>CREATE OR REPLACE TABLE my_table (id INT, name VARCHAR(100), email VARCHAR(200));
+
+CREATE OR REPLACE TASK task_demo_u
+  WAREHOUSE = COMPUTE_WH
+  SCHEDULE = '1 MINUTE'
+AS
+  INSERT INTO my_table (id, name, email)
+  VALUES (100, 'User Managed', 'your-team@example.com');
+
+CREATE OR REPLACE TASK task_demo_s
+  USER_TASK_MANAGED_INITIAL_WAREHOUSE_SIZE = 'XSMALL'
+  SCHEDULE = '1 MINUTE'
+AS
+  INSERT INTO my_table (id, name, email)
+  VALUES (101, 'Serverless', 'your-team@example.com');
+
+ALTER TASK task_demo_u RESUME;
+ALTER TASK task_demo_s RESUME;
+
+EXECUTE TASK task_demo_s;
+
+SELECT * FROM TABLE(INFORMATION_SCHEMA.TASK_HISTORY())
+ORDER BY scheduled_time DESC
+LIMIT 20;
+
+ALTER TASK task_demo_s SUSPEND;</code></pre>
+
+          <h3>Dependent tasks (DAG)</h3>
+          <p>A task DAG is a series of tasks composed of a <strong>single root task</strong> and additional tasks organised by their dependencies. Snowflake enforces these rules:</p>
+          <ul>
+            <li><strong>One-directional</strong> — dependencies flow forward only</li>
+            <li>A task can have <strong>multiple predecessors and multiple successors</strong></li>
+            <li><strong>No looping</strong> allowed</li>
+            <li>Maximum <strong>1,000 tasks</strong> in a DAG</li>
+            <li>Each task can have at most <strong>100 predecessor tasks</strong> and <strong>100 child tasks</strong></li>
+          </ul>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-101-task-dag.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-101-task-dag.png" alt="Task DAG with one root task branching to dependent tasks; no loops; multiple predecessors and successors allowed" loading="lazy" width="1920" height="1080">
+            </a>
+            <figcaption><span class="slide-no">Slide 101</span>One root task fans out to dependants — edges are dependencies, never cycles.</figcaption>
+          </figure>
+
+          <pre><code>CREATE OR REPLACE TASK task_demo_2
+  USER_TASK_MANAGED_INITIAL_WAREHOUSE_SIZE = 'XSMALL'
+  AFTER task_demo_u
+AS
+  INSERT INTO my_table (id, name, email)
+  VALUES (102, 'Dependent', 'your-team@example.com');
+
+-- Resume root first, then child
+ALTER TASK task_demo_u RESUME;
+ALTER TASK task_demo_2 RESUME;</code></pre>
+
+          <h3>Stream + task (CDC automation)</h3>
+          <pre><code>CREATE OR REPLACE TASK task_stream
+  USER_TASK_MANAGED_INITIAL_WAREHOUSE_SIZE = 'XSMALL'
+  SCHEDULE = '1 MINUTE'
+  WHEN SYSTEM$STREAM_HAS_DATA('raw_data_stream')
+AS
+  INSERT INTO processed_data (id, name, age)
+  SELECT id, name, age FROM raw_data_stream;
+
+ALTER TASK task_stream RESUME;</code></pre>
+
+          <h3>CRON scheduling</h3>
+          <p>Snowflake tasks accept cron-style schedules. The five fields are minute, hour, day of month, month, and day of week, followed by an optional timezone:</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-102-cron.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-102-cron.png" alt="CRON option table: minute 0-59, hour 0-23, day of month 1-31, month 1-12, day of week 0-7 where 0 and 7 are Sunday" loading="lazy" width="1920" height="1080">
+            </a>
+            <figcaption><span class="slide-no">Slide 102</span>Five cron fields plus an IANA timezone name on the end.</figcaption>
+          </figure>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Field</th><th>Range</th><th>Example meaning</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>Minute</td><td>0–59</td><td>At minute 0 of the hour</td></tr>
+                <tr><td>Hour</td><td>0–23</td><td>At hour 9 (9 AM)</td></tr>
+                <tr><td>Day of month</td><td>1–31</td><td>Every day (<code>*</code>)</td></tr>
+                <tr><td>Month</td><td>1–12</td><td>Every month (<code>*</code>)</td></tr>
+                <tr><td>Day of week</td><td>0–7 (0 and 7 = Sunday)</td><td>Every day of the week (<code>*</code>)</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <pre><code># ┌───────────── minute (0 - 59)
+# │ ┌───────────── hour (0 - 23)
+# │ │ ┌───────────── day of the month (1 - 31)
+# │ │ │ ┌───────────── month (1 - 12)
+# │ │ │ │ ┌───────────── day of the week (0 - 6) (Sunday to Saturday;
+# │ │ │ │ │                                       7 is also Sunday on some systems)
+# │ │ │ │ │
+# * * * * * America/Los_Angeles
+
+-- Run every day at 9:00 AM Pacific
+CREATE TASK daily_load
+  WAREHOUSE = COMPUTE_WH
+  SCHEDULE = 'USING CRON 0 9 * * * America/Los_Angeles'
+AS
+  INSERT INTO audit_log VALUES (CURRENT_TIMESTAMP(), 'daily run');</code></pre>
+
+          <p>Cron scheduling automates repetitive work — data loading, transformations, pipe refreshes — with flexible start time, frequency, and interval control.</p>
+
+          <div class="callout warn">
+            <strong>Common mistakes:</strong>
+            <ul>
+              <li>Creating a task and wondering why it never runs — it starts <strong>suspended</strong>.</li>
+              <li>Resuming child tasks before parent tasks in a DAG.</li>
+              <li>Using a 1-minute schedule in production without considering credit cost — suspend when idle.</li>
+            </ul>
+          </div>
+        </section>
+
+        <section class="section" id="copy-into-options">
+          <h2>Demo : COPY INTO I &amp; II</h2>
+          <p class="muted">Course file: <code>Advance Data Loading/COPY INTO OPTIONS.txt</code></p>
+          <p><code>COPY INTO &lt;table&gt;</code> options control error handling, column mapping, and reload behaviour. Use MOCK1.csv (row 2 has a bad <code>order</code> value) to test <code>ON_ERROR</code> options — upload both MOCK.csv and MOCK1.csv per <a href="s04-data-loading-unloading.html">Section 4</a>.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Option</th><th>Values</th><th>Purpose</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><code>ON_ERROR</code></td><td><code>ABORT_STATEMENT</code> (bulk default), <code>CONTINUE</code>, <code>SKIP_FILE</code> (Snowpipe default), <code>SKIP_FILE_n</code>, <code>'SKIP_FILE_n%'</code></td><td>Error handling per file/row</td></tr>
+                <tr><td><code>FORCE</code></td><td><code>TRUE | FALSE</code></td><td>Reload files even if already loaded</td></tr>
+                <tr><td><code>PURGE</code></td><td><code>TRUE | FALSE</code> (default FALSE)</td><td>Remove files from stage after load</td></tr>
+                <tr><td><code>MATCH_BY_COLUMN_NAME</code></td><td><code>NONE</code> (default), <code>CASE_SENSITIVE</code>, <code>CASE_INSENSITIVE</code></td><td>Map CSV headers to table columns by name</td></tr>
+                <tr><td><code>ENFORCE_LENGTH</code></td><td><code>TRUE</code> (default), <code>FALSE</code></td><td>Reject values longer than column definition</td></tr>
+                <tr><td><code>TRUNCATECOLUMNS</code></td><td><code>TRUE | FALSE</code></td><td>Truncate strings that exceed VARCHAR length</td></tr>
+                <tr><td><code>SIZE_LIMIT</code></td><td>bytes</td><td>Stop after loading N bytes of data</td></tr>
+                <tr><td><code>RETURN_FAILED_ONLY</code></td><td><code>TRUE | FALSE</code></td><td>Result set shows only failed files</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <pre><code>CREATE OR REPLACE FILE FORMAT my_csv_ff
+  TYPE = CSV FIELD_DELIMITER = ','
+  SKIP_HEADER = 1 NULL_IF = ('NULL', 'null')
+  EMPTY_FIELD_AS_NULL = TRUE COMPRESSION = NONE;
+
+CREATE OR REPLACE TABLE customers_named (
+  customer NUMBER(38,0) NOT NULL,
+  first_name VARCHAR(255) NOT NULL,
+  last_name VARCHAR(255) NOT NULL,
+  region VARCHAR(255) NOT NULL,
+  email VARCHAR(255) NOT NULL,
+  gender VARCHAR(255) NOT NULL,
+  "order" NUMBER(38,0) NOT NULL
+);
+
+-- Default: ABORT_STATEMENT
+COPY INTO customers_named FROM @internal_named_stage FILE_FORMAT = my_csv_ff;
+
+-- CONTINUE: load good rows, skip bad ones
+COPY INTO customers_named FROM @internal_named_stage
+FILE_FORMAT = my_csv_ff ON_ERROR = CONTINUE;
+
+-- SKIP_FILE: skip entire file on first error
+COPY INTO customers_named FROM @internal_named_stage
+FILE_FORMAT = my_csv_ff ON_ERROR = SKIP_FILE;
+
+-- Tolerate first 2 errors, or 2% of rows
+COPY INTO customers_named FROM @internal_named_stage
+FILE_FORMAT = my_csv_ff ON_ERROR = SKIP_FILE_2;
+
+COPY INTO customers_named FROM @internal_named_stage
+FILE_FORMAT = my_csv_ff ON_ERROR = 'SKIP_FILE_2%';</code></pre>
+
+          <pre><code>-- SIZE_LIMIT stops after N bytes (first file always processes)
+COPY INTO customers_named FROM @internal_named_stage
+FILE_FORMAT = my_csv_ff SIZE_LIMIT = 640;
+
+-- RETURN_FAILED_ONLY with CONTINUE
+COPY INTO customers_named FROM @internal_named_stage
+FILE_FORMAT = my_csv_ff ON_ERROR = CONTINUE RETURN_FAILED_ONLY = TRUE;
+
+-- MATCH_BY_COLUMN_NAME with PARSE_HEADER
+CREATE OR REPLACE FILE FORMAT my_csv_ff2
+  TYPE = CSV PARSE_HEADER = TRUE
+  NULL_IF = ('NULL', 'null') EMPTY_FIELD_AS_NULL = TRUE;
+
+COPY INTO customers_named
+FROM @internal_named_stage/MOCK.csv
+FILE_FORMAT = my_csv_ff2
+MATCH_BY_COLUMN_NAME = CASE_INSENSITIVE;
+
+-- ENFORCE_LENGTH = FALSE allows overflow (opposite of TRUNCATECOLUMNS)
+CREATE OR REPLACE TABLE customers_named2 (
+  customer NUMBER(38,0) NOT NULL,
+  first_name VARCHAR(5) NOT NULL,
+  last_name VARCHAR(255) NOT NULL,
+  region VARCHAR(255) NOT NULL,
+  email VARCHAR(255) NOT NULL,
+  gender VARCHAR(255) NOT NULL,
+  "order" NUMBER(38,0) NOT NULL
+);
+
+COPY INTO customers_named2
+FROM @internal_named_stage/MOCK.csv
+FILE_FORMAT = my_csv_ff
+ENFORCE_LENGTH = FALSE;</code></pre>
+        </section>
+
+        <section class="section" id="validation">
+          <h2>Demo : Validation Mode and Validate</h2>
+          <p class="muted">Course file: <code>Advance Data Loading/VALIDATION.txt</code></p>
+          <p>Use <code>VALIDATION_MODE</code> to dry-run a <code>COPY INTO</code> without inserting rows. After a real load, <code>VALIDATE()</code> inspects errors from a specific job.</p>
+
+          <pre><code>COPY INTO customers_named3
+FROM @internal_named_stage
+FILE_FORMAT = my_csv_ff
+VALIDATION_MODE = RETURN_ERRORS;
+
+COPY INTO customers_named3
+FROM @internal_named_stage
+FILE_FORMAT = my_csv_ff
+VALIDATION_MODE = RETURN_10_ROWS;
+
+COPY INTO customers_named3
+FROM @internal_named_stage
+FILE_FORMAT = my_csv_ff
+VALIDATION_MODE = RETURN_ALL_ERRORS;
+
+-- After a real COPY, inspect last job errors
+SELECT * FROM TABLE(VALIDATE(customers_named, JOB_ID => '_last'));
+
+CREATE OR REPLACE TABLE copy_errors AS
+SELECT * FROM TABLE(VALIDATE(customers_named, JOB_ID => '_last'));</code></pre>
+
+          <div class="callout tip">
+            <strong>Workflow:</strong> Run <code>VALIDATION_MODE</code> first on messy files → fix file format or source data → run production <code>COPY INTO</code> with <code>ON_ERROR = ABORT_STATEMENT</code>.
+          </div>
+
+          <div class="callout warn">
+            <strong>Source correction:</strong> Course <code>VALIDATION.txt</code> hard-codes a query ID in <code>VALIDATE(..., JOB_ID => '01ade083-…')</code>. Always use <code>'_last'</code> or your own job ID from the COPY result set.
+          </div>
+        </section>
+
+        <section class="section" id="udf-sp">
+          <h2>UDF and Stored Procedure Concept &amp; Demo</h2>
+          <p class="muted">Course file: <code>Advance Data Loading/UDF SP.txt</code></p>
+          <p>User-defined functions extend Snowflake with operations not available through built-in system functions. Stored procedures are named, precompiled collections of SQL and control-flow logic invoked with <code>CALL</code>. Snowflake Scripting and Snowpark are covered in more depth in <a href="s13-tools-interfaces.html">Section 13</a>.</p>
+
+          <div class="analogy">
+            <strong>Everyday analogy — kitchen tools:</strong> Built-in functions are standard utensils everyone shares. A UDF is your personal spice blend you sprinkle into any dish (SELECT). A stored procedure is the full recipe you execute as one step (CALL).
+          </div>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-108-udf-types.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-108-udf-types.png" alt="Scalar UDF returns one value per input row; table UDF (UDTF) returns a set of rows per input" loading="lazy" width="1920" height="1080">
+            </a>
+            <figcaption><span class="slide-no">Slide 108</span>Scalar UDFs map one input row to one output value; UDTFs map one input to many output rows.</figcaption>
+          </figure>
+
+          <p>UDFs are database objects created in a specific database and schema, addressed as <code>db.schema.function_name</code> — for example <code>demodb.demoschema.udf_sample()</code>. You <strong>cannot create a UDF with the same name as a system-defined function</strong>.</p>
+
+          <h3>Scalar UDFs — multiple languages</h3>
+          <p>The same <code>square</code> function can be written in SQL, JavaScript, Python, or Java:</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-112-udf-languages.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-112-udf-languages.png" alt="Four CREATE FUNCTION square examples in SQL, Python, Java, and JavaScript" loading="lazy" width="1920" height="1080">
+            </a>
+            <figcaption><span class="slide-no">Slide 112</span>Same logic, four language options — pick based on team skills and runtime needs.</figcaption>
+          </figure>
+
+          <pre><code>-- SQL
+CREATE OR REPLACE FUNCTION square(x FLOAT)
+  RETURNS FLOAT
+  AS $$ SELECT x * x; $$;
+
+-- JavaScript
+CREATE OR REPLACE FUNCTION square(x FLOAT)
+  RETURNS FLOAT
+  LANGUAGE JAVASCRIPT
+  AS $$ return x * x; $$;
+
+-- Python and Java variants follow the same RETURNS / LANGUAGE pattern</code></pre>
+
+          <h3>Function overloading</h3>
+          <p>Snowflake resolves UDFs by argument type, so you can define multiple versions of the same name:</p>
+          <pre><code>CREATE OR REPLACE FUNCTION add_numbers(x NUMBER)
+  RETURNS NUMBER AS $$ SELECT x + 8; $$;
+
+CREATE OR REPLACE FUNCTION add_numbers(x STRING)
+  RETURNS STRING AS $$ SELECT x || '8'; $$;
+
+SELECT add_numbers(1);    -- 9
+SELECT add_numbers('1');  -- 18</code></pre>
+
+          <h3>Scalar UDFs (SQL) — course demo</h3>
+          <pre><code>CREATE OR REPLACE FUNCTION addition(n NUMBER)
+  RETURNS NUMBER AS 'n + 8';
+
+SELECT addition(1);  -- 9
+
+CREATE OR REPLACE FUNCTION addition_new(n NUMBER)
+  RETURNS NUMBER AS $$ n + 8 $$;
+
+CREATE OR REPLACE FUNCTION addition(s STRING)
+  RETURNS STRING AS 's || ''8''';
+
+SELECT addition('1');  -- 18</code></pre>
+
+          <h3>JavaScript UDF</h3>
+          <pre><code>CREATE OR REPLACE FUNCTION addition_java(n FLOAT)
+  RETURNS FLOAT
+  LANGUAGE JAVASCRIPT
+  AS 'return n + 5.0;';
+
+SELECT addition_java(1.1);</code></pre>
+
+          <div class="callout warn">
+            <strong>Source correction:</strong> Course <code>UDF SP.txt</code> uses <code>return N + 5</code> while the parameter is <code>n</code> — JavaScript is case-sensitive. Use consistent casing.
+          </div>
+
+          <h3>Table functions (UDTF)</h3>
+          <pre><code>CREATE OR REPLACE FUNCTION get_orders_by_customer(customer_id INT)
+  RETURNS TABLE (order_id INT, order_date DATE, total_amount FLOAT)
+  AS $$
+    SELECT order_id, order_date, total_amount
+    FROM orders
+    WHERE customer_id = customer_id
+  $$;
+
+SELECT * FROM TABLE(get_orders_by_customer(1234));
+
+-- Course demo UDTF
+CREATE OR REPLACE FUNCTION training_topics()
+  RETURNS TABLE(msg VARCHAR)
+  AS $$
+    SELECT 'Training' UNION ALL SELECT 'Snowflake'
+  $$;
+
+SELECT msg FROM TABLE(training_topics()) ORDER BY msg;
+
+CREATE OR REPLACE TABLE sales (product_id VARCHAR, quantity_sold NUMBER(11, 2));
+INSERT INTO sales VALUES ('Jeans', 2000), ('Shirt', 1000);
+
+CREATE OR REPLACE FUNCTION sales_for_product(prod_id VARCHAR)
+  RETURNS TABLE(product_id VARCHAR, quantity_sold NUMBER(11, 2))
+  AS $$
+    SELECT product_id, quantity_sold FROM sales WHERE product_id = prod_id
+  $$;
+
+SELECT * FROM TABLE(sales_for_product('Jeans'));</code></pre>
+
+          <h3>Stored procedures</h3>
+          <p>A stored procedure is invoked only with <code>CALL</code> (including nested calls from other procedures). The general skeleton:</p>
+          <pre><code>CREATE OR REPLACE PROCEDURE procedure_name (parameter_list)
+  RETURNS return_type [NOT NULL]
+  LANGUAGE {SQL | JAVASCRIPT | PYTHON | JAVA}
+  EXECUTE AS CALLER | OWNER
+  AS
+  $$
+  BEGIN
+    -- logic
+    RETURN message;
+  END;
+  $$;
+
+CALL procedure_name(parameter_values);</code></pre>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-116-sp-languages.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-116-sp-languages.png" alt="Stored procedure language options: Snowflake Scripting, SQL, JavaScript, and Snowpark languages Scala, Python, Java" loading="lazy" width="1920" height="1080">
+            </a>
+            <figcaption><span class="slide-no">Slide 116</span>Procedures support Snowflake Scripting, SQL, JavaScript, and Snowpark (Scala, Python, Java).</figcaption>
+          </figure>
+
+          <pre><code>CREATE OR REPLACE SECURE PROCEDURE return_greater(a INTEGER, b INTEGER)
+  RETURNS INTEGER
+  LANGUAGE SQL
+  EXECUTE AS CALLER
+  AS
+  BEGIN
+    IF (a > b) THEN RETURN a; ELSE RETURN b; END IF;
+  END;
+
+CALL return_greater(4, 3);  -- 4
+
+-- Procedure returning a result set (course slide pattern)
+CREATE OR REPLACE PROCEDURE get_customer_orders(customer_id INT)
+  RETURNS TABLE (order_id INT, order_date DATE, total_amount FLOAT)
+  LANGUAGE SQL
+  EXECUTE AS OWNER
+  AS
+  $$
+  BEGIN
+    SELECT order_id, order_date, total_amount
+    FROM orders
+    WHERE customer_id = customer_id;
+  END;
+  $$;
+
+CALL get_customer_orders(1234);
+
+SHOW FUNCTIONS LIKE '%add%';
+SHOW PROCEDURES LIKE '%return%';</code></pre>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-118-udf-vs-sp.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-118-udf-vs-sp.png" alt="Comparison table: UDF must return a value and runs per row in SELECT versus stored procedure with optional return called standalone for DML and DDL" loading="lazy" width="1920" height="1080">
+            </a>
+            <figcaption><span class="slide-no">Slide 118</span>UDFs extend expressions; procedures orchestrate standalone workflows with broader database access.</figcaption>
+          </figure>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Feature</th><th>User-defined function (UDF)</th><th>Stored procedure</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>Return value</td><td><strong>Must</strong> return a value</td><td>Return is <strong>optional</strong></td></tr>
+                <tr><td>Typical use</td><td>Part of a SQL statement (SELECT, WHERE, COPY transform)</td><td>DML, DDL, orchestration</td></tr>
+                <tr><td>Languages</td><td>Java, JavaScript, Python, SQL</td><td>Java, JavaScript, Python, Scala, Snowflake Scripting, SQL</td></tr>
+                <tr><td>Granularity</td><td>Called for <strong>every row</strong> of a query result set</td><td>Executed as a <strong>standalone command</strong> only</td></tr>
+                <tr><td>Inside SELECT</td><td>Multiple UDFs can appear in one SELECT</td><td>Single procedure per statement; nesting via <code>CALL</code> is allowed</td></tr>
+                <tr><td>Database access</td><td>May not have full database access</td><td>Has database access</td></tr>
+                <tr><td>Invocation</td><td>In queries</td><td><code>CALL</code> only</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p><code>CREATE SECURE FUNCTION</code> hides the function body from users who can still execute it — important when logic embeds sensitive filters.</p>
+        </section>
+
+        <section class="section" id="cloning">
+          <h2>Cloning Concept &amp; Demos</h2>
+          <p class="muted">Course file: <code>Advance Data Loading/CLONE.txt</code></p>
+          <p>Cloning creates an exact copy of a database, schema, or table for backups, testing new structures, or spinning up dev environments. A clone is <strong>zero-copy</strong>: it shares underlying <strong>micro-partitions</strong> with the source until either side changes through DML — initial creation is fast and does not duplicate storage immediately. Point-in-time cloning uses the same <code>AT</code>/<code>BEFORE</code> syntax as Time Travel — see <a href="s03-time-travel-views.html">Section 3</a>.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-123-clone-storage.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-123-clone-storage.png" alt="Clone storage diagram: source and clone share micro-partitions until one side receives updates, then divergent partitions are stored separately" loading="lazy" width="1920" height="1080">
+            </a>
+            <figcaption><span class="slide-no">Slide 123</span>Shared micro-partitions until a DML on either side forces a copy-on-write split.</figcaption>
+          </figure>
+
+          <pre><code>CREATE OR REPLACE TABLE sample_data (id INT, name VARCHAR(50), age INT);
+
+INSERT INTO sample_data VALUES
+  (1, 'John', 25), (2, 'Mary', 30), (3, 'Peter', 40), (4, 'Jane', 35);
+
+CREATE OR REPLACE TABLE clone_data CLONE sample_data;
+CREATE OR REPLACE TABLE clone_data2 CLONE clone_data;
+
+INSERT INTO sample_data VALUES (5, 'John', 25);
+SELECT * FROM clone_data;   -- still 4 rows — clone is independent snapshot</code></pre>
+
+          <pre><code>ALTER SESSION SET TIMEZONE = 'UTC';
+SELECT SYSTIMESTAMP();
+
+TRUNCATE TABLE sample_data;
+
+CREATE OR REPLACE TABLE orders_clone_restore CLONE sample_data
+  BEFORE(TIMESTAMP => '&lt;your_timestamp&gt;'::TIMESTAMP_NTZ);
+
+CREATE OR REPLACE TABLE orders_clone_restore CLONE sample_data
+  BEFORE(STATEMENT => '&lt;your_query_id&gt;');
+
+CREATE OR REPLACE TABLE orders_clone_restore CLONE sample_data
+  AT(OFFSET => -60 * 3);  -- 3 hours ago</code></pre>
+
+          <pre><code>-- Clone schema (includes child objects)
+CREATE OR REPLACE SCHEMA la_schema2 CLONE la_schema;
+
+-- Clone stream
+CREATE OR REPLACE STREAM raw_data_stream2 CLONE raw_data_stream;
+
+DESC STREAM raw_data_stream2;</code></pre>
+
+          <h3>What a clone includes and excludes</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-121-clone-what.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-121-clone-what.png" alt="Clone includes database, schema, tables, file formats, sequences, tags, clustering keys, streams, stages, tasks, pipes, and views with caveats; excludes users, roles, grants, warehouses, resource monitors, storage integrations, and policies" loading="lazy" width="1920" height="1080">
+            </a>
+            <figcaption><span class="slide-no">Slide 121</span>Schema/database clones bring most child objects; security and compute objects stay behind.</figcaption>
+          </figure>
+
+          <div class="grid-2">
+            <div class="mini-card">
+              <h4>Cloned with database or schema</h4>
+              <ul>
+                <li>Database, schema (including external tables and internal named stages)</li>
+                <li>Tables, file formats, sequences, tags</li>
+                <li>Clustering keys (suspended)</li>
+                <li>Streams, external stages, table stages (empty)</li>
+                <li>Tasks (suspended by default)</li>
+                <li>Pipes referring to an external stage</li>
+                <li>Views — <strong>only when cloning a database or schema</strong></li>
+              </ul>
+            </div>
+            <div class="mini-card">
+              <h4>Not cloned</h4>
+              <ul>
+                <li>Users, roles, grants</li>
+                <li>Virtual warehouses, resource monitors</li>
+                <li>Storage integrations, policies</li>
+                <li>Views when cloning a table alone</li>
+                <li>Internal named stages when cloning a table alone</li>
+                <li>Temporary tables</li>
+              </ul>
+            </div>
+          </div>
+
+          <h3>Privileges required to clone</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-122-clone-privileges.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-122-clone-privileges.png" alt="Clone privileges: SELECT on tables, OWNERSHIP on pipes streams and tasks, USAGE on other objects" loading="lazy" width="1920" height="1080">
+            </a>
+            <figcaption><span class="slide-no">Slide 122</span>You need SELECT on tables, OWNERSHIP on pipes/streams/tasks, and USAGE on everything else.</figcaption>
+          </figure>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Object</th><th>Privilege required on source</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>Tables</td><td><code>SELECT</code></td></tr>
+                <tr><td>Pipes, streams, tasks</td><td><code>OWNERSHIP</code></td></tr>
+                <tr><td>Other objects</td><td><code>USAGE</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Cloning with Time Travel</h3>
+          <p>Point-in-time clone is available only for <strong>database, schema, table, and stream</strong>. If you omit a timestamp, Snowflake defaults to the <strong>current timestamp</strong>. Cloning fails when:</p>
+          <ul>
+            <li>The source object <strong>did not exist</strong> at the requested point in the past</li>
+            <li>A pipe with <code>AUTO_INGEST = TRUE</code> would need to be <strong>recreated</strong> (historical pipe state cannot be restored the same way)</li>
+          </ul>
+
+          <div class="callout warn">
+            <strong>Clone type rules:</strong> Permanent clones to any type; transient clones to transient or temporary; temporary clones to transient or temporary. Shared databases from data sharing <strong>cannot</strong> be cloned.
+          </div>
+
+          <h3>Fail-safe (brief)</h3>
+          <p>After Time Travel expires, Snowflake keeps permanent table data in <strong>Fail-safe</strong> for a fixed <strong>7 days</strong>. During Fail-safe users cannot query or clone the data — only Snowflake Support can attempt recovery. Storage continues to bill. Do not rely on Fail-safe as your DR plan.</p>
+        </section>
+
+        <section class="section" id="lab">
+          <div class="lab">
+            <h3>Practical Lab — Pipeline Mini-Stack</h3>
+            <div class="lab-meta">
+              <span>Prerequisites: MOCK.csv on stage from Section 4</span>
+              <span>Role: SYSADMIN</span>
+              <span>Warehouse: COMPUTE_WH (X-Small)</span>
+              <span>Cost: Low; suspend tasks when done</span>
+            </div>
+            <pre><code>USE SCHEMA la_db.la_schema;
+
+CREATE OR REPLACE PIPE pipe_lab AUTO_INGEST = FALSE AS
+COPY INTO new_pipe_table FROM @internal_named_stage
+FILE_FORMAT = (TYPE = CSV SKIP_HEADER = 1);
+
+ALTER PIPE pipe_lab REFRESH;
+
+CREATE OR REPLACE TABLE raw_data (id INT, name VARCHAR(50), age INT);
+CREATE OR REPLACE TABLE processed_data (id INT, name VARCHAR(50), age VARCHAR(10));
+INSERT INTO raw_data VALUES (1,'Alice',30), (2,'Bob',25);
+
+CREATE OR REPLACE STREAM raw_stream ON TABLE raw_data;
+INSERT INTO raw_data VALUES (3,'Carol',35);
+
+CREATE OR REPLACE TASK process_stream_task
+  WAREHOUSE = COMPUTE_WH
+  SCHEDULE = '2 MINUTE'
+  WHEN SYSTEM$STREAM_HAS_DATA('raw_stream')
+AS
+  INSERT INTO processed_data SELECT id, name, CAST(age AS VARCHAR) FROM raw_stream;
+
+ALTER TASK process_stream_task RESUME;
+EXECUTE TASK process_stream_task;</code></pre>
+            <h4>Cleanup</h4>
+            <pre><code>ALTER TASK IF EXISTS process_stream_task SUSPEND;
+DROP TASK IF EXISTS process_stream_task;
+DROP PIPE IF EXISTS pipe_lab;
+DROP STREAM IF EXISTS raw_stream;</code></pre>
+          </div>
+        </section>
+
+        <section class="section" id="interview">
+          <h2>Interview questions</h2>
+          <p class="muted">Try to answer each one before opening it.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+            <details class="qa">
+              <summary>When would you choose Snowpipe over a scheduled bulk <code>COPY INTO</code>?<span class="qa-tag">Scenario</span></summary>
+              <div class="qa-body">
+                <p>Use Snowpipe when files arrive continuously and you want near-real-time loads without keeping a warehouse running. Snowpipe uses serverless compute triggered by file arrival (or <code>ALTER PIPE … REFRESH</code>); bulk COPY runs on your virtual warehouse on demand or on a task schedule. Bulk COPY suits large batch windows where you control exactly when warehouse credits are spent; Snowpipe suits event-driven pipelines where latency matters more than minimising per-load overhead.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Why does Snowpipe default to <code>ON_ERROR = SKIP_FILE</code> while bulk COPY defaults to <code>ABORT_STATEMENT</code>?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p>Bulk loads are usually operator-initiated: aborting the whole statement on the first bad row lets you fix the file and rerun cleanly. Snowpipe ingests autonomously in micro-batches — skipping a corrupt file keeps the pipe running instead of halting the entire continuous pipeline. You can override either default, but the out-of-box behaviour reflects batch control versus always-on ingestion.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How is Snowpipe billed, and why is it not free even when your warehouse is suspended?<span class="qa-tag">Cost</span></summary>
+              <div class="qa-body">
+                <p>Snowpipe charges for serverless compute used to scan staged files and load rows, billed separately from warehouse credits. File ingestion events and cloud notification plumbing may also incur cost depending on setup. Because Snowpipe never uses your warehouse, a suspended warehouse does not stop pipe charges — only suspending or dropping the pipe, or stopping file arrivals, does.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What does Snowflake load metadata do, what is the 64-day window, and when is <code>FORCE = TRUE</code> justified?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p>After a successful load, Snowflake records which files were loaded so a repeat <code>COPY INTO</code> skips them automatically — metadata is retained for 64 days. That is why a second COPY with the same files returns zero rows loaded. Use <code>FORCE = TRUE</code> when you deliberately need to reload unchanged files, for example after truncating the target table, fixing a transform, or reprocessing corrected source files within the metadata window.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What is the difference between <code>VALIDATION_MODE</code> on <code>COPY INTO</code> and the <code>VALIDATE()</code> table function?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p><code>VALIDATION_MODE</code> dry-runs a COPY before you insert anything — options like <code>RETURN_ERRORS</code> or <code>RETURN_10_ROWS</code> show what would fail without writing rows. <code>VALIDATE()</code> inspects errors from a load that already ran, using a job ID from the COPY result (or <code>'_last'</code>). Workflow: validate first on messy files, then run production COPY with strict <code>ON_ERROR</code>, then use <code>VALIDATE()</code> if you need to diagnose a completed job.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How do <code>MATCH_BY_COLUMN_NAME</code> and <code>PARSE_HEADER</code> work together?<span class="qa-tag">SQL</span></summary>
+              <div class="qa-body">
+                <p><code>PARSE_HEADER = TRUE</code> on the file format tells Snowflake to read the first row as column names instead of data. <code>MATCH_BY_COLUMN_NAME</code> then maps those header names to target table columns — <code>CASE_INSENSITIVE</code> ignores case differences. Without <code>PARSE_HEADER</code>, matching by name has nothing to match; without <code>MATCH_BY_COLUMN_NAME</code>, you rely on positional <code>$1, $2, …</code> mapping.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What does a stream actually store — and what are the three stream types?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>A stream does not copy table data; it stores change metadata and offsets pointing into the source table's micro-partitions, plus columns like <code>METADATA$ACTION</code>, <code>METADATA$ISUPDATE</code>, and <code>METADATA$ROW_ID</code>. The three types are: standard (default — tracks inserts, updates, and deletes), append-only (<code>APPEND_ONLY = TRUE</code> — inserts only), and insert-only (<code>INSERT_ONLY = TRUE</code> — for external tables where only new files arrive).</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How does a stream go stale, and how do you avoid it?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p>A stream becomes stale when source changes fall outside Time Travel retention — Snowflake can no longer reconstruct the delta. Check <code>STALE_AFTER</code> in <code>SHOW STREAMS</code> or <code>DESC STREAM</code>. Avoid staleness by consuming streams within the retention window, increasing retention if your SLA requires longer gaps between runs, and not letting unconsumed changes pile up indefinitely.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Walk through the <code>MERGE</code> pattern for stream-based CDC that handles inserts, updates, and deletes.<span class="qa-tag">SQL</span></summary>
+              <div class="qa-body">
+                <p>Updates appear as a DELETE + INSERT pair in the stream. A typical MERGE uses three clauses: delete when <code>METADATA$ACTION = 'DELETE'</code> and <code>METADATA$ISUPDATE = FALSE</code>; update when action is INSERT and <code>METADATA$ISUPDATE = TRUE</code>; insert when action is INSERT and <code>METADATA$ISUPDATE = FALSE</code>. Consuming the stream in the MERGE advances the offset so processed changes disappear on the next read.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What is the difference between user-managed and serverless tasks, and how do you build a DAG?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p>User-managed tasks specify <code>WAREHOUSE = …</code> and bill that warehouse's credits. Serverless tasks use <code>USER_TASK_MANAGED_INITIAL_WAREHOUSE_SIZE</code> and Snowflake spins up task compute automatically. Build a DAG with <code>AFTER parent_task</code> on child tasks, then resume the root task first followed by children. All new tasks start suspended until you <code>ALTER TASK … RESUME</code>.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What does <code>SYSTEM$STREAM_HAS_DATA</code> return, and why gate a task on it?<span class="qa-tag">Scenario</span></summary>
+              <div class="qa-body">
+                <p>It returns TRUE when the named stream has unconsumed change rows. Gating a scheduled task with <code>WHEN SYSTEM$STREAM_HAS_DATA('stream_name')</code> prevents the task from running — and spending credits — on an empty stream every minute. The task only fires when there is CDC work to do, which is the standard pattern for stream-driven pipelines.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>When would you use a UDF versus a stored procedure, and which can appear in a <code>SELECT</code>?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p>Scalar UDFs extend expressions inside <code>SELECT</code>, <code>WHERE</code>, and load-time COPY transforms — they must return a value. Stored procedures orchestrate multi-step DDL/DML and are invoked only with <code>CALL</code>, not embedded in SELECT. UDTFs return row sets via <code>TABLE(fn())</code>. Choose UDFs for reusable calculations; choose procedures for workflows with branching logic.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What is the difference between <code>EXECUTE AS CALLER</code> and <code>EXECUTE AS OWNER</code> on a stored procedure?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p><code>EXECUTE AS CALLER</code> (the default in many cases) runs the procedure with the caller's privileges and current role context. <code>EXECUTE AS OWNER</code> runs with the procedure owner's rights, so callers can perform operations they could not run directly if the owner has broader grants. Use OWNER when you want a controlled privilege elevation; use CALLER when the caller's access should bound what the procedure can touch.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How is zero-copy cloning billed, and what does a clone inherit versus not inherit?<span class="qa-tag">Cost</span></summary>
+              <div class="qa-body">
+                <p>Clone creation is fast because it shares underlying micro-partitions with the source — you pay no extra storage until one side diverges through DML. Schema and database clones bring tables, streams, tasks (suspended), pipes on external stages, file formats, sequences, and views. They do <strong>not</strong> copy users, roles, grants, virtual warehouses, resource monitors, storage integrations, or policies. You need <code>SELECT</code> on source tables, <code>OWNERSHIP</code> on pipes/streams/tasks, and <code>USAGE</code> on other objects to clone them.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What are Snowpipe's file-sizing rules, and why does a 100 GB single file hurt you?<span class="qa-tag">Scenario</span></summary>
+              <div class="qa-body">
+                <p>Parallel Snowpipe loads cannot exceed the number of files, so many medium files beat one monster file. Target <strong>100–250 MB compressed</strong> (or larger batches built from small files). A single <strong>100 GB+ file is not recommended</strong> — it limits parallelism, makes <code>ON_ERROR</code> painful, and can run past the 24-hour cancel threshold with nothing loaded. Accumulate source files at roughly a one-minute cadence to align with micro-batch ingestion.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What are the limits on a task DAG, and when is serverless the wrong choice?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p>A DAG has one root task, no loops, max <strong>1,000 tasks</strong>, and each task can have at most <strong>100 predecessors</strong> and <strong>100 child tasks</strong>. Serverless tasks cap at warehouse size <strong>XXLARGE</strong> and cannot run Java/Python UDFs or Scala stored procedures in the task body — use a user-managed warehouse when you need those or when the warehouse stays fully utilised anyway.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How does Snowpipe authentication differ from bulk COPY, and how long is load metadata kept?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>Bulk COPY authenticates like any client session (password, SSO, key-pair). Snowpipe automation requires <strong>key-pair authentication with a JSON Web Token</strong>. Load metadata retention differs too: bulk COPY keeps file history on the target table for <strong>64 days</strong>; Snowpipe retains it for <strong>14 days</strong>. Both skip already-loaded files within their respective windows unless you force a reload.</p>
+              </div>
+            </details>
+          </div>
+        </section>
+
+        <section class="section" id="practice">
+          <h2>Hands-on practice</h2>
+          <p class="muted">Run these in a trial account on an X-Small warehouse with <code>AUTO_SUSPEND = 60</code>. Clean up when you finish.</p>
+          <ol class="practice-list">
+            <li class="practice">
+              <p class="practice-task">Using <code>@internal_named_stage/MOCK.csv</code> from Section 4, create <code>practice_load_table</code> with columns <code>customer</code>, <code>full_name</code>, <code>region</code>, and <code>email</code>. Load with a COPY transform that concatenates first and last name. Use <code>FORCE = TRUE</code> if the file was loaded before.</p>
+              <p class="practice-expect">After COPY succeeds, <code>SELECT COUNT(*) FROM practice_load_table</code> returns approximately 1000 rows, and <code>full_name</code> values contain a space between first and last names.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">SQL</span></summary>
+                <div class="qa-body">
+<pre><code>USE ROLE SYSADMIN;
+USE WAREHOUSE COMPUTE_WH;
+USE DATABASE la_db;
+USE SCHEMA la_schema;
+
+CREATE OR REPLACE TABLE practice_load_table (
+  customer   VARCHAR,
+  full_name  VARCHAR,
+  region     VARCHAR,
+  email      VARCHAR
+);
+
+COPY INTO practice_load_table (customer, full_name, region, email)
+FROM (
+  SELECT t.$1, CONCAT(t.$2, ' ', t.$3), t.$4, t.$5
+  FROM @internal_named_stage/MOCK.csv t
+)
+FILE_FORMAT = (TYPE = CSV SKIP_HEADER = 1)
+FORCE = TRUE;</code></pre>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Create pipe <code>practice_pipe</code> with <code>AUTO_INGEST = FALSE</code> loading MOCK.csv into <code>new_pipe_table</code>, then run <code>ALTER PIPE practice_pipe REFRESH</code>. This uses serverless Snowpipe compute and will incur pipe charges.</p>
+              <p class="practice-expect"><code>SELECT SYSTEM$PIPE_STATUS('PRACTICE_PIPE')</code> shows a runnable state, and <code>SELECT COUNT(*) FROM new_pipe_table</code> returns rows after refresh (zero if load metadata already recorded the file unless you use <code>FORCE</code> in the pipe definition or truncate first).</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">SQL</span></summary>
+                <div class="qa-body">
+<pre><code>CREATE OR REPLACE TABLE new_pipe_table (
+  customer VARCHAR, first_name VARCHAR, last_name VARCHAR,
+  region VARCHAR, email VARCHAR, gender VARCHAR, "ORDER" INTEGER
+);
+
+CREATE OR REPLACE PIPE practice_pipe AUTO_INGEST = FALSE AS
+COPY INTO new_pipe_table
+FROM @internal_named_stage
+FILE_FORMAT = (TYPE = CSV SKIP_HEADER = 1);
+
+ALTER PIPE practice_pipe REFRESH;
+SELECT SYSTEM$PIPE_STATUS('PRACTICE_PIPE');</code></pre>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Set up CDC on <code>raw_data</code> and <code>processed_data</code>: create stream <code>practice_stream</code>, insert row <code>(7, 'Eve', 28)</code>, then MERGE into <code>processed_data</code> handling insert, update, and delete via stream metadata columns.</p>
+              <p class="practice-expect">After MERGE, <code>processed_data</code> contains id 7 with age <code>'28'</code>. Updating raw_data id 7 to age 29 and re-running MERGE changes processed_data accordingly. Querying <code>practice_stream</code> after a consuming MERGE returns no rows.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">SQL</span></summary>
+                <div class="qa-body">
+<pre><code>CREATE OR REPLACE TABLE raw_data (id INT, name VARCHAR(50), age INT);
+CREATE OR REPLACE TABLE processed_data (id INT, name VARCHAR(50), age VARCHAR(10));
+INSERT INTO raw_data VALUES (1,'John',25), (2,'Mary',30);
+
+CREATE OR REPLACE STREAM practice_stream ON TABLE raw_data;
+INSERT INTO raw_data VALUES (7, 'Eve', 28);
+
+MERGE INTO processed_data p
+USING practice_stream s ON p.id = s.id
+WHEN MATCHED AND s.metadata$action = 'DELETE' AND s.metadata$isupdate = FALSE
+  THEN DELETE
+WHEN MATCHED AND s.metadata$action = 'INSERT' AND s.metadata$isupdate = TRUE
+  THEN UPDATE SET p.name = s.name, p.age = CAST(s.age AS VARCHAR)
+WHEN NOT MATCHED AND s.metadata$action = 'INSERT' AND s.metadata$isupdate = FALSE
+  THEN INSERT (id, name, age) VALUES (s.id, s.name, CAST(s.age AS VARCHAR));</code></pre>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Create task <code>practice_stream_task</code> that runs every 2 minutes, gates on <code>SYSTEM$STREAM_HAS_DATA('practice_stream')</code>, and inserts unconsumed stream rows into <code>processed_data</code>. Resume the task and execute it once manually. Tasks consume credits while running.</p>
+              <p class="practice-expect">After inserting a new row into <code>raw_data</code> and calling <code>EXECUTE TASK practice_stream_task</code>, the row appears in <code>processed_data</code> and the stream is consumed.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">SQL</span></summary>
+                <div class="qa-body">
+<pre><code>CREATE OR REPLACE TASK practice_stream_task
+  WAREHOUSE = COMPUTE_WH
+  SCHEDULE = '2 MINUTE'
+  WHEN SYSTEM$STREAM_HAS_DATA('practice_stream')
+AS
+  INSERT INTO processed_data (id, name, age)
+  SELECT id, name, CAST(age AS VARCHAR) FROM practice_stream;
+
+ALTER TASK practice_stream_task RESUME;
+INSERT INTO raw_data VALUES (8, 'Frank', 50);
+EXECUTE TASK practice_stream_task;</code></pre>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Dry-run loading MOCK1.csv (contains a bad order value on row 2) into <code>customers_named</code> using <code>VALIDATION_MODE = RETURN_ERRORS</code> without inserting rows.</p>
+              <p class="practice-expect">The COPY result set lists validation errors for the bad row — no rows are inserted into <code>customers_named</code>.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">SQL</span></summary>
+                <div class="qa-body">
+<pre><code>CREATE OR REPLACE FILE FORMAT my_csv_ff
+  TYPE = CSV FIELD_DELIMITER = ','
+  SKIP_HEADER = 1 NULL_IF = ('NULL', 'null')
+  EMPTY_FIELD_AS_NULL = TRUE;
+
+CREATE OR REPLACE TABLE customers_named (
+  customer NUMBER(38,0), first_name VARCHAR(255), last_name VARCHAR(255),
+  region VARCHAR(255), email VARCHAR(255), gender VARCHAR(255),
+  "order" NUMBER(38,0)
+);
+
+COPY INTO customers_named
+FROM @internal_named_stage/MOCK1.csv
+FILE_FORMAT = my_csv_ff
+VALIDATION_MODE = RETURN_ERRORS;</code></pre>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Create a serverless task <code>practice_cron_task</code> scheduled with cron to run at 9:00 AM in your timezone (<code>USING CRON 0 9 * * * &lt;timezone&gt;</code>) that inserts one audit row. Resume and execute it once manually.</p>
+              <p class="practice-expect"><code>SELECT * FROM TABLE(INFORMATION_SCHEMA.TASK_HISTORY())</code> shows a completed run for <code>PRACTICE_CRON_TASK</code> after <code>EXECUTE TASK</code>.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">SQL</span></summary>
+                <div class="qa-body">
+<pre><code>CREATE OR REPLACE TABLE task_audit (run_at TIMESTAMP_NTZ, note VARCHAR);
+
+CREATE OR REPLACE TASK practice_cron_task
+  USER_TASK_MANAGED_INITIAL_WAREHOUSE_SIZE = 'XSMALL'
+  SCHEDULE = 'USING CRON 0 9 * * * America/Los_Angeles'
+AS
+  INSERT INTO task_audit VALUES (CURRENT_TIMESTAMP(), 'cron practice');
+
+ALTER TASK practice_cron_task RESUME;
+EXECUTE TASK practice_cron_task;</code></pre>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Clone <code>sample_data</code> to <code>sample_data_clone</code>, insert a row into the source only, and confirm the clone still shows the pre-insert row count — demonstrating shared micro-partitions until divergence.</p>
+              <p class="practice-expect"><code>SELECT COUNT(*) FROM sample_data_clone</code> stays at 4 while <code>sample_data</code> shows 5 after the insert.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">SQL</span></summary>
+                <div class="qa-body">
+<pre><code>CREATE OR REPLACE TABLE sample_data (id INT, name VARCHAR(50), age INT);
+INSERT INTO sample_data VALUES
+  (1,'John',25), (2,'Mary',30), (3,'Peter',40), (4,'Jane',35);
+
+CREATE OR REPLACE TABLE sample_data_clone CLONE sample_data;
+SELECT COUNT(*) FROM sample_data_clone;  -- 4
+
+INSERT INTO sample_data VALUES (5, 'Mike', 45);
+SELECT COUNT(*) FROM sample_data;        -- 5
+SELECT COUNT(*) FROM sample_data_clone;  -- still 4</code></pre>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Clean up all practice objects created in this section: suspend and drop tasks, then drop pipes, streams, and practice tables.</p>
+              <p class="practice-expect">All listed objects are removed; <code>SHOW TASKS LIKE 'practice%'</code> and <code>SHOW PIPES LIKE 'practice%'</code> return no rows.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">SQL</span></summary>
+                <div class="qa-body">
+<pre><code>ALTER TASK IF EXISTS practice_stream_task SUSPEND;
+ALTER TASK IF EXISTS practice_cron_task SUSPEND;
+DROP TASK IF EXISTS practice_stream_task;
+DROP TASK IF EXISTS practice_cron_task;
+DROP PIPE IF EXISTS practice_pipe;
+DROP STREAM IF EXISTS practice_stream;
+DROP TABLE IF EXISTS practice_load_table;
+DROP TABLE IF EXISTS new_pipe_table;
+DROP TABLE IF EXISTS raw_data;
+DROP TABLE IF EXISTS processed_data;
+DROP TABLE IF EXISTS customers_named;
+DROP TABLE IF EXISTS sample_data;
+DROP TABLE IF EXISTS sample_data_clone;
+DROP TABLE IF EXISTS task_audit;</code></pre>
+                </div>
+              </details>
+            </li>
+          </ol>
+        </section>
+
+        <section class="section" id="recap">
+          <h2>Recap</h2>
+          <div class="recap">
+            <ul class="checklist">
+              <li>Bulk COPY: user warehouse, 64-day load metadata, client auth; Snowpipe: serverless, 14-day metadata, key-pair JWT.</li>
+              <li>Supported load formats: CSV, TSV, JSON, Parquet, Avro, ORC, XML.</li>
+              <li>Bulk transforms: reorder, omit, cast, truncate; duplicate-file detection via load metadata.</li>
+              <li>Snowpipe micro-batches (~1 min); ideal files 100–250 MB compressed; avoid 100 GB+ single files.</li>
+              <li>File formats define parsing; attach to stages, override in COPY, or infer with <code>INFER_SCHEMA</code>.</li>
+              <li>Streams = CDC offset (not a data copy); standard / append-only / insert-only; check <code>STALE_AFTER</code>.</li>
+              <li>Updates in streams = DELETE + INSERT pair with shared <code>METADATA$ROW_ID</code>, <code>ISUPDATE = TRUE</code>.</li>
+              <li>Tasks: single SQL, procedure call, or Scripting; start suspended; DAG max 1000 tasks, 100 preds/children.</li>
+              <li>Serverless tasks cap at XXLARGE; no Java/Python UDF or Scala SP in task body.</li>
+              <li>Bulk COPY options: <code>ON_ERROR</code>, <code>FORCE</code>, <code>MATCH_BY_COLUMN_NAME</code>, <code>VALIDATION_MODE</code>.</li>
+              <li>UDFs per-row in SELECT (must return value); procedures via <code>CALL</code> (return optional); UDTFs via <code>TABLE(fn())</code>.</li>
+              <li>Clone shares micro-partitions until DML; grants/users/warehouses not cloned; SELECT/OWNERSHIP/USAGE privileges required.</li>
+              <li>Point-in-time clone: database, schema, table, stream only; fails if source missing or AUTO_INGEST pipe must be recreated.</li>
+            </ul>
+            <p style="margin-top:1rem;">
+              <button type="button" data-complete="section-05">Mark complete</button>
+            </p>
+          </div>
+        </section>
+
+      </div>
+
+      <aside class="toc" aria-label="On this page">
+        <strong>On this page</strong>
+        <ol>
+          <li><a href="#lectures">Lectures</a></li>
+          <li><a href="#bulk-continuous">Bulk vs continuous</a></li>
+          <li><a href="#load-transforms">Load transforms</a></li>
+          <li><a href="#file-format">File formats</a></li>
+          <li><a href="#snowpipe">Snowpipe</a></li>
+          <li><a href="#streams">Streams</a></li>
+          <li><a href="#tasks">Tasks</a></li>
+          <li><a href="#copy-into-options">COPY INTO options</a></li>
+          <li><a href="#validation">Validation</a></li>
+          <li><a href="#udf-sp">UDFs &amp; procedures</a></li>
+          <li><a href="#cloning">Cloning</a></li>
+          <li><a href="#lab">Practical lab</a></li>
+          <li><a href="#interview">Interview questions</a></li>
+          <li><a href="#practice">Hands-on practice</a></li>
+          <li><a href="#recap">Recap</a></li>
+        </ol>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<footer class="footer">Snowflake COF-C03 Course Notes · Section 5 · Offline study edition</footer>
+</body>
+</html>

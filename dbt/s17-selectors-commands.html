@@ -1,0 +1,1244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="dbt bootcamp Section 17: node selection syntax, tags, selectors.yml, CLI commands, project variables, and Python models on Snowflake, BigQuery and Databricks.">
+<title>Section 17 — Selectors, Commands and Python Models | The Complete dbt Bootcamp Notes</title>
+<link rel="stylesheet" href="assets/dbt.css">
+<script defer src="assets/search-index.js"></script>
+<script defer src="assets/code-highlight.js"></script>
+<script defer src="assets/dbt.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">Course section 17 of 22 · The Complete dbt Bootcamp: Zero to Hero</p>
+    <h1>Selectors, Commands and Python Models</h1>
+    <p class="subtitle">Running all 40 models on every commit is how warehouse bills explode. This section teaches the full <code>--select</code> language so you can target exactly what changed, tag nodes for CI tiers, store reusable selection graphs in <code>selectors.yml</code>, pass runtime values through <code>--vars</code>, and reach for Python when SQL alone cannot express the transform.</p>
+    <div class="hero-meta">
+      <span class="chip">10 lectures · ~50min</span>
+      <span class="chip">node selection syntax</span>
+      <span class="chip">dbt Python models</span>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <nav class="pager" aria-label="Section navigation">
+    <a href="s16-debugging-logging.html">← Debugging and Logging</a>
+    <a href="index.html">Course contents</a>
+    <a href="s18-orchestration.html">Next: Orchestration →</a>
+  </nav>
+
+  <main id="main">
+    <div class="layout">
+      <div class="content">
+
+        <section class="section" id="lectures">
+          <h2>Lectures in this section</h2>
+          <p class="muted">Ten lectures over roughly 50 minutes. You will add tags to the Airbnb project, create a named selector, run the CLI commands that matter day to day, wire project variables through a macro, and add three Python models under <code>models/dim/</code>. Selection syntax introduced briefly in <a href="s16-debugging-logging.html">Section 16</a> is covered here in full; production Slim CI in <a href="s19-production.html">Section 19</a> depends on the <code>state:modified</code> patterns below.</p>
+          <ol class="lecture-list">
+            <li class="lecture">
+              <a class="lec-title" href="#node-selection">The <code>--select</code> flag and model names</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">course-resources.md · Tags and Selectors</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#node-selection">Graph operators: <code>+model</code>, <code>model+</code>, <code>@model</code></a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">course-resources.md · Selection syntax</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#node-selection">Resource selectors: <code>tag:</code>, <code>path:</code>, <code>source:</code></a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">dbt_project.yml · tags</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#node-selection">Combining selectors, exclusions and depth limits</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">course-resources.md · Selectors</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#node-selection"><code>state:modified</code> and comparison artifacts</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">course-resources.md · State</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#tags">Tags in <code>dbt_project.yml</code></a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">dbt_project.yml · fct tags</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#tags">Tags on individual models</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">models/mart/mart_fullmoon_reviews.sql</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#selectors-yml">Named selectors in <code>selectors.yml</code></a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">selectors.yml</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#commands">dbt commands reference</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">course-resources.md · CLI</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#variables">Project variables and Python models</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">macros/variables.sql · models/dim/*.py</span>
+            </li>
+          </ol>
+          <p class="muted">Sections 7&ndash;16 introduced models, tests and macros. From here the project gains <code>selectors.yml</code>, folder-level tags, three <code>.py</code> models, and the variable patterns orchestrators use to parameterise runs. <a href="s19-production.html">Section 19</a> applies <code>state:modified</code> selectors in Slim CI.</p>
+        </section>
+
+        <section class="section" id="node-selection">
+          <h2>Node selection syntax</h2>
+          <p class="lead">Every dbt command that touches project nodes accepts <code>--select</code> (short form <code>-s</code>). The string you pass is not a SQL fragment &mdash; it is a graph query over the manifest. dbt resolves matching nodes, expands parent dependencies where the syntax requires it, and runs only that subgraph.</p>
+
+          <h3>Why selection matters</h3>
+          <p>In development you rarely want a full project rebuild. In CI you want the smallest subgraph that proves the pull request is safe. In production incident response you want one mart and its upstream chain. Selection is how dbt stays fast and cheap at scale. The instructor demonstrates this after weeks of adding models: a blind <code>dbt run</code> rebuilds staging, dimensions, facts, marts, and every Python experiment whether you touched them or not.</p>
+
+          <p>The selection string is evaluated at parse time against the manifest graph. dbt does not re-read your SQL to guess dependencies — it uses the compiled DAG from <code>ref()</code>, <code>source()</code>, and test attachments. That is why renaming a model breaks selection by old name immediately on <code>dbt parse</code>, and why <code>dbt ls</code> is the safe preview step before any warehouse work.</p>
+
+          <div class="grid-2">
+            <div class="mini-card">
+              <h4>Development habit</h4>
+              <p>End every model edit with <code>dbt build -s +my_model+</code> — upstream parents, the model, downstream children, and attached tests — instead of a full project run.</p>
+            </div>
+            <div class="mini-card">
+              <h4>CI habit</h4>
+              <p>Never run bare <code>dbt build</code> on a pull request. Combine <code>state:modified+</code> with tag filters or a named selector from <code>selectors.yml</code>.</p>
+            </div>
+          </div>
+
+          <div class="diagram">
+            <p class="diagram-title">How --select narrows the DAG before execution</p>
+            <div class="flow">
+              <div class="node is-compute"><b>dbt run -s ...</b><small>CLI selection string</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-model"><b>manifest.json</b><small>full project graph</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-mart pulse"><b>matched subgraph</b><small>models · tests · seeds</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-store"><b>warehouse</b><small>only selected nodes execute</small></div>
+            </div>
+          </div>
+
+          <h3>Selection by model name</h3>
+          <p>The simplest form is a node name. When you run <code>dbt run --select dim_listings_cleansed</code>, dbt builds that model and every upstream parent it depends on (parent inclusion is default). It does not build unrelated branches of the DAG.</p>
+
+          <div class="terminal">
+            <p class="term-head">Run one dimension</p>
+            <pre class="term-body"><span class="tt-cmd">dbt run --select dim_listings_cleansed</span>
+<span class="tt-dim">16:02:01  Running with dbt=1.11.12</span>
+<span class="tt-dim">16:02:03  1 of 2 START sql table model DEV.src_listings .................... [RUN]</span>
+<span class="tt-ok">16:02:03  1 of 2 OK created sql table model DEV.src_listings ............... [SUCCESS 0 in 0.41s]</span>
+<span class="tt-dim">16:02:03  2 of 2 START sql table model DEV.dim_listings_cleansed ............. [RUN]</span>
+<span class="tt-ok">16:02:05  2 of 2 OK created sql table model DEV.dim_listings_cleansed ........ [SUCCESS 1 in 1.87s]</span>
+<span class="tt-ok">16:02:05  Completed successfully</span></pre>
+          </div>
+
+          <p>Ephemeral models like <code>src_listings</code> compile inline and may not appear as separate warehouse objects, but dbt still parses and executes them as part of the selected subgraph. Use <code>dbt ls --select dim_listings_cleansed</code> to preview the exact node list before spending warehouse credits.</p>
+
+          <h3>Graph operators</h3>
+          <p>Graph operators control how far dbt walks the DAG from your anchor node. They work on models, tests, seeds, snapshots and sources depending on the command.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Syntax</th><th>Meaning</th><th>Example</th><th>Typical use</th></tr></thead>
+              <tbody>
+                <tr><td><code>model_name</code></td><td>Node plus upstream parents (default inclusion)</td><td><code>dbt run -s fct_reviews</code></td><td>Rebuild one fact and its staging chain</td></tr>
+                <tr><td><code>+model</code></td><td>All upstream ancestors (parents, grandparents, &hellip;)</td><td><code>dbt run -s +dim_listings_w_hosts</code></td><td>Build everything needed before a mart</td></tr>
+                <tr><td><code>model+</code></td><td>Node and all downstream children</td><td><code>dbt run -s dim_listings_cleansed+</code></td><td>Refresh a dimension and every mart that reads it</td></tr>
+                <tr><td><code>+model+</code></td><td>Full upstream and downstream neighbourhood</td><td><code>dbt test -s +fct_reviews+</code></td><td>Integration test around one hub model</td></tr>
+                <tr><td><code>@model</code></td><td>Parents <em>and</em> children (local subgraph)</td><td><code>dbt run -s @mart_fullmoon_reviews</code></td><td>Impact radius around one node</td></tr>
+                <tr><td><code>N+model</code></td><td>Limit upstream depth to N hops</td><td><code>dbt ls -s 1+dim_listings_cleansed</code></td><td>Direct parents only</td></tr>
+                <tr><td><code>model+N</code></td><td>Limit downstream depth to N hops</td><td><code>dbt ls -s dim_hosts_cleansed+1</code></td><td>Immediate children only</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>The prefix <code>+</code> on the left walks upstream; the suffix <code>+</code> on the right walks downstream. You can combine depth limits with either direction. The at-sign form is easy to confuse with email syntax but means &ldquo;everything one step away in both directions&rdquo; &mdash; useful when you changed a shared dimension and want to see the blast radius without rebuilding the entire project.</p>
+
+          <div class="callout tip"><strong>List before you run.</strong> <code>dbt ls --select +dim_listings_w_hosts</code> prints node names without touching the warehouse. Copy the output into a ticket or CI log to prove your selector matches what you intended.</div>
+
+          <h3>Resource-type selectors</h3>
+          <p>Beyond bare model names, dbt understands prefixes that filter by resource metadata. These compose with graph operators and comma-separated unions.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Prefix</th><th>Selects</th><th>Example</th></tr></thead>
+              <tbody>
+                <tr><td><code>tag:name</code></td><td>Any node carrying that tag</td><td><code>dbt run -s tag:fact</code></td></tr>
+                <tr><td><code>path:models/dim</code></td><td>Nodes under a filesystem path</td><td><code>dbt run -s path:models/dim</code></td></tr>
+                <tr><td><code>source:package.table</code></td><td>A declared source and its tests</td><td><code>dbt test -s source:airbnb.listings</code></td></tr>
+                <tr><td><code>fqn:package.model</code></td><td>Fully qualified node name</td><td><code>dbt run -s fqn:airbnb.dim_listings_cleansed</code></td></tr>
+                <tr><td><code>config.materialized:table</code></td><td>Nodes with matching config</td><td><code>dbt ls -s config.materialized:incremental</code></td></tr>
+                <tr><td><code>resource_type:seed</code></td><td>Filter by node type</td><td><code>dbt seed -s resource_type:seed</code></td></tr>
+                <tr><td><code>test_type:singular</code></td><td>Test nodes by type</td><td><code>dbt test -s test_type:singular</code></td></tr>
+                <tr><td><code>package:dbt_utils</code></td><td>Nodes from an installed package</td><td><code>dbt ls -s package:dbt_utils</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>The course uses <code>source:airbnb.listings</code> in <a href="s16-debugging-logging.html">Section 16</a> to run source tests in isolation. The package name comes from <code>sources.yml</code>; the table name is the source identifier, not the raw warehouse table name.</p>
+
+          <h3>Combining and excluding</h3>
+          <p>Commas form a <strong>union</strong> &mdash; nodes matching any clause are included. Use <code>--exclude</code> to subtract nodes from an otherwise matching set. You can pass multiple space-separated selection arguments; dbt treats them as intersections in some versions, but the pattern that survives code review is comma unions plus explicit excludes.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Pattern</th><th>Meaning</th><th>Example</th></tr></thead>
+              <tbody>
+                <tr><td>Comma union</td><td>Match A OR B</td><td><code>dbt run -s tag:fact,path:models/dim</code></td></tr>
+                <tr><td><code>--exclude</code></td><td>Subtract from matched set</td><td><code>dbt run -s path:models/dim --exclude dim_fullmoon</code></td></tr>
+                <tr><td>Space intersection</td><td>Match A AND B</td><td><code>dbt run -s tag:fact --select path:models/fct</code></td></tr>
+                <tr><td>Graph + exclude</td><td>Downstream minus one node</td><td><code>dbt run -s dim_listings_cleansed+ --exclude dim_review_sentiment</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+<pre data-lang="shell" data-title="Union and exclude" data-explain="Run all fact-tagged models except one heavy mart."><code>dbt run --select tag:fact --exclude mart_fullmoon_reviews
+dbt test --select tag:fact,source:airbnb.listings
+dbt build --select path:models/dim --exclude dim_fullmoon</code></pre>
+
+          <p>Parent inclusion still applies per selected node. If you exclude an upstream model but select its child, dbt may still build the parent because the child cannot compile without it &mdash; unless you also use defer (covered in <a href="s19-production.html">Section 19</a>).</p>
+
+          <h3>state:modified and CI</h3>
+          <p>State-aware selectors compare the current project graph to a saved artifact (usually <code>manifest.json</code> from the last production deploy). The selector <code>state:modified</code> matches nodes whose SQL, config or dependencies changed. Related selectors include <code>state:new</code> (nodes that exist only in the current project) and body-only variants like <code>state:modified.body</code> when you want to ignore config-only diffs. Append <code>+</code> to include downstream dependents: <code>state:modified+</code>.</p>
+
+<pre data-lang="shell" data-title="Slim CI pattern (preview)" data-explain="Production manifest lives in target-prod/; compare against dev checkout. Full workflow in Section 19."><code>dbt ls --state target-prod --select state:modified
+dbt ls --state target-prod --select state:modified+</code></pre>
+
+          <p>The course pin is dbt 1.11. State comparison requires you to pass <code>--state path/to/artifacts</code> pointing at a directory containing a prior <code>manifest.json</code>. Without that directory, <code>state:modified</code> matches nothing useful. On BigQuery and Databricks the mechanics are identical; only artifact storage and CI wiring differ.</p>
+
+          <div class="callout exam"><strong>Certification:</strong> know the difference between <code>+model</code> (upstream), <code>model+</code> (downstream), and <code>@model</code> (both directions). Expect a question on <code>tag:</code> and <code>source:</code> prefixes and on what parent inclusion means when you name a single child model.</div>
+
+          <h3>Previewing with dbt ls</h3>
+          <p><code>dbt ls</code> uses the same selection grammar as <code>dbt run</code>, <code>dbt test</code>, and <code>dbt build</code>. Add flags to inspect metadata:</p>
+
+<pre data-lang="shell" data-title="Inspect selection output"><code>dbt ls --select tag:fact --output name
+dbt ls --select +dim_listings_cleansed --resource-type model
+dbt ls --select state:modified+ --state target-prod --output json</code></pre>
+
+          <p>The <code>--output json</code> form is what Slim CI scripts parse to post a comment on a pull request listing every model that will rebuild. The human-readable default is enough for local debugging.</p>
+
+          <div class="diagram">
+            <p class="diagram-title">Graph operators on the Airbnb dim_listings_cleansed branch</p>
+            <div class="dag">
+              <div class="dag-col">
+                <p class="dag-label">Upstream (+)</p>
+                <div class="node is-source"><b>raw_listings</b></div>
+                <div class="node is-model"><b>src_listings</b></div>
+              </div>
+              <div class="dag-col">
+                <p class="dag-label">Anchor</p>
+                <div class="node is-mart pulse"><b>dim_listings_cleansed</b></div>
+              </div>
+              <div class="dag-col">
+                <p class="dag-label">Downstream (+)</p>
+                <div class="node is-mart"><b>dim_listings_w_hosts</b></div>
+                <div class="node is-mart"><b>dim_long_term_listings</b></div>
+              </div>
+            </div>
+          </div>
+
+          <h3>Selection on other commands</h3>
+          <p>The same grammar applies uniformly. <code>dbt seed --select seed_full_moon_dates</code> reloads one CSV. <code>dbt snapshot --select raw_listings_snapshot</code> runs one snapshot YAML definition. <code>dbt compile --select dim_listings_cleansed</code> renders Jinja without executing DDL. <code>dbt test --select dim_listings_w_hosts</code> runs tests scoped to that model subgraph. Consistency is deliberate: learn one language, use it everywhere.</p>
+
+          <h3>result: and test selection</h3>
+          <p>When debugging a failed test, select by result status to rerun only what broke. <code>dbt test --select result:fail</code> reruns tests that failed in the previous invocation. Pair with <code>dbt retry</code> after fixing the underlying data or test logic. You can also select by resource type alone: <code>dbt test -s resource_type:test</code> runs every test without rebuilding models first.</p>
+
+          <div class="terminal">
+            <p class="term-head">Select failing tests only</p>
+            <pre class="term-body"><span class="tt-cmd">dbt test --select dim_listings_w_hosts</span>
+<span class="tt-err">16:04:11  1 of 3 FAIL 1 unique_dim_listings_w_hosts_listing_id ............. [FAIL 1 in 0.52s]</span>
+<span class="tt-cmd">dbt test --select result:fail</span>
+<span class="tt-dim">16:04:45  1 of 1 START test unique_dim_listings_w_hosts_listing_id .......... [RUN]</span>
+<span class="tt-ok">16:04:46  1 of 1 PASS unique_dim_listings_w_hosts_listing_id ............... [PASS in 0.41s]</span></pre>
+          </div>
+
+          <h3>Intersection with spaces</h3>
+          <p>Passing multiple selection strings as separate arguments creates an <strong>intersection</strong> (AND). The model must match every clause:</p>
+
+<pre data-lang="shell" data-title="Intersection — models that are both dim and table-materialised" data-explain="Space-separated -s flags narrow the set; comma within one flag unions."><code>dbt ls --select path:models/dim config.materialized:table
+dbt run --select tag:fact --select path:models/fct</code></pre>
+
+          <p>This is easy to confuse with comma unions inside a single <code>-s</code> string. Rule of thumb: commas inside one quoted argument are OR; repeated <code>--select</code> flags are AND.</p>
+
+          <div class="analogy"><strong>Everyday analogy —</strong> comma in one <code>-s</code> string is &ldquo;models tagged fact <em>or</em> under path dim&rdquo;. Two <code>--select</code> flags are &ldquo;models that are tagged fact <em>and</em> under path fct&rdquo;. Mixing the two without reading the docs produces empty selections that waste a CI minute before you notice.</div>
+
+          <h3>Quick reference — common selection recipes</h3>
+          <p>Copy these into local notes or CI YAML. Adjust model names to your project.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Goal</th><th>Command</th></tr></thead>
+              <tbody>
+                <tr><td>One model and parents</td><td><code>dbt build -s dim_listings_w_hosts</code></td></tr>
+                <tr><td>All upstream explicitly</td><td><code>dbt build -s +dim_listings_w_hosts</code></td></tr>
+                <tr><td>Dimension folder only</td><td><code>dbt run -s path:models/dim</code></td></tr>
+                <tr><td>All facts plus tests</td><td><code>dbt build -s tag:fact</code></td></tr>
+                <tr><td>Source tests only</td><td><code>dbt test -s source:airbnb.listings</code></td></tr>
+                <tr><td>Named selector (1.11)</td><td><code>dbt run --selector dim_except_listings_w_hosts</code></td></tr>
+                <tr><td>Named selector (1.12+)</td><td><code>dbt run -s selector:dim_except_listings_w_hosts</code></td></tr>
+                <tr><td>Slim CI preview</td><td><code>dbt ls -s state:modified+ --state target-prod</code></td></tr>
+                <tr><td>Preview without running</td><td><code>dbt ls -s +my_model --output name</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="section" id="tags">
+          <h2>Tags</h2>
+          <p class="lead">Tags are string labels attached to dbt nodes. They exist so you can select groups without maintaining brittle lists of model names. A nightly job runs <code>dbt test -s tag:critical</code>; a fact rebuild runs <code>dbt run -s tag:fact</code>; CI runs only what changed via state selectors layered on tags.</p>
+
+          <h3>Folder-level tags in dbt_project.yml</h3>
+          <p>The course tags every model under <code>models/fct/</code> at the project config level. The <code>+</code> prefix merges the tag into each child model's config:</p>
+
+<pre data-lang="yaml" data-title="dbt_project.yml (excerpt)" data-explain="All models in models/fct/ inherit the fact tag without editing each file."><code>models:
+  airbnb:
+    +grants:
+      select: ["transform", "reporter"]
+    +post-hook:
+      - "INSERT INTO {{ target.schema }}.audit_log VALUES ('{{ this }}', CURRENT_TIMESTAMP)"
+    +materialized: view
+    dim:
+      +materialized: table
+    src:
+      +materialized: ephemeral
+    fct:
+      +tags: ['fact']</code></pre>
+
+          <p>After this change, <code>fct_reviews</code> carries <code>fact</code> automatically. Verify with:</p>
+
+<pre data-lang="shell" data-title="List fact-tagged nodes"><code>dbt ls --select tag:fact</code></pre>
+
+          <h3>Model-level tags override and extend</h3>
+          <p>Individual models can set tags in a <code>{{ config() }}</code> block. The course adds <code>fact</code> to <code>mart_fullmoon_reviews</code> even though it lives under <code>models/mart/</code>, outside the <code>fct/</code> folder default. Without this inline tag, <code>dbt run -s tag:fact</code> would build <code>fct_reviews</code> but skip the full-moon mart — a common surprise when folder conventions and business taxonomy diverge.</p>
+
+<pre data-lang="sql" data-title="models/mart/mart_fullmoon_reviews.sql (config excerpt)" data-explain="Tags here merge with folder defaults; mart models do not inherit fct folder tags unless you add them."><code>{{ config(
+  materialized = 'incremental',
+  incremental_strategy='microbatch',
+  event_time='review_date',
+  begin='2009-06-20',
+  batch_size='year',
+  full_refresh=false,
+  tags = ['fact'],
+  schema='mart'
+) }}</code></pre>
+
+          <p>Config precedence follows the usual dbt order: model file config beats folder config in <code>dbt_project.yml</code>, which beats project-wide defaults. Tags from multiple levels merge unless explicitly replaced.</p>
+
+          <h3>Tags on tests</h3>
+          <p>Tests do not inherit model tags automatically. Tag critical tests explicitly in YAML or in a singular test's config block so CI can run <code>dbt test -s tag:critical</code> without scanning the whole project. See <a href="s11-tests.html#selecting-tests">Section 11</a> for examples.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Where</th><th>How</th><th>Selector</th></tr></thead>
+              <tbody>
+                <tr><td><code>dbt_project.yml</code> folder block</td><td><code>+tags: ['fact']</code></td><td><code>dbt run -s tag:fact</code></td></tr>
+                <tr><td>Model <code>config()</code></td><td><code>tags = ['fact', 'nightly']</code></td><td><code>dbt run -s tag:nightly</code></td></tr>
+                <tr><td>YAML column test</td><td><code>config: tags: ['critical']</code></td><td><code>dbt test -s tag:critical</code></td></tr>
+                <tr><td>Singular test SQL file</td><td><code>{{ config(tags=['critical']) }}</code></td><td><code>dbt test -s tag:critical</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout tip"><strong>Convention over lists.</strong> Real teams define a small tag vocabulary in the README: <code>critical</code>, <code>nightly</code>, <code>fact</code>, <code>dim</code>, <code>pii</code>. Selectors in CI reference tags; nobody maintains a 40-model comma list in GitHub Actions YAML.</div>
+
+          <h3>Verifying tags in the manifest</h3>
+          <p>After adding tags, confirm they landed on the nodes you expect before wiring CI. The fastest check is <code>dbt ls</code>; the authoritative source is <code>target/manifest.json</code> after <code>dbt parse</code> or any run:</p>
+
+<pre data-lang="shell" data-title="Inspect tagged nodes"><code>dbt parse
+dbt ls --select tag:fact --output json</code></pre>
+
+          <p>Each node entry includes a <code>tags</code> array under <code>config</code>. If <code>mart_fullmoon_reviews</code> is missing the <code>fact</code> tag, the inline <code>config(tags=[...])</code> block was not saved or a parse error prevented compilation. Tags on folder defaults apply at parse time — no warehouse round trip required.</p>
+
+          <div class="terminal">
+            <p class="term-head">dbt ls tag:fact</p>
+            <pre class="term-body"><span class="tt-cmd">dbt ls --select tag:fact</span>
+<span class="tt-dim">16:06:01  Running with dbt=1.11.12</span>
+<span class="tt-ok">airbnb.fct.fct_reviews</span>
+<span class="tt-ok">airbnb.mart.mart_fullmoon_reviews</span></pre>
+          </div>
+        </section>
+
+        <section class="section" id="selectors-yml">
+          <h2>Named selectors in selectors.yml</h2>
+          <p class="lead">Long <code>--select</code> strings are hard to review in CI YAML and easy to typo. <code>selectors.yml</code> at the project root stores named, reusable selection definitions. dbt evaluates them the same way as inline selectors, but the name becomes documentation and a stable contract for orchestrators.</p>
+
+          <h3>The course selector</h3>
+          <p>The Airbnb project defines one selector that builds every dimension except <code>dim_listings_w_hosts</code>:</p>
+
+<pre data-lang="yaml" data-title="selectors.yml" data-explain="union combines path selection with an exclude block; fqn matches the model unique name."><code>selectors:
+  - name: dim_except_listings_w_hosts
+    description: Selects all dim models, excluding dim_listings_w_hosts.
+    definition:
+      union:
+        - method: path
+          value: models/dim
+        - exclude:
+            - method: fqn
+              value: dim_listings_w_hosts</code></pre>
+
+          <p>The <code>union</code> key means "include everything matching any clause below". The <code>exclude</code> block removes nodes even if the path clause would have included them. Equivalent inline CLI (without the YAML file) would be roughly <code>path:models/dim --exclude dim_listings_w_hosts</code>, but the YAML form is version-controlled and self-documenting.</p>
+
+          <h3>Executing named selectors</h3>
+          <div class="callout info"><strong>Selector CLI syntax changed at dbt 1.12.</strong> Before 1.12, pass the selector name with a dedicated flag: <code>dbt run --selector dim_except_listings_w_hosts</code>. From 1.12 onwards, named selectors use the same <code>-s</code> flag with a <code>selector:</code> prefix: <code>dbt run -s selector:dim_except_listings_w_hosts</code>. The course repo pins dbt 1.11 &mdash; use <code>--selector</code> locally unless you upgrade. Check <code>dbt --version</code> before copying CI snippets from blog posts.</div>
+
+<pre data-lang="shell" data-title="Named selector execution" data-explain="Show both forms; pick the one matching your dbt version."><code># Before dbt v1.12:
+dbt run --selector dim_except_listings_w_hosts
+
+# Starting from dbt v1.12:
+dbt run -s selector:dim_except_listings_w_hosts</code></pre>
+
+          <p>Named selectors work with any command that accepts <code>--select</code>: <code>dbt build</code>, <code>dbt test</code>, <code>dbt compile</code>, and <code>dbt ls</code>. Combine with state flags in CI: <code>dbt build --selector nightly_models --state path/to/prod/manifest</code> (pre-1.12) or <code>dbt build -s selector:nightly_models --state ...</code> (1.12+).</p>
+
+          <div class="terminal">
+            <p class="term-head">Named selector on dbt 1.11 (course pin)</p>
+            <pre class="term-body"><span class="tt-cmd">dbt ls --selector dim_except_listings_w_hosts</span>
+<span class="tt-dim">16:08:01  Running with dbt=1.11.12</span>
+<span class="tt-ok">airbnb.dim.dim_hosts_cleansed</span>
+<span class="tt-ok">airbnb.dim.dim_listings_cleansed</span>
+<span class="tt-ok">airbnb.dim.dim_long_term_listings</span>
+<span class="tt-dim">... (dim_listings_w_hosts omitted)</span></pre>
+          </div>
+
+          <h3>Why exclude dim_listings_w_hosts</h3>
+          <p>The course selector builds every dimension except <code>dim_listings_w_hosts</code> because that model joins hosts and listings and depends on versioned refs — useful for demos where you want dim tables without the join mart. The pattern generalises: exclude slow, experimental or permission-sensitive models from nightly rebuilds while keeping the rest of a folder on schedule.</p>
+
+          <h3>Definition methods reference</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>method</th><th>value example</th><th>Matches</th></tr></thead>
+              <tbody>
+                <tr><td><code>fqn</code></td><td><code>dim_listings_cleansed</code></td><td>One node by name</td></tr>
+                <tr><td><code>path</code></td><td><code>models/dim</code></td><td>All nodes under directory</td></tr>
+                <tr><td><code>tag</code></td><td><code>fact</code></td><td>Tagged nodes</td></tr>
+                <tr><td><code>config</code></td><td><code>materialized:incremental</code></td><td>Config key match</td></tr>
+                <tr><td><code>source</code></td><td><code>airbnb.listings</code></td><td>Source nodes</td></tr>
+                <tr><td><code>state</code></td><td><code>modified</code></td><td>Changed vs comparison manifest</td></tr>
+                <tr><td><code>union</code></td><td>list of clauses</td><td>OR combination</td></tr>
+                <tr><td><code>intersection</code></td><td>list of clauses</td><td>AND combination</td></tr>
+                <tr><td><code>exclude</code></td><td>list of clauses</td><td>Subtract from parent set</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="filetree">
+            <ul>
+              <li><span class="dir">airbnb/</span>
+                <ul>
+                  <li><span class="file">selectors.yml</span> <span class="new">← new in this section</span></li>
+                  <li><span class="file">dbt_project.yml</span> <span class="note">+tags on fct</span></li>
+                  <li><span class="dir">models/dim/</span>
+                    <ul>
+                      <li><span class="file">dim_long_term_listings.py</span> <span class="new">← Python model</span></li>
+                      <li><span class="file">dim_fullmoon.py</span> <span class="new">← Python model</span></li>
+                      <li><span class="file">dim_review_sentiment.py</span> <span class="new">← Python model</span></li>
+                    </ul>
+                  </li>
+                </ul>
+              </li>
+            </ul>
+          </div>
+        </section>
+
+        <section class="section" id="commands">
+          <h2>dbt commands worth knowing</h2>
+          <p class="lead">The CLI surface is large; most days you use five commands. This table is the reference to keep open when someone asks "is there a dbt command for that?" Every command below accepts <code>--select</code> unless noted.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Command</th><th>What it does</th><th>When you reach for it</th><th>Typical flags</th></tr></thead>
+              <tbody>
+                <tr><td><code>dbt run</code></td><td>Build selected models (materialise tables/views)</td><td>Development and scheduled transforms</td><td><code>-s</code>, <code>--full-refresh</code>, <code>--vars</code>, <code>--empty</code></td></tr>
+                <tr><td><code>dbt build</code></td><td>Run models, tests, seeds, snapshots in DAG order</td><td>CI and production &mdash; tests gate downstream nodes</td><td><code>-s</code>, <code>--state</code>, <code>--defer</code></td></tr>
+                <tr><td><code>dbt test</code></td><td>Execute data tests on existing relations</td><td>After run or in isolation during debugging</td><td><code>-s</code>, <code>--store-failures</code></td></tr>
+                <tr><td><code>dbt seed</code></td><td>Load CSV files from <code>seeds/</code> into tables</td><td>Reference data like <code>seed_full_moon_dates</code></td><td><code>-s seed_name</code></td></tr>
+                <tr><td><code>dbt snapshot</code></td><td>Execute snapshot strategies on mutable sources</td><td>SCD tracking on raw listings/hosts</td><td><code>-s snapshot_name</code></td></tr>
+                <tr><td><code>dbt compile</code></td><td>Render Jinja to SQL without executing</td><td>Debug logic; inspect <code>target/compiled/</code></td><td><code>-s</code>, <code>--inline</code></td></tr>
+                <tr><td><code>dbt docs generate</code></td><td>Build catalog JSON and static docs site</td><td>Before <code>dbt docs serve</code></td><td>Usually whole project</td></tr>
+                <tr><td><code>dbt ls</code></td><td>List nodes matching selection</td><td>Preview CI scope; copy test names</td><td><code>-s</code>, <code>--resource-type</code>, <code>--output</code></td></tr>
+                <tr><td><code>dbt debug</code></td><td>Validate profile, connection and project</td><td>First command on a new machine</td><td><code>--config-dir</code></td></tr>
+                <tr><td><code>dbt clean</code></td><td>Remove <code>target/</code> and <code>dbt_packages/</code></td><td>Fresh parse after package upgrade</td><td>&mdash;</td></tr>
+                <tr><td><code>dbt deps</code></td><td>Install packages from <code>packages.yml</code></td><td>After clone or pin change</td><td>&mdash;</td></tr>
+                <tr><td><code>dbt parse</code></td><td>Parse project and write <code>manifest.json</code></td><td>CI lint; Slim CI artifact upload</td><td><code>--warn-error</code></td></tr>
+                <tr><td><code>dbt retry</code></td><td>Re-run nodes that failed in the previous invocation</td><td>Transient warehouse errors overnight</td><td>Inherits prior selection</td></tr>
+                <tr><td><code>dbt run-operation</code></td><td>Call a macro like a function</td><td>One-off admin tasks, logging demos</td><td><code>--args</code>, <code>--vars</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>run versus build</h3>
+          <p><code>dbt run</code> executes models only. Tests do not run; a broken primary key can propagate silently into marts. <code>dbt build</code> interleaves tests according to the DAG &mdash; if <code>fct_reviews</code> fails a <code>unique</code> test, downstream models that depend on it skip. Production pipelines prefer <code>build</code>; interactive development often alternates <code>run</code> and <code>test</code> for speed.</p>
+
+          <div class="terminal">
+            <p class="term-head">dbt build on facts</p>
+            <pre class="term-body"><span class="tt-cmd">dbt build --select tag:fact</span>
+<span class="tt-dim">16:10:01  Running with dbt=1.11.12</span>
+<span class="tt-dim">16:10:04  1 of 4 START sql table model DEV.fct_reviews ........................ [RUN]</span>
+<span class="tt-ok">16:10:18  1 of 4 OK created sql table model DEV.fct_reviews ................... [SUCCESS in 14.2s]</span>
+<span class="tt-dim">16:10:18  2 of 4 START test unique_fct_reviews_review_id ..................... [RUN]</span>
+<span class="tt-ok">16:10:19  2 of 4 PASS unique_fct_reviews_review_id ........................... [PASS in 0.8s]</span>
+<span class="tt-ok">16:10:22  Completed successfully</span></pre>
+          </div>
+
+          <h3>Supporting commands in practice</h3>
+          <p><code>dbt parse</code> is cheap relative to a full run &mdash; it validates YAML, resolves refs, and writes artifacts without warehouse DDL. CI pipelines often run <code>dbt parse --warn-error</code> on every pull request. <code>dbt clean</code> followed by <code>dbt deps</code> is the fix when package macros look stale.</p>
+
+          <p><code>dbt retry</code> re-executes only failed nodes from the immediately previous invocation, preserving selection and vars. Useful when a warehouse blip caused one model in a long run to fail.</p>
+
+          <p><code>dbt docs generate</code> queries the warehouse information schema to enrich column types in documentation. On large projects it can take minutes; schedule it rather than running on every commit. <code>dbt debug</code> should be the first command on a new laptop &mdash; it validates <code>profiles.yml</code>, tests the adapter connection, and confirms the project parses.</p>
+
+          <div class="callout warn"><strong>Postgres and Redshift note.</strong> Every command above works on all adapters, but Python models and some materializations are adapter-specific. A command that succeeds on Snowflake may fail on Postgres if the selection includes an unsupported node type.</div>
+
+          <h3>dbt parse — validate without running</h3>
+          <p><code>dbt parse</code> reads every project file, resolves <code>ref()</code> and <code>source()</code> dependencies, validates YAML, and writes <code>target/manifest.json</code> plus <code>target/partial_parse.msgpack</code>. It never opens a warehouse connection for model execution. CI pipelines use it as a fast lint step; Slim CI uploads the manifest as the comparison artifact for <code>state:modified</code>.</p>
+
+          <div class="terminal">
+            <p class="term-head">dbt parse</p>
+            <pre class="term-body"><span class="tt-cmd">dbt parse --warn-error</span>
+<span class="tt-dim">16:12:01  Running with dbt=1.11.12</span>
+<span class="tt-dim">16:12:03  Performance info: target/manifest.json</span>
+<span class="tt-ok">16:12:03  Completed successfully</span></pre>
+          </div>
+
+          <p><code>--warn-error</code> promotes deprecation warnings to hard failures — useful on pull requests so team members fix renames before they become breaking changes in the next minor version.</p>
+
+          <h3>dbt deps — install packages</h3>
+          <p><code>dbt deps</code> reads <code>packages.yml</code>, downloads pinned package versions into <code>dbt_packages/</code>, and installs any package dependencies recursively. Run it after clone, after changing a package version pin, or when macros from <code>dbt_utils</code> or <code>dbt_expectations</code> are missing. It does not require a warehouse connection.</p>
+
+<pre data-lang="shell" data-title="Typical deps workflow"><code>dbt clean          # optional — removes stale dbt_packages/
+dbt deps           # install packages.yml pins
+dbt parse          # confirm package macros resolve</code></pre>
+
+          <h3>dbt clean — reset local artifacts</h3>
+          <p><code>dbt clean</code> deletes directories listed under <code>clean-targets</code> in <code>dbt_project.yml</code> — by default <code>target/</code> and <code>dbt_packages/</code>. Use it when compiled SQL looks stale after a macro change, when partial parse causes confusing errors, or before a demo where you want a cold start. It does not touch models in the warehouse.</p>
+
+          <h3>dbt docs generate and dbt docs serve</h3>
+          <p>Documentation is a two-step process. <code>dbt docs generate</code> compiles the project, queries the warehouse information schema for column types and row counts, and writes <code>target/catalog.json</code> alongside the manifest. <code>dbt docs serve</code> starts a local web server (default port 8080) that renders lineage, column descriptions, and test results.</p>
+
+          <div class="terminal">
+            <p class="term-head">Generate and serve docs</p>
+            <pre class="term-body"><span class="tt-cmd">dbt docs generate</span>
+<span class="tt-dim">16:14:01  Running with dbt=1.11.12</span>
+<span class="tt-dim">16:14:08  Building catalog</span>
+<span class="tt-ok">16:14:22  Catalog written to target/catalog.json</span>
+<span class="tt-cmd">dbt docs serve</span>
+<span class="tt-ok">16:14:25  Serving at http://localhost:8080</span></pre>
+          </div>
+
+          <p>On large Snowflake schemas, catalog generation can take several minutes because dbt issues metadata queries per relation. Schedule it nightly rather than on every commit. Details on writing descriptions are in <a href="s14-documentation.html">Section 14</a>.</p>
+
+          <h3>dbt debug — connection and config check</h3>
+          <p><code>dbt debug</code> validates that <code>profiles.yml</code> exists, the named profile and target resolve, the adapter can connect to the warehouse, and the project directory parses. Run it first on a new machine or after rotating credentials. It is the fastest way to distinguish &ldquo;dbt misconfigured&rdquo; from &ldquo;SQL wrong&rdquo;.</p>
+
+          <div class="terminal">
+            <p class="term-head">dbt debug (success)</p>
+            <pre class="term-body"><span class="tt-cmd">dbt debug</span>
+<span class="tt-ok">Configuration:</span>
+<span class="tt-ok">  profiles.yml file [OK found and valid]</span>
+<span class="tt-ok">  dbt_project.yml file [OK found and valid]</span>
+<span class="tt-ok">Connection:</span>
+<span class="tt-ok">  account: xy12345.us-east-1</span>
+<span class="tt-ok">  Connection test: [OK connection ok]</span>
+<span class="tt-ok">All checks passed!</span></pre>
+          </div>
+
+          <h3>dbt retry — resume after partial failure</h3>
+          <p>When a long <code>dbt build</code> fails on model 17 of 40, fix the root cause and run <code>dbt retry</code> instead of rebuilding models 1&ndash;16. Retry reads the run results artifact from the immediately previous invocation and re-executes only failed nodes, preserving selection and <code>--vars</code>. It does not help with logic bugs you have not fixed yet — those will fail again.</p>
+
+          <div class="grid-2">
+            <div class="mini-card">
+              <h4>When retry helps</h4>
+              <p>Transient warehouse timeouts, network blips, warehouse auto-suspend resume delays, and rate-limited API errors during metadata queries.</p>
+            </div>
+            <div class="mini-card">
+              <h4>When retry does not help</h4>
+              <p>Compilation errors, test assertion failures, and permission errors. Fix the model or YAML first, then run or retry explicitly.</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="section" id="variables">
+          <h2>Project variables</h2>
+          <p class="lead">Variables let you parameterise a project without editing SQL between runs. Orchestrators pass dates, environment names or feature flags through <code>--vars</code>; Jinja reads them with <code>var()</code>. Defaults live in <code>dbt_project.yml</code> so local runs work without extra flags.</p>
+
+          <h3>Defaults in dbt_project.yml</h3>
+          <p>The course adds a top-level <code>vars:</code> block (sibling to <code>models:</code>):</p>
+
+<pre data-lang="yaml" data-title="dbt_project.yml (vars block from course)" data-explain="user_name is available in every model and macro via var('user_name')."><code>vars:
+  user_name: default_user_name_for_this_project</code></pre>
+
+          <h3>Reading variables in Jinja</h3>
+          <p><code>var('name')</code> raises an error if the variable is undefined and no default is provided. <code>var('name', default)</code> returns the default when missing. This differs from <code>{% set %}</code>, which is compile-time Jinja scope only &mdash; not overridable from the CLI.</p>
+
+          <p>The course macro <code>learn_variables</code> demonstrates both patterns:</p>
+
+<pre data-lang="sql" data-title="macros/variables.sql" data-explain="log(..., info=True) prints to stdout during run-operation; var() reads CLI or dbt_project defaults."><code>{% macro learn_variables() %}
+
+    {% set your_name_jinja = "Zoltan" %}
+    {{ log("Hello " ~ your_name_jinja, info=True) }}
+
+    {{ log("Hello dbt user " ~ var("user_name", "NO USERNAME IS SET!!") ~ "!", info=True) }}
+
+    {% if var("in_test", False) %}
+       {{ log("In test", info=True) }}
+    {% else %}
+       {{ log("NOT in test", info=True) }}
+    {% endif %}
+
+{% endmacro %}</code></pre>
+
+          <p>Run it with defaults, then override from the shell:</p>
+
+          <div class="terminal">
+            <p class="term-head">dbt run-operation learn_variables</p>
+            <pre class="term-body"><span class="tt-cmd">dbt run-operation learn_variables --vars "{user_name: zoltanctoth}"</span>
+<span class="tt-dim">16:15:01  Running with dbt=1.11.12</span>
+<span class="tt-ok">16:15:02  Hello Zoltan</span>
+<span class="tt-ok">16:15:02  Hello dbt user zoltanctoth!</span>
+<span class="tt-ok">16:15:02  NOT in test</span></pre>
+          </div>
+
+          <h3>variable_test.sql — logging plus vars</h3>
+          <p>The repo also ships <code>logging_and_variables</code>, which combines patterns from <a href="s16-debugging-logging.html">Section 16</a> logging with variable reads:</p>
+
+<pre data-lang="sql" data-title="macros/variable_test.sql" data-explain="Demonstrates log levels, Jinja comments vs SQL comments, and var() with a default string."><code>{% macro logging_and_variables() %}
+    {{ log("Call your mom!") }}
+    {{ log("Call your mom!", info=True) }}
+    -- {{ log("This shouldn't be printed", info=True) }}
+    {# log("This really shouldn't be printed", info=True) #}
+
+    {% set your_name = "Zoltan" %}
+    {{ log("Hello " ~ your_name ~ ", call your Mom!", info=true) }}
+
+
+    {# log("Now, hello " ~ var("user_name") ~ "!", info=true) #}
+    {{ log("Now, hello " ~ var("user_name", "...mmmhmmm...") ~ "!", info=true) }}
+
+    {% if var("user_name", False) %}
+        {{ log("User name defined:" ~ var("user_name", False), info=True) }}
+    {% else %}
+        {{ log("User name not defined", info=True) }}
+    {% endif %}
+{% endmacro %}</code></pre>
+
+          <h3>--vars syntax</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Invocation</th><th>Effect</th></tr></thead>
+              <tbody>
+                <tr><td><code>dbt run --vars '{user_name: zoltan}'</code></td><td>YAML-style dict; strings unquoted if simple</td></tr>
+                <tr><td><code>dbt run --vars "{user_name: zoltanctoth}"</code></td><td>Course example; PowerShell-friendly double quotes outside</td></tr>
+                <tr><td><code>dbt run --vars '{"in_test": true}'</code></td><td>Boolean and nested structures need valid JSON/YAML</td></tr>
+                <tr><td>vars in <code>dbt_project.yml</code></td><td>Defaults when CLI omits <code>--vars</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout danger"><strong>Do not put secrets in vars.</strong> <code>--vars</code> values appear in logs, manifest metadata and orchestrator UI. Use <code>env_var()</code> for credentials (see <a href="s19-production.html">Section 19</a>). Vars are for dates, thresholds and feature toggles.</div>
+
+          <h3>Running logging_and_variables</h3>
+          <p>The course ships two variable macros. <code>learn_variables</code> in <code>macros/variables.sql</code> focuses on <code>var()</code> defaults and boolean flags. <code>logging_and_variables</code> in <code>macros/variable_test.sql</code> combines logging levels from <a href="s16-debugging-logging.html">Section 16</a> with the same variable patterns:</p>
+
+          <div class="terminal">
+            <p class="term-head">dbt run-operation logging_and_variables</p>
+            <pre class="term-body"><span class="tt-cmd">dbt run-operation logging_and_variables</span>
+<span class="tt-dim">16:16:01  Running with dbt=1.11.12</span>
+<span class="tt-dim">16:16:02  Call your mom!</span>
+<span class="tt-ok">16:16:02  Call your mom!</span>
+<span class="tt-ok">16:16:02  Hello Zoltan, call your Mom!</span>
+<span class="tt-ok">16:16:02  Now, hello default_user_name_for_this_project!</span>
+<span class="tt-ok">16:16:02  User name defined:default_user_name_for_this_project</span></pre>
+          </div>
+
+          <p>Notice the first <code>log("Call your mom!")</code> without <code>info=True</code> prints at debug level — visible only with <code>--debug</code>. The second identical string with <code>info=True</code> always appears. SQL comments (<code>--</code>) suppress Jinja on that line; Jinja comments (<code>{# #}</code>) remove the line entirely at compile time.</p>
+
+          <h3>Variables in model SQL</h3>
+          <p>Vars are not limited to macros. Any model can read a var for a filter threshold or a logical run date. Section 19 passes <code>start_date</code> and <code>end_date</code> to incremental models from Airflow or Dagster:</p>
+
+<pre data-lang="sql" data-title="Pattern — date window from --vars" data-explain="Orchestrators inject dates per run; defaults in dbt_project.yml cover local development."><code>{% set start = var('start_date', '2000-01-01') %}
+{% set end = var('end_date', '2099-12-31') %}
+
+SELECT *
+FROM {{ ref('fct_reviews') }}
+WHERE review_date BETWEEN '{{ start }}' AND '{{ end }}'</code></pre>
+
+          <div class="terminal">
+            <p class="term-head">Pass date vars on run</p>
+            <pre class="term-body"><span class="tt-cmd">dbt run --select fct_reviews --vars '{start_date: "2024-02-15 00:00:00", end_date: "2024-03-15 23:59:59"}'</span>
+<span class="tt-dim">16:17:01  Running with dbt=1.11.12</span>
+<span class="tt-ok">16:17:14  Completed successfully</span></pre>
+          </div>
+
+          <p>On PowerShell, outer double quotes with inner single-quoted JSON often survive shell parsing better than nested double quotes. When in doubt, test with <code>dbt compile --vars ...</code> and read <code>target/compiled/</code> before running against the warehouse.</p>
+
+          <h3>var versus env_var versus set</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Mechanism</th><th>Set where</th><th>Overridable at CLI</th><th>Use for</th></tr></thead>
+              <tbody>
+                <tr><td><code>{% set x = ... %}</code></td><td>Model or macro file</td><td>No</td><td>Compile-time helpers, loop counters</td></tr>
+                <tr><td><code>var('x')</code></td><td><code>dbt_project.yml</code> or <code>--vars</code></td><td>Yes</td><td>Business parameters shared across models</td></tr>
+                <tr><td><code>env_var('X')</code></td><td>Shell environment</td><td>Via env, not <code>--vars</code></td><td>Secrets and deployment-specific paths</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="section" id="python-models">
+          <h2>Python models</h2>
+          <p class="lead">A Python model is a <code>.py</code> file in <code>models/</code> with a <code>model(dbt, session)</code> function instead of a SQL <code>SELECT</code>. dbt uploads your code to the warehouse Python runtime, passes upstream relations as DataFrames, and materialises the returned DataFrame like any other model. Use Python when you need a library SQL cannot call &mdash; NLP, holidays, scipy &mdash; not when SQL would be clearer.</p>
+
+          <h3>Warehouse support</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Warehouse</th><th>Python runtime</th><th>Supported</th><th>Notes</th></tr></thead>
+              <tbody>
+                <tr><td>Snowflake</td><td>Snowpark Python</td><td>Yes</td><td>Course target; <code>session</code> is Snowpark</td></tr>
+                <tr><td>BigQuery</td><td>BigQuery DataFrames / Python UDF environment</td><td>Yes</td><td>Package installs via <code>dbt.config(packages=[...])</code></td></tr>
+                <tr><td>Databricks</td><td>Spark Python</td><td>Yes</td><td>Returns Spark or pandas DataFrames</td></tr>
+                <tr><td>Postgres</td><td>&mdash;</td><td>No</td><td>SQL models only</td></tr>
+                <tr><td>Redshift</td><td>&mdash;</td><td>No</td><td>SQL models only</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>The course runs on Snowflake. If you develop on Postgres locally, keep Python models <code>enabled: false</code> or skip them until you have a Snowflake target.</p>
+
+          <h3>dim_long_term_listings.py — Snowpark DataFrame API</h3>
+          <p>The simplest course model filters listings with at least 30 minimum nights using Snowpark column syntax &mdash; no Pandas conversion. This is the idiomatic pattern on Snowflake: lazy evaluation stays in the warehouse until dbt materialises the result as a table.</p>
+
+          <p>Every Python model must expose a top-level function named <code>model</code> accepting <code>(dbt, session)</code>. The <code>dbt</code> object provides <code>ref()</code>, <code>source()</code>, and <code>config()</code> — the same concepts as Jinja macros, but in Python. The <code>session</code> object is the warehouse-specific runtime (Snowpark Session on Snowflake).</p>
+
+<pre data-lang="python" data-title="models/dim/dim_long_term_listings.py" data-explain="dbt.ref returns a Snowpark DataFrame; filter and select are lazy until materialisation."><code>def model(dbt, session):
+    listings = dbt.ref("dim_listings_cleansed")
+
+    return (listings.filter(listings["MINIMUM_NIGHTS"] &gt;= 30)
+                   .select("LISTING_ID", "LISTING_NAME", "PRICE"))</code></pre>
+
+          <p>Column names are uppercase because Snowflake returns unquoted identifiers folded to upper case. The model inherits <code>table</code> materialisation from the <code>dim/</code> folder default in <code>dbt_project.yml</code>. You could override inside the function with <code>dbt.config(materialized="view")</code> if you wanted a non-persisted result — same keys as SQL <code>{{ config() }}</code>.</p>
+
+          <div class="terminal">
+            <p class="term-head">Run Snowpark Python model</p>
+            <pre class="term-body"><span class="tt-cmd">dbt run --select dim_long_term_listings</span>
+<span class="tt-dim">16:20:01  Running with dbt=1.11.12</span>
+<span class="tt-dim">16:20:04  1 of 1 START python table model DEV.dim_long_term_listings .......... [RUN]</span>
+<span class="tt-ok">16:20:09  1 of 1 OK created python table model DEV.dim_long_term_listings ..... [SUCCESS 1 in 5.1s]</span>
+<span class="tt-ok">16:20:09  Completed successfully</span></pre>
+          </div>
+
+          <h3>dim_fullmoon.py — Pandas and third-party packages</h3>
+          <p>This model reads a seed, converts to Pandas, and applies the <code>holidays</code> library. <code>dbt.config()</code> sets materialisation and declares pip packages the warehouse should install:</p>
+
+<pre data-lang="python" data-title="models/dim/dim_fullmoon.py" data-explain="enabled=False in the repo disables the model until the lifecycle lesson; remove or set true to run."><code>import holidays
+
+def is_holiday(date_col):
+    german_holidays = holidays.Germany()
+    is_holiday = (date_col in german_holidays)
+    return is_holiday
+
+def model(dbt, session):
+    dbt.config(
+        materialized = "table",
+        packages = ["holidays"],
+        enabled=False # We add this line in the Model Lifecycle / Disabling Models section
+    )
+
+    orders_df = dbt.ref("seed_full_moon_dates")
+
+    df = orders_df.to_pandas()
+
+    df["IS_HOLIDAY"] = df["FULL_MOON_DATE"].apply(is_holiday)
+
+    # return final dataset (Pandas DataFrame)
+    return df</code></pre>
+
+          <p><code>to_pandas()</code> pulls data into the driver &mdash; fine for a small seed, expensive for a fact table. Prefer native Snowpark operations on large inputs.</p>
+
+          <h3>dim_review_sentiment.py — TextBlob sentiment</h3>
+          <p>Sentiment scoring on review text demonstrates a heavier library and a fact-table input:</p>
+
+<pre data-lang="python" data-title="models/dim/dim_review_sentiment.py" data-explain="TextBlob downloads corpora on first use; enabled=False until you intentionally enable heavy NLP models."><code>from textblob import TextBlob
+
+def get_sentiment(text):
+    return TextBlob(text).sentiment.polarity
+
+def model(dbt, session):
+    dbt.config(
+        materialized = "table",
+        enabled= False, # We are disabling this Model later in the Model Lifecycle section
+        packages = ["textblob"]
+    )
+
+    reviews_df = dbt.ref("fct_reviews")
+
+    df = reviews_df.to_pandas()
+
+    df["SENTIMENT_SCORE"] = df["REVIEW_TEXT"].apply(get_sentiment)
+
+    return df</code></pre>
+
+          <div class="callout cost"><strong>Python on full facts is expensive.</strong> Converting <code>fct_reviews</code> to Pandas and running TextBlob row-by-row moves compute out of Snowflake's set-based engine into a single Python worker. For production NLP, teams often batch score in a dedicated service and land results as a source table dbt reads with SQL.</div>
+
+          <h3>config in Python models</h3>
+          <p>SQL models use <code>{{ config(materialized='table') }}</code> at the top of the file. Python models call <code>dbt.config(materialized="table", tags=[...], packages=[...])</code> inside <code>model()</code>. The same keys apply: <code>schema</code>, <code>tags</code>, <code>enabled</code>, incremental settings where the adapter supports them.</p>
+
+          <div class="diagram">
+            <p class="diagram-title">Python model execution on Snowflake</p>
+            <div class="flow">
+              <div class="node is-model"><b>dbt.ref upstream</b><small>Snowpark DataFrame</small></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-compute pulse"><b>model(dbt, session)</b><small>your Python</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-store"><b>CREATE TABLE AS</b><small>warehouse materialisation</small></div>
+            </div>
+          </div>
+
+          <p>Run Python models like any SQL model once enabled:</p>
+
+<pre data-lang="shell" data-title="Run Python dimension"><code>dbt run --select dim_long_term_listings</code></pre>
+
+          <div class="callout tip"><strong>Start Snowpark-native.</strong> Stay in Snowpark DataFrame operations until you hit a library SQL cannot wrap. Convert to Pandas only when the seed or intermediate is small enough to fit comfortably in the Python worker memory.</div>
+
+          <h3>Snowpark versus Pandas in practice</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Approach</th><th>API</th><th>Data movement</th><th>Best for</th></tr></thead>
+              <tbody>
+                <tr><td>Snowpark DataFrame</td><td><code>listings.filter(...).select(...)</code></td><td>Stays in warehouse compute</td><td>Large inputs, set-based filters, joins</td></tr>
+                <tr><td>Pandas via <code>to_pandas()</code></td><td><code>df.apply(...)</code></td><td>Rows pulled to Python worker</td><td>Small seeds, third-party libraries</td></tr>
+                <tr><td>Hybrid</td><td>Snowpark read, Pandas transform, return DataFrame</td><td>Partial export</td><td>Medium datasets with library dependency</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p><code>dim_long_term_listings</code> is the pattern to copy for production: filter and project entirely in Snowpark. <code>dim_fullmoon</code> and <code>dim_review_sentiment</code> trade efficiency for library access (<code>holidays</code>, <code>textblob</code>). Both disabled models ship with <code>enabled=False</code> so a full <code>dbt run</code> does not accidentally trigger expensive Python on every developer laptop.</p>
+
+          <h3>Enabling disabled Python models</h3>
+          <p>To run <code>dim_fullmoon</code> or <code>dim_review_sentiment</code>, set <code>enabled=True</code> in <code>dbt.config()</code> or override at runtime. Ensure upstream seeds and facts exist first:</p>
+
+<pre data-lang="shell" data-title="Enable and run a Python model"><code>dbt seed --select seed_full_moon_dates
+dbt run --select dim_listings_cleansed dim_fullmoon</code></pre>
+
+          <p>First run on Snowflake may take longer while pip installs declared packages into the Snowpark environment. Subsequent runs reuse cached packages.</p>
+
+          <h3>Adapter differences beyond Snowflake</h3>
+          <p>BigQuery Python models use the BigQuery DataFrames API; the <code>session</code> object differs from Snowpark but <code>dbt.ref()</code> and <code>dbt.config()</code> work the same way. Databricks models return Spark or Pandas DataFrames depending on configuration. None of these adapters accept arbitrary pip packages without explicit <code>packages=[...]</code> declaration — undeclared imports fail at runtime with <code>ModuleNotFoundError</code>, not at parse time.</p>
+
+          <div class="callout info"><strong>Postgres developers.</strong> Python models parse in a polyglot repo but fail at run time on unsupported adapters. Tag them <code>python</code> and exclude with <code>--exclude tag:python</code> in local Postgres CI, or set <code>enabled: false</code> until you have a Snowflake target.</div>
+        </section>
+
+        <section class="section" id="deeper">
+          <h2>Deeper detail and edge cases</h2>
+          <p class="lead">Selection grammar edge cases, selector versioning, variable precedence, Python model limits, and the CI patterns teams adopt once the Airbnb exercises stop.</p>
+
+          <h3>Version notes</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Behaviour</th><th>Before</th><th>Now</th><th>Version</th></tr></thead>
+              <tbody>
+                <tr><td>Named selector CLI flag</td><td><code>--selector name</code></td><td><code>-s selector:name</code></td><td>1.12</td></tr>
+                <tr><td>Python models</td><td>Not available</td><td><code>.py</code> files in <code>models/</code></td><td>1.3+</td></tr>
+                <tr><td><code>dbt build</code></td><td>Run and test separately</td><td>Single DAG-aware pipeline command</td><td>0.21+</td></tr>
+                <tr><td><code>dbt retry</code></td><td>Re-run whole selection manually</td><td>Retries failed nodes only</td><td>1.6+</td></tr>
+                <tr><td>State selectors</td><td>N/A</td><td><code>state:modified</code>, <code>state:new</code>, <code>state:modified.body</code></td><td>0.18+</td></tr>
+                <tr><td><code>dbt parse</code></td><td>Side effect of run</td><td>First-class artifact generation</td><td>1.5+</td></tr>
+                <tr><td>Generic test YAML key</td><td><code>tests:</code></td><td><code>data_tests:</code></td><td>1.8+</td></tr>
+                <tr><td>Selection union separator</td><td>Space or comma (adapter docs varied)</td><td>Comma union documented consistently</td><td>1.x</td></tr>
+                <tr><td><code>dbt ls --output json</code></td><td>Name only</td><td>Rich metadata for scripting</td><td>1.5+</td></tr>
+                <tr><td>Snowflake Python packages</td><td>Manual stage upload</td><td><code>packages</code> in <code>dbt.config()</code></td><td>1.3+</td></tr>
+                <tr><td>Course dbt pin</td><td>&mdash;</td><td><code>dbt-core~=1.11.0</code></td><td>pyproject.toml</td></tr>
+                <tr><td><code>--empty</code> flag</td><td>N/A</td><td>Zero-row runs for compile validation</td><td>1.8+</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>What it costs to run</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>What runs</th><th>Where the cost lands</th><th>How to spend less</th></tr></thead>
+              <tbody>
+                <tr><td><code>dbt run</code> without <code>-s</code></td><td>Full project rebuild in warehouse</td><td>Always select; use tags and state in CI</td></tr>
+                <tr><td><code>dbt build --select tag:fact</code></td><td>Fact tables plus their tests</td><td>Split critical vs nightly test tags</td></tr>
+                <tr><td><code>state:modified+</code> over large DAG</td><td>Every downstream mart of a small change</td><td>Review <code>dbt ls</code> output; narrow with tags</td></tr>
+                <tr><td>Python model with <code>to_pandas()</code> on facts</td><td>Data export + Python worker time</td><td>Stay Snowpark-native; disable heavy models in dev</td></tr>
+                <tr><td><code>dbt test</code> on wide facts</td><td>Full table scans per test</td><td><code>dbt test -s tag:critical</code> on PRs</td></tr>
+                <tr><td><code>dbt docs generate</code> on huge projects</td><td>Catalog queries against information schema</td><td>Schedule weekly, not every commit</td></tr>
+                <tr><td>Repeated <code>dbt deps</code> in CI</td><td>Network and minutes</td><td>Cache <code>dbt_packages/</code> Docker layer</td></tr>
+                <tr><td><code>dbt seed</code> full project</td><td>Reloads every CSV</td><td><code>dbt seed -s seed_name</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout cost"><strong>The biggest waste is an unscoped <code>dbt run</code> or <code>dbt build</code> in CI.</strong> A pull request that rebuilds every incremental fact and runs every expectations test on production-scale data can cost more than a week of interactive development. Treat <code>dbt ls --select state:modified+</code> as mandatory review before merging pipeline YAML.</div>
+
+          <h3>Traps that catch people</h3>
+          <ul>
+            <li><strong>Wrong selector flag after upgrade —</strong> CI still calls <code>--selector nightly</code> on dbt 1.12+, which fails or is ignored depending on parser version. Pin dbt in CI and update flags when upgrading.</li>
+            <li><strong>Assuming tests inherit model tags —</strong> <code>dbt test -s tag:fact</code> selects fact models' tests only if those tests are tagged or attached to tagged models per dbt's rules. Tag tests explicitly for tiered CI.</li>
+            <li><strong>Exclude without understanding parent inclusion —</strong> excluding <code>src_listings</code> while selecting <code>dim_listings_cleansed</code> still builds the parent because the child requires it.</li>
+            <li><strong>state:modified without --state —</strong> the selector matches nothing or behaves unexpectedly. You need a prior manifest directory.</li>
+            <li><strong>Comma typo in --vars —</strong> invalid YAML/JSON silently fails parse or drops keys. Test with <code>dbt compile --vars '...'</code> first.</li>
+            <li><strong>Secrets in --vars —</strong> values log to <code>logs/dbt.log</code> and appear in orchestrator UIs. Use <code>env_var()</code> for credentials.</li>
+            <li><strong>Python model on Postgres —</strong> parse succeeds in a polyglot repo but run fails with adapter error. Gate Python models behind tags and warehouse checks.</li>
+            <li><strong>enabled=False surprise —</strong> <code>dim_fullmoon</code> and <code>dim_review_sentiment</code> ship disabled in the repo; <code>dbt run -s path:models/dim</code> skips them without error.</li>
+            <li><strong>Uppercase column names in Snowpark —</strong> Python models must reference <code>MINIMUM_NIGHTS</code> not <code>minimum_nights</code> unless quoted in SQL source.</li>
+            <li><strong>Package install on every run —</strong> missing <code>packages</code> in config causes runtime pip installs. Declare all third-party deps in <code>dbt.config(packages=[...])</code>.</li>
+            <li><strong>dbt run vs build in CI —</strong> run-only pipelines ship broken data when tests fail after merge. Prefer <code>build</code> for deployment-bound jobs.</li>
+            <li><strong>Over-broad @ selector —</strong> <code>@hub_model</code> on a widely referenced dimension rebuilds half the project. Use depth limits or state selectors instead.</li>
+          </ul>
+
+          <h3>Troubleshooting playbook</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Symptom</th><th>Most likely cause</th><th>What to check / fix</th></tr></thead>
+              <tbody>
+                <tr><td><code>Unknown selector name</code></td><td>Typo or missing <code>selectors.yml</code></td><td>Verify file at project root; run <code>dbt parse</code></td></tr>
+                <tr><td><code>--selector</code> not recognised on 1.12+</td><td>Flag removed</td><td>Switch to <code>-s selector:name</code></td></tr>
+                <tr><td><code>dbt ls -s tag:x</code> returns empty</td><td>No nodes tagged <code>x</code></td><td>Inspect <code>target/manifest.json</code> config.tags</td></tr>
+                <tr><td>Python model skipped</td><td><code>enabled: false</code></td><td>Open <code>.py</code> file; set <code>enabled=True</code> to test</td></tr>
+                <tr><td><code>ModuleNotFoundError: holidays</code></td><td>Missing packages config</td><td>Add <code>packages=["holidays"]</code> to <code>dbt.config()</code></td></tr>
+                <tr><td><code>var('x')</code> compilation error</td><td>Undefined var, no default</td><td>Add default in macro or <code>vars:</code> block</td></tr>
+                <tr><td>Selected model did not run</td><td>Name mismatch or disabled node</td><td><code>dbt ls -s model_name</code>; check enabled config</td></tr>
+                <tr><td>state:modified selects everything</td><td>Stale or missing comparison manifest</td><td>Refresh <code>target-prod/manifest.json</code></td></tr>
+                <tr><td>Tests did not run after <code>dbt run</code></td><td>Expected build behaviour</td><td>Use <code>dbt build</code> or separate <code>dbt test</code></td></tr>
+                <tr><td>Retry rebuilt successes</td><td>Wrong invocation context</td><td>Retry only works immediately after partial failure</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Production patterns</h3>
+          <p>Mature teams check three selectors into git: <code>ci_modified</code> (state plus downstream), <code>nightly_full</code> (tagged heavy tests), and <code>deploy_production</code> (full build minus disabled experimental models). GitHub Actions calls <code>dbt ls -s selector:ci_modified --state prod_artifacts</code> in a dry-run step before spending warehouse credits. Tags encode tier; selectors encode graph logic; orchestrators pass vars for logical dates.</p>
+          <p>Python models belong at the edge of the DAG &mdash; small inputs, library transforms SQL cannot express, outputs consumed as ordinary tables downstream. Anti-pattern: a 200-line Python mart that replaces SQL because the author prefers Pandas. It forfeits warehouse parallelism, obscures lineage debugging, and breaks on adapters that lack Python support.</p>
+
+          <div class="diagram">
+            <p class="diagram-title">Typical CI selection flow from pull request to warehouse</p>
+            <div class="flow">
+              <div class="node is-compute"><b>git diff</b><small>PR branch</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-model"><b>dbt parse</b><small>manifest.json</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-model pulse"><b>dbt ls -s state:modified+</b><small>--state prod</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-compute"><b>dbt build</b><small>selected subgraph</small></div>
+            </div>
+          </div>
+
+          <p>Local development mirrors the same discipline. After editing <code>dim_listings_cleansed</code>, run <code>dbt build -s +dim_listings_cleansed+</code> instead of rebuilding facts and unrelated marts. When experimenting with Python, select the single <code>.py</code> file: <code>dbt run -s dim_long_term_listings</code>. The instructor's point in this section is that dbt's power scales with project size only if you learn selection early — before the DAG has forty nodes and a full run takes twenty minutes.</p>
+
+          <div class="grid-2">
+            <div class="mini-card">
+              <h4>Pattern: selector review in CI</h4>
+              <p>Print <code>dbt ls --select selector:ci_modified --state ...</code> to the job log. Reviewers see exact blast radius before approve.</p>
+            </div>
+            <div class="mini-card">
+              <h4>Anti-pattern: mega --select string</h4>
+              <p>A 400-character <code>--select</code> in YAML duplicates <code>selectors.yml</code> poorly. Move it to a named selector with a description field.</p>
+            </div>
+          </div>
+
+<pre data-lang="yaml" data-title="selectors.yml (CI pattern)" data-explain="Combine state, tags and exclusion in one named selector for Slim CI."><code>selectors:
+  - name: ci_modified
+    description: Modified nodes, downstream, excluding heavy NLP model
+    definition:
+      union:
+        - method: state
+          value: modified
+          children: true
+        - exclude:
+            - method: fqn
+              value: dim_review_sentiment</code></pre>
+
+          <h3>Certification pointers</h3>
+          <p>The exam tests selection operators (<code>+</code>, <code>@</code>, <code>tag:</code>, <code>source:</code>), the difference between <code>dbt run</code> and <code>dbt build</code>, what <code>dbt ls</code> does, and variable syntax (<code>var()</code> vs CLI <code>--vars</code>). It asks which warehouses support Python models and what file defines named selectors. Know the 1.12 selector flag change.</p>
+          <ul>
+            <li><a href="s07-models.html">Section 7</a> — DAG basics and first introduction to <code>+model</code> syntax.</li>
+            <li><a href="s11-tests.html#selecting-tests">Section 11</a> — test-specific selectors and tag patterns.</li>
+            <li><a href="s16-debugging-logging.html">Section 16</a> — <code>--empty</code>, logging macros, selective test runs.</li>
+            <li><a href="s19-production.html">Section 19</a> — <code>state:modified</code>, defer, and Slim CI in production.</li>
+            <li><a href="s13-jinja-macros-packages.html">Section 13</a> — Jinja fundamentals underlying <code>var()</code> and macros.</li>
+          </ul>
+          <div class="callout exam"><strong>Certification:</strong> memorise graph operators, <code>tag:</code> and <code>source:</code> prefixes, <code>dbt build</code> vs <code>run</code>, where vars are declared, Python model warehouse support (Snowflake, BigQuery, Databricks — not Postgres/Redshift), and the 1.12 <code>selector:</code> syntax change.</div>
+        </section>
+
+        <section class="section" id="interview">
+          <h2>Interview questions</h2>
+          <p class="muted">Answer each one out loud before opening it.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+
+            <details class="qa">
+              <summary>What is the difference between dbt run and dbt build?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p><code>dbt run</code> executes selected models only — materialising tables and views. Tests are separate unless you invoke <code>dbt test</code>.</p>
+                <p><code>dbt build</code> runs models, seeds, snapshots and tests in DAG order. Failed tests block downstream nodes. CI and production deploys prefer <code>build</code> because it enforces quality gates in one invocation.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Explain the graph operators +model, model+, and @model.<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p><code>+model</code> selects the model and all upstream ancestors. <code>model+</code> selects the model and all downstream descendants. <code>@model</code> selects parents and children — the local neighbourhood around one node.</p>
+                <p>Depth limits like <code>2+model</code> cap how far upstream you walk. Use <code>dbt ls</code> to verify the subgraph before running against the warehouse.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How do tags help in CI pipelines?<span class="qa-tag">Production</span></summary>
+              <div class="qa-body">
+                <p>Tags group nodes by tier or domain: <code>critical</code>, <code>nightly</code>, <code>fact</code>, <code>pii</code>. CI runs <code>dbt test -s tag:critical</code> on every pull request and reserves heavy <code>tag:nightly</code> tests for scheduled jobs.</p>
+                <p>Tags decouple pipeline YAML from model lists. Adding a model to a tier means setting a tag in config, not editing GitHub Actions.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What is selectors.yml and when would you use it?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p><code>selectors.yml</code> stores named, reusable selection definitions composed from methods like <code>path</code>, <code>tag</code>, <code>fqn</code>, <code>state</code>, <code>union</code>, and <code>exclude</code>.</p>
+                <p>Use it when the same complex selection appears in CI, Airflow, and local docs. Named selectors are self-documenting and survive dbt version changes better than 200-character CLI strings.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How did named selector CLI syntax change in dbt 1.12?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p>Before 1.12: <code>dbt run --selector my_selector</code>. From 1.12: <code>dbt run -s selector:my_selector</code>.</p>
+                <p>The YAML definition file is unchanged; only the invocation flag changed. Projects on 1.11 (like the course pin) still use <code>--selector</code>.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What is state:modified and what does it require?<span class="qa-tag">Production</span></summary>
+              <div class="qa-body">
+                <p><code>state:modified</code> selects nodes whose body, config or dependencies differ from a comparison manifest — typically the last production deploy.</p>
+                <p>You must pass <code>--state path/to/artifacts</code> containing a prior <code>manifest.json</code>. Append <code>+</code> for downstream: <code>state:modified+</code>. Slim CI in Section 19 builds on this pattern.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How do project variables differ from Jinja set variables?<span class="qa-tag">Jinja</span></summary>
+              <div class="qa-body">
+                <p><code>{% set x = 1 %}</code> is compile-time scope inside one file or macro — not overridable from the CLI.</p>
+                <p><code>var('x')</code> reads from <code>dbt_project.yml</code> defaults and <code>--vars</code> at invocation time. Use vars for dates, thresholds and environment-specific business parameters orchestrators inject per run.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Which warehouses support dbt Python models?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p>Snowflake (Snowpark), BigQuery, and Databricks support Python models. Postgres and Redshift do not.</p>
+                <p>Python models define a <code>model(dbt, session)</code> function, return a DataFrame, and configure materialisation via <code>dbt.config()</code>. Keep them on supported adapters or set <code>enabled: false</code>.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>When would you choose a Python model over SQL?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>When you need a Python library SQL cannot access — NLP, statistical packages, complex iterative logic — and the input size fits the warehouse Python runtime.</p>
+                <p>Prefer SQL for set-based transforms. Python on large facts via <code>to_pandas()</code> is slow and expensive. Many teams score in a separate service and land results as sources instead.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What does dbt ls do and why run it before dbt run?<span class="qa-tag">Troubleshooting</span></summary>
+              <div class="qa-body">
+                <p><code>dbt ls</code> lists project nodes matching the same <code>--select</code> grammar as run/test/build, without executing warehouse queries.</p>
+                <p>It previews CI blast radius, confirms tag and selector YAML works, and gives exact test node names to copy. Cheap insurance before an expensive <code>dbt build</code>.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What does dbt parse produce and why does CI care?<span class="qa-tag">Production</span></summary>
+              <div class="qa-body">
+                <p><code>dbt parse</code> validates the project and writes <code>target/manifest.json</code> describing every node, its dependencies, config and tags. No warehouse DDL runs.</p>
+                <p>Slim CI uploads that manifest (or a production copy) so <code>state:modified</code> can diff pull requests against main. <code>--warn-error</code> turns deprecations into failures on lint jobs.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How do you combine union and exclude in selectors.yml?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>Put clauses under <code>union:</code> for OR logic. Nest <code>exclude:</code> as a sibling entry with its own method list to subtract nodes from the union result.</p>
+                <p>The course example unions <code>path: models/dim</code> then excludes <code>fqn: dim_listings_w_hosts</code>. Equivalent inline CLI: <code>path:models/dim --exclude dim_listings_w_hosts</code>.</p>
+              </div>
+            </details>
+
+          </div>
+        </section>
+
+        <section class="section" id="practice">
+          <h2>Hands-on practice</h2>
+          <p class="muted">Run these from the <code>airbnb</code> folder with your virtualenv active.</p>
+          <ol class="practice-list">
+
+            <li class="practice">
+              <p class="practice-task">Add the <code>vars</code> block to <code>dbt_project.yml</code> if missing, then run <code>learn_variables</code> with a custom <code>user_name</code> and with <code>in_test: true</code>.</p>
+              <span class="console-path">airbnb/dbt_project.yml · macros/variables.sql</span>
+              <p class="practice-expect">Terminal shows "Hello dbt user zoltanctoth!" and "In test" on the second invocation.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Add at project root level: <code>vars: user_name: default_user_name_for_this_project</code></li>
+                    <li>Run <code>dbt run-operation learn_variables --vars "{user_name: zoltanctoth}"</code></li>
+                    <li>Run <code>dbt run-operation learn_variables --vars "{user_name: zoltanctoth, in_test: true}"</code></li>
+                  </ol>
+<pre data-lang="shell" data-title="Expected commands"><code>dbt run-operation learn_variables --vars "{user_name: zoltanctoth}"
+dbt run-operation learn_variables --vars "{user_name: zoltanctoth, in_test: true}"</code></pre>
+                  <p class="muted">Undo: remove the <code>vars:</code> block if you added it only for this exercise (optional — the course keeps it).</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">Create <code>selectors.yml</code> with <code>dim_except_listings_w_hosts</code>, list matching nodes, then run the selector to build dimensions only.</p>
+              <span class="console-path">airbnb/selectors.yml</span>
+              <p class="practice-expect"><code>dbt ls --selector dim_except_listings_w_hosts</code> lists dim models without <code>dim_listings_w_hosts</code>; run completes for that set.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Copy <code>selectors.yml</code> from the course repo into <code>airbnb/</code></li>
+                    <li><code>dbt ls --selector dim_except_listings_w_hosts</code> (or <code>-s selector:...</code> on dbt 1.12+)</li>
+                    <li><code>dbt run --selector dim_except_listings_w_hosts</code></li>
+                  </ol>
+<pre data-lang="yaml" data-title="selectors.yml"><code>selectors:
+  - name: dim_except_listings_w_hosts
+    description: Selects all dim models, excluding dim_listings_w_hosts.
+    definition:
+      union:
+        - method: path
+          value: models/dim
+        - exclude:
+            - method: fqn
+              value: dim_listings_w_hosts</code></pre>
+                  <p class="muted">Undo: no warehouse undo needed; file is part of the finished project.</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">Run <code>dim_long_term_listings</code> and confirm long-stay listings in the warehouse. Compare row count to a SQL filter on <code>minimum_nights &gt;= 30</code>.</p>
+              <span class="console-path">airbnb/models/dim/dim_long_term_listings.py</span>
+              <p class="practice-expect">Table <code>dim_long_term_listings</code> exists; count matches <code>SELECT COUNT(*) FROM dim_listings_cleansed WHERE minimum_nights &gt;= 30</code>.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Ensure the <code>.py</code> file exists and is not disabled</li>
+                    <li><code>dbt run --select dim_long_term_listings</code></li>
+                    <li>In a worksheet: <code>SELECT COUNT(*) FROM &lt;schema&gt;.dim_long_term_listings</code></li>
+                  </ol>
+<pre data-lang="sql" data-title="Validation query"><code>SELECT COUNT(*) AS py_model_count FROM DEV.dim_long_term_listings;
+
+SELECT COUNT(*) AS sql_count
+FROM DEV.dim_listings_cleansed
+WHERE minimum_nights &gt;= 30;</code></pre>
+                  <p class="muted">Undo: <code>DROP TABLE DEV.dim_long_term_listings</code> if you want a clean schema (optional).</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">Use tag selection to list and build all fact-tagged models. Verify <code>fct_reviews</code> and <code>mart_fullmoon_reviews</code> appear.</p>
+              <span class="console-path">airbnb/dbt_project.yml · models/mart/mart_fullmoon_reviews.sql</span>
+              <p class="practice-expect"><code>dbt ls -s tag:fact</code> includes both models; <code>dbt build -s tag:fact</code> runs models and their tests.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Confirm <code>+tags: ['fact']</code> under <code>models/airbnb/fct:</code></li>
+                    <li>Confirm <code>tags = ['fact']</code> in <code>mart_fullmoon_reviews</code> config</li>
+                    <li><code>dbt ls --select tag:fact</code></li>
+                    <li><code>dbt build --select tag:fact</code></li>
+                  </ol>
+                  <p class="muted">Undo: none required — tags are part of the course project state.</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">Preview a graph operator blast radius: list upstream of <code>dim_listings_w_hosts</code> with <code>+model</code>, then list downstream of <code>dim_listings_cleansed</code> with <code>model+</code>. Compare the two lists.</p>
+              <span class="console-path">Terminal · dbt ls</span>
+              <p class="practice-expect"><code>dbt ls -s +dim_listings_w_hosts</code> includes staging and both host/listing dims; <code>dbt ls -s dim_listings_cleansed+</code> includes marts and Python models that ref the dimension.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li><code>dbt ls --select +dim_listings_w_hosts --resource-type model</code></li>
+                    <li><code>dbt ls --select dim_listings_cleansed+ --resource-type model</code></li>
+                    <li>Note overlap: <code>dim_listings_cleansed</code> appears in both chains but the downstream list is wider</li>
+                  </ol>
+<pre data-lang="shell" data-title="Graph operator preview"><code>dbt ls -s +dim_listings_w_hosts --resource-type model
+dbt ls -s dim_listings_cleansed+ --resource-type model
+dbt ls -s @dim_listings_cleansed --resource-type model</code></pre>
+                  <p class="muted">Undo: none — read-only commands.</p>
+                </div>
+              </details>
+            </li>
+
+          </ol>
+        </section>
+
+        <section class="section" id="recap">
+          <h2>Recap</h2>
+          <div class="recap">
+            <ul class="checklist">
+              <li><code>--select</code> / <code>-s</code> filters the DAG; graph operators <code>+</code>, suffix <code>+</code>, and <code>@</code> control upstream/downstream scope.</li>
+              <li>Resource prefixes include <code>tag:</code>, <code>path:</code>, <code>source:</code>, <code>fqn:</code>, and <code>state:modified</code> (requires <code>--state</code>).</li>
+              <li>Tags in <code>dbt_project.yml</code> use <code>+tags</code>; model files override with <code>config(tags=[...])</code>.</li>
+              <li><code>selectors.yml</code> stores named selections; pre-1.12 uses <code>--selector name</code>, 1.12+ uses <code>-s selector:name</code>.</li>
+              <li><code>dbt build</code> runs tests in DAG order; <code>dbt run</code> does not.</li>
+              <li><code>dbt ls</code> previews selection; <code>dbt parse</code> writes manifest; <code>dbt retry</code> reruns failures only.</li>
+              <li>Vars default in <code>dbt_project.yml</code>; override with <code>--vars</code>; read with <code>var('name', default)</code>.</li>
+              <li>Python models implement <code>model(dbt, session)</code>; configure via <code>dbt.config(materialized=..., packages=[...])</code>.</li>
+              <li>Python models run on Snowflake, BigQuery, and Databricks — not Postgres or Redshift.</li>
+              <li><code>dim_long_term_listings</code> uses Snowpark; <code>dim_fullmoon</code> and <code>dim_review_sentiment</code> use Pandas plus pip packages.</li>
+              <li>Never put secrets in <code>--vars</code>; use <code>env_var()</code> for credentials.</li>
+              <li><code>dbt docs generate</code> builds catalog JSON; <code>dbt clean</code> removes <code>target/</code> and <code>dbt_packages/</code>.</li>
+              <li><code>dbt run-operation</code> invokes macros; combine with <code>--vars</code> to demo <code>learn_variables</code>.</li>
+              <li>Comma in one <code>-s</code> string is union (OR); repeated <code>--select</code> flags are intersection (AND).</li>
+              <li><code>result:fail</code> reruns only tests that failed in the previous invocation.</li>
+            </ul>
+            <p style="margin-top:1rem;">
+              <button type="button" data-complete="section-17">Mark complete</button>
+            </p>
+          </div>
+        </section>
+
+      </div>
+
+      <aside class="toc" aria-label="On this page">
+        <strong>On this page</strong>
+        <ol>
+          <li><a href="#lectures">Lectures</a></li>
+          <li><a href="#node-selection">Node selection</a></li>
+          <li><a href="#tags">Tags</a></li>
+          <li><a href="#selectors-yml">selectors.yml</a></li>
+          <li><a href="#commands">Commands</a></li>
+          <li><a href="#variables">Variables</a></li>
+          <li><a href="#python-models">Python models</a></li>
+          <li><a href="#deeper">Deeper detail</a></li>
+          <li><a href="#interview">Interview questions</a></li>
+          <li><a href="#practice">Hands-on practice</a></li>
+          <li><a href="#recap">Recap</a></li>
+        </ol>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<footer class="footer">The Complete dbt Bootcamp: Zero to Hero · Section 17 · Offline study edition</footer>
+</body>
+</html>

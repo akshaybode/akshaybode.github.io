@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="DEA-C01 Section 5: AWS Lambda serverless compute, S3 and Kinesis event sources, layers, limits, retry and DLQ behaviour, and replayability for resilient data pipelines.">
+<title>Section 5 — Serverless Compute with Lambda | AWS Data Engineer DEA-C01 Notes</title>
+<link rel="stylesheet" href="assets/aws.css">
+<script defer src="assets/search-index.js"></script>
+<script defer src="assets/code-highlight.js"></script>
+<script defer src="assets/aws.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">Course section 5 of 21 · AWS Certified Data Engineer Associate</p>
+    <h1>Serverless Compute with Lambda</h1>
+    <p class="subtitle">Run event-driven Python without servers: S3 uploads that trigger transforms, Kinesis batches that scale with shard count, shared layers for dependencies, the hard limits that define what Lambda cannot do, and replayability — the Domain 1 safety net when a pipeline needs a second chance.</p>
+    <div class="hero-meta">
+      <span class="chip">14 slides · ~25min</span>
+      <span class="chip">Exam domains: Data Ingestion · Data Operations</span>
+      <span class="chip">Deck slides 68–81</span>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <nav class="pager" aria-label="Section navigation">
+    <a href="s04-glue.html">← AWS Glue Deep Dive</a>
+    <a href="index.html">Course contents</a>
+    <a href="s06-streaming.html">Next: Data Streaming →</a>
+  </nav>
+
+  <main id="main">
+    <div class="layout">
+      <div class="content">
+
+        <section class="section" id="lectures">
+          <h2>Lectures in this section</h2>
+          <p class="muted">Each lecture links to the notes that cover it. Labs reuse bucket <code>dea-lab-&lt;initials&gt;-&lt;random&gt;</code> and prefix layout from Section 1.</p>
+          <ol class="lecture-list">
+            <li class="lecture">
+              <a class="lec-title" href="#overview">AWS Lambda overview, use cases and advantages</a>
+              <span class="lec-time">~6:00</span>
+              <span class="lec-src">Slides 69–72</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#s3-events">Lambda with S3 event notifications</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">Slide 73</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#kinesis">Lambda with Kinesis Data Streams</a>
+              <span class="lec-time">~6:00</span>
+              <span class="lec-src">Slide 74</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#layers">Lambda Layers</a>
+              <span class="lec-time">~4:00</span>
+              <span class="lec-src">Slides 75–77</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#limits">Limits, invocation modes and when not to use Lambda</a>
+              <span class="lec-time">~7:00</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#replayability">Replayability: retention, checkpointing and idempotent design</a>
+              <span class="lec-time">~8:00</span>
+              <span class="lec-src">Slides 78–81</span>
+            </li>
+          </ol>
+        </section>
+
+        <section class="section" id="overview">
+          <h2>AWS Lambda overview</h2>
+          <p class="lead"><strong>AWS Lambda</strong> runs your code in response to events without you provisioning or patching servers. AWS scales concurrency automatically, bills per millisecond of execution and per request, and integrates natively with S3, Kinesis, DynamoDB, EventBridge and dozens of other services.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-070.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-070.png" alt="Course slide defining AWS Lambda as serverless compute that runs code without managing servers, scales automatically, and supports Python Java Node.js Go and other languages." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 70</span>Lambda in one slide: no servers, automatic scaling, polyglot runtimes. You upload a handler; AWS manages the fleet.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-071.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-071.png" alt="Course slide listing Lambda use cases: data processing on S3 and DynamoDB, event-driven ingestion from S3 DynamoDB and Kinesis, and workflow automation." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 71</span>Data-engineering use cases. Lambda is the glue between an event (file landed, stream record arrived) and a short transform — copy, validate, metadata extract, fan-out.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-072.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-072.png" alt="Course slide on Lambda advantages: scalable, cost efficient pay per use, simple with no infrastructure management, and typically stateless invocations." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 72</span>Why Lambda wins on small event-driven work: zero idle cost, infinite scale in theory (account limits apply), and stateless handlers that compose cleanly.</figcaption>
+          </figure>
+
+          <h3>Invocation models</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Model</th><th>Who waits</th><th>Examples</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Synchronous</strong></td><td>Caller blocks until the handler returns</td><td>API Gateway, direct <code>Invoke</code>, ALB</td></tr>
+                <tr><td><strong>Asynchronous</strong></td><td>Lambda queues the event and returns 202; retries on failure</td><td>S3 notifications, SNS, EventBridge</td></tr>
+                <tr><td><strong>Poll-based (stream)</strong></td><td>Lambda service polls the source and invokes in batches</td><td>Kinesis, DynamoDB Streams, MSK, SQS</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>S3 → Lambda is <strong>asynchronous</strong>. Kinesis → Lambda is <strong>poll-based</strong> with an event source mapping. The retry and failure semantics differ — covered below.</p>
+
+          <div class="callout exam"><strong>Stateless by design.</strong> Lambda does not preserve memory between invocations unless you use /tmp, external stores or provisioned concurrency with careful design. Each S3 or Kinesis batch is independent — design for idempotency (Section 1, <a href="#replayability">replayability</a> below).</div>
+        </section>
+
+        <section class="section" id="s3-events">
+          <h2>Lambda with S3 event notifications</h2>
+          <p class="lead">Configure an S3 bucket to publish events (object created, deleted, restored) to Lambda. When a file lands under a prefix, Lambda runs your handler — typical pattern: validate, virus-scan, copy to <code>staging/</code>, or kick off a Glue workflow.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-073.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-073.png" alt="Course slide diagram: S3 file upload triggers S3 notification to Lambda which executes code and transfers file for data processing." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 73</span>S3 → Lambda flow. The notification is asynchronous; S3 does not wait for your code to finish. Duplicate deliveries are possible — handle idempotently.</figcaption>
+          </figure>
+
+          <div class="diagram">
+            <p class="diagram-title">S3 ObjectCreated → Lambda → staging copy</p>
+            <div class="flow">
+              <div class="node is-source"><b>S3 raw/</b><small>ObjectCreated event</small></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-compute pulse"><b>Lambda</b><small>copy + tag</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-store"><b>S3 staging/</b><small>same key layout</small></div>
+            </div>
+          </div>
+
+          <h3>S3 notification configuration (JSON)</h3>
+<pre data-lang="json" data-title="S3 event notification — invoke Lambda on PUT under raw/" data-explain="Filter by prefix and suffix so only CSV uploads under raw/ trigger the function. One bucket supports multiple notification rules."><code>{
+  "LambdaFunctionConfigurations": [
+    {
+      "Id": "raw-upload-trigger",
+      "LambdaFunctionArn": "arn:aws:lambda:us-east-1:123456789012:function:dea-s3-staging-copy",
+      "Events": ["s3:ObjectCreated:*"],
+      "Filter": {
+        "Key": {
+          "FilterRules": [
+            { "Name": "prefix", "Value": "raw/" },
+            { "Name": "suffix", "Value": ".csv" }
+          ]
+        }
+      }
+    }
+  ]
+}</code></pre>
+
+          <h3>Handler: read key and copy to staging</h3>
+<pre data-lang="python" data-title="Lambda — S3 ObjectCreated staging copy" data-explain="Uses copy_object with a deterministic staging key so a duplicate event overwrites the same object — idempotent."><code>import boto3
+import urllib.parse
+
+s3 = boto3.client("s3")
+DEST_BUCKET = "dea-lab-ab-4821"
+STAGING_PREFIX = "staging/"
+
+def lambda_handler(event, context):
+    for record in event["Records"]:
+        src_bucket = record["s3"]["bucket"]["name"]
+        # Keys arrive URL-encoded
+        src_key = urllib.parse.unquote_plus(
+            record["s3"]["object"]["key"], encoding="utf-8"
+        )
+        dest_key = STAGING_PREFIX + src_key.removeprefix("raw/")
+        print(f"Copy s3://{src_bucket}/{src_key} -> s3://{DEST_BUCKET}/{dest_key}")
+        s3.copy_object(
+            Bucket=DEST_BUCKET,
+            Key=dest_key,
+            CopySource={"Bucket": src_bucket, "Key": src_key},
+        )
+    return {"statusCode": 200, "copied": len(event["Records"])}</code></pre>
+
+          <h3>Example S3 event payload</h3>
+<pre data-lang="json" data-title="S3 event delivered to Lambda" data-explain="Each Records entry is one object event. s3.object.size helps decide whether to process inline or offload to Glue."><code>{
+  "Records": [
+    {
+      "eventVersion": "2.1",
+      "eventSource": "aws:s3",
+      "eventName": "ObjectCreated:Put",
+      "s3": {
+        "bucket": { "name": "dea-lab-ab-4821" },
+        "object": { "key": "raw/customers/customers.csv", "size": 818 }
+      }
+    }
+  ]
+}</code></pre>
+
+          <p>Asynchronous invokes retry twice by default on error, then optionally route to a dead-letter queue (SQS or SNS). Set <code>MaximumRetryAttempts</code> (0–2) on the event invoke config.</p>
+        </section>
+
+        <section class="section" id="kinesis">
+          <h2>Lambda with Kinesis Data Streams</h2>
+          <p class="lead">An <strong>event source mapping</strong> makes Lambda poll a Kinesis stream, batch records, and invoke your function. Concurrency scales with shard count (one concurrent consumer per shard by default, more with parallelisation factor).</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-074.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-074.png" alt="Course slide diagram: Kinesis Data Streams as event source continuously triggers Lambda in batches which processes and transfers data." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 74</span>Kinesis → Lambda. Executes in batches, scales with stream capacity. This is poll-based, not push — Lambda manages shard iterators and checkpoints.</figcaption>
+          </figure>
+
+          <h3>Event source mapping knobs</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Setting</th><th>Kinesis / DynamoDB Streams</th><th>Effect</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Batch size</strong></td><td>1–10,000 records (Kinesis)</td><td>Records per invocation</td></tr>
+                <tr><td><strong>Batching window</strong></td><td>0–300 seconds</td><td>Wait up to N seconds to fill a batch</td></tr>
+                <tr><td><strong>Parallelisation factor</strong></td><td>1–10 per shard</td><td>Multiple concurrent invokes per shard</td></tr>
+                <tr><td><strong>Starting position</strong></td><td>LATEST or TRIM_HORIZON</td><td>New records only vs oldest retained</td></tr>
+                <tr><td><strong>On-failure destination</strong></td><td>SQS or SNS</td><td>After retries exhausted, send failed batch metadata</td></tr>
+                <tr><td><strong>Bisect batch on function error</strong></td><td>true/false</td><td>Split failing batch to isolate poison pill</td></tr>
+                <tr><td><strong>Maximum retry attempts</strong></td><td>0–10,000 (0 = discard)</td><td>Retries before on-failure destination</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Handler with partial batch failure reporting</h3>
+<pre data-lang="python" data-title="Lambda — Kinesis consumer with batchItemFailures" data-explain="Report only failed sequence numbers so Lambda retries those records without reprocessing the whole batch. Requires ReportBatchItemFailures on the event source mapping."><code>import base64
+import json
+
+def lambda_handler(event, context):
+    failures = []
+    for record in event["Records"]:
+        seq = record["kinesis"]["sequenceNumber"]
+        try:
+            payload = json.loads(
+                base64.b64decode(record["kinesis"]["data"]).decode("utf-8")
+            )
+            process_record(payload)  # your transform / write
+        except Exception:
+            failures.append({"itemIdentifier": seq})
+    return {"batchItemFailures": failures}
+
+def process_record(payload):
+    # Idempotent write keyed on event id
+    if not payload.get("order_id"):
+        raise ValueError("missing order_id")</code></pre>
+
+          <h3>Example Kinesis event payload</h3>
+<pre data-lang="json" data-title="Kinesis event delivered to Lambda" data-explain="data is base64-encoded. partitionKey and sequenceNumber identify the record for partial failure reporting."><code>{
+  "Records": [
+    {
+      "eventSource": "aws:kinesis",
+      "eventName": "aws:kinesis:record",
+      "kinesis": {
+        "partitionKey": "customer-42",
+        "sequenceNumber": "49618115137593273885046144569272806707467268471106562518560",
+        "data": "eyJvcmRlcl9pZCI6ICIxMDAxIiwgImFtb3VudCI6IDQ5Ljk5fQ==",
+        "approximateArrivalTimestamp": 1722614400.0
+      }
+    }
+  ]
+}</code></pre>
+          <p>The decoded <code>data</code> above is <code>{"order_id": "1001", "amount": 49.99}</code>.</p>
+
+          <div class="callout warn"><strong>Poison pill records.</strong> Enable <code>BisectBatchOnFunctionError</code> and <code>ReportBatchItemFailures</code> so one bad record does not block the shard forever. After max retries, route to on-failure SQS for manual replay.</div>
+        </section>
+
+        <section class="section" id="layers">
+          <h2>Lambda Layers</h2>
+          <p class="lead">A <strong>Lambda layer</strong> is a zip archive of libraries, custom runtimes or static assets that you attach to a function. Layers deploy separately from handler code and can be shared across functions in the account or published publicly.</p>
+
+          <div class="slide-row">
+            <figure class="slide-fig">
+              <a href="assets/slides/slide-075.png" target="_blank" rel="noopener">
+                <img src="assets/slides/slide-075.png" alt="Course slide showing Lambda functions without layers where each function bundles its own code dependencies and configuration." loading="lazy">
+              </a>
+              <figcaption><span class="slide-no">Slide 75</span>Without layers, every function zip duplicates pandas, numpy or JDBC drivers — slow deploys and fat packages.</figcaption>
+            </figure>
+            <figure class="slide-fig">
+              <a href="assets/slides/slide-076.png" target="_blank" rel="noopener">
+                <img src="assets/slides/slide-076.png" alt="Course slide showing Lambda functions sharing a layer: package layer zip, create layer, attach to functions, runtime accesses layer contents." loading="lazy">
+              </a>
+              <figcaption><span class="slide-no">Slide 76</span>With layers, dependencies live in one artefact referenced by many functions. Update the layer version once, bump the reference on each function.</figcaption>
+            </figure>
+          </div>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-077.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-077.png" alt="Course slide listing Lambda layer benefits: separate core logic from dependencies, reduce deployment package size, and share dependencies across multiple functions." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 77</span>Three benefits: slimmer function uploads, shared dependency versioning, cleaner handler repos. Layers extract to <code>/opt</code> in the execution environment.</figcaption>
+          </figure>
+
+          <ul>
+            <li>Up to <strong>5 layers</strong> per function; total unzipped function + layers must stay within the deployment size limit.</li>
+            <li>Build layers with the same runtime OS as Lambda (Amazon Linux 2023 for Python 3.12).</li>
+            <li>Common pattern: one layer for <code>pandas/pyarrow</code>, another for internal shared utilities.</li>
+          </ul>
+        </section>
+
+        <section class="section" id="limits">
+          <h2>Limits, performance and when not to use Lambda</h2>
+          <p class="lead">Lambda's limits define the exam boundary between "short event-driven transform" and "that belongs in Glue or EMR". Memory controls CPU proportionally; cold starts matter for latency-sensitive paths.</p>
+
+          <h3>Current limits (know these for the exam)</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Resource</th><th>Limit</th></tr></thead>
+              <tbody>
+                <tr><td>Timeout</td><td>15 minutes max</td></tr>
+                <tr><td>Memory</td><td>128 MB – 10,240 MB (10 GB)</td></tr>
+                <tr><td>Ephemeral storage (<code>/tmp</code>)</td><td>512 MB – 10,240 MB (10 GB), configurable</td></tr>
+                <tr><td>Payload (sync invoke)</td><td>6 MB request/response</td></tr>
+                <tr><td>Payload (async invoke)</td><td>256 KB event body</td></tr>
+                <tr><td>Deployment package (zipped)</td><td>50 MB direct upload; 250 MB unzipped (with layers)</td></tr>
+                <tr><td>Container image</td><td>10 GB image size</td></tr>
+                <tr><td>Layers per function</td><td>5</td></tr>
+                <tr><td>Account concurrency (default)</td><td>1,000 concurrent executions (soft limit, request increase)</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Memory buys CPU</h3>
+          <p>At 1,769 MB a function gets one full vCPU; above that, multiple vCPUs. Power tuning: increase memory until duration drops enough that total cost falls — the Lambda Power Tuning tool automates this. For CSV parsing and boto3 calls, 512 MB–1 GB is usually enough; numpy-heavy work may need more.</p>
+
+          <h3>Cold starts, provisioned concurrency and SnapStart</h3>
+          <ul>
+            <li><strong>Cold start</strong> — first invoke or after scale-out must init the runtime and import modules. Java and .NET suffer most; Python moderate.</li>
+            <li><strong>Provisioned concurrency</strong> — keep N execution environments warm; you pay for the pre-warmed capacity whether or not invocations occur. Use when p99 latency matters.</li>
+            <li><strong>SnapStart</strong> — Java functions only; snapshots initialized execution environment for faster cold starts. Not available for Python data pipelines today.</li>
+          </ul>
+
+          <h3>Lambda in a VPC</h3>
+          <p>Attach a function to private subnets to reach RDS, ElastiCache or internal APIs. Lambda creates ENIs in your subnets — needs <code>ec2:CreateNetworkInterface</code> on the role, a security group allowing outbound to the target, and usually an S3/DynamoDB <strong>VPC gateway or interface endpoint</strong> so the function can still reach AWS APIs without a NAT Gateway. Cold starts are slower with VPC because of ENI setup (mitigated on newer runtimes with hyperplane ENIs).</p>
+
+          <h3>When Lambda is the wrong answer</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Requirement</th><th>Use instead</th><th>Why</th></tr></thead>
+              <tbody>
+                <tr><td>ETL &gt; 15 minutes or TB-scale Spark joins</td><td><a href="s04-glue.html">AWS Glue</a> or EMR</td><td>Lambda timeout and single-node memory ceiling</td></tr>
+                <tr><td>Heavy distributed Spark / Hadoop</td><td>EMR or Glue Spark</td><td>Lambda has no Spark cluster</td></tr>
+                <tr><td>Sustained high-throughput stream analytics with windows</td><td>Managed Flink, Spark Structured Streaming</td><td>Lambda batch window max 5 minutes on Kinesis; stateful windows are awkward</td></tr>
+                <tr><td>Always-on HTTP API with steady load</td><td>ECS/Fargate, App Runner</td><td>Provisioned concurrency cost at constant QPS</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout exam"><strong>Exam pattern.</strong> "File arrives in S3, convert CSV to Parquet under 5 minutes" → Lambda or Glue depending on file size and whether the question says "least operational overhead" (Glue Visual ETL) vs "immediate lightweight trigger" (Lambda). "Process 500 GB daily with joins" → Glue, never Lambda.</div>
+        </section>
+
+        <section class="section" id="replayability">
+          <h2>Replayability</h2>
+          <p class="lead"><strong>Replayability</strong> is the ability to reprocess data that was already ingested — deliberately, because a transform bug shipped, schema changed, or a downstream store was wiped. It is a core Domain 1 topic: the exam expects you to design pipelines where bad code can be fixed and run again without corrupting production data.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-079.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-079.png" alt="Course slide defining replayability as reprocessing already handled data, important for error handling data consistency adapting to schema changes and safe testing." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 79</span>Why replay matters: fix mistakes, align schemas after a change, backfill history, and test transforms against real shapes without touching production curated tables.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-080.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-080.png" alt="Course slide on replay strategies: idempotent operations, logging and auditing, checkpointing, and backfilling mechanisms." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 80</span>Four implementation pillars from the deck. Idempotency and checkpointing do the heavy lifting; logging and backfill are operational wrappers.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-081.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-081.png" alt="Course slide stating replayability is an important safety net ensuring data processing systems are resilient accurate and adaptable." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 81</span>Replayability is insurance — you hope not to need it, but production pipelines without it cannot recover cleanly from a bad deploy.</figcaption>
+          </figure>
+
+          <h3>Source retention — where replay comes from</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Source</th><th>Retention / replay</th><th>Notes</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Kinesis Data Streams</strong></td><td>24 hours default; up to 365 days extended</td><td>Reset shard iterator or new consumer with TRIM_HORIZON replays within window</td></tr>
+                <tr><td><strong>Amazon MSK / Kafka</strong></td><td>Unlimited (disk-bound, topic retention policy)</td><td>Reset consumer group offset to earliest</td></tr>
+                <tr><td><strong>Amazon S3</strong></td><td>Durable until deleted</td><td>Best replay source — keep <code>raw/</code> immutable; re-run Glue/Lambda on prefix</td></tr>
+                <tr><td><strong>Kinesis Data Firehose</strong></td><td><strong>No replay</strong></td><td>Forward-only delivery to S3/Redshift/OpenSearch; source stream retention is your safety net</td></tr>
+                <tr><td><strong>DynamoDB Streams</strong></td><td>24 hours</td><td>Replay via PITR export or source table scan, not the stream itself</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout danger"><strong>Firehose has no replay.</strong> If the exam asks how to recover after a bad Firehose transform Lambda, the answer is re-read from the <em>source stream</em> or from S3 if the stream retention expired — Firehose itself cannot rewind.</div>
+
+          <h3>Checkpointing and shard iterators</h3>
+          <p>Poll-based consumers (Lambda, KCL, Flink) commit a checkpoint — sequence number or offset — when a batch succeeds. On failure, the consumer restarts from the last checkpoint, which may re-deliver records (<strong>at-least-once</strong>). Design writes to tolerate duplicates.</p>
+          <ul>
+            <li>Lambda stores Kinesis checkpoints in DynamoDB (managed automatically per event source mapping).</li>
+            <li>To replay: disable mapping, reset iterator to <code>AT_TIMESTAMP</code> or <code>TRIM_HORIZON</code>, or deploy a new consumer group.</li>
+            <li>Glue streaming uses Spark checkpoint directories on S3; Glue batch uses job bookmarks (<a href="s04-glue.html">Section 4</a>).</li>
+          </ul>
+
+          <h3>Idempotent writes</h3>
+          <p>Replay only works if reprocessing does not double-count. Techniques:</p>
+          <ul>
+            <li>Natural keys with <code>MERGE</code> / conditional DynamoDB <code>PutItem</code> (<code>attribute_not_exists</code>).</li>
+            <li>Deterministic S3 paths: <code>curated/orders/date=2024-01-01/part-000.parquet</code> overwritten on re-run.</li>
+            <li>Store processed event IDs in DynamoDB with TTL for dedup window.</li>
+          </ul>
+
+          <h3>Dead-letter handling and replay pipeline</h3>
+          <p>Failed batches land in an on-failure SQS queue or DLQ with the original payload metadata. A separate "replayer" Lambda or scheduled Glue job drains the DLQ, fixes the root cause, and re-submits. Logging to CloudWatch Logs + S3 access logs gives audit trail for what was replayed when.</p>
+
+          <h3>Design pattern: raw → staging → curated</h3>
+          <div class="diagram">
+            <p class="diagram-title">Replay from immutable raw when a transform fails</p>
+            <div class="flow">
+              <div class="node is-source"><b>raw/</b><small>never mutate</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-compute"><b>Lambda / Glue</b><small>versioned job</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-store"><b>curated/</b><small>partition overwrite</small></div>
+            </div>
+          </div>
+          <p>Never edit <code>raw/</code>. When v2 of the transform is ready, truncate or overwrite affected partitions in <code>curated/</code> and re-run the job against the full raw prefix. S3 versioning on raw adds accidental-delete protection. This pattern is the practical implementation of everything on slides 79–81.</p>
+
+          <div class="callout exam"><strong>Domain 1 favourite.</strong> "A developer deployed buggy Lambda code that wrote wrong aggregates for three days. How recover?" → Fix code; replay from S3 raw or reset Kinesis iterator if within retention; idempotent overwrite curated partitions; use DLQ for records that failed mid-stream.</div>
+        </section>
+
+        <section class="section" id="deeper">
+          <h2>Deeper detail and exam edge cases</h2>
+          <p class="lead">Concurrency models, billing granularity, and poll-based failure semantics — the operational limits that turn a working Lambda demo into a production pipeline that survives poison records and account-wide throttling.</p>
+
+          <h3>Limits and quotas that decide answers</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Limit</th><th>Value</th><th>Adjustable?</th><th>Why it matters</th></tr></thead>
+              <tbody>
+                <tr><td>Function timeout</td><td>15 minutes max</td><td>Yes — set per function up to 900 s (hard ceiling)</td><td>Anything longer belongs in Glue or EMR; exam distractors often propose 30-minute Lambda ETL.</td></tr>
+                <tr><td>Memory</td><td>128 MB – 10,240 MB</td><td>Yes — per function</td><td>CPU scales with memory; 1,769 MB ≈ one vCPU; above that, multiple vCPUs.</td></tr>
+                <tr><td>Ephemeral storage (<code>/tmp</code>)</td><td>512 MB – 10,240 MB default 512 MB</td><td>Yes — configurable independently of memory</td><td>Large CSV staging in <code>/tmp</code> without raising memory wastes GB-second cost; raising <code>/tmp</code> alone does not add CPU.</td></tr>
+                <tr><td>Sync invoke payload</td><td>6 MB request and response</td><td>No (hard)</td><td>API Gateway and direct invoke hit this before your handler runs.</td></tr>
+                <tr><td>Async invoke event</td><td>256 KB</td><td>No (hard)</td><td>S3 notifications are lightweight; stuffing large metadata in the event body fails at enqueue time.</td></tr>
+                <tr><td>Deployment package (zipped direct upload)</td><td>50 MB</td><td>No (hard) — use S3 upload for larger zips</td><td>Layers help but combined unzipped total still capped.</td></tr>
+                <tr><td>Deployment package (unzipped, with layers)</td><td>250 MB total</td><td>No (hard)</td><td>Heavy Python data stacks often need container images instead.</td></tr>
+                <tr><td>Container image</td><td>10 GB</td><td>No (hard)</td><td>Bypasses zip limits; cold starts depend on image size and layer caching.</td></tr>
+                <tr><td>Layers per function</td><td>5</td><td>No (hard)</td><td>Consolidate dependencies into fewer layers or switch to a container image.</td></tr>
+                <tr><td>Account concurrent executions (default)</td><td>1,000</td><td>Yes — soft quota; Service Quotas increase request</td><td>All functions in the Region share the pool unless reserved concurrency is set.</td></tr>
+                <tr><td>Reserved concurrency</td><td>0 – account unreserved pool per function</td><td>Yes — caps and reserves capacity for one function</td><td>Guarantees minimum capacity but subtracts from the shared pool; setting 0 disables invokes.</td></tr>
+                <tr><td>Provisioned concurrency</td><td>Per function, per Region</td><td>Yes — pre-warmed execution environments</td><td>Eliminates cold starts for that alias/version; bills even when idle — see cost table below.</td></tr>
+                <tr><td>Kinesis / DynamoDB Streams batch size</td><td>1 – 10,000 records (Kinesis); up to 10,000 (DynamoDB Streams)</td><td>Yes — event source mapping</td><td>Larger batches improve throughput but lengthen poison-pill blast radius without bisect/partial failure.</td></tr>
+                <tr><td>Batching window</td><td>0 – 300 seconds</td><td>Yes — event source mapping</td><td>Wait to fill a batch; trades latency for fewer invokes.</td></tr>
+                <tr><td>SQS batch size</td><td>1 – 10,000 (standard); max 10 for FIFO</td><td>Yes — event source mapping</td><td>Pair with <code>ReportBatchItemFailures</code> so one bad message does not re-drive the whole batch.</td></tr>
+                <tr><td>Maximum retry attempts (stream mappings)</td><td>0 – 10,000 (0 = discard after failure handling)</td><td>Yes — separate from async invoke retries</td><td>With 0, failed batches go straight to on-failure destination after bisect exhausts.</td></tr>
+                <tr><td>Billing granularity</td><td>1 ms</td><td>No (hard)</td><td>Sub-100 ms invocations still round up to 1 ms — memory tuning changes GB-seconds quickly.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>What you actually pay for</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Billed dimension</th><th>Unit</th><th>How to spend less</th></tr></thead>
+              <tbody>
+                <tr><td>Invoke requests</td><td>Per million requests (us-east-1: ~0.20 USD per 1M)</td><td>Batch Kinesis/SQS records; increase batching window; avoid synchronous invoke loops when async suffices.</td></tr>
+                <tr><td>Duration (GB-seconds)</td><td>Memory allocated × duration in seconds, 1 ms granularity</td><td>Power-tune memory — more RAM often shortens CPU-bound work enough to lower total GB-seconds.</td></tr>
+                <tr><td>Provisioned concurrency</td><td>GB-second for pre-warmed capacity plus per-request charge while provisioned</td><td>Use only on latency-critical aliases; scale to zero off-peak; prefer reserved concurrency if you only need a cap, not warm starts.</td></tr>
+                <tr><td>NAT Gateway (VPC-attached functions)</td><td>Per hour plus per GB processed</td><td>Add S3/DynamoDB gateway or interface VPC endpoints so AWS API calls skip NAT.</td></tr>
+                <tr><td>ENI data transfer (VPC)</td><td>Cross-AZ traffic between Lambda ENIs and private resources</td><td>Place function subnets in the same AZ as RDS when possible; use VPC endpoints for same-Region S3.</td></tr>
+                <tr><td>CloudWatch Logs</td><td>Ingestion and storage per GB</td><td>Sample debug logging; set log retention; avoid logging full payloads on hot paths.</td></tr>
+                <tr><td>KMS (encrypted env vars / SNS / SQS with CMK)</td><td>Per API request</td><td>Use AWS-managed keys where compliance allows; batch decrypt at init not per record.</td></tr>
+                <tr><td>Idle provisioned concurrency</td><td>Full provisioned GB-second rate 24×7</td><td>Anti-pattern: provisioned concurrency on a sporadic S3 trigger — you pay for warm instances that rarely run.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout cost"><strong>Biggest Lambda money leak in data pipelines.</strong> Provisioned concurrency left on a function triggered a few times per hour, or a VPC-attached function routing every S3 <code>GetObject</code> through a NAT Gateway. Both bill continuously while adding little throughput.</div>
+          <div class="callout danger"><strong>Account concurrency exhaustion.</strong> When all 1,000 concurrent executions are in use, additional invokes are throttled with <code>TooManyRequestsException</code> (429). Reserved concurrency on one function can starve others — size the pool before production cutover.</div>
+
+          <h3>Traps that catch people</h3>
+          <ul>
+            <li><strong>Poison pill blocks the shard —</strong> On Kinesis or DynamoDB Streams, one record that always throws prevents checkpoint advancement for that shard until the record ages out of retention (24 hours on DynamoDB Streams). Without <code>BisectBatchOnFunctionError</code>, <code>MaximumRetryAttempts</code>, or on-failure destination, the entire shard stalls while iterator age climbs.</li>
+            <li><strong>Reserved vs provisioned concurrency —</strong> Reserved concurrency only caps and reserves capacity; it does not pre-warm execution environments. Cold starts remain unless you add provisioned concurrency on a published alias.</li>
+            <li><strong>SQS partial batch uses messageId —</strong> <code>ReportBatchItemFailures</code> for SQS returns <code>itemIdentifier</code> as the SQS message ID, not the Kinesis sequence number. Copying a Kinesis handler verbatim silently fails partial retries.</li>
+            <li><strong>Async invoke retries ≠ stream mapping retries —</strong> S3 → Lambda async retries twice by default (0–2 configurable). Kinesis mappings use a separate retry counter (up to 10,000) and bisect logic — mixing the two models in runbooks causes wrong recovery steps.</li>
+            <li><strong>VPC Lambda without endpoints —</strong> Functions in private subnets cannot reach S3, DynamoDB, or Kinesis public endpoints without a NAT Gateway or VPC endpoint. Symptom: timeouts on <code>boto3</code> calls despite correct IAM — network, not permissions.</li>
+            <li><strong>At-least-once duplicates —</strong> Successful processing followed by a crash before checkpoint commits re-delivers the batch. Idempotency keys are mandatory for aggregations writing to S3 or DynamoDB, not optional polish.</li>
+            <li><strong>Large deployment package cold starts —</strong> Importing pandas, numpy, or JDBC drivers on every cold start dominates duration. Layers reduce upload size but imports still run; container images or provisioned concurrency address latency, not zip size alone.</li>
+            <li><strong>Setting reserved concurrency to zero —</strong> Reserved concurrency of 0 on a function blocks all invokes — useful as a circuit breaker but often mis-clicked when trying to "remove limit".</li>
+            <li><strong>Firehose transform timeout vs Lambda limit —</strong> Firehose allows up to six minutes per transform batch, but the same function code deployed as a Kinesis consumer still hits the 15-minute function maximum — different triggers, same handler, different effective limits.</li>
+          </ul>
+
+          <h3>Troubleshooting playbook</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Symptom</th><th>Most likely cause</th><th>What to check / fix</th></tr></thead>
+              <tbody>
+                <tr><td><code>IteratorAge</code> / <code>MillisBehindLatest</code> climbing on Kinesis trigger</td><td>Handler slower than ingest, or poison record blocking shard</td><td>CloudWatch <code>IteratorAge</code> on the event source mapping; enable bisect and partial batch failure; check function <code>Errors</code> and <code>Duration</code> metrics.</td></tr>
+                <tr><td><code>TooManyRequestsException</code> (429) on invoke</td><td>Account or function concurrency exhausted</td><td>CloudWatch <code>ConcurrentExecutions</code> vs account limit; review reserved concurrency allocations; request quota increase or reduce fan-out.</td></tr>
+                <tr><td>S3 trigger fires but handler times out</td><td>Object too large for memory/<code>/tmp</code> or 15-minute ceiling</td><td>Check object size in the event; raise memory (adds CPU and <code>/tmp</code> indirectly) or route large files to Glue; use S3 → SQS → Lambda for backpressure.</td></tr>
+                <tr><td>VPC function times out on <code>s3.get_object</code></td><td>No route to S3 — missing NAT or gateway endpoint</td><td>Verify VPC endpoints for S3 or NAT in route table; security group egress on 443; compare with same code outside VPC.</td></tr>
+                <tr><td>Duplicate rows after deploy</td><td>At-least-once redelivery after checkpoint lag</td><td>Audit idempotency keys; confirm checkpoint after successful sink write; check <code>OnSuccess</code> destination metrics if configured.</td></tr>
+                <tr><td>SQS trigger reprocesses entire batch</td><td><code>ReportBatchItemFailures</code> not enabled or wrong <code>itemIdentifier</code></td><td>Event source mapping → Report batch item failures = on; return failed message IDs only in <code>batchItemFailures</code>.</td></tr>
+                <tr><td>Cold start p99 spikes after release</td><td>New dependency imports or larger package</td><td>Compare <code>InitDuration</code> in CloudWatch Logs REPORT lines; use provisioned concurrency on stable alias; trim imports.</td></tr>
+                <tr><td>On-failure queue empty but shard still blocked</td><td>Retries not exhausted or bisect disabled</td><td>Review <code>MaximumRetryAttempts</code> and <code>MaximumRecordAgeInSeconds</code>; enable on-failure SQS destination; discard aged records if business allows.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Production patterns</h3>
+          <p>Production ingest rarely wires S3 directly to Lambda without a buffer. The durable pattern is <strong>S3 → EventBridge or SQS → Lambda</strong>: SQS absorbs burst uploads, provides a DLQ, and supports partial batch failure without losing the whole notification batch. For streams, set event source mappings with a moderate batch size (100–500), a short batching window (1–5 s), <code>ReportBatchItemFailures</code>, bisect on error, and an on-failure SQS queue inspected by an alarm.</p>
+          <div class="grid-2">
+            <div class="mini-card">
+              <h4>Stream consumer sizing</h4>
+              <ul>
+                <li>One concurrent execution per shard by default; use parallelisation factor only when handler is idempotent and CPU-bound.</li>
+                <li>Reserved concurrency = shard count guarantees capacity; add provisioned concurrency only on latency-sensitive paths.</li>
+                <li>On-failure destination holds batch metadata for manual replay — pair with idempotent sinks.</li>
+              </ul>
+            </div>
+            <div class="mini-card">
+              <h4>Anti-pattern</h4>
+              <p>Monolithic Lambda that reads an entire multi-GB S3 object into memory, transforms, and writes curated output. Hits memory, <code>/tmp</code>, and timeout limits under real data volumes. Glue Spark or S3 Select plus Step Functions handles this scale.</p>
+            </div>
+          </div>
+          <div class="diagram">
+            <p class="diagram-title">Buffered S3 ingest with partial failure handling</p>
+            <div class="flow">
+              <div class="node is-source"><b>S3 raw/</b><small>ObjectCreated</small></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-store"><b>SQS queue</b><small>backpressure + DLQ</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-compute pulse"><b>Lambda</b><small>batchItemFailures</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-store"><b>S3 curated/</b><small>idempotent keys</small></div>
+            </div>
+          </div>
+<pre data-lang="shell" data-title="Event source mapping — enable partial batch failure for SQS" data-explain="ReportBatchItemFailures lets the handler return only failed message IDs so successfully processed messages are deleted from the queue."><code>aws lambda update-event-source-mapping \
+  --uuid esm-abc123 \
+  --function-response-types ReportBatchItemFailures
+
+# Handler must return: {"batchItemFailures": [{"itemIdentifier": "&lt;messageId&gt;"}]}</code></pre>
+
+          <h3>Where this fits with the rest of the exam</h3>
+          <p>Lambda is the default <strong>short, event-driven</strong> compute layer in Domain 1. It sits between ingestion sources and durable stores — almost always paired with services from other sections.</p>
+          <ul>
+            <li><a href="s06-streaming.html">Section 6 — Data Streaming</a> — Kinesis event source mappings, iterator lag, and Firehose transform contracts; Lambda is a consumer, not a replacement for Flink windowing.</li>
+            <li><a href="s07-s3.html">Section 7 — S3</a> — event notifications, prefix layout, and idempotent copy keys for raw → staging triggers.</li>
+            <li><a href="s04-glue.html">Section 4 — Glue</a> — when file size or transform duration exceeds Lambda limits; job bookmarks for batch replay.</li>
+            <li><a href="s15-app-integration.html#eventbridge">Section 15 — EventBridge</a> — richer routing, filtering, and archive/replay compared with direct S3 → Lambda.</li>
+            <li><a href="s19-vpc.html#vpc-endpoints">Section 19 — VPC endpoints</a> — required networking for VPC-attached functions reaching S3 and DynamoDB without NAT.</li>
+          </ul>
+          <div class="callout exam"><strong>Exam framing.</strong> "File arrives, convert under five minutes, least code" → Lambda (or Firehose transform if near-real-time to S3). "Stateful five-minute tumbling windows" or "exactly-once semantics end-to-end" → Managed Flink, not Lambda. "15-minute ETL on terabytes" → Glue. The qualifier on duration, state, and operational overhead eliminates Lambda first when any limit is breached.</div>
+        </section>
+
+        <section class="section" id="interview">
+          <h2>Interview questions</h2>
+          <p class="muted">Answer each one out loud before opening it.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+            <details class="qa">
+              <summary>What is the difference between synchronous, asynchronous and poll-based Lambda invocation?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p><strong>Synchronous</strong> — caller waits for the response (API Gateway, direct invoke). Errors return immediately to the caller; no automatic retry unless the client retries.</p>
+                <p><strong>Asynchronous</strong> — Lambda queues the event (S3, SNS, EventBridge). Returns 202 immediately; Lambda retries up to two times on failure, then can send to DLQ.</p>
+                <p><strong>Poll-based</strong> — Lambda polls Kinesis, DynamoDB Streams, SQS or MSK, batches records, invokes the handler, checkpoints on success. Retries and bisect-on-error apply per batch.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>An S3 upload should trigger a Lambda that copies files to staging. What can go wrong and how do you harden it?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>S3 notifications are <strong>at-least-once</strong> — duplicate invokes possible. Use deterministic destination keys so <code>copy_object</code> overwrites the same staging key. Filter by prefix/suffix so only intended uploads trigger.</p>
+                <p>Set async invoke DLQ or on-failure destination for poison events. Grant Lambda <code>s3:GetObject</code> on source and <code>s3:PutObject</code> on destination. Large files may exceed Lambda timeout — for multi-GB objects, trigger Glue instead.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How does Lambda scale with a Kinesis stream of 8 shards?<span class="qa-tag">Performance</span></summary>
+              <div class="qa-body">
+                <p>By default one concurrent Lambda execution per shard processes records — up to 8 parallel invokes. <strong>Parallelisation factor</strong> (1–10) multiplies that per shard, up to account concurrency limits.</p>
+                <p>Increase batch size and batching window to improve throughput per invoke; enable <code>ReportBatchItemFailures</code> so partial batch retry does not reprocess successful records.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What are Lambda Layers for, and what are the limits?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>Layers package shared dependencies (libraries, binaries, config) separately from handler code. Benefits: smaller uploads, one version shared across functions, separation of app logic and deps. Contents mount under <code>/opt</code>.</p>
+                <p>Max <strong>5 layers</strong> per function. Combined unzipped function + layers ≤ 250 MB (50 MB zipped direct upload). Container images bypass zip limits up to 10 GB.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>When would you choose Glue over Lambda for an S3-triggered CSV conversion?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p><strong>Lambda</strong> when files are small (fit in memory/<code>/tmp</code>), transform completes in minutes, and you want instant per-file triggers with minimal infrastructure.</p>
+                <p><strong>Glue</strong> when files are large, need distributed Parquet conversion, partitioning, catalog updates, job bookmarks, or joins across sources. Glue also wins when the question emphasises "least operational overhead" for complex ETL despite longer startup.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Explain replayability and why Firehose makes it harder.<span class="qa-tag">Exam</span></summary>
+              <div class="qa-body">
+                <p><strong>Replayability</strong> = ability to reprocess historical data after bugs, schema changes or downstream loss. Requires durable source retention (S3 raw, Kinesis with long retention) plus idempotent transforms.</p>
+                <p><strong>Firehose</strong> has no replay — it delivers forward to destinations. Recovery means re-reading the upstream Kinesis stream (within retention) or reprocessing from S3 if Firehose already landed raw copies. Exam distractor: "replay from Firehose" is wrong.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What is bisectBatchOnFunctionError and when do you enable it?<span class="qa-tag">Troubleshooting</span></summary>
+              <div class="qa-body">
+                <p>When a Kinesis/DynamoDB batch invoke fails, Lambda can <strong>split the batch in half</strong> recursively until it isolates the single bad record — instead of retrying the entire batch forever.</p>
+                <p>Enable with <code>ReportBatchItemFailures</code> (partial batch response) for finer control, or bisect for automatic binary split. Pair with on-failure SQS for records that still fail after max retries.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How does increasing Lambda memory affect performance and cost?<span class="qa-tag">Cost</span></summary>
+              <div class="qa-body">
+                <p>Memory and CPU scale together — more memory means more vCPU and often shorter duration. You pay for GB-seconds, so if duration halves when memory doubles, cost can stay flat or fall.</p>
+                <p>Power-tune for production. For exam questions: "function is CPU-bound parsing large JSON" → increase memory; "function is idle waiting on network" → memory may not help.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Design a replay strategy after a bad transform ran for three days on a Kinesis → Lambda → S3 pipeline.<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>1) Fix and deploy corrected Lambda. 2) If raw events still in Kinesis (within retention), reset consumer to <code>AT_TIMESTAMP</code> three days ago or create new event source mapping with TRIM_HORIZON. 3) If raw also lands on S3 (Firehose backup or separate writer), re-run against <code>raw/</code> prefix.</p>
+                <p>4) Overwrite curated partitions idempotently. 5) Drain DLQ for records that failed during the bad period. 6) Add CloudWatch alarms on error rate to catch the next bad deploy early.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What changes when you run Lambda in a VPC?<span class="qa-tag">Architecture</span></summary>
+              <div class="qa-body">
+                <p>Lambda creates ENIs in your subnets to reach private resources (RDS, internal APIs). You need subnet selection, security groups, and usually VPC endpoints for S3/DynamoDB to avoid NAT costs.</p>
+                <p>Cold starts were historically slower; modern hyperplane ENIs reduce penalty. IAM role needs EC2 network interface permissions. Without endpoints, public AWS API calls from a private subnet fail.</p>
+              </div>
+            </details>
+          </div>
+        </section>
+
+        <section class="section" id="practice">
+          <h2>Hands-on practice</h2>
+          <p class="muted">Free tier where possible. Delete everything at the end of each task.</p>
+          <ol class="practice-list">
+            <li class="practice">
+              <p class="practice-task">Create a Lambda function that copies any new object from <code>raw/</code> to <code>staging/</code> on upload. Configure the S3 event notification on your lab bucket.</p>
+              <span class="console-path">Lambda → Create function → S3 trigger</span>
+              <p class="practice-expect">Uploading <code>raw/test/hello.csv</code> creates <code>staging/test/hello.csv</code> within seconds; CloudWatch Logs show the copy.</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">Console + CLI</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li><strong>Lambda → Create</strong> Python 3.12, name <code>dea-s3-staging-copy</code>, paste handler from notes.</li>
+                    <li>Execution role: add <code>s3:GetObject</code>, <code>s3:PutObject</code> on lab bucket.</li>
+                    <li>Add trigger: S3, bucket, event type <code>PUT</code>, prefix <code>raw/</code>.</li>
+                    <li>Upload a test file; verify staging copy.</li>
+                  </ol>
+<pre data-lang="shell"><code>aws s3 cp data/customers.csv s3://dea-lab-ab-4821/raw/customers/customers.csv
+aws s3 ls s3://dea-lab-ab-4821/staging/customers/</code></pre>
+                  <p class="muted">Cleanup: delete Lambda function and remove S3 notification; delete test objects.</p>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Create a Kinesis stream with one shard, send ten JSON records, and attach a Lambda consumer with batch size 5 and partial batch failure reporting enabled.</p>
+              <span class="console-path">Kinesis → Data streams → Lambda → Add trigger</span>
+              <p class="practice-expect">CloudWatch shows two invocations (batch of 5 each); intentionally fail one record and confirm only it is retried.</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">Console</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Create stream <code>dea-lab-orders</code>, 1 shard.</li>
+                    <li>Deploy consumer with Kinesis template; enable <em>Report batch item failures</em>.</li>
+                    <li>Use Kinesis Data Generator or CLI <code>put-record</code> to send ten events.</li>
+                    <li>Include one malformed payload to test <code>batchItemFailures</code>.</li>
+                  </ol>
+<pre data-lang="shell"><code>aws kinesis put-record --stream-name dea-lab-orders \
+  --partition-key pk1 \
+  --data '{"order_id":"1001","amount":9.99}'</code></pre>
+                  <p class="muted">Cleanup: delete event source mapping, Lambda, and Kinesis stream (no free tier beyond trial hours).</p>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Publish a Lambda layer containing <code>requests</code> and attach it to your staging-copy function. Verify import in CloudWatch Logs.</p>
+              <span class="console-path">Lambda → Layers → Create layer</span>
+              <p class="practice-expect">Function logs show successful <code>import requests</code> without bundling it in the function zip.</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">CLI</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Build layer zip: <code>python -m pip install requests -t python/</code>, zip the folder.</li>
+                    <li><code>aws lambda publish-layer-version</code> compatible with python3.12.</li>
+                    <li>Add layer to function configuration.</li>
+                  </ol>
+                  <p class="muted">Cleanup: delete layer versions when done.</p>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Document a replay runbook for your lab bucket: list steps to reprocess all of <code>raw/customers/</code> into <code>curated/</code> after a hypothetical bad transform.</p>
+              <p class="practice-expect">Written steps cover disable trigger, fix job, delete bad curated prefix, reset Glue bookmark or re-run Lambda on prefix, validate row counts.</p>
+              <details class="qa">
+                <summary>Show approach<span class="qa-tag">Design</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Keep <code>raw/</code> read-only (bucket policy deny delete).</li>
+                    <li>Version transforms in Lambda alias or Glue job parameter.</li>
+                    <li>On failure: pause consumers → fix code → <code>aws s3 rm --recursive curated/customers/</code> → reset bookmark → full re-run → reconcile counts with Athena.</li>
+                  </ol>
+                  <p class="muted">No AWS resources to delete; this is a documentation exercise tied to slides 79–81.</p>
+                </div>
+              </details>
+            </li>
+          </ol>
+        </section>
+
+        <section class="section" id="recap">
+          <h2>Recap</h2>
+          <div class="recap">
+            <ul class="checklist">
+              <li>Lambda: serverless, event-driven, stateless handlers; sync vs async vs poll-based invocation.</li>
+              <li>S3 → Lambda is async at-least-once; filter by prefix/suffix; idempotent copy keys.</li>
+              <li>Kinesis → Lambda: event source mapping, batch size/window, parallelisation factor, partial batch failures.</li>
+              <li>Layers: 5 max, share deps, mount at /opt; 50 MB zip / 250 MB unzipped deployment.</li>
+              <li>Limits: 15-min timeout, 128 MB–10 GB memory, 6 MB sync / 256 KB async payload, 1,000 default concurrency.</li>
+              <li>More memory = more CPU; provisioned concurrency kills cold starts; VPC needs endpoints/NAT.</li>
+              <li>Long ETL / Spark → Glue or EMR, not Lambda.</li>
+              <li>Replayability: Kinesis 24h–365d, MSK unlimited, S3 durable raw, Firehose no replay.</li>
+              <li>Idempotent writes + checkpointing + DLQ/on-failure destination = resilient replay pipeline.</li>
+            </ul>
+            <p style="margin-top:1rem;">
+              <button type="button" data-complete="section-05">Mark complete</button>
+            </p>
+          </div>
+        </section>
+
+      </div>
+
+      <aside class="toc" aria-label="On this page">
+        <strong>On this page</strong>
+        <ol>
+          <li><a href="#lectures">Lectures</a></li>
+          <li><a href="#overview">Overview</a></li>
+          <li><a href="#s3-events">S3 events</a></li>
+          <li><a href="#kinesis">Kinesis</a></li>
+          <li><a href="#layers">Layers</a></li>
+          <li><a href="#limits">Limits</a></li>
+          <li><a href="#replayability">Replayability</a></li>
+          <li><a href="#deeper">Deeper detail</a></li>
+          <li><a href="#interview">Interview questions</a></li>
+          <li><a href="#practice">Hands-on practice</a></li>
+          <li><a href="#recap">Recap</a></li>
+        </ol>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<footer class="footer">AWS Certified Data Engineer Associate (DEA-C01) · Section 5 · Offline study edition</footer>
+</body>
+</html>

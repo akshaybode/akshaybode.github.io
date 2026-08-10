@@ -1,0 +1,996 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="dbt bootcamp Section 5: normalisation, facts and dimensions, star schemas, grain, CTEs, slowly changing dimensions, and how dbt implements each pattern in the Airbnb project.">
+<title>Section 5 — Dimensional Modelling and SCDs | The Complete dbt Bootcamp Notes</title>
+<link rel="stylesheet" href="assets/dbt.css">
+<script defer src="assets/search-index.js"></script>
+<script defer src="assets/code-highlight.js"></script>
+<script defer src="assets/dbt.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">Course section 5 of 22 · The Complete dbt Bootcamp: Zero to Hero</p>
+    <h1>Dimensional Modelling and SCDs</h1>
+    <p class="subtitle">The modelling vocabulary every analytics engineer shares: why OLTP normalises and analytics denormalises, how facts and dimensions fit together in a star schema, what grain means and why you declare it first, and how dbt's folder conventions and snapshots implement slowly changing dimensions on the Airbnb project.</p>
+    <div class="hero-meta">
+      <span class="chip">7 lectures · ~40min</span>
+      <span class="chip">Theory foundation</span>
+      <span class="chip">dbt modelling</span>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <nav class="pager" aria-label="Section navigation">
+    <a href="s04-modern-data-stack.html">← The Modern Data Stack and ELT</a>
+    <a href="index.html">Course contents</a>
+    <a href="s06-setup.html">Next: Setup and the Airbnb Project →</a>
+  </nav>
+
+  <main id="main">
+    <div class="layout">
+      <div class="content">
+
+        <section class="section" id="lectures">
+          <h2>Lectures in this section</h2>
+          <ol class="lecture-list">
+            <li class="lecture">
+              <a class="lec-title" href="#normalisation">Normalisation and the normal forms</a>
+              <span class="lec-time">~6:00</span>
+              <span class="lec-src">Theory lecture</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#facts-and-dimensions">Facts and dimensions</a>
+              <span class="lec-time">~6:00</span>
+              <span class="lec-src">Theory lecture · models/fct/ · models/dim/</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#star-snowflake-schemas">Star schemas and snowflake schemas</a>
+              <span class="lec-time">~6:00</span>
+              <span class="lec-src">Theory lecture · models/dim/ · models/fct/</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#grain-keys-conformed">Grain, surrogate keys and conformed dimensions</a>
+              <span class="lec-time">~6:00</span>
+              <span class="lec-src">Theory lecture</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#common-table-expressions">Common Table Expressions</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">Theory lecture · models/src/</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#slowly-changing-dimensions">Slowly Changing Dimensions, types 0 to 6</a>
+              <span class="lec-time">~6:00</span>
+              <span class="lec-src">Theory lecture · snapshots/raw_listings_snapshot.yml</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#dbt-implementation">How dbt implements each of these</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">Theory lecture · airbnb/models/</span>
+            </li>
+          </ol>
+          <p class="muted">This is the last theory section before <a href="s06-setup.html">Section&nbsp;6</a> gets your environment running. Every pattern named here appears as a real model file from Section&nbsp;7 onwards.</p>
+        </section>
+
+        <section class="section" id="normalisation">
+          <h2>Normalisation</h2>
+          <p class="lead">Normalisation is the process of structuring a relational table so each fact is stored once, in one place, with no redundant copies that can drift out of sync. Transactional systems normalise aggressively; analytics systems often deliberately denormalise. Understanding both directions is what makes you a useful modeller.</p>
+
+          <h3>First normal form (1NF)</h3>
+          <p>A table is in first normal form when every column holds a single atomic value and every row is unique. Repeating groups are forbidden: you cannot have <code>host_name_1</code>, <code>host_name_2</code> columns, and you cannot store a comma-separated list of amenities in one cell and call it done.</p>
+          <p>Violations of 1NF are rarer in modern warehouses than they were in spreadsheet exports, but they still appear when someone pivots in Excel and loads the result as a table.</p>
+
+          <h3>Second normal form (2NF)</h3>
+          <p>2NF applies to tables with a composite primary key. Every non-key column must depend on the <em>whole</em> key, not just part of it. If your grain is <code>(order_id, product_id)</code> and you store <code>product_name</code> in that table, you violate 2NF because <code>product_name</code> depends only on <code>product_id</code>.</p>
+
+          <h3>Third normal form (3NF)</h3>
+          <p>3NF removes transitive dependencies: no non-key column may depend on another non-key column. If <code>listing_id</code> determines <code>host_id</code>, and <code>host_id</code> determines <code>host_name</code>, then storing <code>host_name</code> on the listings row duplicates data that belongs on a hosts table.</p>
+
+          <h3>Airbnb example: decomposing a wide listings table</h3>
+          <p>Imagine you loaded listings and hosts into one wide table for convenience. Every listing row repeats its host's name and superhost flag. That is a classic 3NF violation: <code>host_name</code> depends on <code>host_id</code>, not on <code>listing_id</code>.</p>
+          <p><strong>Before — one denormalised table (violates 3NF):</strong></p>
+
+<pre data-lang="sql" data-title="Conceptual wide table (not in the project)" data-explain="A single table mixing listing facts with host attributes. Updating a host name requires touching every listing row they own."><code>-- listing_id | listing_name | room_type | host_id | host_name  | is_superhost
+-- 3176       | Cozy loft    | Entire    | 501     | Maria      | true
+-- 4821       | Sunny studio | Private   | 501     | Maria      | true   &lt;-- host_name duplicated
+-- 9012       | Beach house  | Entire    | 772     | James      | false</code></pre>
+
+          <p><strong>Step 1 — split to 1NF/2NF/3NF by entity:</strong></p>
+
+<pre data-lang="sql" data-title="Conceptual listings table after 3NF" data-explain="Listings hold only attributes that depend on listing_id. The foreign key host_id points at the hosts table."><code>-- listings (grain: one row per listing)
+-- listing_id | listing_name | room_type | minimum_nights | host_id | price
+-- 3176       | Cozy loft    | Entire    | 2              | 501     | 120.00
+-- 4821       | Sunny studio | Private   | 1              | 501     | 85.00
+-- 9012       | Beach house  | Entire    | 7              | 772     | 250.00</code></pre>
+
+<pre data-lang="sql" data-title="Conceptual hosts table after 3NF" data-explain="Host attributes live once. A host rename updates exactly one row."><code>-- hosts (grain: one row per host)
+-- host_id | host_name | is_superhost
+-- 501     | Maria     | true
+-- 772     | James     | false</code></pre>
+
+          <p>The course project implements exactly this split. <code>src_listings</code> and <code>src_hosts</code> read separate raw sources; <code>dim_listings_cleansed</code> and <code>dim_hosts_cleansed</code> hold the cleansed dimension rows. Joining them back together for convenience is what <code>dim_listings_w_hosts</code> does in <a href="s08-materializations.html">Section&nbsp;8</a>.</p>
+
+          <h3>Why OLTP normalises and analytics denormalises</h3>
+          <p>Operational databases (OLTP) optimise for fast, correct writes. Normalisation means updating a host name touches one row, not ten thousand listing rows. Referential integrity and row-level locking work cleanly when each entity has one home.</p>
+          <p>Analytics workloads (OLAP) optimise for fast reads across large scans. A star schema or a wide denormalised table lets a BI tool or a dashboard query answer a question with one or two joins instead of six. Columnar warehouses (Snowflake, BigQuery, Redshift, Databricks SQL) compress repeated dimension values efficiently, which is why the storage penalty of denormalisation is much smaller than it was on row-oriented OLTP systems.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Concern</th><th>OLTP (normalised)</th><th>OLAP (often denormalised)</th></tr></thead>
+              <tbody>
+                <tr><td>Primary workload</td><td>Many small writes</td><td>Few large reads</td></tr>
+                <tr><td>Update pattern</td><td>Change one row in one place</td><td>Rebuild or snapshot; rarely update in place</td></tr>
+                <tr><td>Typical schema</td><td>3NF entity-relationship</td><td>Star schema, wide marts, or OBT</td></tr>
+                <tr><td>Consistency</td><td>Enforced by constraints at write time</td><td>Enforced by dbt tests and rebuild logic</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Boyce-Codd normal form (BCNF)</h3>
+          <p>BCNF is stricter than 3NF: every determinant must be a candidate key. In practice, almost nobody normalises analytics models beyond 3NF, and many OLTP schemas stop at 3NF too. The edge cases BCNF catches — odd functional dependencies involving overlapping composite keys — are rare in the business entities you model daily. Know the name for interviews; do not spend project time chasing BCNF unless you are designing a source system.</p>
+
+          <h3>Functional dependency notation (for interviews)</h3>
+          <p>Modelling textbooks write dependencies as arrows: <code>host_id → host_name</code> means <code>host_name</code> is determined by <code>host_id</code>. A 3NF violation exists when a non-key column depends on something that is not a candidate key for the table's grain. On a listings table at grain <code>listing_id</code>, the chain <code>listing_id → host_id → host_name</code> is transitive — <code>host_name</code> should move to the hosts table.</p>
+
+          <h3>Denormalisation is a deliberate step, not a failure</h3>
+          <p>Analytics engineers sometimes feel guilty building wide tables after learning normal forms. Denormalisation in the presentation layer is intentional: you already paid the cost of clean entities in staging and dimensions; joining them once into <code>dim_listings_w_hosts</code> or a mart saves every dashboard consumer from repeating that join. The mistake is denormalising <em>before</em> you have stable conformed dimensions — you embed inconsistent definitions that diverge silently.</p>
+
+          <div class="callout info"><strong>dbt does not normalise for you.</strong> Staging models rename and cast columns; they do not automatically split entities. The decision to decompose listings and hosts into separate models is a modelling choice you make explicitly, then enforce with <code>ref()</code> and tests.</div>
+        </section>
+
+        <section class="section" id="facts-and-dimensions">
+          <h2>Facts and dimensions</h2>
+          <p class="lead">Facts record what happened — measurements and events. Dimensions describe the context you filter and group by. The distinction is not about table size; it is about role in a query.</p>
+
+          <h3>What makes a fact table</h3>
+          <p>A fact table sits at the centre of a dimensional model. Its rows represent business events or measurements at a declared grain. Fact columns fall into two buckets:</p>
+          <ul>
+            <li><strong>Foreign keys</strong> — pointers to dimension tables (<code>listing_id</code>, <code>host_id</code>, <code>date_key</code>).</li>
+            <li><strong>Measures</strong> — numeric columns you aggregate (<code>review_sentiment</code> encoded as a score, revenue, quantity). Some facts carry degenerate dimensions — attributes like an invoice number that belong at fact grain but are not worth a full dimension table.</li>
+          </ul>
+
+          <h3>What makes a dimension table</h3>
+          <p>Dimensions are the who, what, where, when descriptors. They are relatively wide, relatively stable, and heavily reused. You filter on them (<code>WHERE room_type = 'Entire home/apt'</code>), group by them (<code>GROUP BY host_name</code>), and join them to facts. In the Airbnb project, <code>dim_listings_cleansed</code> and <code>dim_hosts_cleansed</code> are dimensions.</p>
+
+          <h3>Additive, semi-additive and non-additive measures</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Type</th><th>Meaning</th><th>Example</th><th>Aggregation note</th></tr></thead>
+              <tbody>
+                <tr><td>Additive</td><td>Summable across every dimension</td><td>Review count, revenue</td><td><code>SUM</code> works in any slice</td></tr>
+                <tr><td>Semi-additive</td><td>Summable across some dimensions, not others</td><td>Account balance, inventory level</td><td>Do not <code>SUM</code> balances across time; use end-of-period snapshot</td></tr>
+                <tr><td>Non-additive</td><td>Cannot be meaningfully summed</td><td>Ratios, percentages, unit prices</td><td>Recalculate from additive components at query time</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Types of fact table</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Fact type</th><th>Grain</th><th>Example</th></tr></thead>
+              <tbody>
+                <tr><td>Transaction</td><td>One row per event at the lowest detail</td><td><code>fct_reviews</code> — one row per review</td></tr>
+                <tr><td>Periodic snapshot</td><td>One row per entity per time period</td><td>End-of-month account balance</td></tr>
+                <tr><td>Accumulating snapshot</td><td>One row per pipeline entity, updated as stages complete</td><td>Order fulfilment with milestone dates</td></tr>
+                <tr><td>Factless</td><td>Records an event or coverage with no measure</td><td>Students enrolled in courses (did the event happen?)</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p><code>fct_reviews</code> is a classic transaction fact: each row is one guest review, append-only in normal operation, with foreign keys to the listing dimension and a natural event timestamp in <code>review_date</code>. That profile makes it the course's incremental model candidate in <a href="s08-materializations.html">Section&nbsp;8</a>.</p>
+
+          <p>Here is the real fact model from the finished project:</p>
+
+<pre data-lang="sql" data-title="models/fct/fct_reviews.sql" data-explain="Transaction fact at review grain. A surrogate key is generated from the natural key columns. Incremental logic filters on review_date."><code>{{
+  config(
+    materialized = 'incremental',
+    on_schema_change='fail',
+    event_time='review_date'
+    )
+}}
+
+WITH src_reviews AS (
+  SELECT * FROM {{ ref('src_reviews') }}
+)
+SELECT 
+  {{ dbt_utils.generate_surrogate_key(['listing_id', 'review_date', 'reviewer_name', 'review_text']) }} as review_id,
+  *
+FROM src_reviews
+WHERE review_text is not null
+{% if is_incremental() %}
+  {% if var("start_date", False) and var("end_date", False) %}
+    {{ log('Loading ' ~ this ~ ' incrementally (start_date: ' ~ var("start_date") ~ ', end_date: ' ~ var("end_date") ~ ')', info=True) }}
+    AND review_date &gt;= '{{ var("start_date") }}'
+    AND review_date &lt; '{{ var("end_date") }}'
+  {% else %}
+    AND review_date &gt; (select max(review_date) from {{ this }})
+    {{ log('Loading ' ~ this ~ ' incrementally (all missing dates)', info=True)}}
+  {% endif %}
+{% endif %}</code></pre>
+
+          <p>Notice what is and is not here. The model adds a surrogate <code>review_id</code> because the natural key is a composite of four columns — awkward to join on and unstable if any component is corrected. It filters null review text at the fact layer so downstream marts never see empty rows. The incremental block is irrelevant to the dimensional role but essential to the operational cost profile.</p>
+
+          <h3>Reviews staging — the upstream of the fact</h3>
+          <p>The fact reads from <code>src_reviews</code>, which standardises column names from the raw source:</p>
+
+<pre data-lang="sql" data-title="models/src/src_reviews.sql" data-explain="Staging reviews: maps source columns to review_date, review_text, review_sentiment used downstream."><code>WITH raw_reviews AS (
+    SELECT
+        *
+    FROM
+        {{ source('airbnb', 'reviews') }}
+)
+SELECT
+    listing_id,
+    DATE AS review_date,
+    reviewer_name,
+    comments AS review_text,
+    sentiment AS review_sentiment
+FROM
+    raw_reviews</code></pre>
+
+          <p>The lineage is: <code>source('airbnb', 'reviews')</code> → <code>src_reviews</code> → <code>fct_reviews</code> → marts. Each hop has a narrower job — import, standardise, model at grain, present for business.</p>
+
+          <h3>Dimension example — dim_hosts_cleansed</h3>
+          <p>The hosts dimension carries descriptive attributes at host grain. It cleanses null names and materialises as a table (the folder default for <code>dim/</code>):</p>
+
+<pre data-lang="sql" data-title="models/dim/dim_hosts_cleansed.sql" data-explain="Type 1 dimension: one row per host_id, rebuilt each run. NVL replaces null host names with Anonymous."><code>{#
+  You might have `view` as the materialization as we only 
+  replace `materialized` with `table` when we implement constraints. 
+#}
+{{
+  config(
+    materialized = 'table' 
+    )
+}} 
+WITH src_hosts AS (
+    SELECT
+        *
+    FROM
+        {{ ref('src_hosts') }}
+)
+SELECT
+    host_id,
+    NVL(
+        host_name,
+        'Anonymous'
+    ) AS host_name,
+    is_superhost,
+    created_at,
+    updated_at
+FROM
+    src_hosts</code></pre>
+
+          <h3>Periodic and accumulating snapshot facts (when you outgrow transactions)</h3>
+          <p>Transaction facts like <code>fct_reviews</code> are the right starting point. As the business matures you may need periodic snapshots — one row per listing per month with occupancy rate at month end — or accumulating snapshots — one row per booking tracking confirmation date, payment date, and check-in date as columns that update until the process completes. Neither appears in the course project, but interviewers often ask the difference. The rule of thumb: transaction for events, periodic for regular status readings, accumulating for long-running processes with milestones.</p>
+
+          <p>Compare to the fact: dimensions hold attributes you describe entities with; facts hold foreign keys pointing at those entities plus the event itself. <code>fct_reviews</code> carries <code>listing_id</code> but not <code>room_type</code> — that lives on <code>dim_listings_cleansed</code> and is joined when needed.</p>
+
+          <h3>Factless fact tables in more detail</h3>
+          <p>Factless facts record that a relationship or event occurred without a numeric measure. Examples: attendance (was the student present?), coverage (which product was promoted in which store?), or bridge tables linking dimensions in many-to-many relationships. You still declare grain and often <code>COUNT</code> rows as the implicit measure. The Airbnb project does not use a factless fact, but promotion-eligibility or listing-amenity coverage would be natural candidates if the dataset grew.</p>
+
+          <div class="callout tip"><strong>Dimensions answer &ldquo;who/what/where&rdquo;; facts answer &ldquo;how many/how much&rdquo;.</strong> If a column is something you would put in a <code>WHERE</code> or <code>GROUP BY</code> for business users, it probably belongs on a dimension. If it is something you <code>SUM</code> or <code>COUNT</code>, it belongs on a fact — or is derived from one at query time.</div>
+        </section>
+
+        <section class="section" id="star-snowflake-schemas">
+          <h2>Star and snowflake schemas</h2>
+          <p class="lead">A star schema puts one fact table at the centre with dimensions joined directly to it. A snowflake schema normalises those dimensions further into sub-dimensions. Both are valid; the choice is a trade-off between join count, storage, and maintainability.</p>
+
+          <div class="diagram">
+            <p class="diagram-title">Airbnb star schema — fct_reviews with listing and host dimensions</p>
+            <div class="dag">
+              <div class="dag-col">
+                <p class="dag-label">Dimensions</p>
+                <div class="node is-mart"><b>dim_listings_cleansed</b><small>listing attributes</small></div>
+                <div class="node is-mart"><b>dim_hosts_cleansed</b><small>host attributes</small></div>
+              </div>
+              <div class="dag-col">
+                <p class="dag-label">Fact</p>
+                <div class="node is-model pulse"><b>fct_reviews</b><small>one row per review</small></div>
+              </div>
+              <div class="dag-col">
+                <p class="dag-label">Joined wide table</p>
+                <div class="node is-mart"><b>dim_listings_w_hosts</b><small>optional denormalised dim</small></div>
+              </div>
+            </div>
+          </div>
+
+          <p><code>fct_reviews.listing_id</code> joins to <code>dim_listings_cleansed.listing_id</code>. Listing rows carry <code>host_id</code>, which joins to <code>dim_hosts_cleansed.host_id</code> when you need host attributes. <code>dim_listings_w_hosts</code> pre-joins listing and host columns for consumers who want a wide dimension without writing the join themselves — a pragmatic denormalisation step the course adds in Section&nbsp;8.</p>
+
+          <h3>Star versus snowflake versus One Big Table</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Pattern</th><th>Joins required</th><th>Storage</th><th>Query speed</th><th>Maintainability</th><th>BI-tool friendliness</th><th>When to pick it</th></tr></thead>
+              <tbody>
+                <tr><td>Star schema</td><td>One join per dimension at query time</td><td>Moderate duplication on dimension keys in facts</td><td>Fast with columnar pruning on facts</td><td>Good — each entity one model</td><td>Excellent — clear fact/dim roles</td><td>Default for dbt projects and semantic layers</td></tr>
+                <tr><td>Snowflake schema</td><td>Multiple joins through normalised sub-dims</td><td>Lowest — least redundancy</td><td>Slower — more join steps</td><td>Harder — more models to track</td><td>Confusing for non-technical users</td><td>Very large dimensions with shared sub-entities (geography hierarchies)</td></tr>
+                <tr><td>One Big Table (OBT)</td><td>None at query time</td><td>Highest — full denormalisation</td><td>Often fastest for simple scans</td><td>Poor — one change propagates everywhere</td><td>Simplest for self-serve BI</td><td>Small teams, fixed dashboards, columnar warehouses</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Why columnar warehouses changed the calculus</h3>
+          <p>Row-oriented OLTP databases paid heavily for wide tables: every query read every column. Columnar storage reads only the columns you select, and repeated dimension values compress well. That makes OBT and wide marts viable in Snowflake and BigQuery in ways they were not on Postgres a decade ago.</p>
+          <p>OBT is still the wrong default when: the same dimension is shared across many facts (you will rebuild the same wide join repeatedly); attributes change independently (host name changes should not force rebuilding every fact); or you need conformed dimensions across teams. The course teaches star schema first because it scales to those cases; <code>dim_listings_w_hosts</code> shows where a controlled denormalisation helps.</p>
+
+          <h3>When snowflake still wins</h3>
+          <p>Snowflake schemas remain appropriate when a sub-dimension is shared by many dimensions and maintained centrally — a date dimension, a geography hierarchy (country → region → city), or a product category tree referenced by facts and multiple role-playing dimensions. The course Airbnb dataset is small enough that a star is simpler; enterprise retail or finance models often snowflake geography and product hierarchies while keeping facts at the centre.</p>
+
+          <h3>Role-playing dimensions</h3>
+          <p>The same physical dimension table can play multiple roles in one fact — order date versus ship date versus delivery date, all joining to <code>dim_date</code> with different foreign keys. In dbt you either join the same <code>ref('dim_date')</code> multiple times with aliases in a mart, or expose role-specific views. The conformed date dimension ensures fiscal calendars and holidays mean the same thing everywhere.</p>
+
+          <div class="analogy"><strong>Everyday analogy —</strong> a star schema is a restaurant menu organised by course (starters, mains, desserts) with a separate wine list you combine at order time. OBT is a set menu printed on one card: faster to read, painful to reprint when one dish changes.</div>
+        </section>
+
+        <section class="section" id="grain-keys-conformed">
+          <h2>Grain, keys and conformed dimensions</h2>
+          <p class="lead">Grain is the single most important decision in fact modelling. Get it wrong and every metric built on the table is wrong — and tests may still pass if nobody thought to check row counts after joins.</p>
+
+          <h3>Declaring grain first</h3>
+          <p>Before you name a single measure, finish this sentence: <em>one row in this table represents ___</em>. For <code>fct_reviews</code>, the answer is <em>one guest review of one listing on one date by one reviewer</em>. Every design choice flows from that statement. If you later discover two reviews can share the same date, reviewer, and text on different listings, your grain statement still holds because <code>listing_id</code> is part of the natural key.</p>
+          <p>Changing grain after launch is expensive. Halving grain (adding detail) requires a backfill. Coarsening grain loses information permanently.</p>
+
+          <h3>Natural keys versus surrogate keys</h3>
+          <p>A <strong>natural key</strong> is a business identifier: <code>host_id</code> from the source system, an order number, a composite of columns that uniquely identifies an event. Natural keys are meaningful but brittle — source systems reuse IDs across environments, merge records, or change formats.</p>
+          <p>A <strong>surrogate key</strong> is a warehouse-generated identifier with no business meaning. It stabilises joins when natural keys change, supports SCD Type 2 (multiple rows for one natural key), and gives facts a single-column foreign key instead of a four-column composite.</p>
+          <p><code>fct_reviews</code> uses <code>dbt_utils.generate_surrogate_key</code> over <code>listing_id</code>, <code>review_date</code>, <code>reviewer_name</code>, and <code>review_text</code>. The macro hashes the concatenation into a single key column. Full macro details are in <a href="s13-jinja-macros-packages.html">Section&nbsp;13</a>.</p>
+
+          <div class="callout warn"><strong>Never use a natural key that the source can reuse.</strong> If an source system deletes and recreates <code>host_id = 501</code> as a different person, a Type 1 dimension silently attaches the new person's name to the old host's history. Surrogate keys and snapshots exist to handle exactly this.</div>
+
+          <h3>Conformed dimensions</h3>
+          <p>A conformed dimension is the same dimension table reused across multiple fact tables with consistent keys and definitions. <code>dim_listings_cleansed</code> should mean the same thing whether you join it to reviews, bookings, or payouts.</p>
+          <p>Without conformance, two teams both publish a &ldquo;customer&rdquo; table with different deduplication rules, different active flags, and different surrogate keys. Executive dashboards that blend their metrics double-count or drop revenue. dbt helps by giving one project one definition, referenced via <code>ref()</code> — but conformed dimensions across dbt projects still need explicit agreement on keys and scd handling.</p>
+
+          <h3>Degenerate dimensions</h3>
+          <p>A degenerate dimension is a descriptive attribute stored on the fact table because it is at fact grain but not worth a separate dimension — for example an order number on an order-lines fact when you never analyse orders independently of lines.</p>
+
+          <h3>Junk dimensions</h3>
+          <p>A junk dimension bundles low-cardinality flags and indicators from a fact row into one surrogate-keyed dimension to avoid wide facts with dozens of boolean columns — for example combining payment method, promotion flag, and channel into a single <code>junk_key</code>.</p>
+
+          <h3>Enforcing grain with tests</h3>
+          <p>Grain is not a comment — it is a contract. A <code>unique</code> test on the grain key fails the build when duplicates appear, which is preferable to shipping a dashboard that double-counts revenue. Relationship tests confirm foreign keys point at existing dimension rows. The course adds these in <a href="s11-tests.html">Section&nbsp;11</a>; the practice section below has you add a grain test to <code>fct_reviews</code>.</p>
+
+          <div class="terminal">
+            <p class="term-head">dbt test — grain violation</p>
+            <pre class="term-body"><span class="tt-cmd">dbt test --select fct_reviews</span>
+<span class="tt-dim">09:14:02  Running with dbt=1.11.12</span>
+<span class="tt-err">09:14:05  Failure in test unique_fct_reviews_review_id</span>
+<span class="tt-err">09:14:05    Got 3 results, configured to fail if != 0</span>
+<span class="tt-dim">09:14:05  Completed with 1 error</span></pre>
+          </div>
+
+          <p>Three duplicate <code>review_id</code> values mean the surrogate key definition is missing a distinguishing column, or upstream staging duplicated rows. Fix the model logic, not the test threshold.</p>
+        </section>
+
+        <section class="section" id="common-table-expressions">
+          <h2>Common Table Expressions</h2>
+          <p class="lead">A CTE (<code>WITH ... AS (...)</code>) names a subquery at the top of a SQL statement. dbt models conventionally chain CTEs and end with a final <code>SELECT</code> — the pattern you will see in every file under <code>models/src/</code> and <code>models/dim/</code>.</p>
+
+          <h3>Syntax and the dbt CTE chain pattern</h3>
+
+<pre data-lang="sql" data-title="CTE pattern (illustrative)" data-explain="Each CTE is one logical step. The final SELECT reads from the last CTE only."><code>WITH step_one AS (
+    SELECT ...
+    FROM {{ ref('upstream_model') }}
+),
+step_two AS (
+    SELECT ...
+    FROM step_one
+)
+SELECT
+    ...
+FROM step_two</code></pre>
+
+          <p>Each CTE is one transformation step with a readable name. New requirements add a CTE rather than nesting subqueries three levels deep. In code review you can discuss <code>cleansed_hosts</code> by name instead of &ldquo;the subquery on line 47&rdquo;.</p>
+
+          <h3>Readability versus subqueries</h3>
+          <p>Subqueries in the <code>FROM</code> clause work identically in most warehouses, but they read inside-out. CTEs read top-to-bottom like a script. dbt's compiled SQL is often inspected by analysts who do not live in the repo daily — CTEs are the community convention for that audience.</p>
+
+          <h3>Are CTEs materialised or inlined?</h3>
+          <p>It depends on the warehouse optimiser, and the answer changed over time for some engines.</p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Warehouse</th><th>Typical behaviour</th><th>Practical note</th></tr></thead>
+              <tbody>
+                <tr><td>Snowflake</td><td>Generally inlines CTEs into one plan</td><td>Course target; no automatic materialisation</td></tr>
+                <tr><td>BigQuery</td><td>Inlines; may cache repeated CTE scans in some cases</td><td>Use a dbt model instead of expecting CTE persistence</td></tr>
+                <tr><td>Postgres &lt; 12</td><td>CTE results materialised (optimization fence)</td><td>Could hide performance issues; upgraded behaviour since PG 12</td></tr>
+                <tr><td>Postgres 12+</td><td>Inlined by default unless <code>MATERIALIZED</code> keyword used</td><td>Closer to Snowflake behaviour</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>If a CTE is expensive and reused, promote it to a dbt model with its own materialization rather than relying on the warehouse to cache it.</p>
+
+          <h3>Recursive CTEs</h3>
+          <p>Recursive CTEs reference themselves to walk hierarchies — org charts, bill-of-materials, nested categories. Syntax adds a <code>UNION ALL</code> between a base case and a recursive case. They appear rarely in analytics dbt projects compared to staging chains, but they are the standard SQL answer when you cannot flatten a hierarchy at load time.</p>
+
+          <h3>Real course models using CTEs</h3>
+          <p>Staging model — reads the source, renames columns, nothing else:</p>
+
+<pre data-lang="sql" data-title="models/src/src_listings.sql" data-explain="The canonical staging pattern: one CTE wrapping source(), then a SELECT with renamed columns."><code>-- import raw_listings
+WITH raw_listings AS (
+        SELECT * FROM {{ source('airbnb', 'listings') }}
+)
+SELECT 
+   id AS listing_id,
+   listing_url,
+   name AS listing_name,
+   room_type,
+   minimum_nights,
+   host_id,
+   price AS price_str,
+   created_at,
+   updated_at
+FROM raw_listings</code></pre>
+
+          <p>Dimension model — reads staging via <code>ref()</code>, applies cleansing logic:</p>
+
+<pre data-lang="sql" data-title="models/dim/dim_listings_cleansed.sql" data-explain="Dimension built as a CTE chain: pull from staging, cleanse types and business rules in the outer SELECT."><code>{{
+  config(
+    materialized = 'view',
+    event_time='created_at'
+  )
+}} 
+WITH src_listings AS (
+    SELECT * FROM {{ ref('src_listings') }}
+)
+SELECT 
+  listing_id,
+  listing_name,
+  room_type,
+  CASE
+    WHEN minimum_nights = 0 THEN 1
+    ELSE minimum_nights
+  END AS minimum_nights,
+  host_id,
+  REPLACE(
+    price_str,
+    '$'
+  ) :: NUMBER(
+    10,
+    2
+  ) AS price,
+  created_at,
+  updated_at
+FROM
+  src_listings</code></pre>
+
+          <p>The hosts staging model follows the same pattern — one CTE, explicit column list:</p>
+
+<pre data-lang="sql" data-title="models/src/src_hosts.sql" data-explain="Staging hosts: source() in the CTE, rename id to host_id and NAME to host_name in the outer SELECT."><code>WITH raw_hosts AS (
+    SELECT
+        *
+    FROM
+       {{ source('airbnb', 'hosts') }}
+)
+SELECT
+    id AS host_id,
+    NAME AS host_name,
+    is_superhost,
+    created_at,
+    updated_at
+FROM
+    raw_hosts</code></pre>
+
+          <h3>CTE scope and the ephemeral materialization</h3>
+          <p>Staging models in this project use the ephemeral materialization (set in <code>dbt_project.yml</code> for the <code>src:</code> folder). At compile time, dbt inlines them as CTEs inside parent models rather than creating warehouse objects. That gives you the readability of named staging steps without the storage and rebuild cost of physical tables — covered fully in <a href="s08-materializations.html">Section&nbsp;8</a>.</p>
+        </section>
+
+        <section class="section" id="slowly-changing-dimensions">
+          <h2>Slowly Changing Dimensions</h2>
+          <p class="lead">Dimensions change. Hosts rename themselves, listings change price, customers move city. Slowly Changing Dimension (SCD) techniques define how you record those changes without lying about history.</p>
+
+          <h3>SCD types 0 through 6</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Type</th><th>What it does</th><th>What you can answer</th><th>What you cannot answer</th><th>Storage cost</th></tr></thead>
+              <tbody>
+                <tr><td>Type 0</td><td>Retain original value; ignore updates</td><td>What was true at first load</td><td>Any subsequent change</td><td>Lowest — one row per entity</td></tr>
+                <tr><td>Type 1</td><td>Overwrite in place</td><td>Current state only</td><td>What the value used to be</td><td>Low — one row per entity</td></tr>
+                <tr><td>Type 2</td><td>Insert new row; close old row with validity range</td><td>Full history; point-in-time joins</td><td>Requires careful join predicates</td><td>High — one row per change</td></tr>
+                <tr><td>Type 3</td><td>Add previous-value column on same row</td><td>Current and one prior value</td><td>History beyond one step</td><td>Low — extra columns only</td></tr>
+                <tr><td>Type 4</td><td>Current row in dim; history in separate table</td><td>Fast current queries; history when needed</td><td>Two tables to maintain</td><td>Medium — split current/history</td></tr>
+                <tr><td>Type 6</td><td>Hybrid of 1 + 2 + 3</td><td>Current value plus historical rows plus previous column</td><td>Complexity — three mechanisms to keep aligned</td><td>Highest</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Type 2 worked example — host renames on raw_hosts</h3>
+          <p>Suppose host <code>501</code> is loaded as <code>Maria</code>. On 2024-06-01 she renames to <code>Maria Santos</code>. A dbt snapshot on <code>raw_hosts</code> implements Type 2 automatically.</p>
+          <p><strong>Before the rename (one current row in the snapshot table):</strong></p>
+
+<pre data-lang="sql" data-title="Conceptual scd_raw_hosts before rename" data-explain="Type 2 snapshot columns added by dbt: dbt_scd_id, dbt_valid_from, dbt_valid_to, dbt_updated_at."><code>-- id | NAME   | is_superhost | dbt_scd_id | dbt_valid_from      | dbt_valid_to | dbt_updated_at
+-- 501 | Maria  | true         | abc-111    | 2024-01-15 08:00:00 | NULL         | 2024-01-15 08:00:00</code></pre>
+
+          <p><strong>After the rename (two rows — old closed, new current):</strong></p>
+
+<pre data-lang="sql" data-title="Conceptual scd_raw_hosts after rename" data-explain="The old row gets dbt_valid_to set. A new row opens with the updated name and dbt_valid_to NULL for the current version."><code>-- id | NAME          | is_superhost | dbt_scd_id | dbt_valid_from      | dbt_valid_to        | dbt_updated_at
+-- 501 | Maria         | true         | abc-111    | 2024-01-15 08:00:00 | 2024-06-01 09:00:00 | 2024-06-01 09:00:00
+-- 501 | Maria Santos  | true         | abc-222    | 2024-06-01 09:00:00 | NULL                | 2024-06-01 09:00:00</code></pre>
+
+          <p>Point-in-time analysis joins on <code>host_id</code> <em>and</em> filters where the fact's timestamp falls between <code>dbt_valid_from</code> and <code>dbt_valid_to</code> (or <code>dbt_valid_to IS NULL</code> for current). Joining on <code>host_id</code> alone duplicates every fact row across all history rows — the classic Type 2 bug covered in the traps section.</p>
+
+          <h3>How dbt implements Type 2 — snapshots</h3>
+          <p>dbt snapshots detect changes in a source table or model and append Type 2 history rows. The course configures them in YAML — the modern form introduced in dbt 1.9. Full walkthrough is in <a href="s10-snapshots.html">Section&nbsp;10</a>.</p>
+
+<pre data-lang="yaml" data-title="snapshots/raw_listings_snapshot.yml" data-explain="YAML snapshot definition: names the snapshot, points at the source relation, and sets unique_key, strategy, updated_at, and hard_deletes."><code>snapshots:
+  - name: scd_raw_listings
+    relation: source('airbnb', 'listings')
+    config:
+      unique_key: id
+      strategy: timestamp
+      updated_at: updated_at
+      hard_deletes: invalidate</code></pre>
+
+          <p>The hosts source gets an identical pattern in <code>snapshots/raw_hosts_snapshot.yml</code> with <code>name: scd_raw_hosts</code>. <code>strategy: timestamp</code> compares <code>updated_at</code> to detect changes. <code>hard_deletes: invalidate</code> closes rows that disappear from the source rather than pretending they still exist.</p>
+
+          <div class="callout info"><strong>Older tutorials use <code>{% snapshot %}</code> blocks in <code>.sql</code> files.</strong> That form still works on many versions but YAML is the current standard. The course repo uses YAML exclusively.</div>
+
+          <h3>Type 1 in dbt — plain rebuilt dimensions</h3>
+          <p><code>dim_hosts_cleansed</code> is a Type 1 dimension today: each run rebuilds the table and overwrites host names. You see the current name only. If you need history, you read from <code>scd_raw_hosts</code> instead — or build a dimension that sources from the snapshot.</p>
+
+          <h3>Type 4 — current table plus history table</h3>
+          <p>Type 4 keeps a slim current-state dimension for fast joins while storing full history in a separate table — often the snapshot table itself. Analysts doing operational reporting hit the current table; auditors hit history. In dbt this is a modelling choice: <code>dim_hosts_cleansed</code> for current, <code>scd_raw_hosts</code> for history, with marts picking the appropriate source.</p>
+
+          <h3>Type 6 — hybrid 1 + 2 + 3</h3>
+          <p>Type 6 combines overwrite of a current-value column, historical rows for reporting, and a previous-value column on the current row. It answers more question types without joins but triples the maintenance surface. Rare in dbt projects unless regulatory reporting demands both current and one-step-back columns on the same row alongside full history.</p>
+
+          <h3>Timestamp versus check snapshot strategies</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Strategy</th><th>Requires</th><th>Detects changes when</th><th>Course usage</th></tr></thead>
+              <tbody>
+                <tr><td><code>timestamp</code></td><td>Reliable <code>updated_at</code> column</td><td><code>updated_at</code> differs from last snapshot</td><td><code>raw_listings_snapshot.yml</code>, <code>raw_hosts_snapshot.yml</code></td></tr>
+                <tr><td><code>check</code></td><td><code>check_cols</code> list</td><td>Any listed column's value differs</td><td>Use when source lacks trustworthy timestamps</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>The Airbnb raw tables carry <code>updated_at</code>, so timestamp strategy is appropriate. Sources that only append audit logs or lack change metadata need check strategy with an explicit column list — otherwise snapshots either miss changes or fire on irrelevant column drift.</p>
+
+          <h3>Point-in-time join pattern for Type 2</h3>
+          <p>When you need historical accuracy — what was the host name when this review was written — the join must constrain validity:</p>
+
+<pre data-lang="sql" data-title="Point-in-time join (illustrative)" data-explain="Join facts to listings for host_id, then to Type 2 snapshot with validity predicate on review_date."><code>SELECT
+    r.review_id,
+    r.review_date,
+    h.host_name
+FROM {{ ref('fct_reviews') }} r
+JOIN {{ ref('dim_listings_cleansed') }} l
+  ON r.listing_id = l.listing_id
+JOIN {{ ref('scd_raw_hosts') }} h
+  ON l.host_id = h.id
+ AND r.review_date &gt;= h.dbt_valid_from
+ AND (r.review_date &lt; h.dbt_valid_to OR h.dbt_valid_to IS NULL)</code></pre>
+
+          <p>In practice you wrap this in a mart model so analysts never write the predicate by hand. For current-state reporting only, join to <code>dim_hosts_cleansed</code> and accept Type 1 semantics.</p>
+
+          <h3>Hosts snapshot YAML</h3>
+
+<pre data-lang="yaml" data-title="snapshots/raw_hosts_snapshot.yml" data-explain="Identical structure to listings snapshot, pointed at the hosts source."><code>snapshots:
+  - name: scd_raw_hosts
+    relation: source('airbnb', 'hosts')
+    config:
+      unique_key: id
+      strategy: timestamp
+      updated_at: updated_at
+      hard_deletes: invalidate</code></pre>
+        </section>
+
+        <section class="section" id="dbt-implementation">
+          <h2>How dbt implements each idea</h2>
+          <p class="lead">dbt does not ship a dimensional modelling wizard. It gives you folders, materializations, tests, and snapshots — conventions that map cleanly onto Kimball patterns when you apply them consistently.</p>
+
+          <h3>Pattern-to-artefact mapping</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Modelling idea</th><th>dbt artefact</th><th>Course example</th></tr></thead>
+              <tbody>
+                <tr><td>Normalisation / staging</td><td><code>src_</code> models (often ephemeral)</td><td><code>src_listings</code>, <code>src_hosts</code>, <code>src_reviews</code></td></tr>
+                <tr><td>Dimension (Type 1)</td><td><code>dim_</code> models</td><td><code>dim_listings_cleansed</code>, <code>dim_hosts_cleansed</code></td></tr>
+                <tr><td>Fact table</td><td><code>fct_</code> models</td><td><code>fct_reviews</code></td></tr>
+                <tr><td>Presentation / wide mart</td><td><code>mart_</code> models</td><td><code>mart_fullmoon_reviews</code> (Section&nbsp;9)</td></tr>
+                <tr><td>SCD Type 1</td><td>Rebuild dimension table or view each run</td><td><code>dim_hosts_cleansed</code> materialised as table</td></tr>
+                <tr><td>SCD Type 2</td><td>Snapshot</td><td><code>scd_raw_listings</code>, <code>scd_raw_hosts</code></td></tr>
+                <tr><td>Grain enforcement</td><td><code>unique</code> test on grain key</td><td>Add to <code>schema.yml</code> — see <a href="s11-tests.html">Section&nbsp;11</a></td></tr>
+                <tr><td>Surrogate key generation</td><td><code>dbt_utils.generate_surrogate_key</code></td><td><code>fct_reviews.review_id</code> — see <a href="s13-jinja-macros-packages.html">Section&nbsp;13</a></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Project folder layout</h3>
+          <div class="filetree">
+            <ul>
+              <li><span class="dir">airbnb/</span>
+                <ul>
+                  <li><span class="dir">models/</span>
+                    <ul>
+                      <li><span class="dir">src/</span> <span class="note">ephemeral staging — normalised entities from raw sources</span></li>
+                      <li><span class="dir">dim/</span> <span class="note">Type 1 dimensions and joined wide dims</span></li>
+                      <li><span class="dir">fct/</span> <span class="note">transaction facts at declared grain</span></li>
+                      <li><span class="dir">mart/</span> <span class="note">business-facing presentation layer</span></li>
+                      <li><span class="file">schema.yml</span> <span class="note">tests including grain uniqueness</span></li>
+                      <li><span class="file">sources.yml</span> <span class="note">raw listings, hosts, reviews</span></li>
+                    </ul>
+                  </li>
+                  <li><span class="dir">snapshots/</span> <span class="note">Type 2 SCD over raw sources</span></li>
+                  <li><span class="file">dbt_project.yml</span> <span class="note">folder defaults: src=ephemeral, dim=table, fct=tagged</span></li>
+                </ul>
+              </li>
+            </ul>
+          </div>
+
+          <p>Folder defaults in <code>dbt_project.yml</code> encode the pattern: staging is ephemeral (inlined into parents), dimensions default to tables, facts carry a <code>fact</code> tag for selection. You override per model — <code>dim_listings_cleansed</code> is a view — when the access pattern demands it. Materialization trade-offs are the subject of <a href="s08-materializations.html">Section&nbsp;8</a>; building the models themselves starts in <a href="s07-models.html">Section&nbsp;7</a>.</p>
+
+          <h3>Medallion architecture alignment</h3>
+          <p>The dimensional patterns map cleanly onto medallion naming: raw sources are bronze, <code>src_</code> models are silver staging, <code>dim_</code> and <code>fct_</code> are silver/gold modelled entities, and <code>mart_</code> is gold presentation. dbt does not mandate medallion labels, but the course folder structure is a Kimball star schema expressed as dbt conventions — which is what most analytics engineering teams actually run in production.</p>
+
+          <div class="diagram">
+            <p class="diagram-title">Modelling layers in the Airbnb project</p>
+            <div class="stack">
+              <div class="layer"><strong>Raw (bronze)</strong> — <code>AIRBNB.RAW</code> listings, hosts, reviews loaded by EL tool</div>
+              <div class="layer"><strong>Staging (silver)</strong> — ephemeral <code>src_*</code> models: rename, cast, one entity per model</div>
+              <div class="layer"><strong>Modelled (gold core)</strong> — <code>dim_*</code> dimensions, <code>fct_*</code> facts, <code>snapshots/</code> for Type 2</div>
+              <div class="layer"><strong>Presentation (gold serve)</strong> — <code>mart_*</code>, <code>dim_listings_w_hosts</code>, dashboard exposures</div>
+            </div>
+          </div>
+
+          <h3>Wide dimension — dim_listings_w_hosts</h3>
+          <p>The course eventually builds a denormalised dimension joining listings to hosts — star schema convenience without touching the fact table:</p>
+
+<pre data-lang="sql" data-title="models/dim/dim_listings_w_hosts.sql" data-explain="Two CTEs pull dimensions, then a join produces a wide listing row with host attributes inline."><code>WITH
+l AS (
+    SELECT
+        *
+    FROM
+        {{ ref('dim_listings_cleansed') }}
+),
+h AS (
+    SELECT * 
+    FROM {{ ref('dim_hosts_cleansed', v=2) }}
+    -- We are only adding the `, v=2` part at the Model Versioning section
+)
+
+SELECT 
+    l.listing_id,
+    l.listing_name,
+    l.room_type,
+    l.minimum_nights,
+    l.price,
+    l.host_id,
+    h.host_name,
+    h.is_superhost as host_is_superhost,
+    l.created_at,
+    GREATEST(l.updated_at, h.updated_at) as updated_at
+FROM l
+LEFT JOIN h ON (h.host_id = l.host_id)</code></pre>
+
+          <p>This is not a fact table — there is no review event or additive measure. It is a dimension widened for consumers who need host name on every listing row without writing the join. The <code>v=2</code> reference appears later in the course when model versioning is introduced in <a href="s19-production.html">Section&nbsp;19</a>.</p>
+
+          <div class="callout exam"><strong>Certification:</strong> expect questions that match a business requirement to an SCD type, and questions that map dbt folders and features (snapshots, tests, incremental models) to dimensional modelling roles.</div>
+        </section>
+
+        <section class="section" id="deeper">
+          <h2>Deeper detail and edge cases</h2>
+          <p class="lead">Operational detail the theory lectures skip: version drift in snapshot syntax, warehouse bills for history tables, and the modelling mistakes that produce silently wrong dashboards.</p>
+
+          <h3>Version notes</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Behaviour</th><th>Before</th><th>Now</th><th>Version</th></tr></thead>
+              <tbody>
+                <tr><td>Snapshot definitions</td><td><code>{% snapshot %}</code> blocks in <code>.sql</code> files</td><td>YAML under <code>snapshots/</code> with <code>relation:</code> and <code>config:</code></td><td>1.9</td></tr>
+                <tr><td>Hard deletes in snapshots</td><td><code>invalidate_hard_deletes: true</code></td><td><code>hard_deletes: invalidate</code> (or <code>new_record</code>, <code>ignore</code>)</td><td>1.9</td></tr>
+                <tr><td>Surrogate key macro</td><td><code>dbt_utils.surrogate_key</code></td><td><code>dbt_utils.generate_surrogate_key</code></td><td>dbt_utils 1.x</td></tr>
+                <tr><td>Current row <code>dbt_valid_to</code></td><td><code>NULL</code> for open rows (still default)</td><td>Optional <code>dbt_valid_to_current</code> config sets a sentinel date instead of NULL</td><td>1.9+</td></tr>
+                <tr><td>Snapshot check strategy</td><td>Timestamp only in older docs</td><td><code>strategy: check</code> with <code>check_cols</code> for sources without reliable <code>updated_at</code></td><td>1.0+</td></tr>
+                <tr><td>Tests in YAML</td><td><code>tests:</code></td><td><code>data_tests:</code></td><td>1.8</td></tr>
+                <tr><td>Generic test arguments</td><td>Top-level keys</td><td>Nested under <code>arguments:</code></td><td>1.10</td></tr>
+                <tr><td>Postgres CTE handling</td><td>Always materialised (optimisation fence)</td><td>Inlined by default from Postgres 12</td><td>PG 12</td></tr>
+                <tr><td>Model <code>event_time</code></td><td>Not available</td><td>Enables <code>--sample</code> for time-range dev runs</td><td>1.10</td></tr>
+                <tr><td>Incremental facts</td><td>Manual <code>is_incremental()</code> filters only</td><td><code>incremental_strategy='microbatch'</code> for time-bucketed loads</td><td>1.9</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>What it costs to run</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>What runs</th><th>Where the cost lands</th><th>How to spend less</th></tr></thead>
+              <tbody>
+                <tr><td>Type 2 snapshot on a wide source</td><td>Full source scan every run; storage grows with every change</td><td>Snapshot only columns that matter; use <code>check</code> strategy on narrow cols; run less often than facts</td></tr>
+                <tr><td>Wide denormalised mart (<code>dim_listings_w_hosts</code>)</td><td>Full rebuild reads both parent dims; storage duplicates host cols on every listing row</td><td>Keep as table only if queried often; otherwise join at query time in BI</td></tr>
+                <tr><td>Fact table full rebuild</td><td>Scans entire source history every run</td><td>Incremental on <code>review_date</code> — as <code>fct_reviews</code> does</td></tr>
+                <tr><td>Fact table incremental append</td><td>Cheap per run; storage still accumulates</td><td>Cluster on <code>review_date</code>; archive old partitions if policy allows</td></tr>
+                <tr><td><code>unique</code> grain test</td><td><code>GROUP BY</code> over the full fact or dim</td><td>Test the grain key only, not every column; scope with <code>where:</code> on large tables</td></tr>
+                <tr><td>Joining Type 2 dim without validity filter</td><td>Massive result set; BI tool times out</td><td>Always constrain to point-in-time or current row in the mart layer</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout cost"><strong>The biggest waste here is Type 2 history you never query.</strong> Snapshots over every source column on every run, joined without validity predicates in marts nobody uses for point-in-time analysis, cost storage and scan time indefinitely. Snapshot the entities that genuinely change and matter for reporting; use Type 1 everywhere else.</div>
+
+          <h3>Traps that catch people</h3>
+          <ul>
+            <li><strong>Grain violation after a join —</strong> joining <code>fct_reviews</code> to a dimension at the wrong grain (for example a host dimension row duplicated per listing) silently multiplies review counts. Revenue and averages look plausible but are wrong. Always validate row counts before and after joins; add a <code>unique</code> test on the fact grain key.</li>
+            <li><strong>Natural key reuse —</strong> assuming <code>host_id</code> from the source identifies one person forever. If the source reuses IDs, Type 1 dimensions attach new attributes to old history. Use snapshots or surrogate keys keyed on source + load metadata when IDs are not trustworthy.</li>
+            <li><strong>Type 2 join without validity predicate —</strong> <code>JOIN dim ON fact.host_id = dim.host_id</code> returns four rows per fact if the host changed four times. You must filter <code>fact.review_date &gt;= dim.dbt_valid_from AND (fact.review_date &lt; dim.dbt_valid_to OR dim.dbt_valid_to IS NULL)</code>, or use a current-row view.</li>
+            <li><strong><code>SELECT *</code> past a schema change —</strong> a fact model doing <code>SELECT *</code> from staging picks up a new column silently. Downstream contracts break, or worse, a duplicate column name shadows a measure. Explicit column lists in facts and dimensions.</li>
+            <li><strong>Confusing snapshot with incremental —</strong> both touch only changed rows on some runs, but snapshots append history rows for Type 2; incrementals append new fact events. Using incremental on a mutable dimension loses history; using snapshot on an append-only fact table wastes scans.</li>
+            <li><strong>Snowflake schema by accident —</strong> splitting every attribute into its own dbt model without a business reason multiplies joins and confuses BI users. Normalise only when a sub-entity is shared across multiple dimensions.</li>
+            <li><strong>OBT for every consumer —</strong> building a separate wide table per dashboard duplicates maintenance. Conformed dimensions exist so one <code>dim_hosts_cleansed</code> serves every fact.</li>
+            <li><strong>Testing the wrong grain —</strong> a <code>unique</code> test on <code>listing_id</code> in a reviews fact passes while duplicate reviews exist. Test the full grain: <code>review_id</code> or the composite natural key.</li>
+            <li><strong>Ignoring hard deletes —</strong> without <code>hard_deletes: invalidate</code>, deleted source rows linger as current in the snapshot. Metrics include listings that no longer exist.</li>
+          </ul>
+
+          <h3>Troubleshooting playbook</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Symptom</th><th>Most likely cause</th><th>What to check / fix</th></tr></thead>
+              <tbody>
+                <tr><td>Metric doubled after joining a dimension</td><td>Grain fan-out from many-to-many or Type 2 history</td><td>Compare <code>COUNT(*)</code> before and after join; add validity filter or deduplicate dim to current row</td></tr>
+                <tr><td>Snapshot not creating new rows on change</td><td><code>updated_at</code> not changing in source, or wrong <code>unique_key</code></td><td>Query source directly; try <code>strategy: check</code> with explicit <code>check_cols</code></td></tr>
+                <tr><td><code>unique</code> test fails on fact table</td><td>Duplicate events at declared grain, or surrogate key missing a component</td><td><code>SELECT grain_cols, COUNT(*) HAVING COUNT(*) &gt; 1</code> in a worksheet; fix upstream dedup</td></tr>
+                <tr><td>Host name wrong for old reviews</td><td>Type 1 dimension joined for historical analysis</td><td>Join to snapshot table with point-in-time predicate, or build SCD-aware mart</td></tr>
+                <tr><td>Incremental fact missing old reviews</td><td>Watermark ahead of data, or backfill never run</td><td><code>SELECT MAX(review_date) FROM fct_reviews</code>; compare to source; <code>--full-refresh</code> once</td></tr>
+                <tr><td>Compiled SQL shows unexpected cross join</td><td>Missing join condition between CTEs</td><td>Open <code>target/compiled/airbnb/models/...</code>; run with EXPLAIN</td></tr>
+                <tr><td>Snapshot table enormous</td><td>High-change source, all columns snapshotted, frequent schedule</td><td>Reduce <code>check_cols</code>; snapshot a cleansed subset model instead of raw wide source</td></tr>
+                <tr><td>Surrogate key collisions</td><td>Hash truncated or key columns omit distinguishing field</td><td>Add column to <code>generate_surrogate_key</code> list; inspect colliding rows</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Production patterns</h3>
+          <p>Teams that model well in dbt agree on grain statements in pull request templates — literally a field that says <em>one row represents</em> before a fact merges. They enforce it with a <code>unique</code> and <code>not_null</code> test on the grain key in <code>schema.yml</code>, run on every CI build via <code>dbt build</code>.</p>
+          <p>For SCDs, production teams split the problem: Type 1 conformed dimensions in <code>dim_</code> for current-state reporting (fast, simple joins); Type 2 snapshots on sources that feed point-in-time marts or regulatory reports. They rarely implement Type 6 — three mechanisms to keep aligned is operational debt without a clear audience.</p>
+
+          <div class="grid-2">
+            <div class="mini-card">
+              <h4>Pattern: current-state mart</h4>
+              <p>Facts join to <code>dim_*</code> Type 1 models. Snapshots exist for audit but are not in the default BI semantic layer. Analysts who need history opt into a separate mart.</p>
+            </div>
+            <div class="mini-card">
+              <h4>Anti-pattern: snapshot everything</h4>
+              <p>Snapshotting append-only facts and rebuilding wide OBT marts nightly from scratch. Storage and scan costs compound; nobody can explain which table is canonical.</p>
+            </div>
+          </div>
+
+<pre data-lang="yaml" data-title="models/schema.yml (grain test pattern)" data-explain="Enforce fact grain in CI. Add this to fct_reviews when review_id is the grain key."><code>  - name: fct_reviews
+    columns:
+      - name: review_id
+        data_tests:
+          - unique
+          - not_null</code></pre>
+
+          <h3>Certification pointers</h3>
+          <p>The exam tests dimensional vocabulary literally: fact versus dimension, star versus snowflake, SCD types 1 and 2, and which dbt feature implements each. It likes &ldquo;which strategy would you use when&rdquo; questions — mutable source with history requirement maps to snapshot; append-only events map to incremental fact.</p>
+          <ul>
+            <li><a href="s07-models.html">Section 7</a> — building the <code>src_</code>, <code>dim_</code> models quoted on this page.</li>
+            <li><a href="s08-materializations.html">Section 8</a> — why <code>fct_reviews</code> is incremental and <code>dim_listings_w_hosts</code> is a table.</li>
+            <li><a href="s10-snapshots.html">Section 10</a> — running and querying <code>scd_raw_listings</code> and <code>scd_raw_hosts</code>.</li>
+            <li><a href="s11-tests.html">Section 11</a> — <code>unique</code>, <code>relationships</code>, and grain enforcement in YAML.</li>
+            <li><a href="s13-jinja-macros-packages.html">Section 13</a> — <code>generate_surrogate_key</code> implementation details.</li>
+          </ul>
+          <div class="callout exam"><strong>Certification:</strong> know that dbt snapshots implement SCD Type 2, rebuilt dimensions implement Type 1, and <code>unique</code> tests enforce grain. Expect a scenario question where joining a Type 2 dimension duplicates rows and you must name the fix.</div>
+        </section>
+
+        <section class="section" id="interview">
+          <h2>Interview questions</h2>
+          <p class="muted">Answer each one out loud before opening it.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+
+            <details class="qa">
+              <summary>When would you use a snapshot instead of an incremental model?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p>Use a snapshot when the source row <em>mutates in place</em> and you need to preserve history — host renames, price changes, status flips. Snapshots implement SCD Type 2 by closing old rows and inserting new ones when tracked columns change.</p>
+                <p>Use an incremental model when the source is <em>append-only</em> at the grain you model — new reviews, new orders, new events. You add rows for new keys or timestamps; you do not rewrite history. <code>fct_reviews</code> is the textbook incremental case; <code>scd_raw_hosts</code> is the snapshot case.</p>
+                <p>If you used incremental on a mutable dimension, the next run would overwrite changed attributes and history would be lost. If you used a snapshot on reviews, you would scan the entire reviews table every run to detect changes that never happen in place — wasted cost.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>A join against your Type 2 dimension returned four times the rows. Why?<span class="qa-tag">Troubleshooting</span></summary>
+              <div class="qa-body">
+                <p>The join matched every fact row to every history row for the same natural key. Type 2 dimensions contain multiple rows per <code>host_id</code> — one per version — with validity ranges in <code>dbt_valid_from</code> and <code>dbt_valid_to</code>.</p>
+                <p>Fixing it requires a point-in-time predicate: constrain the fact's event timestamp to fall within the dimension row's validity window, or filter to current rows only (<code>dbt_valid_to IS NULL</code>) if you accept Type 1 semantics for that query. Better still, expose a <code>dim_hosts_current</code> view for default reporting and a separate historical mart for auditors.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How do you choose the grain of a fact table?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>Start from the business process, not the source file layout. Ask what single observable event or measurement the business cares to count. For reviews, the event is <em>a guest submitted a review</em> — one row per review, not one row per listing per day.</p>
+                <p>Then stress-test: can two rows exist with the same proposed key? If yes, the grain is too coarse. Can one business event split across two rows? If yes, the grain is too fine. Document the sentence <em>one row represents...</em> in the model description and enforce with a <code>unique</code> test on the grain key.</p>
+                <p>Changing grain later is painful — coarsening loses detail; refining requires a backfill. Getting this right before the first <code>dbt run</code> saves quarters of rework.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What is the difference between a star schema and a snowflake schema?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>In a star schema, dimensions connect directly to the fact table — one hop per dimension. In a snowflake schema, dimensions are normalised into hierarchies of sub-dimension tables, so a single query may join fact → product → category → department.</p>
+                <p>Star schemas trade storage duplication for simpler queries and better BI usability. Snowflake schemas reduce redundancy but add join complexity. Modern columnar warehouses tilt the default toward star or OBT because join cost dropped relative to storage savings.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Explain SCD Type 1 versus Type 2.<span class="qa-tag">Modelling</span></summary>
+              <div class="qa-body">
+                <p>Type 1 overwrites the dimension row when an attribute changes. You see the current value only; historical reporting uses today's name for yesterday's events. Implementation in dbt is a table or view rebuilt each run — <code>dim_hosts_cleansed</code>.</p>
+                <p>Type 2 preserves history by inserting a new row and closing the previous one with validity timestamps. Point-in-time joins reproduce what you would have known on a given date. dbt implements this with snapshots producing <code>dbt_valid_from</code>, <code>dbt_valid_to</code>, and <code>dbt_scd_id</code>.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What is a conformed dimension and why does it matter?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>A conformed dimension is shared across fact tables with the same keys, attributes, and definitions. <code>dim_listings_cleansed</code> should mean the same thing whether joined to reviews, bookings, or payouts.</p>
+                <p>Without conformance, two teams publish different customer tables, executives blend metrics in a dashboard, and numbers disagree with no single source of truth. dbt's <code>ref()</code> helps within one project; cross-project conformance needs governance — shared packages or a mesh contract.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>When is a measure semi-additive?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>A semi-additive measure can be summed across some dimensions but not others — typically time. Account balance is the classic example: summing balances across customers is meaningful; summing balances across days is not (you double-count).</p>
+                <p>Handle semi-additive measures with periodic snapshot facts, or compute end-of-period values with window functions rather than naive <code>SUM</code> across dates.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Why generate a surrogate key in fct_reviews instead of using the natural columns?<span class="qa-tag">SQL</span></summary>
+              <div class="qa-body">
+                <p>The natural key is four columns — awkward for joins, foreign keys in downstream tools, and error messages. Hashing them into <code>review_id</code> gives a single-column grain key that is stable as long as the component list is correct.</p>
+                <p>Surrogate keys also decouple the warehouse from source system key formats and prepare you for SCD scenarios where the same business key maps to multiple dimension rows. See <code>dbt_utils.generate_surrogate_key</code> in the real <code>fct_reviews.sql</code>.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What is the role of CTEs in dbt models?<span class="qa-tag">SQL</span></summary>
+              <div class="qa-body">
+                <p>CTEs structure a model as a readable pipeline: import sources in the first CTE, apply cleansed logic in the next, select into the final output. They replace nested subqueries and match how analytics engineers discuss transformations step by step.</p>
+                <p>They are not separate materializations unless the warehouse optimiser chooses to materialize them (Postgres before version 12 always did). Expensive reusable steps should become their own dbt models with explicit materializations.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Why normalise in the source layer but denormalise in marts?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>Staging normalises entities so each attribute is defined once — a host name change updates one place. Facts and dimensions stay narrow and conformed. Marts denormalise for consumption: joining listing, host, and review columns into one wide table a BI tool can scan without seven joins.</p>
+                <p>The ELT pattern loads raw data cheaply, dbt enforces clean entities in the middle layers, and presentation marts pay the join cost once at build time rather than on every dashboard query.</p>
+              </div>
+            </details>
+
+          </div>
+        </section>
+
+        <section class="section" id="practice">
+          <h2>Hands-on practice</h2>
+          <p class="muted">Run these from the <code>airbnb</code> folder with your virtualenv active.</p>
+          <ol class="practice-list">
+
+            <li class="practice">
+              <p class="practice-task">Identify the grain of <code>fct_reviews</code> and prove it with a <code>unique</code> test on <code>review_id</code> in <code>schema.yml</code>. Run <code>dbt build --select fct_reviews</code> and confirm the test passes.</p>
+              <span class="console-path">airbnb/models/schema.yml</span>
+              <p class="practice-expect"><code>dbt build</code> reports PASS for the new <code>unique</code> test on <code>review_id</code> and the fact model builds successfully.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>State the grain: one row per guest review, keyed by <code>review_id</code> (surrogate hash of listing, date, reviewer, text).</li>
+                    <li>Open <code>models/schema.yml</code> and add tests under the <code>fct_reviews</code> model.</li>
+                    <li>Run <code>dbt build --select fct_reviews</code> from the <code>airbnb</code> directory.</li>
+                  </ol>
+<pre data-lang="yaml" data-title="models/schema.yml (add under fct_reviews)" data-explain="unique plus not_null on review_id enforces the declared grain."><code>  - name: fct_reviews
+    columns:
+      - name: review_id
+        data_tests:
+          - unique
+          - not_null</code></pre>
+                  <p class="muted">Undo: remove the <code>review_id</code> block you added from <code>schema.yml</code> and run <code>dbt build --select fct_reviews</code> to confirm a clean state.</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">Sketch the star schema for a hypothetical <code>fct_bookings</code> fact at booking-event grain. List which dimensions you would conjoin and the foreign keys on the fact.</p>
+              <span class="console-path">airbnb/models/fct/ (paper or a new file)</span>
+              <p class="practice-expect">A diagram or bullet list with <code>fct_bookings</code> at the centre, foreign keys to <code>dim_listings_cleansed</code>, <code>dim_hosts_cleansed</code>, and a date dimension, plus additive measures (nights booked, booking amount).</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Modelling</span></summary>
+                <div class="qa-body">
+                  <p>Grain: one row per confirmed booking.</p>
+                  <ul>
+                    <li><code>listing_id</code> → <code>dim_listings_cleansed</code></li>
+                    <li><code>host_id</code> → <code>dim_hosts_cleansed</code> (or derive via listing)</li>
+                    <li><code>booking_date</code> → date dimension (or use <code>review_date</code> pattern)</li>
+                    <li>Measures: <code>nights_booked</code>, <code>gross_booking_value</code> (additive)</li>
+                  </ul>
+                  <p>Reuse conformed dimensions from the existing project rather than creating <code>dim_listings_bookings</code>. Facts share dimensions; they do not own private copies.</p>
+                  <p class="muted">Undo: nothing to undo if you only sketched on paper. Delete any scratch SQL file you created.</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">Hand-write the Type 2 snapshot output for host <code>501</code> after two updates: first rename to <code>Maria Santos</code>, then superhost flag changes to false. Include all dbt snapshot metadata columns.</p>
+              <span class="console-path">airbnb/snapshots/raw_hosts_snapshot.yml</span>
+              <p class="practice-expect">Three historical rows for <code>id = 501</code>: original, after rename, after superhost change — only the last row has <code>dbt_valid_to IS NULL</code>.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Start from one open row (Maria, superhost true).</li>
+                    <li>After rename: close row 1; open row 2 (Maria Santos, superhost true).</li>
+                    <li>After superhost false: close row 2; open row 3 (Maria Santos, superhost false).</li>
+                  </ol>
+<pre data-lang="sql" data-title="Expected scd_raw_hosts rows for host 501" data-explain="Each change closes the prior row and opens a new one. Only the current row has NULL dbt_valid_to."><code>-- id | NAME          | is_superhost | dbt_valid_from      | dbt_valid_to        | current?
+-- 501 | Maria         | true         | 2024-01-01 00:00:00 | 2024-03-01 00:00:00 | no
+-- 501 | Maria Santos  | true         | 2024-03-01 00:00:00 | 2024-08-01 00:00:00 | no
+-- 501 | Maria Santos  | false        | 2024-08-01 00:00:00 | NULL                | yes</code></pre>
+                  <p class="muted">Undo: nothing to undo — this is a paper exercise. To verify real snapshot behaviour, run <code>dbt snapshot</code> after editing test data in dev, then revert your source changes.</p>
+                </div>
+              </details>
+            </li>
+
+          </ol>
+        </section>
+
+        <section class="section" id="recap">
+          <h2>Recap</h2>
+          <div class="recap">
+            <ul class="checklist">
+              <li>Normalisation removes redundancy; OLTP systems normalise to 3NF, analytics often denormalises for read performance.</li>
+              <li>Facts are events or measurements at declared grain; dimensions are descriptive context for filter and group by.</li>
+              <li><code>fct_reviews</code> is a transaction fact; <code>dim_listings_cleansed</code> and <code>dim_hosts_cleansed</code> are Type 1 dimensions.</li>
+              <li>Star schemas join facts directly to dimensions; snowflake schemas normalise dimensions further; OBT pre-joins everything for scan speed.</li>
+              <li>Declare grain first — one row represents — and enforce it with a <code>unique</code> test on the grain key.</li>
+              <li>Surrogate keys stabilise joins; <code>dbt_utils.generate_surrogate_key</code> builds them from natural key columns.</li>
+              <li>Conformed dimensions share keys and definitions across facts; without them, metrics diverge between teams.</li>
+              <li>dbt models use CTE chains for readability; warehouses usually inline CTEs — promote expensive steps to models.</li>
+              <li>SCD Type 1 overwrites; Type 2 preserves history with validity ranges — dbt snapshots implement Type 2.</li>
+              <li>Joining Type 2 dimensions requires a validity predicate or you duplicate fact rows silently.</li>
+              <li>Folder convention: <code>src_</code> staging, <code>dim_</code> dimensions, <code>fct_</code> facts, <code>mart_</code> presentation, <code>snapshots/</code> for SCD Type 2.</li>
+              <li>Snapshots are YAML in dbt 1.9+ with <code>hard_deletes: invalidate</code>, not the older <code>{% snapshot %}</code> SQL blocks.</li>
+            </ul>
+            <p style="margin-top:1rem;">
+              <button type="button" data-complete="section-05">Mark complete</button>
+            </p>
+          </div>
+        </section>
+
+      </div>
+
+      <aside class="toc" aria-label="On this page">
+        <strong>On this page</strong>
+        <ol>
+          <li><a href="#lectures">Lectures</a></li>
+          <li><a href="#normalisation">Normalisation</a></li>
+          <li><a href="#facts-and-dimensions">Facts and dimensions</a></li>
+          <li><a href="#star-snowflake-schemas">Star and snowflake</a></li>
+          <li><a href="#grain-keys-conformed">Grain and keys</a></li>
+          <li><a href="#common-table-expressions">CTEs</a></li>
+          <li><a href="#slowly-changing-dimensions">SCDs</a></li>
+          <li><a href="#dbt-implementation">dbt mapping</a></li>
+          <li><a href="#deeper">Deeper detail</a></li>
+          <li><a href="#interview">Interview questions</a></li>
+          <li><a href="#practice">Hands-on practice</a></li>
+          <li><a href="#recap">Recap</a></li>
+        </ol>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<footer class="footer">The Complete dbt Bootcamp: Zero to Hero · Section 5 · Offline study edition</footer>
+</body>
+</html>

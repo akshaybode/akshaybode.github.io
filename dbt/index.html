@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Complete study notes for The Complete dbt (Data Build Tool) Bootcamp: Zero to Hero — all 22 sections, the whole Airbnb project, every command and config, plus interview questions and hands-on practice.">
+<title>The Complete dbt Bootcamp: Zero to Hero — Course Notes</title>
+<link rel="stylesheet" href="assets/dbt.css">
+<script defer src="assets/search-index.js"></script>
+<script defer src="assets/code-highlight.js"></script>
+<script defer src="assets/dbt.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">Analytics engineering · dbt Core 1.11 · Snowflake</p>
+    <h1>The Complete dbt&nbsp;Bootcamp</h1>
+    <p class="subtitle">Complete notes for <em>The Complete dbt (Data Build Tool) Bootcamp: Zero to Hero</em> by Zoltan C. Toth and Steven Lloyd. Twenty-two sections covering the theory, the whole Airbnb project built model by model, production deployment, and the dbt Analytics Engineering certification &mdash; with interview questions and hands-on practice at the end of every section.</p>
+    <div class="hero-meta">
+      <span class="chip">22 sections</span>
+      <span class="chip">159 lectures mapped &middot; ~13h 30m of video</span>
+      <span class="chip">Every file in the Airbnb project</span>
+      <span class="chip">Last verified: 5 Aug 2026</span>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <main id="main">
+
+    <section class="section" id="start">
+      <h2>Start here</h2>
+      <p class="lead">These notes replace the videos. Every model the course writes, every command it runs, every config it sets and every error it deliberately triggers is written out below, with the reasoning the videos give and the detail they skip.</p>
+
+      <div class="grid-3">
+        <div class="mini-card">
+          <h4>Read in order</h4>
+          <p>Sections 1&ndash;22 follow the course exactly. Each opens with its lecture list, so you can match a video to the notes and back again.</p>
+        </div>
+        <div class="mini-card">
+          <h4>Or search</h4>
+          <p>Press <code>/</code> anywhere to search every section, config key, command, diagram and interview question offline.</p>
+        </div>
+        <div class="mini-card">
+          <h4>Then build</h4>
+          <p>Every section ends with hands-on tasks against the real Airbnb project. <a href="s06-setup.html">Section&nbsp;6</a> gets the project running on your machine.</p>
+        </div>
+      </div>
+
+      <div class="callout tip"><strong>Every section has a &ldquo;Deeper detail&rdquo; block.</strong> Sitting just before the interview questions, it holds what the course never covers: what changed in which dbt version, where the warehouse cost actually lands, the traps that catch people, a symptom-to-fix troubleshooting playbook, the pattern a real team would adopt, and what the certification does with the material.</div>
+
+      <div class="callout info"><strong>Two extra pages beyond the course.</strong> <a href="extras.html">Extras</a> covers what the bootcamp leaves out &mdash; dbt Mesh and multi-project setups, the Semantic Layer and MetricFlow, adapters other than Snowflake, data-quality tooling, and cost control. <a href="interview-prep.html">Interview prep</a> collects the open-ended scenario questions an analytics engineering interview actually asks.</div>
+
+      <h3>Your progress</h3>
+      <div class="progress" aria-hidden="true"><span data-progress-bar></span></div>
+      <p class="muted" data-progress-text>0 of 22 sections marked complete (0%)</p>
+    </section>
+
+    <section class="section" id="project">
+      <h2>The project you build</h2>
+      <p>The whole course is one project: an Airbnb analytics pipeline on Snowflake. Three raw tables land in a <code>RAW</code> schema, and by the end you have staging models, cleansed dimensions, an incremental fact table, a seed, two snapshots, a mart, tests, contracts, documentation and a dashboard exposure &mdash; deployed through a CI pipeline.</p>
+
+      <div class="diagram">
+        <p class="diagram-title">The Airbnb DAG the course builds, source to dashboard</p>
+        <div class="dag">
+          <div class="dag-col">
+            <p class="dag-label">Sources</p>
+            <div class="node is-source"><b>listings</b><small>raw_listings</small></div>
+            <div class="node is-source"><b>hosts</b><small>raw_hosts</small></div>
+            <div class="node is-source"><b>reviews</b><small>raw_reviews</small></div>
+          </div>
+          <div class="dag-col">
+            <p class="dag-label">Staging</p>
+            <div class="node is-model"><b>src_listings</b><small>ephemeral</small></div>
+            <div class="node is-model"><b>src_hosts</b><small>ephemeral</small></div>
+            <div class="node is-model"><b>src_reviews</b><small>ephemeral</small></div>
+          </div>
+          <div class="dag-col">
+            <p class="dag-label">Dimensions &amp; facts</p>
+            <div class="node is-model"><b>dim_listings_cleansed</b><small>view</small></div>
+            <div class="node is-model"><b>dim_hosts_cleansed</b><small>table &middot; v1, v2</small></div>
+            <div class="node is-model"><b>fct_reviews</b><small>incremental</small></div>
+          </div>
+          <div class="dag-col">
+            <p class="dag-label">Marts</p>
+            <div class="node is-mart"><b>dim_listings_w_hosts</b><small>joined dimension</small></div>
+            <div class="node is-mart pulse"><b>mart_fullmoon_reviews</b><small>microbatch</small></div>
+          </div>
+          <div class="dag-col">
+            <p class="dag-label">Consumers</p>
+            <div class="node is-serve"><b>Executive dashboard</b><small>Preset exposure</small></div>
+          </div>
+        </div>
+      </div>
+
+      <p class="muted">Alongside the DAG the course also builds two snapshots over the raw sources, a <code>seed_full_moon_dates</code> seed, singular and generic tests, a unit test, a contract on <code>dim_hosts_cleansed</code>, and three Python models.</p>
+
+      <div class="analogy"><strong>Everyday analogy &mdash;</strong> dbt is a build tool for SQL, in the same sense that Make is a build tool for C. You write the recipes; dbt works out the order, runs what needs running, and refuses to carry on when a step fails its checks.</div>
+    </section>
+
+    <section class="section" id="certification">
+      <h2>The certification this maps to</h2>
+      <p>The course is aligned to the <strong>dbt Analytics Engineering Certification</strong>. The exam publishes eight topic areas but <em>no</em> percentage weightings &mdash; every question is worth one point and all are weighted equally, so there is no domain worth cramming over another.</p>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Certification topic</th><th>Where these notes cover it</th></tr></thead>
+          <tbody>
+            <tr><td>Developing and optimizing dbt models</td><td><a href="s07-models.html">Section 7</a>, <a href="s08-materializations.html">Section 8</a>, <a href="s09-seeds-sources.html">Section 9</a>, <a href="s17-selectors-commands.html">Section 17</a></td></tr>
+            <tr><td>Managing dbt models governance</td><td><a href="s12-advanced-testing.html">Section 12</a> (contracts, constraints), <a href="s19-production.html">Section 19</a> (versions, deprecation, access)</td></tr>
+            <tr><td>Debugging data modeling errors</td><td><a href="s16-debugging-logging.html">Section 16</a></td></tr>
+            <tr><td>Troubleshooting and optimizing dbt pipelines</td><td><a href="s16-debugging-logging.html">Section 16</a>, <a href="s18-orchestration.html">Section 18</a>, <a href="s19-production.html">Section 19</a></td></tr>
+            <tr><td>Implementing dbt tests</td><td><a href="s11-tests.html">Section 11</a>, <a href="s12-advanced-testing.html">Section 12</a></td></tr>
+            <tr><td>Creating and maintaining dbt documentation</td><td><a href="s14-documentation.html">Section 14</a></td></tr>
+            <tr><td>Leveraging the dbt state</td><td><a href="s19-production.html">Section 19</a> (state:modified, defer, Slim CI)</td></tr>
+            <tr><td>Implementing and maintaining external dependencies</td><td><a href="s09-seeds-sources.html">Section 9</a> (source freshness), <a href="s13-jinja-macros-packages.html">Section 13</a> (packages), <a href="s15-analyses-hooks-exposures.html">Section 15</a> (exposures)</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout exam"><strong>Question formats to expect.</strong> The exam is not only multiple choice. It also uses fill-in-the-blank, matching, hotspot, build-list and Discrete Option Multiple Choice questions, so recognising a config key is not enough &mdash; you have to be able to write it. <a href="s22-certification.html">Section&nbsp;22</a> has a full practice exam and the strategy.</div>
+    </section>
+
+    <section class="section" id="sections">
+      <h2>All 22 sections</h2>
+      <div class="index-controls">
+        <label class="visually-hidden" for="card-search">Filter sections</label>
+        <input id="card-search" class="search" type="search" placeholder="Filter sections by name or topic…" data-part-search>
+        <button class="filter-btn active" type="button" data-filter="all">All</button>
+        <button class="filter-btn" type="button" data-filter="theory">Theory</button>
+        <button class="filter-btn" type="button" data-filter="build">Building</button>
+        <button class="filter-btn" type="button" data-filter="test">Testing</button>
+        <button class="filter-btn" type="button" data-filter="docs">Docs</button>
+        <button class="filter-btn" type="button" data-filter="deploy">Production</button>
+        <p class="filter-status" data-filter-status></p>
+      </div>
+
+      <div class="card-grid">
+        <a class="part-card" href="s01-introduction.html" data-part-card data-tags="theory intro">
+          <span class="part-no">SECTION 01</span>
+          <h3>Introduction</h3>
+          <p>What dbt is, what analytics engineering means, how the course is structured and what you will have built by the end.</p>
+          <div class="tags"><span>What is dbt</span><span>Analytics engineering</span></div>
+        </a>
+        <a class="part-card" href="s02-data-maturity.html" data-part-card data-tags="theory">
+          <span class="part-no">SECTION 02</span>
+          <h3>The Data Maturity Model</h3>
+          <p>The four stages from raw data collection to machine learning, and why every stage above the base fails without the ones below it.</p>
+          <div class="tags"><span>Maturity model</span><span>Data architecture</span></div>
+        </a>
+        <a class="part-card" href="s03-warehouses-lakes.html" data-part-card data-tags="theory">
+          <span class="part-no">SECTION 03</span>
+          <h3>Warehouses, Lakes and Lakehouses</h3>
+          <p>Schema-on-write versus schema-on-read, OLTP versus OLAP, columnar storage, and which of the three you are actually building on.</p>
+          <div class="tags"><span>Warehouse</span><span>Data lake</span><span>Lakehouse</span></div>
+        </a>
+        <a class="part-card" href="s04-modern-data-stack.html" data-part-card data-tags="theory">
+          <span class="part-no">SECTION 04</span>
+          <h3>The Modern Data Stack and ELT</h3>
+          <p>Why ELT replaced ETL, the layers of the modern stack, and exactly which layer dbt occupies.</p>
+          <div class="tags"><span>ETL vs ELT</span><span>Modern stack</span></div>
+        </a>
+        <a class="part-card" href="s05-dimensional-modelling.html" data-part-card data-tags="theory build">
+          <span class="part-no">SECTION 05</span>
+          <h3>Dimensional Modelling and SCDs</h3>
+          <p>Normalisation, star schemas, facts and dimensions, CTEs, and the slowly changing dimension types that snapshots implement.</p>
+          <div class="tags"><span>Star schema</span><span>SCD Type 2</span><span>CTE</span></div>
+        </a>
+        <a class="part-card" href="s06-setup.html" data-part-card data-tags="build setup">
+          <span class="part-no">SECTION 06</span>
+          <h3>Setup and the Airbnb Project</h3>
+          <p>Snowflake account and roles, the dataset, uv and virtualenvs, installing dbt, <code>profiles.yml</code>, <code>dbt init</code> and the anatomy of a project.</p>
+          <div class="tags"><span>Snowflake</span><span>profiles.yml</span><span>dbt init</span></div>
+        </a>
+        <a class="part-card" href="s07-models.html" data-part-card data-tags="build">
+          <span class="part-no">SECTION 07</span>
+          <h3>Models</h3>
+          <p>Your first models, CTEs, <code>ref()</code> and how the DAG is inferred, compiled SQL in <code>target/</code>, and the staging-to-dimension flow.</p>
+          <div class="tags"><span>ref()</span><span>DAG</span><span>Compiled SQL</span></div>
+        </a>
+        <a class="part-card" href="s08-materializations.html" data-part-card data-tags="build">
+          <span class="part-no">SECTION 08</span>
+          <h3>Materializations</h3>
+          <p>View, table, ephemeral and incremental, <code>is_incremental()</code>, full refreshes, <code>on_schema_change</code>, and the incremental strategies.</p>
+          <div class="tags"><span>Incremental</span><span>Ephemeral</span><span>Strategies</span></div>
+        </a>
+        <a class="part-card" href="s09-seeds-sources.html" data-part-card data-tags="build">
+          <span class="part-no">SECTION 09</span>
+          <h3>Seeds and Sources</h3>
+          <p>CSV seeds, declaring sources, <code>source()</code>, the <code>identifier</code> escape hatch, and source freshness with warn and error thresholds.</p>
+          <div class="tags"><span>Seeds</span><span>source()</span><span>Freshness</span></div>
+        </a>
+        <a class="part-card" href="s10-snapshots.html" data-part-card data-tags="build">
+          <span class="part-no">SECTION 10</span>
+          <h3>Snapshots</h3>
+          <p>Recording history from a mutable source: timestamp and check strategies, the <code>dbt_valid_from</code> columns, and handling hard deletes.</p>
+          <div class="tags"><span>SCD Type 2</span><span>hard_deletes</span></div>
+        </a>
+        <a class="part-card" href="s11-tests.html" data-part-card data-tags="test">
+          <span class="part-no">SECTION 11</span>
+          <h3>Tests</h3>
+          <p>The four built-in generic tests, singular tests, storing failures, choosing what to run, and reading a failing test's compiled SQL.</p>
+          <div class="tags"><span>Generic tests</span><span>Singular tests</span><span>store_failures</span></div>
+        </a>
+        <a class="part-card" href="s12-advanced-testing.html" data-part-card data-tags="test">
+          <span class="part-no">SECTION 12</span>
+          <h3>Advanced Testing</h3>
+          <p>Unit tests with mocked inputs, contracts and constraints, custom generic tests, test parameters and severity.</p>
+          <div class="tags"><span>Unit tests</span><span>Contracts</span><span>Custom tests</span></div>
+        </a>
+        <a class="part-card" href="s13-jinja-macros-packages.html" data-part-card data-tags="build">
+          <span class="part-no">SECTION 13</span>
+          <h3>Jinja, Macros and Packages</h3>
+          <p>The templating layer under every model, writing macros, the <code>adapter</code> API, and installing dbt_utils from the package hub.</p>
+          <div class="tags"><span>Jinja</span><span>Macros</span><span>dbt_utils</span></div>
+        </a>
+        <a class="part-card" href="s14-documentation.html" data-part-card data-tags="docs">
+          <span class="part-no">SECTION 14</span>
+          <h3>Documentation</h3>
+          <p>Descriptions in YAML, docs blocks, the project overview, generating and serving the docs site, and reading the lineage graph.</p>
+          <div class="tags"><span>docs blocks</span><span>Lineage graph</span></div>
+        </a>
+        <a class="part-card" href="s15-analyses-hooks-exposures.html" data-part-card data-tags="docs build">
+          <span class="part-no">SECTION 15</span>
+          <h3>Analyses, Hooks and Exposures</h3>
+          <p>Version-controlled ad-hoc SQL, hooks and grants, building a Preset dashboard, and declaring it as an exposure in the DAG.</p>
+          <div class="tags"><span>Hooks</span><span>Grants</span><span>Exposures</span></div>
+        </a>
+        <a class="part-card" href="s16-debugging-logging.html" data-part-card data-tags="test deploy">
+          <span class="part-no">SECTION 16</span>
+          <h3>Debugging and Logging</h3>
+          <p>dbt-expectations, debugging a failing test from its compiled SQL, logging from macros, and the <code>--empty</code> and <code>--sample</code> flags.</p>
+          <div class="tags"><span>dbt-expectations</span><span>--empty</span><span>Logging</span></div>
+        </a>
+        <a class="part-card" href="s17-selectors-commands.html" data-part-card data-tags="build deploy">
+          <span class="part-no">SECTION 17</span>
+          <h3>Selectors, Commands and Python Models</h3>
+          <p>Node selection syntax in full, tags, <code>selectors.yml</code>, the commands worth knowing, variables, and models written in Python.</p>
+          <div class="tags"><span>--select</span><span>Selectors</span><span>Python models</span></div>
+        </a>
+        <a class="part-card" href="s18-orchestration.html" data-part-card data-tags="deploy">
+          <span class="part-no">SECTION 18</span>
+          <h3>Orchestration</h3>
+          <p>Running dbt on a schedule with Dagster, the partitioned incremental pattern, and how Airflow, Prefect and dbt Cloud compare.</p>
+          <div class="tags"><span>Dagster</span><span>Airflow</span><span>Scheduling</span></div>
+        </a>
+        <a class="part-card" href="s19-production.html" data-part-card data-tags="deploy">
+          <span class="part-no">SECTION 19</span>
+          <h3>dbt in Production</h3>
+          <p>Microbatching, model versioning and deprecation, targets and environment variables, custom schemas, state comparison, defer, and Slim CI.</p>
+          <div class="tags"><span>Slim CI</span><span>--defer</span><span>Microbatch</span><span>Versioning</span></div>
+        </a>
+        <a class="part-card" href="s20-poweruser-fusion-ai.html" data-part-card data-tags="build deploy">
+          <span class="part-no">SECTION 20</span>
+          <h3>Power User, Fusion and AI</h3>
+          <p>The dbt Power User and official VS Code extensions, the Fusion engine, SQLFluff, refactoring legacy SQL, and building models with an AI assistant.</p>
+          <div class="tags"><span>Power User</span><span>Fusion</span><span>Refactoring</span></div>
+        </a>
+        <a class="part-card" href="s21-best-practices.html" data-part-card data-tags="deploy theory">
+          <span class="part-no">SECTION 21</span>
+          <h3>Best Practices</h3>
+          <p>Introducing dbt to a company that has none: project structure, naming, the style guide, code review, and the migration order that works.</p>
+          <div class="tags"><span>Project structure</span><span>Conventions</span><span>Adoption</span></div>
+        </a>
+        <a class="part-card" href="s22-certification.html" data-part-card data-tags="test theory">
+          <span class="part-no">SECTION 22</span>
+          <h3>Certification Exam Prep</h3>
+          <p>The eight topic areas in detail, a full practice exam with explanations, the facts worth memorising, and how to book and sit it.</p>
+          <div class="tags"><span>Practice exam</span><span>Topic outline</span></div>
+        </a>
+        <a class="part-card" href="extras.html" data-part-card data-tags="theory build deploy">
+          <span class="part-no">EXTRAS</span>
+          <h3>Beyond the Course</h3>
+          <p>dbt Mesh and multi-project setups, the Semantic Layer and MetricFlow, adapters beyond Snowflake, materialized views, Elementary and data observability, and warehouse cost control.</p>
+          <div class="tags"><span>dbt Mesh</span><span>Semantic Layer</span><span>Cost</span></div>
+        </a>
+        <a class="part-card" href="interview-prep.html" data-part-card data-tags="test theory">
+          <span class="part-no">INTERVIEW</span>
+          <h3>Analytics Engineering Interview Prep</h3>
+          <p>The open-ended questions a real interview asks: a model went from two minutes to forty, a test passes but the numbers are wrong, the CFO's dashboard disagrees with finance &mdash; what do you do?</p>
+          <div class="tags"><span>Scenarios</span><span>Design</span><span>Debugging</span></div>
+        </a>
+      </div>
+    </section>
+
+    <section class="section" id="curriculum">
+      <h2>Course curriculum</h2>
+      <p class="muted">Every lecture in the course, with the source material each one covers. Click a lecture to jump to the notes that explain it.</p>
+      <div class="qa-controls">
+        <button class="filter-btn" type="button" data-cur-toggle="open">Expand all</button>
+        <button class="filter-btn" type="button" data-cur-toggle="closed">Collapse all</button>
+      </div>
+      <!-- CURRICULUM:START -->
+<div class="curriculum">
+  <details class="cur-section" id="cur-01">
+    <summary><span class="cur-no">SECTION 01</span><span class="cur-name">Introduction</span><span class="cur-meta">3 lectures · ~8min</span></summary>
+    <div class="cur-body">
+      <ol class="lecture-list">
+        <li class="lecture"><a class="lec-title" href="s01-introduction.html#what-is-dbt">What dbt is and what it does not do</a><span class="lec-time">~3:00</span><span class="lec-src">Course introduction</span></li>
+        <li class="lecture"><a class="lec-title" href="s01-introduction.html#analytics-engineering">Analytics engineering as a job</a><span class="lec-time">~3:00</span><span class="lec-src">Course introduction</span></li>
+        <li class="lecture"><a class="lec-title" href="s01-introduction.html#course-shape">How the course is structured and what you build</a><span class="lec-time">~2:00</span><span class="lec-src">README.md · course repo</span></li>
+      </ol>
+      <p><a href="s01-introduction.html">Open Section 01 notes &rarr;</a></p>
+    </div>
+  </details>
+  <details class="cur-section" id="cur-02">
+    <summary><span class="cur-no">SECTION 02</span><span class="cur-name">The Data Maturity Model</span><span class="cur-meta">4 lectures · ~20min</span></summary>
+    <div class="cur-body">
+      <ol class="lecture-list">
+        <li class="lecture"><a class="lec-title" href="s02-data-maturity.html#maturity-pyramid">The four stages of data maturity</a><span class="lec-time">~5:00</span><span class="lec-src">Theory lecture</span></li>
+        <li class="lecture"><a class="lec-title" href="s02-data-maturity.html#stage-1-collection">Stage 1 — data collection and the sources you inherit</a><span class="lec-time">~5:00</span><span class="lec-src">Theory lecture</span></li>
+        <li class="lecture"><a class="lec-title" href="s02-data-maturity.html#stage-2-wrangling">Stages 2 and 3 — data wrangling and analytics</a><span class="lec-time">~5:30</span><span class="lec-src">Theory lecture</span></li>
+        <li class="lecture"><a class="lec-title" href="s02-data-maturity.html#stage-4-ml">Stage 4 — machine learning, and where dbt sits</a><span class="lec-time">~4:30</span><span class="lec-src">Theory lecture</span></li>
+      </ol>
+      <p><a href="s02-data-maturity.html">Open Section 02 notes &rarr;</a></p>
+    </div>
+  </details>
+  <details class="cur-section" id="cur-03">
+    <summary><span class="cur-no">SECTION 03</span><span class="cur-name">Warehouses, Lakes and Lakehouses</span><span class="cur-meta">6 lectures · ~30min</span></summary>
+    <div class="cur-body">
+      <ol class="lecture-list">
+        <li class="lecture"><a class="lec-title" href="s03-warehouses-lakes.html#what-is-a-data-warehouse">What a data warehouse is</a><span class="lec-time">~5:30</span><span class="lec-src">Theory lecture</span></li>
+        <li class="lecture"><a class="lec-title" href="s03-warehouses-lakes.html#oltp-vs-olap">OLTP versus OLAP</a><span class="lec-time">~5:00</span><span class="lec-src">Theory lecture</span></li>
+        <li class="lecture"><a class="lec-title" href="s03-warehouses-lakes.html#columnar-storage">Columnar storage and why analytics is fast on it</a><span class="lec-time">~6:00</span><span class="lec-src">Theory lecture</span></li>
+        <li class="lecture"><a class="lec-title" href="s03-warehouses-lakes.html#data-lakes">Data lakes and schema-on-read</a><span class="lec-time">~5:30</span><span class="lec-src">Theory lecture</span></li>
+        <li class="lecture"><a class="lec-title" href="s03-warehouses-lakes.html#lakehouse">The lakehouse and open table formats</a><span class="lec-time">~4:30</span><span class="lec-src">Theory lecture</span></li>
+        <li class="lecture"><a class="lec-title" href="s03-warehouses-lakes.html#choosing-between">Choosing between the three</a><span class="lec-time">~3:30</span><span class="lec-src">Theory lecture</span></li>
+      </ol>
+      <p><a href="s03-warehouses-lakes.html">Open Section 03 notes &rarr;</a></p>
+    </div>
+  </details>
+  <details class="cur-section" id="cur-04">
+    <summary><span class="cur-no">SECTION 04</span><span class="cur-name">The Modern Data Stack and ELT</span><span class="cur-meta">5 lectures · ~25min</span></summary>
+    <div class="cur-body">
+      <ol class="lecture-list">
+        <li class="lecture"><a class="lec-title" href="s04-modern-data-stack.html#etl">ETL and why it was built that way</a><span class="lec-time">~5:30</span><span class="lec-src">Theory lecture</span></li>
+        <li class="lecture"><a class="lec-title" href="s04-modern-data-stack.html#elt">ELT and what changed</a><span class="lec-time">~5:00</span><span class="lec-src">Theory lecture</span></li>
+        <li class="lecture"><a class="lec-title" href="s04-modern-data-stack.html#stack-layers">The layers of the modern data stack</a><span class="lec-time">~6:00</span><span class="lec-src">Theory lecture</span></li>
+        <li class="lecture"><a class="lec-title" href="s04-modern-data-stack.html#dbt-position">Where dbt sits in the stack</a><span class="lec-time">~4:30</span><span class="lec-src">Theory lecture</span></li>
+        <li class="lecture"><a class="lec-title" href="s04-modern-data-stack.html#course-stack">The tools around dbt</a><span class="lec-time">~4:00</span><span class="lec-src">Theory lecture</span></li>
+      </ol>
+      <p><a href="s04-modern-data-stack.html">Open Section 04 notes &rarr;</a></p>
+    </div>
+  </details>
+  <details class="cur-section" id="cur-05">
+    <summary><span class="cur-no">SECTION 05</span><span class="cur-name">Dimensional Modelling and SCDs</span><span class="cur-meta">7 lectures · ~40min</span></summary>
+    <div class="cur-body">
+      <ol class="lecture-list">
+        <li class="lecture"><a class="lec-title" href="s05-dimensional-modelling.html#normalisation">Normalisation and the normal forms</a><span class="lec-time">~6:00</span><span class="lec-src">Theory lecture</span></li>
+        <li class="lecture"><a class="lec-title" href="s05-dimensional-modelling.html#facts-and-dimensions">Facts and dimensions</a><span class="lec-time">~6:00</span><span class="lec-src">Theory lecture · models/fct/ · models/dim/</span></li>
+        <li class="lecture"><a class="lec-title" href="s05-dimensional-modelling.html#star-snowflake-schemas">Star schemas and snowflake schemas</a><span class="lec-time">~6:00</span><span class="lec-src">Theory lecture · models/dim/ · models/fct/</span></li>
+        <li class="lecture"><a class="lec-title" href="s05-dimensional-modelling.html#grain-keys-conformed">Grain, surrogate keys and conformed dimensions</a><span class="lec-time">~6:00</span><span class="lec-src">Theory lecture</span></li>
+        <li class="lecture"><a class="lec-title" href="s05-dimensional-modelling.html#common-table-expressions">Common Table Expressions</a><span class="lec-time">~5:00</span><span class="lec-src">Theory lecture · models/src/</span></li>
+        <li class="lecture"><a class="lec-title" href="s05-dimensional-modelling.html#slowly-changing-dimensions">Slowly Changing Dimensions, types 0 to 6</a><span class="lec-time">~6:00</span><span class="lec-src">Theory lecture · snapshots/raw_listings_snapshot.yml</span></li>
+        <li class="lecture"><a class="lec-title" href="s05-dimensional-modelling.html#dbt-implementation">How dbt implements each of these</a><span class="lec-time">~5:00</span><span class="lec-src">Theory lecture · airbnb/models/</span></li>
+      </ol>
+      <p><a href="s05-dimensional-modelling.html">Open Section 05 notes &rarr;</a></p>
+    </div>
+  </details>
+  <details class="cur-section" id="cur-06">
+    <summary><span class="cur-no">SECTION 06</span><span class="cur-name">Setup and the Airbnb Project</span><span class="cur-meta">12 lectures · ~55min</span></summary>
+    <div class="cur-body">
+      <ol class="lecture-list">
+        <li class="lecture"><a class="lec-title" href="s06-setup.html#snowflake-setup">Finding your Snowflake account URL</a><span class="lec-time">~3:00</span><span class="lec-src">course-resources.md · Introduction and Environment Setup</span></li>
+        <li class="lecture"><a class="lec-title" href="s06-setup.html#snowflake-setup">Automated Snowflake setup</a><span class="lec-time">~5:00</span><span class="lec-src">course-resources.md · Automated Snowflake Setup</span></li>
+        <li class="lecture"><a class="lec-title" href="s06-setup.html#loading-data">Manual Snowflake data import</a><span class="lec-time">~8:00</span><span class="lec-src">course-resources.md · Snowflake data import (manual)</span></li>
+        <li class="lecture"><a class="lec-title" href="s06-setup.html#snowflake-setup">Snowflake roles, users and permissions</a><span class="lec-time">~8:00</span><span class="lec-src">course-resources.md · Snowflake user creation</span></li>
+        <li class="lecture"><a class="lec-title" href="s06-setup.html#loading-data">Airstats capstone tables</a><span class="lec-time">~3:00</span><span class="lec-src">course-resources.md · Airstats tables - Capstone Setup</span></li>
+        <li class="lecture"><a class="lec-title" href="s06-setup.html#python-uv">Python and uv installation</a><span class="lec-time">~5:00</span><span class="lec-src">course-resources.md · dbt installation</span></li>
+        <li class="lecture"><a class="lec-title" href="s06-setup.html#python-uv">Creating and activating the virtual environment</a><span class="lec-time">~4:00</span><span class="lec-src">course-resources.md · uv Environment Setup</span></li>
+        <li class="lecture"><a class="lec-title" href="s06-setup.html#installing-dbt">Installing dbt Core and the Snowflake adapter</a><span class="lec-time">~4:00</span><span class="lec-src">pyproject.toml</span></li>
+        <li class="lecture"><a class="lec-title" href="s06-setup.html#profiles-yml">profiles.yml and connection targets</a><span class="lec-time">~6:00</span><span class="lec-src">EXAMPLE-profiles.yml · _prod_profiles/profiles.yml</span></li>
+        <li class="lecture"><a class="lec-title" href="s06-setup.html#dbt-init">dbt init and project file anatomy</a><span class="lec-time">~5:00</span><span class="lec-src">course-resources.md · dbt Project Setup · dbt_project.yml</span></li>
+        <li class="lecture"><a class="lec-title" href="s06-setup.html#dbt-debug">dbt debug and verifying the connection</a><span class="lec-time">~4:00</span><span class="lec-src">course-resources.md · dbt Project Setup</span></li>
+        <li class="lecture"><a class="lec-title" href="s06-setup.html#devcontainer">Devcontainer workflow</a><span class="lec-time">~4:00</span><span class="lec-src">.devcontainer/devcontainer.json</span></li>
+      </ol>
+      <p><a href="s06-setup.html">Open Section 06 notes &rarr;</a></p>
+    </div>
+  </details>
+  <details class="cur-section" id="cur-07">
+    <summary><span class="cur-no">SECTION 07</span><span class="cur-name">Models</span><span class="cur-meta">10 lectures · ~45min</span></summary>
+    <div class="cur-body">
+      <ol class="lecture-list">
+        <li class="lecture"><a class="lec-title" href="s07-models.html#model-basics">What a dbt model is</a><span class="lec-time">~5:00</span><span class="lec-src">course-resources.md · Models</span></li>
+        <li class="lecture"><a class="lec-title" href="s07-models.html#model-basics">The models folder and naming conventions</a><span class="lec-time">~4:00</span><span class="lec-src">airbnb/models/ · dbt_project.yml</span></li>
+        <li class="lecture"><a class="lec-title" href="s07-models.html#staging-src-models">First staging model: src_listings</a><span class="lec-time">~5:00</span><span class="lec-src">models/src/src_listings.sql</span></li>
+        <li class="lecture"><a class="lec-title" href="s07-models.html#staging-src-models">Building src_reviews</a><span class="lec-time">~4:00</span><span class="lec-src">models/src/src_reviews.sql</span></li>
+        <li class="lecture"><a class="lec-title" href="s07-models.html#staging-src-models">Exercise: src_hosts</a><span class="lec-time">~5:00</span><span class="lec-src">course-resources.md · Exercise</span></li>
+        <li class="lecture"><a class="lec-title" href="s07-models.html#ref-and-dag">The ref() macro and model dependencies</a><span class="lec-time">~5:00</span><span class="lec-src">models/dim/dim_listings_cleansed.sql</span></li>
+        <li class="lecture"><a class="lec-title" href="s07-models.html#ref-and-dag">The dbt DAG and lineage graph</a><span class="lec-time">~4:00</span><span class="lec-src">target/manifest.json</span></li>
+        <li class="lecture"><a class="lec-title" href="s07-models.html#compiled-sql">Compiled SQL in target/compiled and target/run</a><span class="lec-time">~5:00</span><span class="lec-src">target/compiled/ · target/run/</span></li>
+        <li class="lecture"><a class="lec-title" href="s07-models.html#dimension-dim-models">Dimension models with CTEs</a><span class="lec-time">~5:00</span><span class="lec-src">models/dim/dim_listings_cleansed.sql · dim_hosts_cleansed.sql</span></li>
+        <li class="lecture"><a class="lec-title" href="s07-models.html#running-and-selecting-models">dbt run output and selecting models</a><span class="lec-time">~3:00</span><span class="lec-src">course-resources.md · Models</span></li>
+      </ol>
+      <p><a href="s07-models.html">Open Section 07 notes &rarr;</a></p>
+    </div>
+  </details>
+  <details class="cur-section" id="cur-08">
+    <summary><span class="cur-no">SECTION 08</span><span class="cur-name">Materializations</span><span class="cur-meta">8 lectures · ~40min</span></summary>
+    <div class="cur-body">
+      <ol class="lecture-list">
+        <li class="lecture"><a class="lec-title" href="s08-materializations.html#what-materializations-are">What materializations are and why they matter</a><span class="lec-time">~5:00</span><span class="lec-src">course-resources.md · Materializations</span></li>
+        <li class="lecture"><a class="lec-title" href="s08-materializations.html#view-materialization">View materialization</a><span class="lec-time">~5:00</span><span class="lec-src">models/dim/dim_listings_cleansed.sql</span></li>
+        <li class="lecture"><a class="lec-title" href="s08-materializations.html#table-materialization">Table materialization and folder defaults</a><span class="lec-time">~5:00</span><span class="lec-src">dbt_project.yml · models/dim/</span></li>
+        <li class="lecture"><a class="lec-title" href="s08-materializations.html#ephemeral-materialization">Ephemeral materialization and CTE inlining</a><span class="lec-time">~5:00</span><span class="lec-src">models/src/ · dbt_project.yml</span></li>
+        <li class="lecture"><a class="lec-title" href="s08-materializations.html#incremental-models">Incremental models</a><span class="lec-time">~6:00</span><span class="lec-src">models/fct/fct_reviews.sql</span></li>
+        <li class="lecture"><a class="lec-title" href="s08-materializations.html#full-refresh">Full refresh</a><span class="lec-time">~4:00</span><span class="lec-src">course-resources.md · Incremental Models</span></li>
+        <li class="lecture"><a class="lec-title" href="s08-materializations.html#incremental-strategies">Incremental strategies (reference)</a><span class="lec-time">~5:00</span><span class="lec-src">docs.getdbt.com · incremental-strategy</span></li>
+        <li class="lecture"><a class="lec-title" href="s08-materializations.html#dim-listings-w-hosts">dim_listings_w_hosts and dropping stale views</a><span class="lec-time">~5:00</span><span class="lec-src">models/dim/dim_listings_w_hosts.sql</span></li>
+      </ol>
+      <p><a href="s08-materializations.html">Open Section 08 notes &rarr;</a></p>
+    </div>
+  </details>
+  <details class="cur-section" id="cur-09">
+    <summary><span class="cur-no">SECTION 09</span><span class="cur-name">Seeds and Sources</span><span class="cur-meta">7 lectures · ~35min</span></summary>
+    <div class="cur-body">
+      <ol class="lecture-list">
+        <li class="lecture"><a class="lec-title" href="s09-seeds-sources.html#seeds">What seeds are and when to use them</a><span class="lec-time">~5:00</span><span class="lec-src">course-resources.md · Sources and Seeds</span></li>
+        <li class="lecture"><a class="lec-title" href="s09-seeds-sources.html#seeds">Adding seed_full_moon_dates.csv</a><span class="lec-time">~5:00</span><span class="lec-src">seeds/seed_full_moon_dates.csv</span></li>
+        <li class="lecture"><a class="lec-title" href="s09-seeds-sources.html#seeds">Running dbt seed</a><span class="lec-time">~5:00</span><span class="lec-src">course-resources.md · Sources and Seeds</span></li>
+        <li class="lecture"><a class="lec-title" href="s09-seeds-sources.html#sources-yml">Declaring sources in sources.yml</a><span class="lec-time">~5:00</span><span class="lec-src">models/sources.yml</span></li>
+        <li class="lecture"><a class="lec-title" href="s09-seeds-sources.html#source-vs-ref">The source() function versus ref()</a><span class="lec-time">~5:00</span><span class="lec-src">models/src/src_listings.sql</span></li>
+        <li class="lecture"><a class="lec-title" href="s09-seeds-sources.html#identifier">The identifier escape hatch</a><span class="lec-time">~5:00</span><span class="lec-src">models/sources.yml</span></li>
+        <li class="lecture"><a class="lec-title" href="s09-seeds-sources.html#source-freshness">Source freshness and dbt source freshness</a><span class="lec-time">~5:00</span><span class="lec-src">course-resources.md · Source Freshness</span></li>
+      </ol>
+      <p><a href="s09-seeds-sources.html">Open Section 09 notes &rarr;</a></p>
+    </div>
+  </details>
+  <details class="cur-section" id="cur-10">
+    <summary><span class="cur-no">SECTION 10</span><span class="cur-name">Snapshots</span><span class="cur-meta">5 lectures · ~25min</span></summary>
+    <div class="cur-body">
+      <ol class="lecture-list">
+        <li class="lecture"><a class="lec-title" href="s10-snapshots.html#snapshot-command">What snapshots are and the dbt snapshot command</a><span class="lec-time">~5:00</span><span class="lec-src">course-resources.md · Snapshots</span></li>
+        <li class="lecture"><a class="lec-title" href="s10-snapshots.html#yaml-config">YAML snapshot configuration</a><span class="lec-time">~5:00</span><span class="lec-src">snapshots/raw_listings_snapshot.yml</span></li>
+        <li class="lecture"><a class="lec-title" href="s10-snapshots.html#listings-walkthrough">Walkthrough: raw_listings_snapshot.yml</a><span class="lec-time">~5:00</span><span class="lec-src">course-resources.md · Snapshots for listing</span></li>
+        <li class="lecture"><a class="lec-title" href="s10-snapshots.html#update-rerun">Updating the source and reading validity columns</a><span class="lec-time">~5:00</span><span class="lec-src">course-resources.md · Updating the table</span></li>
+        <li class="lecture"><a class="lec-title" href="s10-snapshots.html#hard-deletes">Hard deletes and the raw_hosts assignment</a><span class="lec-time">~5:00</span><span class="lec-src">snapshots/raw_hosts_snapshot.yml</span></li>
+      </ol>
+      <p><a href="s10-snapshots.html">Open Section 10 notes &rarr;</a></p>
+    </div>
+  </details>
+  <details class="cur-section" id="cur-11">
+    <summary><span class="cur-no">SECTION 11</span><span class="cur-name">Tests</span><span class="cur-meta">9 lectures · ~40min</span></summary>
+    <div class="cur-body">
+      <ol class="lecture-list">
+        <li class="lecture"><a class="lec-title" href="s11-tests.html#why-test">Why test in dbt</a><span class="lec-time">~4:00</span><span class="lec-src">course-resources.md · Tests</span></li>
+        <li class="lecture"><a class="lec-title" href="s11-tests.html#generic-tests">The four built-in generic tests</a><span class="lec-time">~5:00</span><span class="lec-src">course-resources.md · Generic Tests</span></li>
+        <li class="lecture"><a class="lec-title" href="s11-tests.html#data-tests-yaml">Declaring tests in schema.yml</a><span class="lec-time">~5:00</span><span class="lec-src">models/schema.yml</span></li>
+        <li class="lecture"><a class="lec-title" href="s11-tests.html#data-tests-yaml">The data_tests: key and arguments:</a><span class="lec-time">~4:00</span><span class="lec-src">tools/SOURCES.md · Facts</span></li>
+        <li class="lecture"><a class="lec-title" href="s11-tests.html#singular-tests">Singular tests</a><span class="lec-time">~5:00</span><span class="lec-src">tests/dim_listings_minimum_nights.sql</span></li>
+        <li class="lecture"><a class="lec-title" href="s11-tests.html#singular-tests">Exercise: consistent_created_at</a><span class="lec-time">~5:00</span><span class="lec-src">tests/consistent_created_at.sql</span></li>
+        <li class="lecture"><a class="lec-title" href="s11-tests.html#store-failures">Storing test failures</a><span class="lec-time">~4:00</span><span class="lec-src">dbt_project.yml · data_tests:</span></li>
+        <li class="lecture"><a class="lec-title" href="s11-tests.html#selecting-tests">Restricting test execution</a><span class="lec-time">~4:00</span><span class="lec-src">course-resources.md · Restricting test execution</span></li>
+        <li class="lecture"><a class="lec-title" href="s11-tests.html#compiled-sql">Compiled SQL and dbt test output</a><span class="lec-time">~4:00</span><span class="lec-src">target/compiled/ · course-resources.md</span></li>
+      </ol>
+      <p><a href="s11-tests.html">Open Section 11 notes &rarr;</a></p>
+    </div>
+  </details>
+  <details class="cur-section" id="cur-12">
+    <summary><span class="cur-no">SECTION 12</span><span class="cur-name">Advanced Testing</span><span class="cur-meta">8 lectures · ~50min</span></summary>
+    <div class="cur-body">
+      <ol class="lecture-list">
+        <li class="lecture"><a class="lec-title" href="s12-advanced-testing.html#unit-tests">Unit tests: mocked inputs and expected outputs</a><span class="lec-time">~8:00</span><span class="lec-src">models/mart/unit_tests.yml</span></li>
+        <li class="lecture"><a class="lec-title" href="s12-advanced-testing.html#unit-test-selectors">Selecting tests by model and test type</a><span class="lec-time">~5:00</span><span class="lec-src">course-resources.md · Unit Tests</span></li>
+        <li class="lecture"><a class="lec-title" href="s12-advanced-testing.html#contracts">Model contracts and enforced column types</a><span class="lec-time">~8:00</span><span class="lec-src">models/schema.yml · contract block</span></li>
+        <li class="lecture"><a class="lec-title" href="s12-advanced-testing.html#constraints">Warehouse constraints: not_null, primary_key, foreign_key, check</a><span class="lec-time">~10:00</span><span class="lec-src">models/schema.yml · constraints</span></li>
+        <li class="lecture"><a class="lec-title" href="s12-advanced-testing.html#custom-generic-tests">Writing custom generic tests with {% test %}</a><span class="lec-time">~8:00</span><span class="lec-src">tests/generic/positive_values.sql</span></li>
+        <li class="lecture"><a class="lec-title" href="s12-advanced-testing.html#test-parameters">Passing parameters to generic tests</a><span class="lec-time">~5:00</span><span class="lec-src">tests/generic/minimum_row_count.sql</span></li>
+        <li class="lecture"><a class="lec-title" href="s12-advanced-testing.html#test-severity">Test severity: warn versus error</a><span class="lec-time">~4:00</span><span class="lec-src">models/schema.yml · minimum_row_count</span></li>
+        <li class="lecture"><a class="lec-title" href="s12-advanced-testing.html#test-severity">warn_if and error_if thresholds</a><span class="lec-time">~2:00</span><span class="lec-src">dbt docs · test config</span></li>
+      </ol>
+      <p><a href="s12-advanced-testing.html">Open Section 12 notes &rarr;</a></p>
+    </div>
+  </details>
+  <details class="cur-section" id="cur-13">
+    <summary><span class="cur-no">SECTION 13</span><span class="cur-name">Jinja, Macros and Packages</span><span class="cur-meta">10 lectures · ~55min</span></summary>
+    <div class="cur-body">
+      <ol class="lecture-list">
+        <li class="lecture"><a class="lec-title" href="s13-jinja-macros-packages.html#jinja-basics">Executing Jinja in dbt with compile --inline</a><span class="lec-time">~5:00</span><span class="lec-src">course-resources.md · Jinja</span></li>
+        <li class="lecture"><a class="lec-title" href="s13-jinja-macros-packages.html#jinja-basics">Jinja expressions, statements and comments</a><span class="lec-time">~6:00</span><span class="lec-src">course-resources.md · Jinja</span></li>
+        <li class="lecture"><a class="lec-title" href="s13-jinja-macros-packages.html#jinja-basics">Variables, if and for loops</a><span class="lec-time">~6:00</span><span class="lec-src">course-resources.md · Jinja</span></li>
+        <li class="lecture"><a class="lec-title" href="s13-jinja-macros-packages.html#writing-macros">Writing your first macro</a><span class="lec-time">~6:00</span><span class="lec-src">macros/select_positive_values.sql</span></li>
+        <li class="lecture"><a class="lec-title" href="s13-jinja-macros-packages.html#writing-macros">Compiling and running macros with --inline</a><span class="lec-time">~5:00</span><span class="lec-src">course-resources.md · Macros</span></li>
+        <li class="lecture"><a class="lec-title" href="s13-jinja-macros-packages.html#advanced-macros">Advanced macros: loops, adapter and run_query</a><span class="lec-time">~7:00</span><span class="lec-src">macros/no_empty_strings.sql</span></li>
+        <li class="lecture"><a class="lec-title" href="s13-jinja-macros-packages.html#custom-generic-tests">Custom generic tests (recap)</a><span class="lec-time">~5:00</span><span class="lec-src">tests/generic/positive_values.sql · Section 12</span></li>
+        <li class="lecture"><a class="lec-title" href="s13-jinja-macros-packages.html#test-parameters">Setting test parameters via macro arguments</a><span class="lec-time">~5:00</span><span class="lec-src">tests/generic/minimum_row_count.sql</span></li>
+        <li class="lecture"><a class="lec-title" href="s13-jinja-macros-packages.html#packages">Packages, packages.yml and dbt deps</a><span class="lec-time">~5:00</span><span class="lec-src">packages.yml</span></li>
+        <li class="lecture"><a class="lec-title" href="s13-jinja-macros-packages.html#dbt-utils">Using dbt_utils in fct_reviews</a><span class="lec-time">~5:00</span><span class="lec-src">models/fct/fct_reviews.sql</span></li>
+      </ol>
+      <p><a href="s13-jinja-macros-packages.html">Open Section 13 notes &rarr;</a></p>
+    </div>
+  </details>
+  <details class="cur-section" id="cur-14">
+    <summary><span class="cur-no">SECTION 14</span><span class="cur-name">Documentation</span><span class="cur-meta">7 lectures · ~35min</span></summary>
+    <div class="cur-body">
+      <ol class="lecture-list">
+        <li class="lecture"><a class="lec-title" href="s14-documentation.html#schema-descriptions">Adding model and column descriptions in schema.yml</a><span class="lec-time">~5:00</span><span class="lec-src">course-resources.md · Documentation</span></li>
+        <li class="lecture"><a class="lec-title" href="s14-documentation.html#schema-descriptions">Where descriptions appear in the docs UI</a><span class="lec-time">~5:00</span><span class="lec-src">models/schema.yml</span></li>
+        <li class="lecture"><a class="lec-title" href="s14-documentation.html#docs-blocks">Reusable docs blocks in docs.md</a><span class="lec-time">~5:00</span><span class="lec-src">models/docs.md</span></li>
+        <li class="lecture"><a class="lec-title" href="s14-documentation.html#docs-blocks">Referencing docs with {{ doc(&#x27;name&#x27;) }}</a><span class="lec-time">~5:00</span><span class="lec-src">models/schema.yml · minimum_nights</span></li>
+        <li class="lecture"><a class="lec-title" href="s14-documentation.html#overview">Project overview with __overview__</a><span class="lec-time">~5:00</span><span class="lec-src">models/overview.md</span></li>
+        <li class="lecture"><a class="lec-title" href="s14-documentation.html#docs-generate-serve">dbt docs generate and dbt docs serve</a><span class="lec-time">~5:00</span><span class="lec-src">target/manifest.json · target/catalog.json</span></li>
+        <li class="lecture"><a class="lec-title" href="s14-documentation.html#lineage-graph">Reading the lineage graph and documenting tests</a><span class="lec-time">~5:00</span><span class="lec-src">models/test_docs.yml · assets/input_schema.png</span></li>
+      </ol>
+      <p><a href="s14-documentation.html">Open Section 14 notes &rarr;</a></p>
+    </div>
+  </details>
+  <details class="cur-section" id="cur-15">
+    <summary><span class="cur-no">SECTION 15</span><span class="cur-name">Analyses, Hooks and Exposures</span><span class="cur-meta">7 lectures · ~35min</span></summary>
+    <div class="cur-body">
+      <ol class="lecture-list">
+        <li class="lecture"><a class="lec-title" href="s15-analyses-hooks-exposures.html#analyses">The analyses folder and what analyses are for</a><span class="lec-time">~5:00</span><span class="lec-src">course-resources.md · Analyses</span></li>
+        <li class="lecture"><a class="lec-title" href="s15-analyses-hooks-exposures.html#analyses">full_moon_no_sleep.sql and dbt compile</a><span class="lec-time">~5:00</span><span class="lec-src">analyses/full_moon_no_sleep.sql</span></li>
+        <li class="lecture"><a class="lec-title" href="s15-analyses-hooks-exposures.html#hooks">Pre-hooks and post-hooks on models</a><span class="lec-time">~5:00</span><span class="lec-src">dbt_project.yml · +post-hook</span></li>
+        <li class="lecture"><a class="lec-title" href="s15-analyses-hooks-exposures.html#hooks">on-run-start and on-run-end</a><span class="lec-time">~5:00</span><span class="lec-src">dbt_project.yml · on-run-start</span></li>
+        <li class="lecture"><a class="lec-title" href="s15-analyses-hooks-exposures.html#grants">Grants applied on model build</a><span class="lec-time">~5:00</span><span class="lec-src">dbt_project.yml · +grants</span></li>
+        <li class="lecture"><a class="lec-title" href="s15-analyses-hooks-exposures.html#preset-dashboard">Building a dashboard in Preset</a><span class="lec-time">~5:00</span><span class="lec-src">course-resources.md · Preset · mart_fullmoon_reviews</span></li>
+        <li class="lecture"><a class="lec-title" href="s15-analyses-hooks-exposures.html#exposures">Declaring exposures and the DAG</a><span class="lec-time">~5:00</span><span class="lec-src">models/dashboards.yml</span></li>
+      </ol>
+      <p><a href="s15-analyses-hooks-exposures.html">Open Section 15 notes &rarr;</a></p>
+    </div>
+  </details>
+  <details class="cur-section" id="cur-16">
+    <summary><span class="cur-no">SECTION 16</span><span class="cur-name">Debugging and Logging</span><span class="cur-meta">8 lectures · ~40min</span></summary>
+    <div class="cur-body">
+      <ol class="lecture-list">
+        <li class="lecture"><a class="lec-title" href="s16-debugging-logging.html#dbt-expectations">Debugging tests and dbt-expectations</a><span class="lec-time">~6:00</span><span class="lec-src">course-resources.md · Great Expectations</span></li>
+        <li class="lecture"><a class="lec-title" href="s16-debugging-logging.html#selective-testing">Testing a single model with --select</a><span class="lec-time">~4:00</span><span class="lec-src">course-resources.md · Testing a single model</span></li>
+        <li class="lecture"><a class="lec-title" href="s16-debugging-logging.html#selective-testing">Testing individual sources</a><span class="lec-time">~3:00</span><span class="lec-src">course-resources.md · source: selector</span></li>
+        <li class="lecture"><a class="lec-title" href="s16-debugging-logging.html#debug-flag">The --debug flag and what it prints</a><span class="lec-time">~5:00</span><span class="lec-src">course-resources.md · --debug</span></li>
+        <li class="lecture"><a class="lec-title" href="s16-debugging-logging.html#logging">Logging with log() and learn_logging</a><span class="lec-time">~6:00</span><span class="lec-src">macros/logging.sql</span></li>
+        <li class="lecture"><a class="lec-title" href="s16-debugging-logging.html#debugging-errors">Reading compilation errors and compiled output</a><span class="lec-time">~7:00</span><span class="lec-src">target/compiled/ · target/run/</span></li>
+        <li class="lecture"><a class="lec-title" href="s16-debugging-logging.html#empty-sample">--empty and --sample for fast iteration</a><span class="lec-time">~6:00</span><span class="lec-src">course-resources.md · event_time</span></li>
+        <li class="lecture"><a class="lec-title" href="s16-debugging-logging.html#global-flags">Global flags and behaviour changes (behavior change flags)</a><span class="lec-time">~3:00</span><span class="lec-src">course-resources.md · Flags</span></li>
+      </ol>
+      <p><a href="s16-debugging-logging.html">Open Section 16 notes &rarr;</a></p>
+    </div>
+  </details>
+  <details class="cur-section" id="cur-17">
+    <summary><span class="cur-no">SECTION 17</span><span class="cur-name">Selectors, Commands and Python Models</span><span class="cur-meta">10 lectures · ~50min</span></summary>
+    <div class="cur-body">
+      <ol class="lecture-list">
+        <li class="lecture"><a class="lec-title" href="s17-selectors-commands.html#node-selection">The --select flag and model names</a><span class="lec-time">~5:00</span><span class="lec-src">course-resources.md · Tags and Selectors</span></li>
+        <li class="lecture"><a class="lec-title" href="s17-selectors-commands.html#node-selection">Graph operators: +model, model+, @model</a><span class="lec-time">~5:00</span><span class="lec-src">course-resources.md · Selection syntax</span></li>
+        <li class="lecture"><a class="lec-title" href="s17-selectors-commands.html#node-selection">Resource selectors: tag:, path:, source:</a><span class="lec-time">~5:00</span><span class="lec-src">dbt_project.yml · tags</span></li>
+        <li class="lecture"><a class="lec-title" href="s17-selectors-commands.html#node-selection">Combining selectors, exclusions and depth limits</a><span class="lec-time">~5:00</span><span class="lec-src">course-resources.md · Selectors</span></li>
+        <li class="lecture"><a class="lec-title" href="s17-selectors-commands.html#node-selection">state:modified and comparison artifacts</a><span class="lec-time">~5:00</span><span class="lec-src">course-resources.md · State</span></li>
+        <li class="lecture"><a class="lec-title" href="s17-selectors-commands.html#tags">Tags in dbt_project.yml</a><span class="lec-time">~5:00</span><span class="lec-src">dbt_project.yml · fct tags</span></li>
+        <li class="lecture"><a class="lec-title" href="s17-selectors-commands.html#tags">Tags on individual models</a><span class="lec-time">~5:00</span><span class="lec-src">models/mart/mart_fullmoon_reviews.sql</span></li>
+        <li class="lecture"><a class="lec-title" href="s17-selectors-commands.html#selectors-yml">Named selectors in selectors.yml</a><span class="lec-time">~5:00</span><span class="lec-src">selectors.yml</span></li>
+        <li class="lecture"><a class="lec-title" href="s17-selectors-commands.html#commands">dbt commands reference</a><span class="lec-time">~5:00</span><span class="lec-src">course-resources.md · CLI</span></li>
+        <li class="lecture"><a class="lec-title" href="s17-selectors-commands.html#variables">Project variables and Python models</a><span class="lec-time">~5:00</span><span class="lec-src">macros/variables.sql · models/dim/*.py</span></li>
+      </ol>
+      <p><a href="s17-selectors-commands.html">Open Section 17 notes &rarr;</a></p>
+    </div>
+  </details>
+  <details class="cur-section" id="cur-18">
+    <summary><span class="cur-no">SECTION 18</span><span class="cur-name">Orchestration</span><span class="cur-meta">6 lectures · ~35min</span></summary>
+    <div class="cur-body">
+      <ol class="lecture-list">
+        <li class="lecture"><a class="lec-title" href="s18-orchestration.html#why-scheduler">Why dbt needs an external scheduler</a><span class="lec-time">~5:00</span><span class="lec-src">course-resources.md · dbt Orchestration</span></li>
+        <li class="lecture"><a class="lec-title" href="s18-orchestration.html#orchestrator-comparison">Choosing an orchestrator</a><span class="lec-time">~6:00</span><span class="lec-src">course-resources.md · Links to different orchestrators</span></li>
+        <li class="lecture"><a class="lec-title" href="s18-orchestration.html#dagster-setup">Dagster setup and dagster dev</a><span class="lec-time">~6:00</span><span class="lec-src">dbt_dagster_project/ · requirements.txt</span></li>
+        <li class="lecture"><a class="lec-title" href="s18-orchestration.html#dagster-project">The dbt_dagster_project walkthrough</a><span class="lec-time">~8:00</span><span class="lec-src">assets.py · definitions.py · schedules.py</span></li>
+        <li class="lecture"><a class="lec-title" href="s18-orchestration.html#partitioned-incremental">Partitioned incremental runs on fct_reviews</a><span class="lec-time">~6:00</span><span class="lec-src">models/fct/fct_reviews.sql</span></li>
+        <li class="lecture"><a class="lec-title" href="s18-orchestration.html#airflow-integration">Airflow: BashOperator and Cosmos</a><span class="lec-time">~4:00</span><span class="lec-src">branch airflow · airflow/dags/dbt_pipeline.py</span></li>
+      </ol>
+      <p><a href="s18-orchestration.html">Open Section 18 notes &rarr;</a></p>
+    </div>
+  </details>
+  <details class="cur-section" id="cur-19">
+    <summary><span class="cur-no">SECTION 19</span><span class="cur-name">dbt in Production</span><span class="cur-meta">12 lectures · ~65min</span></summary>
+    <div class="cur-body">
+      <ol class="lecture-list">
+        <li class="lecture"><a class="lec-title" href="s19-production.html#microbatching">Microbatch incremental strategy</a><span class="lec-time">~6:00</span><span class="lec-src">course-resources.md · Microbatching</span></li>
+        <li class="lecture"><a class="lec-title" href="s19-production.html#microbatching">event_time, batch_size, and upstream facts</a><span class="lec-time">~5:00</span><span class="lec-src">models/mart/mart_fullmoon_reviews.sql · models/fct/fct_reviews.sql</span></li>
+        <li class="lecture"><a class="lec-title" href="s19-production.html#microbatching">Event-time CLI flags and full-refresh windows</a><span class="lec-time">~5:00</span><span class="lec-src">course-resources.md · Microbatching</span></li>
+        <li class="lecture"><a class="lec-title" href="s19-production.html#microbatching">The threads:4 requirement</a><span class="lec-time">~4:00</span><span class="lec-src">_prod_profiles/profiles.yml</span></li>
+        <li class="lecture"><a class="lec-title" href="s19-production.html#model-lifecycle">Model versioning with v=1 and v=2</a><span class="lec-time">~6:00</span><span class="lec-src">models/dim/dim_hosts_cleansed_v2.sql · models/schema.yml</span></li>
+        <li class="lecture"><a class="lec-title" href="s19-production.html#model-lifecycle">Deprecating and disabling models</a><span class="lec-time">~5:00</span><span class="lec-src">models/schema.yml · models/dim/dim_fullmoon.py</span></li>
+        <li class="lecture"><a class="lec-title" href="s19-production.html#targets">Dev, staging, and prod targets</a><span class="lec-time">~5:00</span><span class="lec-src">_prod_profiles/profiles.yml</span></li>
+        <li class="lecture"><a class="lec-title" href="s19-production.html#env-vars">Environment variables and secrets</a><span class="lec-time">~6:00</span><span class="lec-src">_prod_profiles/profiles.yml · set-env scripts</span></li>
+        <li class="lecture"><a class="lec-title" href="s19-production.html#custom-schemas">Custom schema naming with generate_schema_name</a><span class="lec-time">~6:00</span><span class="lec-src">macros/generate_schema_name.sql</span></li>
+        <li class="lecture"><a class="lec-title" href="s19-production.html#schema-cleanup">Dropping dev schemas safely</a><span class="lec-time">~4:00</span><span class="lec-src">macros/drop_dev_schemas.sql</span></li>
+        <li class="lecture"><a class="lec-title" href="s19-production.html#state">State comparison, dbt retry, and manifest artifacts</a><span class="lec-time">~7:00</span><span class="lec-src">course-resources.md · Working with State</span></li>
+        <li class="lecture"><a class="lec-title" href="s19-production.html#ci-pipelines">Defer, Slim CI, and production pipelines</a><span class="lec-time">~10:00</span><span class="lec-src">.github/workflows/*.yml</span></li>
+      </ol>
+      <p><a href="s19-production.html">Open Section 19 notes &rarr;</a></p>
+    </div>
+  </details>
+  <details class="cur-section" id="cur-20">
+    <summary><span class="cur-no">SECTION 20</span><span class="cur-name">Power User, Fusion and AI</span><span class="cur-meta">5 lectures · ~25min</span></summary>
+    <div class="cur-body">
+      <ol class="lecture-list">
+        <li class="lecture"><a class="lec-title" href="s20-poweruser-fusion-ai.html#power-user-extension">The dbt Power User VS Code extension</a><span class="lec-time">~6:00</span><span class="lec-src">branch poweruser · .devcontainer/devcontainer.json</span></li>
+        <li class="lecture"><a class="lec-title" href="s20-poweruser-fusion-ai.html#official-extension">The official dbt VS Code extension</a><span class="lec-time">~5:00</span><span class="lec-src">branch official-extension · devcontainer.json</span></li>
+        <li class="lecture"><a class="lec-title" href="s20-poweruser-fusion-ai.html#fusion-engine">The Fusion engine</a><span class="lec-time">~5:00</span><span class="lec-src">branch official-extension · install-dbt-fusion.sh</span></li>
+        <li class="lecture"><a class="lec-title" href="s20-poweruser-fusion-ai.html#sqlfluff">SQLFluff and the dbt templater</a><span class="lec-time">~4:00</span><span class="lec-src">branch poweruser · airbnb/.sqlfluff</span></li>
+        <li class="lecture"><a class="lec-title" href="s20-poweruser-fusion-ai.html#legacy-refactoring">Legacy code, refactoring, and building with AI</a><span class="lec-time">~5:00</span><span class="lec-src">course-resources.md · models/legacy/ · models/intermediate/</span></li>
+      </ol>
+      <p><a href="s20-poweruser-fusion-ai.html">Open Section 20 notes &rarr;</a></p>
+    </div>
+  </details>
+  <details class="cur-section" id="cur-21">
+    <summary><span class="cur-no">SECTION 21</span><span class="cur-name">Best Practices</span><span class="cur-meta">6 lectures · ~30min</span></summary>
+    <div class="cur-body">
+      <ol class="lecture-list">
+        <li class="lecture"><a class="lec-title" href="s21-best-practices.html#project-structure">Recommended project structure</a><span class="lec-time">~6:00</span><span class="lec-src">airbnb/models/ · dbt Labs structure guide</span></li>
+        <li class="lecture"><a class="lec-title" href="s21-best-practices.html#naming-conventions">Naming conventions</a><span class="lec-time">~5:00</span><span class="lec-src">models/src/ · dim/ · fct/ · mart/</span></li>
+        <li class="lecture"><a class="lec-title" href="s21-best-practices.html#style-guide">The dbt style guide</a><span class="lec-time">~5:00</span><span class="lec-src">int_host_performance.sql · poweruser branch</span></li>
+        <li class="lecture"><a class="lec-title" href="s21-best-practices.html#code-review">Code review for analytics</a><span class="lec-time">~5:00</span><span class="lec-src">.github/workflows/ · schema.yml</span></li>
+        <li class="lecture"><a class="lec-title" href="s21-best-practices.html#adoption-playbook">Introducing dbt to a company with none</a><span class="lec-time">~5:00</span><span class="lec-src">course-resources.md · migration patterns</span></li>
+        <li class="lecture"><a class="lec-title" href="s21-best-practices.html#anti-patterns">Anti-patterns and fixes</a><span class="lec-time">~4:00</span><span class="lec-src">synthesis · community patterns</span></li>
+      </ol>
+      <p><a href="s21-best-practices.html">Open Section 21 notes &rarr;</a></p>
+    </div>
+  </details>
+  <details class="cur-section" id="cur-22">
+    <summary><span class="cur-no">SECTION 22</span><span class="cur-name">Certification Exam Prep</span><span class="cur-meta">4 lectures · ~20min</span></summary>
+    <div class="cur-body">
+      <ol class="lecture-list">
+        <li class="lecture"><a class="lec-title" href="s22-certification.html#exam-format">Exam format, scoring and registration</a><span class="lec-time">~5:00</span><span class="lec-src">dbt Labs certification page · study guide v1.11</span></li>
+        <li class="lecture"><a class="lec-title" href="s22-certification.html#topic-developing">The eight certification topic areas</a><span class="lec-time">~6:00</span><span class="lec-src">index.html · certification table</span></li>
+        <li class="lecture"><a class="lec-title" href="s22-certification.html#practice-exam">Practice exam and study strategy</a><span class="lec-time">~5:00</span><span class="lec-src">Synthesis · course-wide review</span></li>
+        <li class="lecture"><a class="lec-title" href="s22-certification.html#booking">Booking, exam day and what happens after</a><span class="lec-time">~4:00</span><span class="lec-src">dbt Labs certification FAQ</span></li>
+      </ol>
+      <p><a href="s22-certification.html">Open Section 22 notes &rarr;</a></p>
+    </div>
+  </details>
+</div>
+      <!-- CURRICULUM:END -->
+    </section>
+
+    <section class="section" id="how">
+      <h2>How these notes were built</h2>
+      <p>Everything here traces back to a primary source. Nothing is paraphrased from memory.</p>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Source</th><th>What it contributed</th></tr></thead>
+          <tbody>
+            <tr><td>The course's lesson script &mdash; <code>_course_resources/course-resources.md</code></td><td>Every command the instructor types, every code snippet, every exercise and its solution, in lecture order.</td></tr>
+            <tr><td>The finished course project &mdash; <code>nordquant/complete-dbt-bootcamp-zero-to-hero</code></td><td>The real <code>airbnb</code> dbt project: all models, macros, tests, snapshots, seeds, YAML and the Dagster project, quoted verbatim.</td></tr>
+            <tr><td>The course's other branches</td><td><code>poweruser</code> for the legacy-refactoring and AI lessons, <code>airflow</code> for the Airflow DAG, <code>official-extension</code> for the Fusion install, <code>production</code> and the CI workflows for the deployment pipeline.</td></tr>
+            <tr><td>The dbt documentation and certification study guide</td><td>Current defaults, version history, the eight certification topics, and the corrections where the course material has aged.</td></tr>
+            <tr><td>Operational practice</td><td>The &ldquo;Deeper detail&rdquo; block on every section: version notes, warehouse cost, traps, troubleshooting and production patterns.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout info"><strong>Versions these notes assume.</strong> dbt Core <code>1.11</code> with <code>dbt-snowflake 1.11</code>, <code>dbt_utils 1.3.3</code> and <code>dbt_expectations 0.10.10</code>. Where a behaviour changed recently &mdash; YAML snapshots, <code>data_tests:</code>, <code>hard_deletes</code>, the <code>arguments:</code> key for test parameters, selector syntax at 1.12 &mdash; the notes teach the current form and flag the old one, so an older project still makes sense.</div>
+
+      <h3>Rebuilding the site</h3>
+      <p>The search index and the curriculum block above are generated. After editing any page:</p>
+<pre data-lang="shell" data-title="Regenerate and check"><code>python build_site.py        # search index + curriculum block
+python validate_site.py     # links, anchors, code blocks, Jinja balance
+python tools/audit_site.py  # unknown CSS classes and content inventory
+node tools/highlight_smoke.js   # syntax highlighter
+python tools/validator_smoke.py # the validator's own checks</code></pre>
+
+      <p>Those prove the HTML is sound. A second set asks whether the writing is trustworthy &mdash; whether the code we claim to quote is really the code in the course repo, whether anything the instructor demonstrates is missing, and whether the prose has drifted into filler:</p>
+<pre data-lang="shell" data-title="Content-quality checks"><code>python tools/quality_audit.py        # quoted code vs the real repo files
+python tools/transcript_coverage.py  # every command and model in the lesson script
+python tools/prose_audit.py          # self-corrections, filler, placeholders
+python tools/title_consistency.py    # hub cards, h1s and pager labels agree
+python tools/lecture_count.py        # lecture totals match what the hub claims
+python tools/coverage_probe.py       # certification vocabulary
+node tools/search_smoke.js           # the search finds what a reader types</code></pre>
+    </section>
+
+  </main>
+</div>
+
+<footer class="footer">The Complete dbt Bootcamp: Zero to Hero &middot; Offline study edition &middot; Built from the course repo, the lesson script and the dbt documentation</footer>
+</body>
+</html>

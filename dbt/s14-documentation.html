@@ -1,0 +1,1060 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="dbt bootcamp Section 14: schema.yml descriptions, docs blocks, doc(), overview.md, dbt docs generate and serve, manifest.json versus catalog.json, and reading the lineage graph.">
+<title>Section 14 — Documentation | The Complete dbt Bootcamp Notes</title>
+<link rel="stylesheet" href="assets/dbt.css">
+<script defer src="assets/search-index.js"></script>
+<script defer src="assets/code-highlight.js"></script>
+<script defer src="assets/dbt.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">Course section 14 of 22 · The Complete dbt Bootcamp: Zero to Hero</p>
+    <h1>Documentation</h1>
+    <p class="subtitle">Descriptions in YAML, reusable docs blocks, and a project homepage that renders Markdown and images. This section turns the Airbnb pipeline from a folder of SQL into a browsable docs site with a lineage graph &mdash; the same artifact analysts and stakeholders use to understand what each model means and what breaks when it changes.</p>
+    <div class="hero-meta">
+      <span class="chip">7 lectures · ~35min</span>
+      <span class="chip">dbt docs generate</span>
+      <span class="chip">lineage graph</span>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <nav class="pager" aria-label="Section navigation">
+    <a href="s13-jinja-macros-packages.html">← Jinja, Macros and Packages</a>
+    <a href="index.html">Course contents</a>
+    <a href="s15-analyses-hooks-exposures.html">Next: Analyses, Hooks and Exposures →</a>
+  </nav>
+
+  <main id="main">
+    <div class="layout">
+      <div class="content">
+
+        <section class="section" id="lectures">
+          <h2>Lectures in this section</h2>
+          <p class="muted">Seven lectures span roughly 35 minutes. They add no new warehouse objects &mdash; documentation is metadata dbt collects at parse time and publishes with <code>dbt docs generate</code>. Everything you write here also appears in the lineage graph and in tools that ingest <code>manifest.json</code>.</p>
+          <ol class="lecture-list">
+            <li class="lecture">
+              <a class="lec-title" href="#schema-descriptions">Adding model and column descriptions in schema.yml</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">course-resources.md · Documentation</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#schema-descriptions">Where descriptions appear in the docs UI</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">models/schema.yml</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#docs-blocks">Reusable docs blocks in docs.md</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">models/docs.md</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#docs-blocks">Referencing docs with {{ doc('name') }}</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">models/schema.yml · minimum_nights</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#overview">Project overview with __overview__</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">models/overview.md</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#docs-generate-serve">dbt docs generate and dbt docs serve</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">target/manifest.json · target/catalog.json</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#lineage-graph">Reading the lineage graph and documenting tests</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">models/test_docs.yml · assets/input_schema.png</span>
+            </li>
+          </ol>
+          <p class="muted">Sections 11&ndash;13 defined tests and macros in the same YAML files you will now describe. Documentation lives beside tests because both are contract metadata: what the column means and what must stay true about it. <a href="s11-tests.html">Section 11</a> already showed the <code>doc()</code> reference on <code>minimum_nights</code> in passing; this section completes the picture.</p>
+        </section>
+
+        <section class="section" id="schema-descriptions">
+          <h2>Descriptions in schema.yml</h2>
+          <p class="lead">The fastest documentation win is a <code>description</code> field on every model and every column in <code>models/schema.yml</code>. dbt parses these strings at compile time, stores them on each node in <code>manifest.json</code>, and renders them in the docs site. No separate wiki, no Confluence page that drifts out of date.</p>
+
+          <p>In the Airbnb project, <code>schema.yml</code> already declares <code>data_tests:</code> from Sections 11&ndash;12. This section adds human-readable <code>description</code> keys at the same levels. Model descriptions explain grain and business purpose; column descriptions explain identifiers, foreign keys, and domain vocabulary.</p>
+
+          <div class="filetree">
+            <ul>
+              <li><span class="dir">airbnb/</span>
+                <ul>
+                  <li><span class="dir">models/</span>
+                    <ul>
+                      <li><span class="file">schema.yml</span> <span class="new">← model + column descriptions</span></li>
+                      <li><span class="file">docs.md</span> <span class="new">← reusable docs blocks</span></li>
+                      <li><span class="file">overview.md</span> <span class="new">← project homepage</span></li>
+                      <li><span class="file">test_docs.yml</span> <span class="new">← macro/test documentation</span></li>
+                    </ul>
+                  </li>
+                  <li><span class="dir">assets/</span>
+                    <ul>
+                      <li><span class="file">input_schema.png</span> <span class="note">referenced from overview</span></li>
+                    </ul>
+                  </li>
+                </ul>
+              </li>
+            </ul>
+          </div>
+
+          <h3>Model-level description</h3>
+          <p>A model entry can carry a top-level <code>description</code> sibling to <code>columns:</code> and <code>data_tests:</code>. It renders as the header text when you click the model in the docs UI. Keep it to one or two sentences: what one row represents and who consumes it.</p>
+
+<pre data-lang="yaml" data-title="models/schema.yml (model description)" data-explain="Model-level description sits beside columns and data_tests on the same model entry."><code>models:
+  - name: dim_listings_cleansed
+    description: Cleansed table which contains Airbnb listings.
+    data_tests:
+      - minimum_row_count:
+          arguments:
+            min_row_count: 1000
+          config:
+            severity: error
+    columns:
+      - name: listing_id
+        description: Primary key for the listing
+        data_tests:
+          - unique
+          - not_null</code></pre>
+
+          <p>The course adds similar descriptions to <code>dim_hosts_cleansed</code> and documents columns on <code>fct_reviews</code>. Descriptions are optional in dbt &mdash; parse succeeds without them &mdash; but empty docs sites are the norm on teams that skip this step until an audit forces a catch-up sprint.</p>
+
+          <h3>Column-level description</h3>
+          <p>Each entry under <code>columns:</code> can include <code>description:</code>. These appear in the column list on the model's docs page and in search results. Document primary keys, foreign keys, enum-like fields, and anything a new hire would ask in their first week.</p>
+
+<pre data-lang="yaml" data-title="models/schema.yml (column descriptions excerpt)" data-explain="Real excerpt from the course repo after the documentation lecture. Foreign-key columns name the referenced model in prose."><code>      - name: host_id
+        description: The host's id. References the host table.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_hosts_cleansed')
+                field: host_id
+
+      - name: room_type
+        description: Type of the apartment / room
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['Entire home/apt', 'Private room', 'Shared room', 'Hotel room']</code></pre>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>YAML key</th><th>Scope</th><th>Rendered in docs UI</th><th>Also used by</th></tr></thead>
+              <tbody>
+                <tr><td><code>description</code> on model</td><td>Whole relation</td><td>Model detail page header</td><td>Catalog tools, dbt Cloud, manifest consumers</td></tr>
+                <tr><td><code>description</code> on column</td><td>One column</td><td>Column table on model page</td><td>Column search, lineage tooltips</td></tr>
+                <tr><td><code>data_type</code> on column</td><td>Contract metadata</td><td>Shown when contract enforced</td><td><a href="s12-advanced-testing.html">Section 12</a> contracts</td></tr>
+                <tr><td><code>meta</code></td><td>Arbitrary JSON</td><td>Hidden unless custom docs macro</td><td>Ownership tags, PII flags, Slack channels</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Descriptions support Markdown</h3>
+          <p>dbt renders description strings as Markdown in the docs site. That means <code>**bold**</code>, bullet lists, inline <code>code</code>, and links work in YAML descriptions without a separate docs block. For long prose or content reused across several columns, prefer a docs block and <code>{{ doc('name') }}</code> instead of pasting the same paragraph five times.</p>
+
+          <div class="callout tip"><strong>Write descriptions for the reader who does not have warehouse access.</strong> "Primary key" is minimal but better than nothing. "Surrogate hash of listing_id, review_date, reviewer_name, review_text; one row per guest review" tells an analyst what grain means without opening the SQL file.</div>
+
+          <h3>Relationship to tests in the same file</h3>
+          <p>Keeping <code>description</code> and <code>data_tests:</code> on the same column documents both the meaning and the guarantees. When a <code>relationships</code> test fails, the column description tells the reader which parent model the foreign key expects. When someone removes a test in a pull request, the description reminds them why the column mattered.</p>
+
+<pre data-lang="yaml" data-title="models/schema.yml (fct_reviews columns)" data-explain="Fact table columns documented alongside relationship and accepted_values tests."><code>  - name: fct_reviews
+    columns:
+      - name: listing_id
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_listings_cleansed')
+                field: listing_id
+
+      - name: reviewer_name
+        data_tests:
+          - not_null
+      
+      - name: review_sentiment
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['positive', 'neutral', 'negative']</code></pre>
+
+          <p>Production teams often split YAML by layer (<code>models/dim/_dim__models.yml</code>) but keep the same shape: model description, columns with descriptions, tests nested under columns or at model level. The course uses one <code>schema.yml</code> for teaching clarity.</p>
+
+          <h3>Documenting dim_hosts_cleansed and fct_reviews</h3>
+          <p>The lecture excerpt also documents host and fact columns. Host identifiers carry accepted-value tests on <code>is_superhost</code>; review sentiment is constrained to three labels. Descriptions on those columns explain the business encoding (<code>'t'</code> / <code>'f'</code> strings, not booleans) so downstream tools do not cast incorrectly.</p>
+
+<pre data-lang="yaml" data-title="models/schema.yml (hosts and reviews excerpt)" data-explain="Course excerpt after documentation lecture; dim_hosts omits some contract fields present in the finished repo."><code>  - name: dim_hosts_cleansed
+    columns:
+      - name: host_id
+        data_tests:
+          - not_null
+          - unique
+
+      - name: host_name
+        data_tests:
+          - not_null
+
+      - name: is_superhost
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['t', 'f']
+
+  - name: fct_reviews
+    columns:
+      - name: listing_id
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_listings_cleansed')
+                field: listing_id
+
+      - name: reviewer_name
+        data_tests:
+          - not_null
+
+      - name: review_sentiment
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['positive', 'neutral', 'negative']</code></pre>
+
+          <p>In the finished repo, <code>dim_hosts_cleansed</code> also carries version blocks, contracts, and richer column descriptions from <a href="s12-advanced-testing.html">Section 12</a>. Documentation and contracts reinforce each other: the description says what the column means; <code>data_type</code> and constraints say what the warehouse must enforce.</p>
+
+          <h3>Source descriptions (cross-reference)</h3>
+          <p>Sources accept the same <code>description</code> keys in <code>sources.yml</code> (<a href="s09-seeds-sources.html">Section 9</a>). Documenting <code>airbnb.listings</code> at the source layer explains raw ingestion semantics; documenting <code>src_listings</code> explains the staging rename layer. Both appear in lineage and search. A common pattern: short source description ("Fivetran-synced Airbnb listings export"), longer staging doc block referenced from the ephemeral model's YAML entry if you attach tests there.</p>
+
+          <h3>Searching the docs site</h3>
+          <p>After <code>dbt docs serve</code>, the search bar indexes model names, column names, and description text from manifest. Typing <code>minimum_nights</code> finds the column and the docs block content once <code>doc()</code> is resolved. Typing <code>superhost</code> finds accepted-values tests and any description mentioning the term. This is why consistent vocabulary between descriptions and test names matters — analysts search natural language, not macro names.</p>
+        </section>
+
+        <section class="section" id="docs-blocks">
+          <h2>Docs blocks and doc()</h2>
+          <p class="lead">When the same explanation appears in multiple places, or when Markdown is too long for a YAML string, define a docs block in a <code>.md</code> file and reference it with <code>{{ doc('block_name') }}</code>. dbt resolves the block at parse time and inlines the rendered Markdown wherever the reference appears.</p>
+
+          <h3>Defining a docs block</h3>
+          <p>Docs blocks live in any file under your configured model, seed, snapshot, or macro paths. The course uses <code>models/docs.md</code>. Syntax is a Jinja block tag pair wrapping Markdown content:</p>
+
+<pre data-lang="text" data-title="models/docs.md" data-explain="The block name dim_listing_cleansed__minimum_nights follows a model__column naming convention common in dbt projects."><code>{% docs dim_listing_cleansed__minimum_nights %}
+Minimum number of nights required to rent this property. 
+
+Keep in mind that old listings might have `minimum_nights` set to 0 in the source tables. Our cleansing algorithm updates this to `1`.
+
+{% enddocs %}</code></pre>
+
+          <p>Block names are global within a project. Use a naming convention &mdash; <code>model__column</code>, <code>model__overview</code>, <code>source__table__column</code> &mdash; so collisions are obvious in code review. The double underscore is convention, not syntax.</p>
+
+          <h3>Referencing with doc()</h3>
+          <p>In YAML, wrap the Jinja call in quotes so the parser treats it as a string dbt will render:</p>
+
+<pre data-lang="yaml" data-title="models/schema.yml (doc reference)" data-explain="Single quotes around the Jinja expression are required in YAML so the doc() call is stored as a string for dbt to render."><code>      - name: minimum_nights
+        description: '{{ doc("dim_listing_cleansed__minimum_nights") }}'
+        data_tests:
+          - positive_values</code></pre>
+
+          <p>At parse time dbt replaces the <code>doc()</code> call with the Markdown body from the docs block. The docs site shows the formatted paragraph under the <code>minimum_nights</code> column, including the inline code around <code>minimum_nights</code> and <code>1</code> from the block content.</p>
+
+          <div class="diagram">
+            <p class="diagram-title">How doc() connects YAML to docs.md</p>
+            <div class="flow">
+              <div class="node is-model"><b>schema.yml</b><small>description: doc(...)</small></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-compute"><b>dbt parse</b><small>resolve doc blocks</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-store"><b>manifest.json</b><small>rendered description text</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-serve"><b>docs site</b><small>Markdown HTML</small></div>
+            </div>
+          </div>
+
+          <h3>Where doc() works</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Location</th><th>Example</th><th>Notes</th></tr></thead>
+              <tbody>
+                <tr><td>Model <code>description</code></td><td><code>description: "{{ doc('dim_listings_cleansed__overview') }}"</code></td><td>Long model intros</td></tr>
+                <tr><td>Column <code>description</code></td><td><code>'{{ doc("dim_listing_cleansed__minimum_nights") }}'</code></td><td>Course example</td></tr>
+                <tr><td>Source table description</td><td>In <code>sources.yml</code></td><td>Same syntax as models</td></tr>
+                <tr><td>Inside another docs block</td><td>Rare; avoid deep nesting</td><td>Can create circular references</td></tr>
+                <tr><td>Macro description in YAML</td><td><code>models/test_docs.yml</code></td><td>Documents generic tests</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout warn"><strong>Typo in the block name fails at parse time.</strong> <code>{{ doc("dim_listings_cleansed__minimum_nights") }}</code> (extra <code>s</code> in listings) does not fall back to empty text &mdash; dbt raises a compilation error naming the missing block. Grep the project for the exact string before merging.</div>
+
+          <h3>Docs blocks versus inline YAML</h3>
+          <p>Use inline YAML strings for one-line definitions. Use docs blocks when:</p>
+          <ul>
+            <li>The same text appears on multiple columns or models (DRY documentation).</li>
+            <li>You need multi-paragraph Markdown, lists, or code examples.</li>
+            <li>Non-engineers edit prose in <code>.md</code> files while engineers own YAML structure.</li>
+          </ul>
+
+          <p>Docs blocks are not warehouse objects. They never appear in the lineage graph as nodes. They only enrich metadata on the nodes that reference them.</p>
+
+          <h3>Naming convention for block names</h3>
+          <p>The course uses <code>dim_listing_cleansed__minimum_nights</code> — note the singular <code>listing</code> in the block name while the model is <code>dim_listings_cleansed</code>. That mismatch is harmless if the reference matches exactly, but greenfield projects usually align names (<code>dim_listings_cleansed__minimum_nights</code>) to reduce grep confusion. Pick a team standard early and enforce it in code review.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Pattern</th><th>Example</th><th>Use for</th></tr></thead>
+              <tbody>
+                <tr><td><code>&lt;model&gt;__&lt;column&gt;</code></td><td><code>fct_reviews__review_sentiment</code></td><td>Column-level long descriptions</td></tr>
+                <tr><td><code>&lt;model&gt;__overview</code></td><td><code>dim_listings_cleansed__overview</code></td><td>Model landing text</td></tr>
+                <tr><td><code>&lt;source&gt;__&lt;table&gt;</code></td><td><code>airbnb__listings__overview</code></td><td>Raw source context</td></tr>
+                <tr><td><code>__overview__</code></td><td>Reserved</td><td>Project homepage only</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Multiple docs blocks in one file</h3>
+          <p><code>docs.md</code> can hold many blocks back-to-back. dbt parses all of them at once. Splitting by domain (<code>docs/listings.md</code>, <code>docs/reviews.md</code>) keeps files reviewable when the project grows past a few dozen blocks.</p>
+
+<pre data-lang="text" data-title="models/docs/listings.md (pattern)" data-explain="Second block in the same file follows the same syntax; names must remain unique project-wide."><code>{% docs dim_listings_cleansed__room_type %}
+Allowed room types mirror Airbnb's source export. Hotel room
+was added in a 2019 source schema change; historical rows may
+be null before that date — handled in staging, not here.
+{% enddocs %}
+
+{% docs dim_listings_cleansed__price %}
+Cleansed numeric price in USD, parsed from the source string
+column that included a dollar sign prefix.
+{% enddocs %}</code></pre>
+        </section>
+
+        <section class="section" id="overview">
+          <h2>Project overview and overview.md</h2>
+          <p class="lead">Every dbt docs site has a homepage. The reserved docs block name <code>__overview__</code> defines that page: pipeline context, onboarding links, architecture diagrams, and anything you want visible before a reader clicks into a model.</p>
+
+          <h3>The __overview__ block</h3>
+          <p>Create <code>models/overview.md</code> (or any path under your project paths) with a single block named <code>__overview__</code>. dbt renders it as the landing page when you open the docs site.</p>
+
+<pre data-lang="text" data-title="models/overview.md (course repo)" data-explain="The overview block accepts full Markdown including headings and images. The course repo uses a local asset path; the lesson script shows an equivalent S3 URL."><code>{% docs __overview__ %}
+# Airbnb pipeline
+
+Hey, welcome to our Airbnb pipeline documentation!
+
+Here is the schema of our input data:
+![input schema](assets/input_schema.png)
+
+{% enddocs %}</code></pre>
+
+          <p>The course repository stores the diagram at <code>airbnb/assets/input_schema.png</code>. The project's <code>dbt_project.yml</code> declares <code>asset-paths: ["assets"]</code>, so dbt can resolve image paths relative to the project when generating docs. The instructor's script also shows a hosted copy at <code>https://dbt-datasets.s3.us-east-2.amazonaws.com/input_schema.png</code> &mdash; either works; local assets version with git, hosted URLs do not.</p>
+
+          <h3>What input_schema.png shows</h3>
+          <p>The PNG is an entity-relationship sketch of the three raw tables the course loads into Snowflake: <code>raw_listings</code>, <code>raw_hosts</code>, and <code>raw_reviews</code>. It depicts how <code>raw_listings.host_id</code> references <code>raw_hosts.id</code> and how <code>raw_reviews.listing_id</code> references <code>raw_listings.id</code>. That picture is the same join logic you built in <a href="s07-models.html">Section 7</a>; placing it on the overview orients new readers before they open the lineage graph.</p>
+
+          <div class="callout info"><strong>Overview content is not a model.</strong> It does not get built in the warehouse, tested, or selected with <code>dbt run</code>. It is pure documentation metadata parsed like any other docs block. You can include Mermaid-style diagrams only if your docs deployment supports them; standard dbt docs renders CommonMark Markdown plus images.</div>
+
+          <h3>Project-level Markdown elsewhere</h3>
+          <p>Besides <code>overview.md</code>, teams add:</p>
+          <ul>
+            <li><strong>Layer README files</strong> &mdash; <code>models/mart/README.md</code> checked into git for developers; optionally mirrored in docs blocks.</li>
+            <li><strong>CONTRIBUTING.md</strong> at repo root for git, not auto-published by dbt.</li>
+            <li><strong>Exposure and metric descriptions</strong> &mdash; added in later sections (<a href="s15-analyses-hooks-exposures.html">Section 15</a> exposures, semantic layer in advanced material).</li>
+          </ul>
+
+          <p>Only content inside <code>{% docs %}...{% enddocs %}</code> in project paths is picked up by dbt's docs engine. A plain <code>README.md</code> in the repo root is for GitHub unless you wrap it or link from <code>__overview__</code>.</p>
+
+          <h3>Linking from overview to models</h3>
+          <p>Markdown links to models use the docs site's URL scheme after generation. During authoring, the reliable pattern is to name models in prose and let readers use search. In dbt Cloud, @-mention style linking exists; in Core's static site, relative links like <code>[dim_listings_cleansed](#!/model/model.airbnb.dim_listings_cleansed)</code> work once you know the node id from <code>manifest.json</code>.</p>
+        </section>
+
+        <section class="section" id="docs-generate-serve">
+          <h2>dbt docs generate and dbt docs serve</h2>
+          <p class="lead">Documentation is not live by default. You generate a static site plus JSON artifacts, then serve them locally or publish the <code>target/</code> output to object storage or dbt Cloud.</p>
+
+          <h3>dbt docs generate</h3>
+          <p>This command parses the project (if needed), queries the warehouse information schema for every relation dbt manages, and writes artifacts under <code>target/</code>. It must succeed against a reachable warehouse for column types and row counts to appear.</p>
+
+<div class="terminal">
+  <p class="term-head">dbt docs generate</p>
+  <pre class="term-body"><span class="tt-cmd">dbt docs generate</span>
+<span class="tt-dim">16:08:14  Running with dbt=1.11.12</span>
+<span class="tt-dim">16:08:16  Found 18 models, 3 seeds, 2 snapshots, 42 data tests, 3 sources, 854 macros</span>
+<span class="tt-dim">16:08:18  Building catalog</span>
+<span class="tt-ok">16:08:22  Catalog written to target/catalog.json</span>
+<span class="tt-ok">16:08:22  Done.</span></pre>
+</div>
+
+          <p>Run it from the <code>airbnb</code> folder after models exist in the warehouse. If you never ran <code>dbt run</code>, generate still succeeds but catalog entries may be empty for relations that do not exist yet.</p>
+
+          <h3>dbt docs serve</h3>
+          <p>Starts a local web server (default port 8080) that serves the generated static site and opens the lineage graph in your browser. It is for local development and demos &mdash; not for production hosting.</p>
+
+<div class="terminal">
+  <p class="term-head">dbt docs serve</p>
+  <pre class="term-body"><span class="tt-cmd">dbt docs serve</span>
+<span class="tt-dim">16:10:01  Running with dbt=1.11.12</span>
+<span class="tt-ok">16:10:02  Serving docs at http://localhost:8080</span>
+<span class="tt-dim">16:10:02  Press Ctrl+C to exit.</span></pre>
+</div>
+
+          <p>Typical workflow: edit descriptions in YAML or docs blocks, run <code>dbt parse</code> or any command to refresh <code>manifest.json</code>, run <code>dbt docs generate</code> to refresh catalog metadata, run <code>dbt docs serve</code>, refresh the browser. In CI, teams run generate once per merge and upload <code>target/index.html</code> plus JSON to S3 or GCS.</p>
+
+          <h3>manifest.json versus catalog.json</h3>
+          <p>These two files answer different questions. Confusing them is a common interview trap.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Artifact</th><th>Written by</th><th>Contains</th><th>Requires warehouse?</th></tr></thead>
+              <tbody>
+                <tr><td><code>target/manifest.json</code></td><td>Any parse command (<code>dbt parse</code>, <code>dbt run</code>, <code>dbt build</code>, <code>dbt docs generate</code>)</td><td>Full project graph: models, tests, sources, macros, configs, compiled paths, YAML descriptions, <code>depends_on</code> edges</td><td>No &mdash; parse is local</td></tr>
+                <tr><td><code>target/catalog.json</code></td><td><code>dbt docs generate</code> only</td><td>Warehouse metadata: column names, types, stats, table sizes for relations dbt knows about</td><td>Yes &mdash; queries information schema</td></tr>
+                <tr><td><code>target/run_results.json</code></td><td>Run commands that execute nodes</td><td>Pass/fail, timing, rows affected for last invocation</td><td>Yes</td></tr>
+                <tr><td><code>target/index.html</code></td><td><code>dbt docs generate</code></td><td>Static docs SPA entry point</td><td>Generate needs catalog step</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="analogy"><strong>Everyday analogy &mdash;</strong> <code>manifest.json</code> is the blueprint (what you intended to build and how pieces connect). <code>catalog.json</code> is the building inspector's report (what actually exists in the warehouse right now and how big it is).</div>
+
+          <h3>What manifest stores for documentation</h3>
+          <p>Each node in <code>manifest.json</code> includes a <code>description</code> field with the fully rendered text after <code>doc()</code> resolution. Search in the docs UI indexes this text. External tools &mdash; Elementary, Monte Carlo, custom lineage portals &mdash; read manifest rather than re-parsing SQL.</p>
+
+<pre data-lang="json" data-title="manifest.json (illustrative node fragment)" data-explain="Real manifest files are large; this shows the fields documentation consumers care about."><code>{
+  "nodes": {
+    "model.airbnb.dim_listings_cleansed": {
+      "name": "dim_listings_cleansed",
+      "resource_type": "model",
+      "description": "Cleansed table which contains Airbnb listings.",
+      "depends_on": {
+        "nodes": ["model.airbnb.src_listings"]
+      },
+      "columns": {
+        "minimum_nights": {
+          "name": "minimum_nights",
+          "description": "Minimum number of nights required to rent this property.\n\nKeep in mind..."
+        }
+      }
+    }
+  }
+}</code></pre>
+
+          <h3>What catalog adds</h3>
+          <p>Catalog merges warehouse reality into the docs UI: data types you did not declare in YAML, row counts, last modified times (adapter-dependent). That is why the column list in docs can show types even before you add <code>data_type</code> contract fields. On BigQuery and Snowflake the information schema queries differ; dbt abstracts them per adapter.</p>
+
+          <h3>persist_docs (production extension)</h3>
+          <p>The course does not enable it, but production teams often set <code>+persist_docs:</code> in <code>dbt_project.yml</code> so model and column descriptions push into warehouse COMMENT metadata. BI tools that read Snowflake or BigQuery comments then show dbt descriptions without opening the docs site.</p>
+
+<pre data-lang="yaml" data-title="dbt_project.yml (persist_docs pattern)" data-explain="Not in the course repo; common production addition documented here for certification and real deployments."><code>models:
+  airbnb:
+    +persist_docs:
+      relation: true
+      columns: true</code></pre>
+
+          <p><code>persist_docs</code> runs COMMENT statements on each model build &mdash; extra DDL cost, negligible on Snowflake for most projects but worth knowing for thousands of columns. Relation-only persistence is a lighter first step.</p>
+
+          <div class="callout cost"><strong>dbt docs generate hits the warehouse.</strong> Every relation in the graph triggers information schema queries. On a large project, running generate in a tight dev loop adds up. Parse locally while editing prose; generate once before sharing the docs link.</div>
+
+          <h3>Docs workflow in the course CI reference</h3>
+          <p>The course GitHub repo includes a workflow step that runs <code>dbt docs generate</code> after builds — the pattern production teams copy. Artifacts are not committed to git; they are output for optional upload. Your local workflow mirrors it: build models in dev, generate, serve, share the localhost URL during pair review, then tear down the server.</p>
+
+          <h3>Navigating the static docs UI</h3>
+          <p>The generated site has four areas worth knowing:</p>
+          <ul>
+            <li><strong>Project overview</strong> — the <code>__overview__</code> block; entry point for onboarding.</li>
+            <li><strong>Models</strong> — searchable list grouped by folder; each page shows description, columns, tests, SQL source link, and lineage button.</li>
+            <li><strong>Sources</strong> — declared sources from <code>sources.yml</code> with freshness config visible.</li>
+            <li><strong>Macros</strong> — project and package macros; argument docs from YAML appear here when defined.</li>
+          </ul>
+
+          <p>Clicking "Code" on a model shows the raw SQL file content syntax-highlighted. That is the same file in git — not compiled SQL. For compiled output, use <code>target/compiled/</code> as in <a href="s07-models.html#compiled-sql">Section 7</a>.</p>
+
+          <h3>When manifest and catalog disagree</h3>
+          <p>Manifest says a model exists in the project; catalog says whether the table or view is actually in the warehouse. Common mismatches: you renamed a model but the old relation still exists (orphan table); you added a column in SQL but have not run the model yet (catalog column list lags); contract enforcement failed mid-build. The docs UI may show YAML-declared columns from manifest while catalog lacks types until the build succeeds. Treat catalog as live truth for types and row counts, manifest as intended truth for graph and descriptions.</p>
+        </section>
+
+        <section class="section" id="lineage-graph">
+          <h2>Reading the lineage graph</h2>
+          <p class="lead">The lineage view is a directed acyclic graph (DAG) of every resource dbt knows about: sources, seeds, models, snapshots, tests, and (from Section 15 onward) exposures. Edges follow <code>ref()</code>, <code>source()</code>, and declared dependencies &mdash; not orchestration schedule order.</p>
+
+          <h3>Opening the graph</h3>
+          <p>After <code>dbt docs serve</code>, click the lineage icon or open a model and choose "View lineage". You can pan, zoom, filter by resource type, and click nodes to jump to documentation. Green nodes typically indicate selected resources; upstream parents appear to the left, downstream children to the right.</p>
+
+          <div class="diagram">
+            <p class="diagram-title">Airbnb pipeline DAG as shown in the docs lineage view</p>
+            <div class="dag">
+              <div class="dag-col">
+                <p class="dag-label">Sources</p>
+                <div class="node is-source"><b>airbnb.listings</b></div>
+                <div class="node is-source"><b>airbnb.hosts</b></div>
+                <div class="node is-source"><b>airbnb.reviews</b></div>
+              </div>
+              <div class="dag-col">
+                <p class="dag-label">Staging</p>
+                <div class="node is-model"><b>src_listings</b><small>ephemeral</small></div>
+                <div class="node is-model"><b>src_hosts</b><small>ephemeral</small></div>
+                <div class="node is-model"><b>src_reviews</b><small>ephemeral</small></div>
+              </div>
+              <div class="dag-col">
+                <p class="dag-label">Dimensions</p>
+                <div class="node is-model"><b>dim_listings_cleansed</b></div>
+                <div class="node is-model"><b>dim_hosts_cleansed</b></div>
+                <div class="node is-model"><b>dim_listings_w_hosts</b></div>
+              </div>
+              <div class="dag-col">
+                <p class="dag-label">Facts &amp; marts</p>
+                <div class="node is-mart pulse"><b>fct_reviews</b></div>
+                <div class="node is-mart"><b>mart_fullmoon_reviews</b></div>
+              </div>
+            </div>
+          </div>
+
+          <h3>What creates an edge</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Code pattern</th><th>Edge in graph</th><th>Missing edge symptom</th></tr></thead>
+              <tbody>
+                <tr><td><code>{{ ref('dim_hosts_cleansed') }}</code></td><td>Current model → dim_hosts_cleansed</td><td>Hard-coded table name: no edge</td></tr>
+                <tr><td><code>{{ source('airbnb', 'listings') }}</code></td><td>Source → model using it</td><td>Raw table name in SQL: orphan model</td></tr>
+                <tr><td><code>relationships</code> test <code>to: ref(...)</code></td><td>Test node linked to models</td><td>Documented in test view, not always visual edge</td></tr>
+                <tr><td>Ephemeral model</td><td>Shown as node; inlined at compile</td><td>Still appears in graph for impact analysis</td></tr>
+                <tr><td>Macro expansion</td><td>No macro node</td><td>Lineage stays at model level (<a href="s13-jinja-macros-packages.html">Section 13</a>)</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Using lineage for impact analysis</h3>
+          <p>Before changing <code>dim_listings_cleansed</code>, select it in the graph and inspect downstream nodes. Every child model, exposure, and test that depends on it may need revalidation. In production, the same graph powers <code>dbt ls --select dim_listings_cleansed+</code> and Slim CI's <code>state:modified</code> selectors from <a href="s19-production.html">Section 19</a>.</p>
+
+          <p>Seeds and snapshots appear with distinct node styling. Sources sit in the leftmost column when declared in <code>sources.yml</code> (<a href="s09-seeds-sources.html">Section 9</a>). Tests attach to the columns or models they guard; clicking a test in the docs site shows compiled SQL from <code>target/compiled/</code>.</p>
+
+          <h3>Graph versus execution order</h3>
+          <p>The DAG shows dependency order, not timing. <code>fct_reviews</code> and <code>dim_listings_w_hosts</code> may build in parallel if neither references the other. Orchestrators (Section 18) schedule dbt invocations; the graph tells them what must finish before what, not when the cron fires.</p>
+
+          <h3>Lineage graph UI controls</h3>
+          <p>In the docs lineage view, learn these controls once — they save time in every later section:</p>
+          <ul>
+            <li><strong>Resource type filters</strong> — hide tests or macros clutter when presenting to stakeholders.</li>
+            <li><strong>Export / screenshot</strong> — browser screenshot for architecture docs; some teams script manifest → diagram tools for auto-updates.</li>
+            <li><strong>Node colour</strong> — selected node highlighted; upstream/downstream fade helps focus impact analysis.</li>
+            <li><strong>Double-click model</strong> — opens the model docs page with column list and test summary.</li>
+          </ul>
+
+          <p>Compare graph navigation with CLI: <code>dbt ls --select +dim_listings_cleansed</code> lists ancestors; <code>dbt ls --select dim_listings_cleansed+</code> lists descendants. The graph is the visual version of those selectors documented in <a href="s17-selectors-commands.html">Section 17</a>.</p>
+
+          <div class="callout exam"><strong>Certification:</strong> know that lineage comes from <code>ref()</code> and <code>source()</code> at parse time, that macros do not appear as separate nodes, and that <code>dbt docs generate</code> combines manifest (graph + descriptions) with catalog (warehouse columns).</div>
+        </section>
+
+        <section class="section" id="test-docs">
+          <h2>Documenting tests and macros in test_docs.yml</h2>
+          <p class="lead">Generic tests and project macros are code. <code>models/test_docs.yml</code> (or a file under <code>macros/</code>) documents their arguments the same way models get column descriptions &mdash; so the docs site explains what <code>minimum_row_count</code> expects before someone attaches it in YAML.</p>
+
+          <h3>test_docs.yml structure</h3>
+          <p>The course documents the custom generic test macro <code>test_minimum_row_count</code> from <a href="s12-advanced-testing.html">Section 12</a>:</p>
+
+<pre data-lang="yaml" data-title="models/test_docs.yml" data-explain="macros: entries document macro arguments for the docs site; mirrors the arguments: list in generic test YAML."><code>macros:
+  - name: test_minimum_row_count
+    description: "Test that a model has at least a minimum number of rows."
+    arguments:
+      - name: model
+        description: "The model to test."
+      - name: min_row_count
+        description: "The minimum number of rows the model should have."</code></pre>
+
+          <p>When you open the macro page in docs (under Macros), the argument list renders with these descriptions. That helps analysts who attach <code>minimum_row_count</code> in <code>schema.yml</code> without reading the SQL implementation.</p>
+
+          <h3>Conventions for test documentation</h3>
+          <ul>
+            <li><strong>Name matches the macro</strong> &mdash; for generic tests, the macro is typically <code>test_&lt;test_name&gt;</code>; document under that name.</li>
+            <li><strong>One entry per custom generic</strong> &mdash; built-in tests (<code>unique</code>, <code>not_null</code>) already ship with dbt docs.</li>
+            <li><strong>Package macros</strong> &mdash; dbt_utils and dbt_expectations document themselves in package repos; you only document project-specific wrappers.</li>
+            <li><strong>Keep arguments in sync</strong> &mdash; if you add a <code>where</code> argument to the macro, update <code>test_docs.yml</code> in the same pull request.</li>
+          </ul>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Resource</th><th>YAML top-level key</th><th>Documented fields</th></tr></thead>
+              <tbody>
+                <tr><td>Model</td><td><code>models:</code></td><td><code>description</code>, column descriptions</td></tr>
+                <tr><td>Source</td><td><code>sources:</code></td><td>Source and table descriptions</td></tr>
+                <tr><td>Macro / generic test</td><td><code>macros:</code></td><td><code>description</code>, <code>arguments</code> list</td></tr>
+                <tr><td>Exposure</td><td><code>exposures:</code></td><td>Added in Section 15</td></tr>
+                <tr><td>Semantic models</td><td><code>semantic_models:</code></td><td>Advanced / certification edge cases</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Linking tests to documented behaviour</h3>
+          <p>The model-level <code>minimum_row_count</code> on <code>dim_listings_cleansed</code> in <code>schema.yml</code> references the macro documented in <code>test_docs.yml</code>:</p>
+
+<pre data-lang="yaml" data-title="models/schema.yml (model-level test)" data-explain="Model-level data_tests sit beside description; severity is test config."><code>  - name: dim_listings_cleansed
+    description: Cleansed table which contains Airbnb listings.
+    data_tests:
+      - minimum_row_count:
+          arguments:
+            min_row_count: 1000
+          config:
+            severity: error</code></pre>
+
+          <p>A reader tracing data quality starts at the model description, sees the row-count guarantee, opens the test definition in docs, and reads the macro argument descriptions without cloning the macro file.</p>
+        </section>
+
+        <section class="section" id="markdown-images">
+          <h2>Markdown support and images in docs</h2>
+          <p class="lead">dbt docs renders CommonMark Markdown in descriptions, docs blocks, and the overview page. Images, headings, lists, and fenced code blocks work wherever Markdown is accepted.</p>
+
+          <h3>Markdown in descriptions</h3>
+          <p>Inline and block Markdown in YAML descriptions is rendered when the docs site loads. Useful patterns:</p>
+          <ul>
+            <li><strong>Bold</strong> for grain statements: <code>This table is **one row per listing**.</code></li>
+            <li>Bullet lists for acceptable values when not using <code>accepted_values</code> test alone.</li>
+            <li>Links to Notion or Slack channels for stewards: <code>[Data owner](https://...)</code></li>
+            <li>Fenced code for example values: `` `Entire home/apt` `` in backticks.</li>
+          </ul>
+
+          <p>YAML multiline strings use <code>|</code> or <code>&gt;</code> for paragraphs; docs blocks are easier for long Markdown because you avoid YAML escaping.</p>
+
+          <h3>Embedding images</h3>
+          <p>The overview references <code>assets/input_schema.png</code> with standard Markdown image syntax:</p>
+
+<pre data-lang="text" data-title="Markdown image in overview.md" data-explain="Path is relative to the project root; asset-paths in dbt_project.yml includes the assets folder."><code>![input schema](assets/input_schema.png)</code></pre>
+
+          <p>The file lives at <code>airbnb/assets/input_schema.png</code> in the course repository. It documents the raw-layer ERD for onboarding. When docs are generated, dbt copies or links static assets into the site output so the image loads in the browser. Remote URLs (as in the course script's S3 example) also work and suit shared demo datasets.</p>
+
+          <h3>asset-paths configuration</h3>
+          <p>The Airbnb <code>dbt_project.yml</code> includes:</p>
+
+<pre data-lang="yaml" data-title="dbt_project.yml (asset-paths)" data-explain="Without asset-paths, image references in docs blocks may not resolve at generate time."><code>asset-paths: ["assets"]</code></pre>
+
+          <p>Add paths here for logos, diagrams, and PDFs referenced from documentation. Keep binaries in git only when small; large diagrams often live in object storage with HTTPS URLs in Markdown.</p>
+
+          <h3>What Markdown does not do</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Feature</th><th>Supported in dbt docs?</th><th>Alternative</th></tr></thead>
+              <tbody>
+                <tr><td>Raw HTML embeds</td><td>Limited / stripped</td><td>Stick to Markdown</td></tr>
+                <tr><td>Interactive charts</td><td>No</td><td>Link to BI exposure (Section 15)</td></tr>
+                <tr><td>Mermaid in Core docs</td><td>Not by default</td><td>PNG/SVG in assets</td></tr>
+                <tr><td>LaTeX math</td><td>No</td><td>Plain text or image</td></tr>
+                <tr><td>@model mentions</td><td>dbt Cloud feature</td><td>Manual links or search</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout tip"><strong>Regenerate after changing images.</strong> Browsers cache static docs aggressively. If you replace <code>input_schema.png</code>, run <code>dbt docs generate</code> again and hard-refresh the browser.</div>
+
+          <h3>input_schema.png purpose in the course</h3>
+          <p>The PNG is not decorative. It encodes the same foreign-key structure the staging models assume: listings belong to hosts; reviews belong to listings. When a <code>relationships</code> test fails on <code>fct_reviews.listing_id</code>, an analyst can open the overview, see the ERD, and trace which raw parent table is broken without reading SQL. Keeping the diagram updated when source schemas change is as important as updating tests — stale diagrams mislead faster than no diagram.</p>
+
+          <p>Because the notes site does not bundle the binary, verify the file exists in your clone at <code>airbnb/assets/input_schema.png</code> before expecting the overview image to render. If missing, copy it from the course repository or temporarily use the S3 URL from the lesson script until the asset is local.</p>
+
+          <h3>YAML multiline descriptions without docs blocks</h3>
+          <p>For medium-length Markdown still inline in YAML, use block scalars:</p>
+
+<pre data-lang="yaml" data-title="Inline multiline description (pattern)" data-explain="The pipe | preserves newlines; dbt renders them as Markdown paragraphs."><code>      - name: review_sentiment
+        description: |
+          Sentiment label assigned in **mart** processing.
+          - `positive` — guest praise dominates
+          - `neutral` — mixed or factual tone
+          - `negative` — complaint or criticism
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['positive', 'neutral', 'negative']</code></pre>
+
+          <p>Once the list grows past a few lines, move to a docs block so diffs stay readable and translators can work in <code>.md</code> files only.</p>
+        </section>
+
+        <section class="section" id="deeper">
+          <h2>Deeper detail and edge cases</h2>
+          <p class="lead">Artifact contracts, warehouse comment persistence, docs generation cost, and the failure modes that leave teams with empty or stale documentation sites.</p>
+
+          <h3>Version notes</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Behaviour</th><th>Before</th><th>Now</th><th>Version</th></tr></thead>
+              <tbody>
+                <tr><td>Tests in schema YAML</td><td><code>tests:</code></td><td><code>data_tests:</code> (legacy key still parses)</td><td>1.8</td></tr>
+                <tr><td>Generic test arguments</td><td>Top-level keys</td><td>Nested under <code>arguments:</code></td><td>1.10</td></tr>
+                <tr><td>Macro argument docs in YAML</td><td>Undocumented or README only</td><td><code>macros:</code> entries with <code>arguments:</code> list</td><td>1.5+</td></tr>
+                <tr><td>Unit test docs</td><td>N/A</td><td><code>unit_tests:</code> appear in manifest; limited docs UI</td><td>1.8</td></tr>
+                <tr><td>Model versions in docs</td><td>Single version only</td><td>Version picker when <code>versions:</code> defined</td><td>1.5</td></tr>
+                <tr><td>Exposure lineage</td><td>Manual tracking</td><td><code>exposures:</code> as first-class DAG nodes</td><td>1.0+</td></tr>
+                <tr><td>Catalog refresh</td><td>Full information schema scan</td><td>Same; no incremental catalog in Core</td><td>1.x</td></tr>
+                <tr><td>docs generate in CI</td><td>Optional</td><td>Standard in production pipelines; artifact upload</td><td>1.x</td></tr>
+                <tr><td>dbt Cloud docs hosting</td><td>Manual serve</td><td>Auto-publish on job completion in Cloud</td><td>Cloud</td></tr>
+                <tr><td>Fusion docs URL param</td><td>Single docs site</td><td>Fusion-branded reference docs coexist</td><td>Fusion era</td></tr>
+                <tr><td>Snapshot YAML docs</td><td>SQL snapshot blocks</td><td>YAML snapshot resources document like models</td><td>1.9</td></tr>
+                <tr><td>Semantic layer in docs</td><td>Not present</td><td>Metrics and semantic models in manifest</td><td>1.6+</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>What it costs to run</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>What runs</th><th>Where the cost lands</th><th>How to spend less</th></tr></thead>
+              <tbody>
+                <tr><td><code>dbt docs generate</code></td><td>Information schema query per relation; metadata API calls</td><td>Generate on merge, not every save; use dev target with fewer objects</td></tr>
+                <tr><td><code>persist_docs</code> on build</td><td>COMMENT DDL on each model run</td><td>Enable only for marts; batch in prod job</td></tr>
+                <tr><td>Large catalog.json</td><td>Storage and slow docs SPA load</td><td>Split projects or exclude dev schemas from prod docs</td></tr>
+                <tr><td>docs serve left running</td><td>Negligible compute; security exposure if port open</td><td>Bind localhost only; do not expose in prod</td></tr>
+                <tr><td>CI docs upload</td><td>S3/GCS egress and storage pennies</td><td>Retain one doc version per environment</td></tr>
+                <tr><td>Warehouse idle during generate</td><td>Snowflake 60s minimum if warehouse was suspended</td><td>Run generate after build job on warm warehouse</td></tr>
+                <tr><td>Duplicate generate + full build</td><td>Two warehouse sessions</td><td>Chain generate after <code>dbt build</code> in same CI step</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout cost"><strong>The biggest waste is running docs generate against production on every laptop refresh.</strong> Descriptions are in manifest after parse; only column types and stats need the warehouse. Use <code>dbt parse</code> while editing YAML, then generate once against dev or from CI with a service account.</div>
+
+          <h3>Traps that catch people</h3>
+          <ul>
+            <li><strong>Expecting docs without generate —</strong> editing YAML and refreshing an old <code>dbt docs serve</code> tab shows stale text until you re-run generate or at least parse for manifest-only fields.</li>
+            <li><strong>Missing doc() quotes in YAML —</strong> unquoted <code>{{ doc(...) }}</code> can be interpreted as YAML syntax errors or empty nodes. Wrap in single quotes.</li>
+            <li><strong>Wrong docs block name —</strong> typos fail compilation, not at runtime. CI parse step catches them if you run <code>dbt parse</code> on pull requests.</li>
+            <li><strong>Hard-coded tables break lineage —</strong> documentation and impact analysis are wrong together when <code>ref()</code> is bypassed; the graph is not a separate concern.</li>
+            <li><strong>Catalog empty for new models —</strong> you documented a model that never ran; types show from YAML contract only if enforced, otherwise blank until first build.</li>
+            <li><strong>Image path relative to wrong root —</strong> paths in overview are project-relative, not relative to the <code>.md</code> file. Use <code>assets/...</code> from project root.</li>
+            <li><strong>Committing target/ to git —</strong> manifest in PR artifacts is intentional for Slim CI; committing full docs HTML bloats the repo. Publish artifacts to storage instead.</li>
+            <li><strong>Duplicating test and docs prose —</strong> when a column has both <code>accepted_values</code> and a description listing values, they drift. Describe meaning in docs; let tests enforce values.</li>
+            <li><strong>Macro docs file ignored —</strong> <code>test_docs.yml</code> must live under a configured path and use valid YAML schema or parse warns and skips entries.</li>
+            <li><strong>Assuming BI reads dbt docs —</strong> Looker, Tableau, and Preset do not auto-sync unless you use <code>persist_docs</code> or a catalog integration.</li>
+            <li><strong>Overview __overview__ typo —</strong> only the exact name <code>__overview__</code> becomes the homepage; double underscores matter.</li>
+            <li><strong>Ephemeral models in lineage confuse stakeholders —</strong> explain that ephemeral nodes are compile-time CTEs, not queryable tables, when walking non-technical readers through the graph.</li>
+          </ul>
+
+          <h3>Troubleshooting playbook</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Symptom</th><th>Most likely cause</th><th>What to check / fix</th></tr></thead>
+              <tbody>
+                <tr><td><code>Compilation Error ... depends on doc 'X' which was not found</code></td><td>Typo in doc block name or file not in project paths</td><td>Grep for <code>{% docs X %}</code>; confirm file under <code>models/</code></td></tr>
+                <tr><td>Description shows literal <code>{{ doc('...') }}</code></td><td>Forgot quotes; YAML treated Jinja as plain text</td><td>Wrap description in single quotes</td></tr>
+                <tr><td>Overview page blank</td><td>Missing <code>__overview__</code> block</td><td>Add block to <code>overview.md</code>; run parse</td></tr>
+                <tr><td>Image broken in docs site</td><td>Wrong path or missing <code>asset-paths</code></td><td>Verify <code>airbnb/assets/input_schema.png</code> exists; regenerate</td></tr>
+                <tr><td>Lineage missing source edge</td><td>Hard-coded raw table in SQL</td><td>Replace with <code>source()</code>; rebuild manifest</td></tr>
+                <tr><td>Column types missing in docs</td><td>Catalog not generated or relation missing in warehouse</td><td>Run <code>dbt docs generate</code> after <code>dbt run</code></td></tr>
+                <tr><td>docs serve shows old project</td><td>Serving from wrong directory or stale target</td><td><code>cd airbnb</code>; <code>dbt clean</code>; regenerate</td></tr>
+                <tr><td>Macro arguments undocumented</td><td>No <code>macros:</code> entry in YAML</td><td>Add to <code>test_docs.yml</code></td></tr>
+                <tr><td>Catalog step fails with permissions</td><td>Role lacks information schema access</td><td>Grant USAGE on database/schema; test with <code>dbt debug</code></td></tr>
+                <tr><td>Descriptions in warehouse unchanged</td><td><code>persist_docs</code> not enabled</td><td>Add to <code>dbt_project.yml</code> and rebuild models</td></tr>
+                <tr><td>Two models same description search hit</td><td>Copy-pasted doc block reference</td><td>Split docs blocks per model or add distinct intros</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Production patterns</h3>
+          <p>Mature teams treat documentation as a CI artifact: every merge to main runs <code>dbt build</code> (or at least run + test) on prod, then <code>dbt docs generate</code>, then uploads <code>target/manifest.json</code>, <code>catalog.json</code>, and static HTML to a private S3 bucket fronted by CloudFront or serves via dbt Cloud's hosted docs. Pull requests run <code>dbt parse</code> to validate doc references and optionally publish preview docs from the dev schema for reviewer comment.</p>
+
+          <p>Documentation ownership follows code ownership: each model folder has a CODEOWNERS entry; empty descriptions fail a custom lint (dbt-checkpoint, sqlfluff-adjacent tools, or a simple script over manifest). Stewards fill <code>meta:</code> with Slack channel and PII classification for governance tools that ingest manifest.</p>
+
+          <div class="grid-2">
+            <div class="mini-card">
+              <h4>Pattern: docs in the same PR as logic</h4>
+              <p>Require description updates when column semantics change. Reviewers reject "fix later" on docs the same way they reject missing tests.</p>
+            </div>
+            <div class="mini-card">
+              <h4>Anti-pattern: docs sprint once a year</h4>
+              <p>A quarter-end scramble to document 200 models produces generic text nobody trusts. Incremental docs in each feature PR stays accurate.</p>
+            </div>
+          </div>
+
+<pre data-lang="yaml" data-title="Pattern: meta for ownership (production)" data-explain="meta fields do not render in stock docs UI but integrate with catalog products and custom macros."><code>models:
+  - name: dim_listings_cleansed
+    description: "{{ doc('dim_listings_cleansed__overview') }}"
+    meta:
+      owner: analytics-platform
+      slack: "#data-listings"
+      pii: false</code></pre>
+
+          <h3>Certification pointers</h3>
+          <p>The exam tests documentation mechanics literally: where descriptions live, how <code>doc()</code> references docs blocks, what <code>dbt docs generate</code> produces versus parse alone, and the difference between manifest and catalog. Expect a question on which file contains the DAG (<code>manifest.json</code>) and which requires warehouse queries (<code>catalog.json</code>).</p>
+          <ul>
+            <li><a href="s07-models.html">Section 7</a> — <code>ref()</code> edges feed the lineage graph shown in docs.</li>
+            <li><a href="s09-seeds-sources.html">Section 9</a> — source nodes appear leftmost in lineage when declared in YAML.</li>
+            <li><a href="s11-tests.html">Section 11</a> — tests documented beside columns in the same schema.yml file.</li>
+            <li><a href="s12-advanced-testing.html">Section 12</a> — <code>minimum_row_count</code> macro that test_docs.yml describes.</li>
+            <li><a href="s15-analyses-hooks-exposures.html">Section 15</a> — exposures extend the DAG to dashboards.</li>
+            <li><a href="s19-production.html">Section 19</a> — publishing manifest artifacts for Slim CI and prod docs.</li>
+          </ul>
+          <div class="callout exam"><strong>Certification:</strong> memorise <code>{% docs name %}...{% enddocs %}</code>, <code>{{ doc('name') }}</code> in quoted YAML descriptions, <code>__overview__</code> for the homepage, and that <code>dbt docs generate</code> writes <code>catalog.json</code> while parse writes <code>manifest.json</code>.</div>
+        </section>
+
+        <section class="section" id="interview">
+          <h2>Interview questions</h2>
+          <p class="muted">Answer each one out loud before opening it.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+
+            <details class="qa">
+              <summary>How do you document a dbt model and its columns?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>Add <code>description</code> at the model level and under each column in <code>schema.yml</code> (or split YAML files under <code>models/</code>). dbt parses these into <code>manifest.json</code> and renders them in the docs site as Markdown.</p>
+                <p>For long or reused text, define a <code>{% docs %}</code> block in a <code>.md</code> file and set <code>description: '{{ doc("block_name") }}'</code> in YAML. Run <code>dbt docs generate</code> to merge warehouse catalog metadata and <code>dbt docs serve</code> to preview locally.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What is the difference between manifest.json and catalog.json?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p><code>manifest.json</code> is written on any parse: it holds the full project graph, configs, dependencies, compiled paths, and documentation strings from YAML and docs blocks. No warehouse connection is required.</p>
+                <p><code>catalog.json</code> is written by <code>dbt docs generate</code> only. It queries the warehouse information schema for column types, relations, and statistics for objects dbt knows about. Docs UI merges both: manifest for structure and descriptions, catalog for live warehouse metadata.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Explain doc() and docs blocks.<span class="qa-tag">Jinja</span></summary>
+              <div class="qa-body">
+                <p>A docs block is defined with <code>{% docs block_name %}...{% enddocs %}</code> in a Markdown file under project paths. The block body is Markdown stored in the project, not the warehouse.</p>
+                <p><code>{{ doc('block_name') }}</code> is a Jinja function that inlines the rendered block wherever it appears — typically in a YAML <code>description</code> field. Block names are project-global. The special name <code>__overview__</code> becomes the docs homepage.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What creates edges in the dbt lineage graph?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>Edges come from parse-time dependency discovery: <code>{{ ref('model') }}</code> links models, <code>{{ source('source', 'table') }}</code> links sources to models, and declared exposure <code>depends_on</code> links models to downstream consumers. Tests attach to models or columns but are separate node types.</p>
+                <p>Hard-coded table names do not create edges. Macros expand inline and do not appear as nodes. The graph reflects logical dependencies, not orchestration schedule or runtime parallelism.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>When would you use persist_docs?<span class="qa-tag">Production</span></summary>
+              <div class="qa-body">
+                <p>When BI tools, SQL IDEs, or warehouse catalog products should show the same descriptions as dbt docs without users opening the docs site. <code>+persist_docs: {relation: true, columns: true}</code> in <code>dbt_project.yml</code> pushes COMMENT metadata on model build.</p>
+                <p>Trade-offs: extra DDL each run, adapter-specific comment limits, and descriptions must be kept in YAML/docs blocks as source of truth — warehouse comments are overwritten on build, not edited in the UI long term.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Your colleague added a doc() reference but the docs site shows the raw Jinja. Why?<span class="qa-tag">Troubleshooting</span></summary>
+              <div class="qa-body">
+                <p>Most often the YAML description was not quoted, so the file stores literal curly braces as a plain string and dbt never treats it as a Jinja template to render at parse time. Fix: <code>description: '{{ doc("block_name") }}'</code>.</p>
+                <p>Less common: they edited YAML but never re-ran parse or generate, and the browser shows a cached older manifest. Run <code>dbt parse</code>, <code>dbt docs generate</code>, and hard-refresh.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How do you document a custom generic test?<span class="qa-tag">Testing</span></summary>
+              <div class="qa-body">
+                <p>Add a <code>macros:</code> entry in YAML (the course uses <code>models/test_docs.yml</code>) with <code>name</code> matching the test macro (e.g. <code>test_minimum_row_count</code>), a <code>description</code>, and an <code>arguments</code> list naming each parameter with its own description.</p>
+                <p>The docs site macro page then documents how to attach the test in <code>schema.yml</code> under <code>data_tests:</code> with <code>arguments:</code> nested correctly for dbt 1.8+.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Does dbt docs generate require models to be built first?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p>Parse and manifest generation do not require built models. Catalog generation queries the warehouse for relations that exist; if a model was never run, it may appear in lineage from manifest but lack column types and stats in catalog until the relation exists.</p>
+                <p>Best practice: run <code>dbt build</code> (or at least run models) on the target schema, then generate docs so the site shows complete metadata. CI prod jobs typically chain build then generate.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How would you host dbt docs for a production project?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>Common pattern: CI on main runs <code>dbt docs generate</code> against prod (or a dedicated docs target), uploads <code>target/index.html</code>, static assets, <code>manifest.json</code>, and <code>catalog.json</code> to private object storage, and serves via HTTPS with SSO in front. dbt Cloud offers hosted docs on job completion.</p>
+                <p>Avoid leaving <code>dbt docs serve</code> running on a shared server — it is a dev command. Store artifacts, not live Python servers, in production.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Why document columns that already have not_null and unique tests?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>Tests enforce constraints; descriptions convey meaning. A <code>not_null</code> test does not explain that <code>host_id</code> is a foreign key to <code>dim_hosts_cleansed</code> or what to do when it fails. Documentation reduces slack questions and speeds onboarding.</p>
+                <p>Together they form a contract: description for humans, tests for machines. Certification questions often pair "where do descriptions live" with "where do tests live" — same YAML file, different keys.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What is the __overview__ docs block?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>A reserved docs block name whose Markdown body renders as the landing page of the dbt docs site. The course defines it in <code>models/overview.md</code> with a pipeline title, welcome text, and an ERD image (<code>assets/input_schema.png</code>).</p>
+                <p>It is the right place for architecture context, links to runbooks, and diagrams that do not belong on a single model page. It is not a model and is not built in the warehouse.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How does documentation relate to data governance and catalog tools?<span class="qa-tag">Production</span></summary>
+              <div class="qa-body">
+                <p>dbt manifest is a machine-readable graph many catalogs ingest (Atlan, Alation, Monte Carlo, Snowflake Horizon). Descriptions and <code>meta</code> fields become tags and stewardship metadata. <code>persist_docs</code> bridges to warehouse-native comments.</p>
+                <p>dbt docs alone is not a full enterprise catalog — it covers dbt-managed resources, not every raw landing table or SaaS dataset — but it is the authoritative source for transformation logic definitions when the project is well documented.</p>
+              </div>
+            </details>
+
+          </div>
+        </section>
+
+        <section class="section" id="practice">
+          <h2>Hands-on practice</h2>
+          <p class="muted">Run these from the <code>airbnb</code> folder with your virtualenv active.</p>
+          <ol class="practice-list">
+
+            <li class="practice">
+              <p class="practice-task">Add model and column descriptions to <code>dim_listings_cleansed</code> and <code>fct_reviews</code> in <code>schema.yml</code> matching the course repo excerpt, including the <code>doc()</code> reference on <code>minimum_nights</code>.</p>
+              <span class="console-path">airbnb/models/schema.yml · airbnb/models/docs.md</span>
+              <p class="practice-expect"><code>dbt parse</code> succeeds; in docs, <code>minimum_nights</code> shows the multi-line explanation about zero-night listings becoming one.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Create <code>models/docs.md</code> with the <code>dim_listing_cleansed__minimum_nights</code> block from the course repo.</li>
+                    <li>Add descriptions to <code>schema.yml</code> for models and columns as in the lecture excerpt.</li>
+                    <li>Set <code>minimum_nights</code> description to <code>'{{ doc("dim_listing_cleansed__minimum_nights") }}'</code>.</li>
+                    <li>Run <code>dbt parse</code>, then <code>dbt docs generate</code> and <code>dbt docs serve</code>.</li>
+                  </ol>
+<pre data-lang="yaml" data-title="models/schema.yml (minimum_nights column)"><code>      - name: minimum_nights
+        description: '{{ doc("dim_listing_cleansed__minimum_nights") }}'
+        data_tests:
+          - positive_values</code></pre>
+                  <p class="muted">Undo: revert <code>schema.yml</code> and delete <code>docs.md</code> if experimenting only; no warehouse objects change.</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">Create <code>models/overview.md</code> with the <code>__overview__</code> block and verify the input schema image reference resolves after docs generate.</p>
+              <span class="console-path">airbnb/models/overview.md · airbnb/assets/input_schema.png</span>
+              <p class="practice-expect">Docs homepage shows "Airbnb pipeline" heading and the input schema diagram (file must exist at <code>assets/input_schema.png</code>).</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Copy <code>overview.md</code> from the course repo (local image path or S3 URL).</li>
+                    <li>Confirm <code>asset-paths: ["assets"]</code> in <code>dbt_project.yml</code>.</li>
+                    <li>Run <code>dbt docs generate</code> and <code>dbt docs serve</code>; open the homepage.</li>
+                  </ol>
+<pre data-lang="text" data-title="models/overview.md"><code>{% docs __overview__ %}
+# Airbnb pipeline
+
+Hey, welcome to our Airbnb pipeline documentation!
+
+Here is the schema of our input data:
+![input schema](assets/input_schema.png)
+
+{% enddocs %}</code></pre>
+                  <p class="muted">Undo: delete <code>overview.md</code>; regenerate docs.</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">Add <code>models/test_docs.yml</code> documenting <code>test_minimum_row_count</code>, then locate the macro in the docs UI under Macros.</p>
+              <span class="console-path">airbnb/models/test_docs.yml</span>
+              <p class="practice-expect">Macro page lists <code>model</code> and <code>min_row_count</code> argument descriptions matching your YAML.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Copy <code>test_docs.yml</code> from the course repo.</li>
+                    <li>Run <code>dbt parse</code> and regenerate docs.</li>
+                    <li>In the docs site search bar, type <code>minimum_row_count</code> and open the macro entry.</li>
+                  </ol>
+<pre data-lang="yaml" data-title="models/test_docs.yml"><code>macros:
+  - name: test_minimum_row_count
+    description: "Test that a model has at least a minimum number of rows."
+    arguments:
+      - name: model
+        description: "The model to test."
+      - name: min_row_count
+        description: "The minimum number of rows the model should have."</code></pre>
+                  <p class="muted">Undo: remove <code>test_docs.yml</code>; regenerate docs.</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">Compare <code>manifest.json</code> and <code>catalog.json</code> after generate: find <code>dim_listings_cleansed</code> in both and note which file holds <code>depends_on</code> versus column types.</p>
+              <span class="console-path">airbnb/target/manifest.json · airbnb/target/catalog.json</span>
+              <p class="practice-expect">manifest contains <code>depends_on.nodes</code> and rendered descriptions; catalog contains warehouse column metadata for built relations.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Run <code>dbt run --select dim_listings_cleansed</code> if the relation might be missing.</li>
+                    <li>Run <code>dbt docs generate</code>.</li>
+                    <li>Open manifest and search <code>model.airbnb.dim_listings_cleansed</code>; note <code>description</code> and <code>depends_on</code>.</li>
+                    <li>Open catalog and search the same model key; note column types and stats.</li>
+                  </ol>
+                  <p class="muted">Undo: nothing to revert; reading artifacts only.</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">Use the lineage graph to list all downstream models of <code>dim_listings_cleansed</code> and compare with <code>dbt ls --select dim_listings_cleansed+</code>.</p>
+              <span class="console-path">dbt docs serve · Terminal</span>
+              <p class="practice-expect">CLI list matches nodes visible downstream in the graph (e.g. <code>fct_reviews</code>, models referencing the dimension).</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Run <code>dbt ls --select dim_listings_cleansed+ --resource-type model</code>.</li>
+                    <li>Open lineage, select <code>dim_listings_cleansed</code>, enable downstream view.</li>
+                    <li>Reconcile any difference — usually exposures or tests shown in graph but filtered in ls.</li>
+                  </ol>
+<pre data-lang="shell" data-title="Terminal"><code>dbt ls --select dim_listings_cleansed+ --resource-type model</code></pre>
+                  <p class="muted">Undo: nothing to revert.</p>
+                </div>
+              </details>
+            </li>
+
+          </ol>
+        </section>
+
+        <section class="section" id="recap">
+          <h2>Recap</h2>
+          <div class="recap">
+            <ul class="checklist">
+              <li>Model and column <code>description</code> fields in <code>schema.yml</code> are the primary documentation surface.</li>
+              <li>Descriptions render as Markdown in the dbt docs site.</li>
+              <li>Reusable prose lives in <code>{% docs block_name %}...{% enddocs %}</code> blocks, typically in <code>models/docs.md</code>.</li>
+              <li>Reference a block with <code>'{{ doc("block_name") }}'</code> in quoted YAML descriptions.</li>
+              <li><code>__overview__</code> in <code>models/overview.md</code> defines the docs homepage; the course embeds <code>assets/input_schema.png</code> for the raw ERD.</li>
+              <li><code>dbt docs generate</code> builds catalog metadata and static site assets; it queries the warehouse information schema.</li>
+              <li><code>dbt docs serve</code> previews docs locally at <code>http://localhost:8080</code> — not for production hosting.</li>
+              <li><code>manifest.json</code> holds the graph, configs, and descriptions; <code>catalog.json</code> holds warehouse column metadata.</li>
+              <li>Lineage edges come from <code>ref()</code> and <code>source()</code>; macros do not appear as separate nodes.</li>
+              <li><code>test_docs.yml</code> documents custom generic test macros under a <code>macros:</code> YAML key.</li>
+              <li><code>asset-paths</code> in <code>dbt_project.yml</code> lets docs blocks reference project images.</li>
+              <li>Optional <code>persist_docs</code> pushes descriptions into warehouse COMMENT metadata on build.</li>
+            </ul>
+            <p style="margin-top:1rem;">
+              <button type="button" data-complete="section-14">Mark complete</button>
+            </p>
+          </div>
+        </section>
+
+      </div>
+
+      <aside class="toc" aria-label="On this page">
+        <strong>On this page</strong>
+        <ol>
+          <li><a href="#lectures">Lectures</a></li>
+          <li><a href="#schema-descriptions">schema.yml descriptions</a></li>
+          <li><a href="#docs-blocks">Docs blocks and doc()</a></li>
+          <li><a href="#overview">Project overview</a></li>
+          <li><a href="#docs-generate-serve">docs generate and serve</a></li>
+          <li><a href="#lineage-graph">Lineage graph</a></li>
+          <li><a href="#test-docs">test_docs.yml</a></li>
+          <li><a href="#markdown-images">Markdown and images</a></li>
+          <li><a href="#deeper">Deeper detail</a></li>
+          <li><a href="#interview">Interview questions</a></li>
+          <li><a href="#practice">Hands-on practice</a></li>
+          <li><a href="#recap">Recap</a></li>
+        </ol>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<footer class="footer">The Complete dbt Bootcamp: Zero to Hero · Section 14 · Offline study edition</footer>
+</body>
+</html>

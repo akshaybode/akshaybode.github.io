@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Topics on the SnowPro Core COF-C03 blueprint that the Udemy course does not teach, or teaches only in passing: Snowpipe Streaming, hybrid tables, data metric functions, aggregation and projection policies, organizations, budgets, failover groups and an end-to-end capstone.">
+<title>EXTRAS — Beyond the Course | Snowflake COF-C03 Course Notes</title>
+<link rel="stylesheet" href="assets/snowflake.css">
+<script defer src="assets/search-index.js"></script>
+<script defer src="assets/sql-glossary.js"></script>
+<script defer src="assets/sql-highlight.js"></script>
+<script defer src="assets/snowflake.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">Extras · Not taught in the course</p>
+    <h1>Beyond the Course</h1>
+    <p class="subtitle">The COF-C03 blueprint is wider than any single course. This page collects the exam-relevant material the Udemy sections skip or mention only in passing, plus the deeper reference tables and the end-to-end capstone that did not belong to any one lecture.</p>
+    <div class="hero-meta">
+      <span class="chip">14 topics</span>
+      <span class="chip">Gap-fill for all five exam domains</span>
+      <span class="chip">Last verified: 28 Jul 2026</span>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <nav class="pager" aria-label="Section navigation">
+    <a href="s17-bonus.html">← Bonus</a>
+    <a href="../index.html">Course contents</a>
+    <a href="interview-prep.html">Interview scenarios →</a>
+  </nav>
+
+  <main id="main">
+    <div class="layout">
+      <div class="content">
+
+        <section class="section" id="why">
+          <h2>Why this page exists</h2>
+          <p class="lead">Sections 1–17 follow the course lecture by lecture. That is the right way to study alongside the videos, but it means the notes inherit the course's blind spots. Snowflake rewrote the exam in February 2026 and several new areas landed on the blueprint that the course covers thinly or not at all.</p>
+          <p>Everything below is examinable. Treat this page as the last pass before the mock test rather than optional reading, and use <a href="s16-mock-test.html">Section 16</a> to revise by domain once you have been through it.</p>
+
+          <div class="callout info">
+            <strong>How to read the gap table.</strong> <em>Course depth</em> is how thoroughly the Udemy sections handle the topic: <strong>full</strong> means you can rely on the section notes, <strong>passing</strong> means it is named but not explained, <strong>none</strong> means the course never mentions it.
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Exam domain</th><th>Weight</th><th>Topic</th><th>Course depth</th><th>Covered here</th></tr>
+              </thead>
+              <tbody>
+                <tr><td rowspan="3">AI Data Cloud Features &amp; Architecture</td><td rowspan="3">31%</td><td>Hybrid tables / Unistore</td><td>none</td><td><a href="#hybrid-tables">Hybrid tables</a></td></tr>
+                <tr><td>Native Apps &amp; Container Services</td><td>none</td><td><a href="#native-apps">Native Apps</a></td></tr>
+                <tr><td>Full data-type reference incl. GEOGRAPHY</td><td>passing</td><td><a href="#data-types">Data types</a></td></tr>
+                <tr><td rowspan="4">Account Management &amp; Data Governance</td><td rowspan="4">20%</td><td>Data metric functions / data quality</td><td>none</td><td><a href="#dmf">Data metric functions</a></td></tr>
+                <tr><td>Aggregation &amp; projection policies</td><td>none</td><td><a href="#policies">Horizon policies</a></td></tr>
+                <tr><td>Organizations and ORGADMIN</td><td>passing</td><td><a href="#organizations">Organizations</a></td></tr>
+                <tr><td>Budgets vs resource monitors</td><td>passing</td><td><a href="#budgets">Budgets</a></td></tr>
+                <tr><td rowspan="2">Data Loading, Unloading &amp; Connectivity</td><td rowspan="2">18%</td><td>Snowpipe Streaming</td><td>passing</td><td><a href="#snowpipe-streaming">Snowpipe Streaming</a></td></tr>
+                <tr><td>External functions</td><td>passing</td><td><a href="#external-functions">External functions</a></td></tr>
+                <tr><td rowspan="2">Performance, Querying &amp; Transformation</td><td rowspan="2">21%</td><td>Constraints and join elimination</td><td>passing</td><td><a href="#constraints">Constraints</a></td></tr>
+                <tr><td>Query hash and recurring-query analysis</td><td>none</td><td><a href="#query-hash">Query hash</a></td></tr>
+                <tr><td>Data Collaboration</td><td>10%</td><td>Failover groups, client redirect, BCDR</td><td>passing</td><td><a href="#failover">Failover &amp; BCDR</a></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="section" id="snowpipe-streaming">
+          <h2>Snowpipe Streaming</h2>
+          <p>The course teaches <a href="s05-advance-data-loading.html">Snowpipe</a>, which is file-driven: something writes a file to a stage, a notification fires, Snowflake loads the file. Snowpipe Streaming removes the file entirely — a client writes <strong>rows</strong> into a channel through an SDK, and Snowflake commits them into the table.</p>
+
+          <div class="analogy">
+            <strong>Everyday analogy — post versus phone call:</strong> Snowpipe is posting a letter: you fill an envelope (a file), drop it in the box (the stage), and the postal service collects it on its own schedule. Snowpipe Streaming is phoning the office directly — each sentence lands as you speak it, with no envelope in between.
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th></th><th>Bulk COPY INTO</th><th>Snowpipe</th><th>Snowpipe Streaming</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><strong>Unit of work</strong></td><td>Files you choose</td><td>Files, event-driven</td><td>Rows, via channels</td></tr>
+                <tr><td><strong>Compute</strong></td><td>Your virtual warehouse</td><td>Serverless</td><td>Serverless</td></tr>
+                <tr><td><strong>Typical latency</strong></td><td>Whenever you run it</td><td>Around a minute</td><td>Seconds</td></tr>
+                <tr><td><strong>Stage required</strong></td><td>Yes</td><td>Yes</td><td>No</td></tr>
+                <tr><td><strong>Interface</strong></td><td>SQL</td><td>SQL pipe + notifications</td><td>Java/Scala SDK, or the Kafka connector in streaming mode</td></tr>
+                <tr><td><strong>Ordering</strong></td><td>No guarantee across files</td><td>No guarantee across files</td><td>Ordered within a channel, via offset tokens</td></tr>
+                <tr><td><strong>Default <code>ON_ERROR</code></td><td><code>ABORT_STATEMENT</code></td><td><code>SKIP_FILE</code></td><td>Not applicable — errors surface per row to the client</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>A <strong>channel</strong> is a named, logical connection from one client to one table. Each channel keeps an <strong>offset token</strong> so a restarted client can ask Snowflake what it last committed and resume without duplicating rows — this is how exactly-once delivery is achieved.</p>
+
+          <pre><code>-- Snowpipe Streaming is driven from client code, not SQL. From SQL you
+-- mainly observe it:
+
+SHOW CHANNELS IN TABLE my_db.my_schema.events;
+
+SELECT *
+FROM SNOWFLAKE.ACCOUNT_USAGE.SNOWPIPE_STREAMING_FILE_MIGRATION_HISTORY
+ORDER BY start_time DESC
+LIMIT 50;
+
+-- Streaming credits appear as their own service type
+SELECT service_type, SUM(credits_used) AS credits
+FROM SNOWFLAKE.ACCOUNT_USAGE.METERING_DAILY_HISTORY
+WHERE usage_date &gt;= DATEADD('day', -30, CURRENT_DATE())
+GROUP BY service_type
+ORDER BY credits DESC;</code></pre>
+
+          <div class="callout exam">
+            <strong>COF-C03 exam tip:</strong> If a question says "sub-minute latency", "row by row", or "no files", the answer is Snowpipe Streaming. If it says "files arrive in a bucket", it is Snowpipe. If it says "load this month's export once", it is <code>COPY INTO</code>. Snowpipe Streaming bills for the time a client is actively writing plus a per-client charge — it is not free when idle in the way a suspended warehouse is.
+          </div>
+        </section>
+
+        <section class="section" id="hybrid-tables">
+          <h2>Hybrid Tables (Unistore)</h2>
+          <p>Every table type the course covers is columnar and optimised for scanning lots of rows. A <strong>hybrid table</strong> is the opposite: a row-store table designed for single-row lookups and high-concurrency small writes — the transactional half of Snowflake's Unistore workload.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th></th><th>Standard table</th><th>Hybrid table</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><strong>Storage</strong></td><td>Columnar micro-partitions</td><td>Row store, with a columnar copy maintained for analytics</td></tr>
+                <tr><td><strong>Best at</strong></td><td>Scans and aggregations over many rows</td><td>Point lookups and single-row updates</td></tr>
+                <tr><td><strong>Primary key</strong></td><td>Informational only</td><td><strong>Required and enforced</strong></td></tr>
+                <tr><td><strong>Unique / foreign keys</strong></td><td>Informational only</td><td>Enforced</td></tr>
+                <tr><td><strong>Secondary indexes</strong></td><td>Not available</td><td>Supported</td></tr>
+                <tr><td><strong>Locking</strong></td><td>Table-level for DML</td><td>Row-level</td></tr>
+                <tr><td><strong>Time Travel</strong></td><td>Up to 90 days (Enterprise+)</td><td>Limited — check current documentation for your region</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <pre><code>CREATE OR REPLACE HYBRID TABLE order_status (
+  order_id     NUMBER       PRIMARY KEY,
+  customer_id  NUMBER       NOT NULL,
+  status       VARCHAR(20)  NOT NULL,
+  updated_at   TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP(),
+  INDEX idx_customer (customer_id)
+);
+
+-- Enforced uniqueness: the second statement fails
+INSERT INTO order_status (order_id, customer_id, status) VALUES (1, 100, 'NEW');
+INSERT INTO order_status (order_id, customer_id, status) VALUES (1, 101, 'NEW');
+-- Duplicate key value violates unique constraint
+
+-- Indexed point lookup — the pattern hybrid tables exist for
+SELECT status FROM order_status WHERE order_id = 1;</code></pre>
+
+          <div class="callout warn">
+            <strong>Availability.</strong> Hybrid tables are not enabled in every region or edition, and they are billed differently from standard tables. Confirm availability before planning a lab around them.
+          </div>
+
+          <div class="callout exam">
+            <strong>COF-C03 exam tip:</strong> The single most testable fact is that hybrid tables are the <em>only</em> Snowflake table type that <strong>enforces</strong> <code>PRIMARY KEY</code> and <code>UNIQUE</code> constraints, and the only one supporting secondary indexes. Everywhere else, <code>NOT NULL</code> is the only enforced constraint.
+          </div>
+        </section>
+
+        <section class="section" id="native-apps">
+          <h2>Native Apps and Snowpark Container Services</h2>
+          <p><a href="s12-data-sharing.html">Section 12</a> covers sharing data. The Native App Framework extends the same distribution machinery to sharing <em>logic</em>: a provider packages stored procedures, UDFs, Streamlit UIs and even container images, publishes them as a listing, and a consumer installs the application into their own account. The provider's code runs on the consumer's data without either party moving the data.</p>
+
+          <div class="grid-3 card-grid">
+            <div class="mini-card">
+              <h4>Application package</h4>
+              <p>The provider-side container holding versions, patches and the setup script that creates objects on install.</p>
+            </div>
+            <div class="mini-card">
+              <h4>Setup script</h4>
+              <p>Runs in the consumer account at install time. Creates the application role, views over shared content and any procedures.</p>
+            </div>
+            <div class="mini-card">
+              <h4>Container Services</h4>
+              <p>Runs long-lived container images on Snowflake-managed compute pools, so an app can ship a full service rather than only SQL.</p>
+            </div>
+          </div>
+
+          <div class="callout exam">
+            <strong>COF-C03 exam tip:</strong> Distinguish the three collaboration outputs. A <strong>share</strong> gives live read access to objects. A <strong>listing</strong> is the packaging and discovery layer (private listing, or public on the Marketplace) around a share or an app. A <strong>Native App</strong> ships executable logic that the consumer installs and runs on their own compute.
+          </div>
+        </section>
+
+        <section class="section" id="dmf">
+          <h2>Data Metric Functions and Data Quality</h2>
+          <p>The course covers governance policies but not data quality monitoring. A <strong>data metric function</strong> (DMF) is a function that measures something about a table — a null count, a duplicate count, a freshness lag — and that Snowflake evaluates on a schedule you attach to the table. Results land in a system view you can alert on.</p>
+
+          <p>Snowflake ships system DMFs in the <code>SNOWFLAKE.CORE</code> schema:</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>System DMF</th><th>Measures</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><code>NULL_COUNT</code> / <code>NULL_PERCENT</code></td><td>Missing values in a column</td></tr>
+                <tr><td><code>DUPLICATE_COUNT</code></td><td>Rows sharing the same value in a column</td></tr>
+                <tr><td><code>UNIQUE_COUNT</code></td><td>Distinct values in a column</td></tr>
+                <tr><td><code>BLANK_COUNT</code> / <code>BLANK_PERCENT</code></td><td>Empty strings, as distinct from NULLs</td></tr>
+                <tr><td><code>ROW_COUNT</code></td><td>Rows in the table</td></tr>
+                <tr><td><code>FRESHNESS</code></td><td>Seconds since the newest timestamp in a column</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <pre><code>USE ROLE ACCOUNTADMIN;
+
+-- 1. Decide how often metrics are evaluated for this table
+ALTER TABLE customers SET DATA_METRIC_SCHEDULE = '60 MINUTE';
+-- or: DATA_METRIC_SCHEDULE = 'USING CRON 0 8 * * * UTC'
+-- or: DATA_METRIC_SCHEDULE = 'TRIGGER_ON_CHANGES'
+
+-- 2. Attach system metrics to specific columns
+ALTER TABLE customers
+  ADD DATA METRIC FUNCTION SNOWFLAKE.CORE.NULL_COUNT ON (email);
+
+ALTER TABLE customers
+  ADD DATA METRIC FUNCTION SNOWFLAKE.CORE.DUPLICATE_COUNT ON (customer_id);
+
+-- 3. A custom DMF for a business rule
+CREATE OR REPLACE DATA METRIC FUNCTION negative_amounts(t TABLE(amount NUMBER))
+RETURNS NUMBER
+AS
+$$
+  SELECT COUNT(*) FROM t WHERE amount &lt; 0
+$$;
+
+ALTER TABLE orders
+  ADD DATA METRIC FUNCTION negative_amounts ON (amount);
+
+-- 4. Read the results
+SELECT measurement_time, metric_name, table_name, value
+FROM SNOWFLAKE.LOCAL.DATA_QUALITY_MONITORING_RESULTS
+ORDER BY measurement_time DESC
+LIMIT 50;
+
+-- 5. What is attached where
+SELECT * FROM TABLE(INFORMATION_SCHEMA.DATA_METRIC_FUNCTION_REFERENCES(
+  REF_ENTITY_NAME   =&gt; 'customers',
+  REF_ENTITY_DOMAIN =&gt; 'TABLE'
+));
+
+-- Cleanup
+ALTER TABLE customers DROP DATA METRIC FUNCTION SNOWFLAKE.CORE.NULL_COUNT ON (email);
+ALTER TABLE customers UNSET DATA_METRIC_SCHEDULE;</code></pre>
+
+          <div class="callout warn">
+            <strong>Cost.</strong> DMF evaluation is serverless and billed per run. A <code>TRIGGER_ON_CHANGES</code> schedule on a busy table can evaluate far more often than an hourly cron. Resource monitors will not cap this — see <a href="#budgets">Budgets</a>.
+          </div>
+        </section>
+
+        <section class="section" id="policies">
+          <h2>Aggregation, Projection and Tag-Based Policies</h2>
+          <p><a href="s10-access-control.html">Section 10</a> teaches masking policies and row access policies. Snowflake Horizon adds two more policy types the course never mentions, plus a way to attach any of them through tags instead of one object at a time.</p>
+
+          <h3>Aggregation policy — no single-row answers</h3>
+          <p>Forces queries against a table to return grouped results with at least <em>N</em> rows behind each group. Useful when you want a partner to analyse a population without identifying individuals.</p>
+
+          <pre><code>CREATE OR REPLACE AGGREGATION POLICY min_group_of_five
+  AS () RETURNS AGGREGATION_CONSTRAINT -&gt;
+    AGGREGATION_CONSTRAINT(MIN_GROUP_SIZE =&gt; 5);
+
+ALTER TABLE patients SET AGGREGATION POLICY min_group_of_five;
+
+SELECT * FROM patients;                       -- blocked: not an aggregate
+SELECT city, COUNT(*) FROM patients GROUP BY city;
+-- groups with fewer than 5 rows are combined into a remainder group
+
+ALTER TABLE patients UNSET AGGREGATION POLICY;</code></pre>
+
+          <h3>Projection policy — a column you may filter on but never see</h3>
+          <pre><code>CREATE OR REPLACE PROJECTION POLICY no_projection
+  AS () RETURNS PROJECTION_CONSTRAINT -&gt;
+    PROJECTION_CONSTRAINT(ALLOW =&gt; false);
+
+ALTER TABLE customers MODIFY COLUMN email
+  SET PROJECTION POLICY no_projection;
+
+SELECT email FROM customers;                    -- blocked
+SELECT COUNT(*) FROM customers WHERE email LIKE '%@example.com';  -- allowed</code></pre>
+
+          <h3>Tag-based masking — attach once, apply everywhere</h3>
+          <p>Instead of applying a masking policy to every column individually, attach it to a tag. Any column that carries the tag inherits the policy, including columns created later.</p>
+
+          <pre><code>CREATE OR REPLACE TAG pii_tag;
+
+CREATE OR REPLACE MASKING POLICY mask_email AS (val STRING)
+  RETURNS STRING -&gt;
+    CASE WHEN CURRENT_ROLE() IN ('ACCOUNTADMIN') THEN val ELSE '***MASKED***' END;
+
+-- Bind policy to tag, then tag columns
+ALTER TAG pii_tag SET MASKING POLICY mask_email;
+ALTER TABLE customers MODIFY COLUMN email SET TAG pii_tag = 'high';
+
+-- Any newly tagged column is masked automatically
+ALTER TABLE leads MODIFY COLUMN work_email SET TAG pii_tag = 'high';</code></pre>
+
+          <div class="callout exam">
+            <strong>COF-C03 exam tip:</strong> Learn the shapes. <strong>Masking policy</strong> changes a value in a column. <strong>Row access policy</strong> removes rows. <strong>Projection policy</strong> stops a column being selected while still allowing it in a predicate. <strong>Aggregation policy</strong> stops row-level output entirely. A masking policy and a projection policy can sit on the same column; a column can only have one masking policy at a time.
+          </div>
+        </section>
+
+        <section class="section" id="classification">
+          <h2>Automatic Data Classification</h2>
+          <p>Classification scans column data, infers what kind of information it holds, and can tag it for you — the input that makes tag-based masking practical at scale.</p>
+
+          <pre><code>-- Classify a schema and write the resulting tags automatically
+CREATE OR REPLACE SNOWFLAKE.DATA_PRIVACY.CLASSIFICATION_PROFILE
+  my_profile(
+    {
+      'minimum_object_age_for_classification_days': 0,
+      'maximum_classification_validity_days': 30,
+      'auto_tag': true
+    }
+  );
+
+ALTER SCHEMA sales_db.public
+  SET CLASSIFICATION_PROFILE = 'my_profile';
+
+-- Or classify on demand
+CALL SYSTEM$CLASSIFY('sales_db.public.customers', {'auto_tag': true});
+
+-- Review what was found
+SELECT * FROM TABLE(
+  INFORMATION_SCHEMA.TAG_REFERENCES_ALL_COLUMNS('customers', 'table')
+);</code></pre>
+
+          <p>Snowflake reports two things per column: a <strong>semantic category</strong> (what the data means — <code>EMAIL</code>, <code>NAME</code>, <code>PHONE_NUMBER</code>) and a <strong>privacy category</strong> (how sensitive it is — <code>IDENTIFIER</code>, <code>QUASI_IDENTIFIER</code>, <code>SENSITIVE</code>).</p>
+        </section>
+
+        <section class="section" id="organizations">
+          <h2>Organizations, ORGADMIN and Organization Usage</h2>
+          <p>The course works inside one account. In reality an <strong>organization</strong> sits above accounts and is how enterprises separate production from development, meet data-residency rules, and roll usage up for billing.</p>
+
+          <div class="diagram" role="img" aria-label="Hierarchy from organization down through accounts, databases, schemas and objects">
+            <div class="stack">
+              <div class="layer"><strong>Organization</strong><br><small class="muted">ORGADMIN · one contract, many accounts</small></div>
+              <div class="layer"><strong>Account</strong><br><small class="muted">One cloud, one region, one edition</small></div>
+              <div class="layer"><strong>Database → Schema → Object</strong><br><small class="muted">Everything the rest of these notes covers</small></div>
+            </div>
+          </div>
+
+          <pre><code>USE ROLE ORGADMIN;
+
+SHOW ORGANIZATION ACCOUNTS;
+
+CREATE ACCOUNT dev_account
+  ADMIN_NAME     = 'dev_admin'
+  ADMIN_PASSWORD = '&lt;strong_password&gt;'
+  EMAIL          = 'your-team@example.com'
+  EDITION        = ENTERPRISE
+  REGION         = 'aws_us_east_1';
+
+-- Usage across every account in the organization
+SELECT account_name, usage_date, SUM(credits_used) AS credits
+FROM SNOWFLAKE.ORGANIZATION_USAGE.METERING_DAILY_HISTORY
+WHERE usage_date &gt;= DATEADD('day', -30, CURRENT_DATE())
+GROUP BY account_name, usage_date
+ORDER BY usage_date DESC;
+
+SELECT * FROM SNOWFLAKE.ORGANIZATION_USAGE.CONTRACT_ITEMS;</code></pre>
+
+          <div class="callout exam">
+            <strong>COF-C03 exam tip:</strong> <code>ORGADMIN</code> is not in the normal role hierarchy under <code>ACCOUNTADMIN</code>. It is granted separately, it exists to manage accounts and read <code>ORGANIZATION_USAGE</code>, and it cannot see the data inside those accounts. Remember the three usage schemas: <code>INFORMATION_SCHEMA</code> (current database, live, short retention), <code>SNOWFLAKE.ACCOUNT_USAGE</code> (whole account, up to 365 days, latency of minutes to hours), <code>SNOWFLAKE.ORGANIZATION_USAGE</code> (all accounts).
+          </div>
+        </section>
+
+        <section class="section" id="budgets">
+          <h2>Budgets versus Resource Monitors</h2>
+          <p><a href="s09-performance.html">Section 9</a> covers resource monitors. Their well-known limitation is that they only see credits from the user-managed warehouses assigned to them. Everything serverless — Snowpipe, tasks, materialized view maintenance, search optimization, Cortex, DMFs — is invisible to them. Budgets close that gap.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th></th><th>Resource monitor</th><th>Budget</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><strong>Covers</strong></td><td>Assigned user-managed warehouses, plus their cloud-services usage</td><td>Warehouses, serverless features, storage and AI services</td></tr>
+                <tr><td><strong>Can suspend compute</strong></td><td><strong>Yes</strong> — <code>SUSPEND</code> and <code>SUSPEND_IMMEDIATE</code></td><td><strong>No</strong> — notification only</td></tr>
+                <tr><td><strong>Granularity</strong></td><td>Account, or a set of warehouses</td><td>Account budget, plus custom budgets over any set of objects</td></tr>
+                <tr><td><strong>Period</strong></td><td>Daily, weekly, monthly, yearly, or never reset</td><td>Monthly spending limit</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <pre><code>USE ROLE ACCOUNTADMIN;
+
+-- Account-level budget
+CALL SNOWFLAKE.LOCAL.ACCOUNT_ROOT_BUDGET!SET_SPENDING_LIMIT(1000);
+CALL SNOWFLAKE.LOCAL.ACCOUNT_ROOT_BUDGET!SET_EMAIL_NOTIFICATIONS(
+  'my_email_integration', ARRAY_CONSTRUCT('your-team@example.com')
+);
+
+-- Custom budget over a chosen set of objects
+CREATE OR REPLACE SNOWFLAKE.CORE.BUDGET analytics_budget();
+CALL analytics_budget!SET_SPENDING_LIMIT(250);
+CALL analytics_budget!ADD_RESOURCE(SYSTEM$REFERENCE('WAREHOUSE', 'ANALYTICS_WH'));
+CALL analytics_budget!ADD_RESOURCE(SYSTEM$REFERENCE('DATABASE', 'ANALYTICS_DB'));
+
+SELECT analytics_budget!GET_SPENDING_LIMIT();
+CALL analytics_budget!GET_SERVICE_TYPE_SPENDING_HISTORY();</code></pre>
+
+          <div class="callout exam">
+            <strong>COF-C03 exam tip:</strong> "Stop the spend" is a resource monitor. "Tell me about the spend, including serverless" is a budget. A question that mentions capping Snowpipe or Cortex costs with a resource monitor is describing something that does not work.
+          </div>
+        </section>
+
+        <section class="section" id="failover">
+          <h2>Replication, Failover Groups and Client Redirect</h2>
+          <p><a href="s12-data-sharing.html">Section 12</a> introduces replication. This is the business-continuity depth behind it.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Capability</th><th>What it does</th><th>Minimum edition</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>Database replication</td><td>Read-only secondary copy of one database in another account or region</td><td>Standard</td></tr>
+                <tr><td>Replication group</td><td>Replicates a set of databases and account objects together, consistently</td><td>Business Critical</td></tr>
+                <tr><td>Failover group</td><td>A replication group that can be promoted to primary</td><td>Business Critical</td></tr>
+                <tr><td>Client redirect</td><td>A connection URL that can be pointed at a different account without changing client config</td><td>Business Critical</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <pre><code>-- On the primary account
+CREATE FAILOVER GROUP prod_fg
+  OBJECT_TYPES  = DATABASES, ROLES, USERS, WAREHOUSES, INTEGRATIONS
+  ALLOWED_DATABASES = sales_db, finance_db
+  ALLOWED_ACCOUNTS  = myorg.dr_account
+  REPLICATION_SCHEDULE = '10 MINUTE';
+
+-- On the secondary account
+CREATE FAILOVER GROUP prod_fg
+  AS REPLICA OF myorg.prod_account.prod_fg;
+
+ALTER FAILOVER GROUP prod_fg REFRESH;
+
+-- Failover: promote the secondary
+ALTER FAILOVER GROUP prod_fg PRIMARY;
+
+-- Client redirect
+CREATE CONNECTION prod_conn;
+CREATE CONNECTION prod_conn AS REPLICA OF myorg.prod_account.prod_conn;
+ALTER CONNECTION prod_conn PRIMARY;   -- run on the account taking over
+
+SELECT * FROM SNOWFLAKE.ACCOUNT_USAGE.REPLICATION_GROUP_REFRESH_HISTORY
+ORDER BY start_time DESC;</code></pre>
+
+          <div class="callout warn">
+            <strong>Two things that catch people out.</strong> You cannot replicate into an account of a <em>lower</em> edition than the primary. And replication transfers data across regions, which is billed as egress on top of the storage the secondary consumes — a frequent <code>REPLICATION_SCHEDULE</code> on a large database is expensive.
+          </div>
+        </section>
+
+        <section class="section" id="constraints">
+          <h2>Constraints, Enforcement and Join Elimination</h2>
+          <p>The course creates tables with <code>PRIMARY KEY</code> and <code>NOT NULL</code> without dwelling on which of them Snowflake actually enforces. The answer is a reliable exam question.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Constraint</th><th>Standard tables</th><th>Hybrid tables</th><th>Why declare it anyway</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><code>NOT NULL</code></td><td><strong>Enforced</strong></td><td>Enforced</td><td>Genuine data protection</td></tr>
+                <tr><td><code>PRIMARY KEY</code></td><td>Not enforced</td><td><strong>Enforced</strong></td><td>Documents intent; the optimizer can use it</td></tr>
+                <tr><td><code>UNIQUE</code></td><td>Not enforced</td><td><strong>Enforced</strong></td><td>Documents intent</td></tr>
+                <tr><td><code>FOREIGN KEY</code></td><td>Not enforced</td><td>Enforced</td><td>Enables join elimination; tools read it for ER diagrams</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <pre><code>CREATE OR REPLACE TABLE dim_customer (
+  customer_id NUMBER PRIMARY KEY,          -- informational
+  name        VARCHAR NOT NULL             -- enforced
+);
+
+-- Both rows insert: the primary key is not enforced
+INSERT INTO dim_customer VALUES (1, 'Ann'), (1, 'Bob');
+
+-- This fails: NOT NULL is enforced
+INSERT INTO dim_customer VALUES (2, NULL);
+
+-- Declaring RELY lets the optimizer trust the constraint and
+-- eliminate joins that select no columns from the dimension
+ALTER TABLE dim_customer
+  ALTER CONSTRAINT PRIMARY KEY (customer_id) RELY;
+
+SHOW PRIMARY KEYS IN TABLE dim_customer;</code></pre>
+
+          <div class="callout exam">
+            <strong>COF-C03 exam tip:</strong> "Which constraint does Snowflake enforce on a standard table?" — only <code>NOT NULL</code>. Declaring the others is still worthwhile, because with <code>RELY</code> the optimizer may skip a join entirely.
+          </div>
+        </section>
+
+        <section class="section" id="data-types">
+          <h2>Full Data-Type Reference</h2>
+          <p>The course meets data types as it needs them. Here they are in one place, including the geospatial types it never uses.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Family</th><th>Types</th><th>Worth knowing</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>Numeric</td><td><code>NUMBER(p,s)</code>, <code>DECIMAL</code>, <code>INT</code>, <code>FLOAT</code>, <code>DOUBLE</code></td><td>All the integer aliases are <code>NUMBER(38,0)</code>. <code>FLOAT</code> is approximate — never use it for money.</td></tr>
+                <tr><td>String</td><td><code>VARCHAR(n)</code>, <code>CHAR</code>, <code>STRING</code>, <code>TEXT</code></td><td>Maximum 16 MB. Declaring a length costs nothing extra in storage; Snowflake only stores what is there.</td></tr>
+                <tr><td>Binary</td><td><code>BINARY</code>, <code>VARBINARY</code></td><td>Maximum 8 MB.</td></tr>
+                <tr><td>Boolean</td><td><code>BOOLEAN</code></td><td>Three-valued: TRUE, FALSE, NULL.</td></tr>
+                <tr><td>Date &amp; time</td><td><code>DATE</code>, <code>TIME</code>, <code>TIMESTAMP_NTZ</code>, <code>TIMESTAMP_LTZ</code>, <code>TIMESTAMP_TZ</code></td><td><code>TIMESTAMP</code> is an alias controlled by the <code>TIMESTAMP_TYPE_MAPPING</code> parameter, defaulting to <code>TIMESTAMP_NTZ</code>.</td></tr>
+                <tr><td>Semi-structured</td><td><code>VARIANT</code>, <code>OBJECT</code>, <code>ARRAY</code></td><td><code>VARIANT</code> holds up to 16 MB compressed. Covered in <a href="s06-semi-unstructured.html">Section 6</a>.</td></tr>
+                <tr><td>Geospatial</td><td><code>GEOGRAPHY</code>, <code>GEOMETRY</code></td><td><code>GEOGRAPHY</code> models a sphere (lat/long on Earth); <code>GEOMETRY</code> models a flat plane. Accepts WKT, WKB and GeoJSON.</td></tr>
+                <tr><td>Vector</td><td><code>VECTOR(FLOAT, n)</code></td><td>Fixed-length embedding used by Cortex similarity functions — see <a href="s14-advance-concepts.html">Section 14</a>.</td></tr>
+                <tr><td>Structured</td><td><code>OBJECT(...)</code>, <code>ARRAY(...)</code>, <code>MAP(...)</code></td><td>Typed variants of the semi-structured types, used mainly with Iceberg tables.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <pre><code>SELECT
+  TO_GEOGRAPHY('POINT(-122.35 37.55)')                AS from_wkt,
+  ST_DISTANCE(
+    TO_GEOGRAPHY('POINT(-122.35 37.55)'),
+    TO_GEOGRAPHY('POINT(0.13 51.51)')
+  )                                                    AS metres_apart,
+  [1.0, 2.0, 3.0]::VECTOR(FLOAT, 3)                    AS embedding;</code></pre>
+        </section>
+
+        <section class="section" id="external-functions">
+          <h2>External Functions</h2>
+          <p><a href="s13-tools-interfaces.html">Section 13</a> names external functions without demonstrating them. They let a SQL query call code running outside Snowflake — a Lambda, an Azure Function, any HTTPS endpoint behind a cloud API gateway.</p>
+
+          <pre><code>USE ROLE ACCOUNTADMIN;
+
+CREATE OR REPLACE API INTEGRATION my_api_int
+  API_PROVIDER         = aws_api_gateway
+  API_AWS_ROLE_ARN     = 'arn:aws:iam::&lt;aws_account_id&gt;:role/snowflake_api_role'
+  API_ALLOWED_PREFIXES = ('https://&lt;api_id&gt;.execute-api.&lt;region&gt;.amazonaws.com/prod/')
+  ENABLED              = TRUE;
+
+CREATE OR REPLACE EXTERNAL FUNCTION sentiment_score(text VARCHAR)
+  RETURNS VARIANT
+  API_INTEGRATION = my_api_int
+  AS 'https://&lt;api_id&gt;.execute-api.&lt;region&gt;.amazonaws.com/prod/sentiment';
+
+SELECT review_id, sentiment_score(review_text) FROM reviews LIMIT 10;</code></pre>
+
+          <div class="callout exam">
+            <strong>COF-C03 exam tip:</strong> Know the four ways to run non-SQL logic and where each executes. <strong>UDF</strong> and <strong>stored procedure</strong>: inside Snowflake. <strong>Snowpark</strong>: inside Snowflake, on a warehouse. <strong>External function</strong>: outside Snowflake, reached through an API integration, and therefore subject to network latency and the remote service's availability. External functions cannot be shared and are not available in all deployments.
+          </div>
+        </section>
+
+        <section class="section" id="query-hash">
+          <h2>Query Hash and Recurring-Query Analysis</h2>
+          <p><a href="s09-performance.html">Section 9</a> tunes one query at a time using Query Profile. Query hashes let you find <em>which</em> queries are worth tuning, by grouping executions that share the same shape.</p>
+
+          <pre><code>-- QUERY_HASH: identical text. QUERY_PARAMETERIZED_HASH: same shape,
+-- different literals — the one you usually want.
+SELECT
+  query_parameterized_hash,
+  ANY_VALUE(query_text)                       AS example_query,
+  COUNT(*)                                    AS executions,
+  ROUND(SUM(total_elapsed_time) / 1000 / 60, 1) AS total_minutes,
+  ROUND(AVG(total_elapsed_time) / 1000, 1)      AS avg_seconds,
+  SUM(bytes_spilled_to_local_storage)           AS local_spill
+FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY
+WHERE start_time &gt;= DATEADD('day', -7, CURRENT_TIMESTAMP())
+  AND execution_status = 'SUCCESS'
+GROUP BY query_parameterized_hash
+ORDER BY total_minutes DESC
+LIMIT 20;</code></pre>
+
+          <p>Sorting by total time rather than average time is the point: a two-second query run 400,000 times costs far more than a ten-minute report run once a week.</p>
+        </section>
+
+        <section class="section" id="capstone">
+          <h2>Capstone — RetailPulse End to End</h2>
+          <p>The course ends with a mock test rather than a build. This capstone stitches most of the syllabus into one pipeline, which is the fastest way to find out what you only half-know.</p>
+
+          <div class="diagram" role="img" aria-label="Pipeline from S3 through staging, streams and tasks into curated tables, then governance and sharing">
+            <div class="flow">
+              <div class="node">S3<br><small class="muted">Raw files</small></div>
+              <span class="arrow" aria-hidden="true">→</span>
+              <div class="node pulse">Snowpipe<br><small class="muted">Staging</small></div>
+              <span class="arrow" aria-hidden="true">→</span>
+              <div class="node">Stream + Task<br><small class="muted">Curated</small></div>
+              <span class="arrow" aria-hidden="true">→</span>
+              <div class="node">Policies<br><small class="muted">Governed</small></div>
+              <span class="arrow" aria-hidden="true">→</span>
+              <div class="node pulse">Share<br><small class="muted">Consumer</small></div>
+            </div>
+          </div>
+
+          <div class="lab">
+            <h3>Build it in seven phases</h3>
+            <div class="lab-meta">
+              <span>Prerequisites: trial account, an S3 bucket you control</span>
+              <span>Role: ACCOUNTADMIN for setup, custom roles thereafter</span>
+              <span>Warehouse: X-Small with AUTO_SUSPEND = 60</span>
+              <span>Cost: low if you complete the cleanup</span>
+              <span>Time: 2–3 hours</span>
+            </div>
+            <ol>
+              <li><strong>Foundation</strong> — database, schemas (<code>raw</code>, <code>curated</code>, <code>marts</code>), a warehouse with auto-suspend, and a resource monitor. Covered in <a href="s02-basic-concepts.html">Section 2</a> and <a href="s09-performance.html">Section 9</a>.</li>
+              <li><strong>Ingest</strong> — storage integration, external stage, file format, then a pipe with <code>AUTO_INGEST = TRUE</code>. <a href="s07-connect-to-cloud.html">Section 7</a> and <a href="s05-advance-data-loading.html">Section 5</a>.</li>
+              <li><strong>Transform</strong> — a stream on the raw table feeding a task that <code>MERGE</code>s into curated, and a dynamic table for the aggregate mart. <a href="s05-advance-data-loading.html">Section 5</a> and <a href="s15-cof-c03-exclusive.html">Section 15</a>.</li>
+              <li><strong>Govern</strong> — custom roles for loader, transformer and analyst; a masking policy on customer email; a row access policy on region. <a href="s10-access-control.html">Section 10</a>.</li>
+              <li><strong>Optimise</strong> — run the mart query, read the Query Profile, decide honestly whether clustering or the search optimization service is justified. <a href="s09-performance.html">Section 9</a>.</li>
+              <li><strong>Collaborate</strong> — a secure view over the mart, shared to a reader account. <a href="s12-data-sharing.html">Section 12</a>.</li>
+              <li><strong>Operate</strong> — an alert on credit usage, cost attribution by tag, and a Git-backed deployment script. <a href="s14-advance-concepts.html">Section 14</a> and <a href="s15-cof-c03-exclusive.html">Section 15</a>.</li>
+            </ol>
+            <h4>Verification checklist</h4>
+            <ul class="checklist">
+              <li>Dropping a file in the bucket lands rows in <code>raw</code> within about a minute.</li>
+              <li><code>SYSTEM$STREAM_HAS_DATA</code> returns TRUE before the task runs and FALSE after.</li>
+              <li>The analyst role sees masked emails and only its own region's rows.</li>
+              <li>The reader account can query the secure view and nothing else.</li>
+              <li>The alert fires when you lower its threshold below current usage.</li>
+            </ul>
+            <h4>Cleanup</h4>
+            <pre><code>ALTER TASK curate_task SUSPEND;
+ALTER PIPE raw_pipe SET PIPE_EXECUTION_PAUSED = TRUE;
+DROP DATABASE IF EXISTS retailpulse;
+DROP WAREHOUSE IF EXISTS retailpulse_wh;
+DROP RESOURCE MONITOR IF EXISTS retailpulse_rm;
+DROP STORAGE INTEGRATION IF EXISTS retailpulse_int;</code></pre>
+          </div>
+        </section>
+
+        <section class="section" id="mistakes">
+          <h2>Common Mistakes Compendium</h2>
+          <p>Collected from every section, in the order they usually bite.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Mistake</th><th>What actually happens</th><th>Section</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>Using <code>ACCOUNTADMIN</code> for daily work</td><td>Objects end up owned by <code>ACCOUNTADMIN</code> and nobody else can manage them</td><td><a href="s10-access-control.html">10</a></td></tr>
+                <tr><td>Creating a role and never granting it upward</td><td>An orphaned role that <code>SYSADMIN</code> cannot manage</td><td><a href="s10-access-control.html">10</a></td></tr>
+                <tr><td>Granting <code>SELECT</code> on a table but not <code>USAGE</code> on its database and schema</td><td>The grantee cannot see the table at all</td><td><a href="s10-access-control.html">10</a></td></tr>
+                <tr><td>Running <code>PUT</code> or <code>GET</code> in a Snowsight worksheet</td><td>Unsupported — use SnowSQL, <code>snow stage copy</code>, or the Snowsight upload UI</td><td><a href="s04-data-loading-unloading.html">4</a></td></tr>
+                <tr><td>Forgetting <code>SKIP_HEADER = 1</code></td><td>The header row loads as data</td><td><a href="s04-data-loading-unloading.html">4</a></td></tr>
+                <tr><td>Re-running <code>COPY INTO</code> and seeing zero rows</td><td>Load metadata suppresses already-loaded files for 64 days; use <code>FORCE = TRUE</code></td><td><a href="s05-advance-data-loading.html">5</a></td></tr>
+                <tr><td>Using <code>PURGE = TRUE</code> in a lab</td><td>Source files are deleted, so the load cannot be repeated</td><td><a href="s05-advance-data-loading.html">5</a></td></tr>
+                <tr><td>Letting a stream go unconsumed past the retention period</td><td>The stream becomes stale and must be recreated</td><td><a href="s05-advance-data-loading.html">5</a></td></tr>
+                <tr><td>Setting <code>MIN_DATA_RETENTION_TIME_IN_DAYS</code> at account level</td><td>Raises storage cost across every table, and cannot be lowered per object</td><td><a href="s03-time-travel-views.html">3</a></td></tr>
+                <tr><td>Expecting a resource monitor to cap Snowpipe or Cortex</td><td>It does not — serverless spend needs a budget</td><td><a href="#budgets">Extras</a></td></tr>
+                <tr><td>Adding a clustering key to a small or rarely filtered table</td><td>Continuous reclustering credits with no query benefit</td><td><a href="s09-performance.html">9</a></td></tr>
+                <tr><td>Reading <code>ACCOUNT_USAGE</code> and expecting live data</td><td>Latency runs from minutes to hours; use <code>INFORMATION_SCHEMA</code> for now</td><td><a href="s11-security-auth.html">11</a></td></tr>
+                <tr><td>Applying a network policy without allow-listing your own IP</td><td>You lock yourself out of the account</td><td><a href="s11-security-auth.html">11</a></td></tr>
+                <tr><td>Sharing a standard view instead of a secure view</td><td>The underlying definition and unfiltered data can leak to the consumer</td><td><a href="s12-data-sharing.html">12</a></td></tr>
+                <tr><td>Assuming a clone doubles storage</td><td>Clones are zero-copy; you pay only for what diverges afterwards</td><td><a href="s05-advance-data-loading.html">5</a></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="section" id="recap">
+          <h2>Recap</h2>
+          <div class="recap">
+            <ul class="checklist">
+              <li>Snowpipe Streaming loads rows through channels with offset tokens — no files, no stage, seconds of latency.</li>
+              <li>Hybrid tables are the only table type that enforces <code>PRIMARY KEY</code> and <code>UNIQUE</code> and supports secondary indexes.</li>
+              <li>Data metric functions plus a <code>DATA_METRIC_SCHEDULE</code> give you scheduled data-quality monitoring.</li>
+              <li>Masking changes a value, row access removes rows, projection blocks selection, aggregation blocks row-level output.</li>
+              <li>Resource monitors can suspend warehouses but ignore serverless; budgets see everything but only notify.</li>
+              <li>Failover groups and client redirect require Business Critical; plain database replication does not.</li>
+              <li>On standard tables only <code>NOT NULL</code> is enforced — the rest are informational, though <code>RELY</code> helps the optimizer.</li>
+              <li>Group <code>QUERY_PARAMETERIZED_HASH</code> by total elapsed time to find what is actually worth tuning.</li>
+            </ul>
+            <p style="margin-top:1rem;">
+              <button type="button" data-complete="extras">Mark complete</button>
+            </p>
+          </div>
+        </section>
+
+      </div>
+
+      <aside class="toc" aria-label="On this page">
+        <strong>On this page</strong>
+        <ol>
+          <li><a href="#why">Why this page exists</a></li>
+          <li><a href="#snowpipe-streaming">Snowpipe Streaming</a></li>
+          <li><a href="#hybrid-tables">Hybrid tables</a></li>
+          <li><a href="#native-apps">Native Apps</a></li>
+          <li><a href="#dmf">Data metric functions</a></li>
+          <li><a href="#policies">Horizon policies</a></li>
+          <li><a href="#classification">Classification</a></li>
+          <li><a href="#organizations">Organizations</a></li>
+          <li><a href="#budgets">Budgets</a></li>
+          <li><a href="#failover">Failover &amp; BCDR</a></li>
+          <li><a href="#constraints">Constraints</a></li>
+          <li><a href="#data-types">Data types</a></li>
+          <li><a href="#external-functions">External functions</a></li>
+          <li><a href="#query-hash">Query hash</a></li>
+          <li><a href="#capstone">Capstone</a></li>
+          <li><a href="#mistakes">Common mistakes</a></li>
+          <li><a href="#recap">Recap</a></li>
+        </ol>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<footer class="footer">Snowflake COF-C03 Course Notes · Extras · Offline study edition</footer>
+</body>
+</html>

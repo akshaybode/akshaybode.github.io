@@ -1,0 +1,1280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="dbt bootcamp Section 7: what models are, staging src_ models, ref() and the DAG, compiled SQL in target/, dimension dim_ models with CTEs, and running and selecting models.">
+<title>Section 7 — Models | The Complete dbt Bootcamp Notes</title>
+<link rel="stylesheet" href="assets/dbt.css">
+<script defer src="assets/search-index.js"></script>
+<script defer src="assets/code-highlight.js"></script>
+<script defer src="assets/dbt.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">Course section 7 of 22 · The Complete dbt Bootcamp: Zero to Hero</p>
+    <h1>Models</h1>
+    <p class="subtitle">Your first real dbt models: a <code>SELECT</code> in a file under <code>models/</code>, staging layers that rename raw columns without touching business logic, <code>ref()</code> to wire dependencies, the DAG dbt infers from those calls, and the compiled SQL in <code>target/</code> that shows exactly what the warehouse runs.</p>
+    <div class="hero-meta">
+      <span class="chip">10 lectures · ~45min</span>
+      <span class="chip">src_ and dim_ models</span>
+      <span class="chip">dbt DAG and ref()</span>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <nav class="pager" aria-label="Section navigation">
+    <a href="s06-setup.html">← Setup and the Airbnb Project</a>
+    <a href="index.html">Course contents</a>
+    <a href="s08-materializations.html">Next: Materializations →</a>
+  </nav>
+
+  <main id="main">
+    <div class="layout">
+      <div class="content">
+
+        <section class="section" id="lectures">
+          <h2>Lectures in this section</h2>
+          <ol class="lecture-list">
+            <li class="lecture">
+              <a class="lec-title" href="#model-basics">What a dbt model is</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">course-resources.md · Models</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#model-basics">The models folder and naming conventions</a>
+              <span class="lec-time">~4:00</span>
+              <span class="lec-src">airbnb/models/ · dbt_project.yml</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#staging-src-models">First staging model: src_listings</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">models/src/src_listings.sql</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#staging-src-models">Building src_reviews</a>
+              <span class="lec-time">~4:00</span>
+              <span class="lec-src">models/src/src_reviews.sql</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#staging-src-models">Exercise: src_hosts</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">course-resources.md · Exercise</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#ref-and-dag">The ref() macro and model dependencies</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">models/dim/dim_listings_cleansed.sql</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#ref-and-dag">The dbt DAG and lineage graph</a>
+              <span class="lec-time">~4:00</span>
+              <span class="lec-src">target/manifest.json</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#compiled-sql">Compiled SQL in target/compiled and target/run</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">target/compiled/ · target/run/</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#dimension-dim-models">Dimension models with CTEs</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">models/dim/dim_listings_cleansed.sql · dim_hosts_cleansed.sql</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#running-and-selecting-models">dbt run output and selecting models</a>
+              <span class="lec-time">~3:00</span>
+              <span class="lec-src">course-resources.md · Models</span>
+            </li>
+          </ol>
+          <p class="muted">This is the first section where every lecture adds a file to the Airbnb project. If you completed <a href="s06-setup.html">Section&nbsp;6</a>, your environment is ready; if not, set up Snowflake and <code>profiles.yml</code> before continuing.</p>
+        </section>
+
+        <section class="section" id="model-basics">
+          <h2>Model basics</h2>
+          <p class="lead">A dbt model is a <code>.sql</code> file under <code>models/</code> containing a single <code>SELECT</code> statement. dbt reads the file, resolves Jinja macros like <code>{{ ref() }}</code>, wraps the result in the appropriate <code>CREATE</code> statement for the materialization, and executes it against your warehouse. You never write <code>CREATE TABLE</code> or <code>CREATE VIEW</code> yourself.</p>
+
+          <p>That separation is the core contract. Your job is to express the transformation logic; dbt's job is to turn it into DDL, run it in dependency order, and record what happened. If a model fails, dbt stops the run and does not build downstream models that depend on it.</p>
+
+          <h3>Where models live</h3>
+          <p>Every model file maps to one node in the DAG. The file name (without <code>.sql</code>) becomes the model name. A file at <code>models/dim/dim_listings_cleansed.sql</code> builds a model called <code>dim_listings_cleansed</code>. Subfolders are organisation only &mdash; they do not appear in the model name unless you configure a custom alias.</p>
+
+          <div class="filetree">
+            <ul>
+              <li><span class="dir">airbnb/</span>
+                <ul>
+                  <li><span class="dir">models/</span>
+                    <ul>
+                      <li><span class="dir">src/</span> <span class="note">staging · ephemeral default</span>
+                        <ul>
+                          <li><span class="file">src_listings.sql</span> <span class="new">&larr; first model in this section</span></li>
+                          <li><span class="file">src_reviews.sql</span> <span class="new">&larr; new</span></li>
+                          <li><span class="file">src_hosts.sql</span> <span class="new">&larr; exercise</span></li>
+                        </ul>
+                      </li>
+                      <li><span class="dir">dim/</span> <span class="note">dimensions · table default</span>
+                        <ul>
+                          <li><span class="file">dim_listings_cleansed.sql</span> <span class="new">&larr; new</span></li>
+                          <li><span class="file">dim_hosts_cleansed.sql</span> <span class="new">&larr; new</span></li>
+                        </ul>
+                      </li>
+                    </ul>
+                  </li>
+                  <li><span class="file">dbt_project.yml</span></li>
+                </ul>
+              </li>
+            </ul>
+          </div>
+
+          <h3>Naming conventions in this project</h3>
+          <p>The Airbnb project uses prefixes to signal layer and purpose:</p>
+          <ul>
+            <li><strong><code>src_</code></strong> &mdash; staging models. One raw source table in, renamed columns out. No business rules yet beyond aliasing.</li>
+            <li><strong><code>dim_</code></strong> &mdash; dimension models. Cleansed, conformed entities (listings, hosts) that other models join to.</li>
+            <li><strong><code>fct_</code></strong> &mdash; fact models (added in later sections). Events and metrics at a grain.</li>
+            <li><strong><code>mart_</code></strong> &mdash; presentation-layer models for a specific use case.</li>
+          </ul>
+
+          <p>Prefixes are convention, not dbt syntax. dbt does not enforce them. Teams adopt them so a file name tells you its role before you open it.</p>
+
+          <h3>Folder defaults from dbt_project.yml</h3>
+          <p>Materialization and other behaviour can be set per folder in <code>dbt_project.yml</code>. The Airbnb project configures three layers before you touch individual model files:</p>
+
+<pre data-lang="yaml" data-title="dbt_project.yml (models block excerpt)" data-explain="Folder-level defaults: src ephemeral, dim table, project default view. Individual models can override with config()."><code>models:
+  airbnb:
+    +materialized: view
+    dim:
+      +materialized: table
+    src:
+      +materialized: ephemeral</code></pre>
+
+          <p>Staging in <code>src/</code> is ephemeral: dbt inlines it as a CTE inside downstream models instead of creating a warehouse object. Dimensions in <code>dim/</code> persist as tables. Anything outside those folders defaults to views. <a href="s08-materializations.html">Section&nbsp;8</a> goes deep on what each materialization means; for now, know that <code>src_</code> models compile away and <code>dim_</code> models become queryable tables in your dev schema.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Folder</th><th>Default materialization</th><th>Warehouse object after <code>dbt run</code></th><th>Typical role</th></tr></thead>
+              <tbody>
+                <tr><td><code>models/src/</code></td><td>ephemeral</td><td>None &mdash; inlined as CTE</td><td>Rename raw columns, light typing</td></tr>
+                <tr><td><code>models/dim/</code></td><td>table</td><td><code>DEV.DIM_*</code> table</td><td>Cleansed dimensions</td></tr>
+                <tr><td>Everything else</td><td>view</td><td><code>DEV.*</code> view</td><td>Facts, marts, joins</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout info"><strong>Lesson versus finished repo.</strong> In the video, the instructor hard-codes <code>AIRBNB.RAW.RAW_LISTINGS</code> because <code>sources.yml</code> does not exist yet. The finished course repo uses <code>{{ source('airbnb', 'listings') }}</code> after <a href="s09-seeds-sources.html">Section&nbsp;9</a>. Both compile to the same raw table; <code>source()</code> adds documentation, freshness checks and lineage to raw tables.</div>
+
+          <h3>Anatomy of a model file</h3>
+          <p>A minimal model has three parts: an optional <code>{{ config() }}</code> block at the top, one or more CTEs in a <code>WITH</code> clause, and a final <code>SELECT</code>. The instructor builds every model in this section with CTEs even when a single <code>SELECT</code> would suffice, because the pattern scales: add a second CTE for a join, a third for a filter, without restructuring the file.</p>
+
+          <div class="analogy"><strong>Everyday analogy &mdash;</strong> a model file is a recipe card. The CTEs are prep steps (wash the vegetables, dice the onion). The final <code>SELECT</code> is the dish. dbt is the kitchen that reads every recipe, works out which dishes need which prep steps first, and cooks them in order.</div>
+
+          <h3>Rules every model must follow</h3>
+          <p>dbt enforces a few constraints that differ from writing ad hoc SQL in a worksheet:</p>
+          <ul>
+            <li><strong>One statement per file.</strong> The file must compile to a single <code>SELECT</code> (or a <code>WITH … SELECT</code>). Multiple semicolon-separated statements fail parsing.</li>
+            <li><strong>No DDL in model files.</strong> Do not write <code>CREATE</code>, <code>INSERT</code>, <code>DELETE</code>, or <code>MERGE</code>. dbt generates DDL from the materialization config. Exceptions exist (hooks, incremental logic via config) but not inline in the model body.</li>
+            <li><strong>Valid Jinja.</strong> Every <code>{% if %}</code> needs <code>{% endif %}</code>; every <code>{{ ref() }}</code> must reference a model that exists or will exist in the same project.</li>
+            <li><strong>Unique model names.</strong> Two files cannot produce the same model name. Collisions between <code>models/a/foo.sql</code> and <code>models/b/foo.sql</code> fail at parse time.</li>
+          </ul>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Valid in a model file</th><th>Not valid in a model file</th></tr></thead>
+              <tbody>
+                <tr><td><code>WITH cte AS (…) SELECT …</code></td><td><code>CREATE TABLE … AS SELECT …</code></td></tr>
+                <tr><td><code>{{ ref('upstream') }}</code></td><td><code>INSERT INTO other_table …</code></td></tr>
+                <tr><td><code>{{ config(materialized='table') }}</code></td><td><code>GRANT SELECT ON …</code> (use hooks or orchestration)</td></tr>
+                <tr><td><code>CASE</code>, window functions, joins</td><td>Multiple <code>SELECT</code> statements separated by semicolons</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>Python models (<code>.py</code> files) follow a different contract &mdash; introduced in <a href="s17-selectors-commands.html">Section&nbsp;17</a>. This section covers SQL models only.</p>
+        </section>
+
+        <section class="section" id="ref-and-dag">
+          <h2>ref() and the DAG</h2>
+          <p class="lead"><code>{{ ref('model_name') }}</code> is how one dbt model references another. It records a dependency, resolves to the correct schema-qualified relation for your current target, and feeds the lineage graph. Every <code>ref()</code> call is an edge in the directed acyclic graph (DAG) dbt uses to determine build order.</p>
+
+          <h3>What ref() does at compile time</h3>
+          <p>When dbt compiles <code>dim_listings_cleansed</code>, it finds <code>{{ ref('src_listings') }}</code> and substitutes whatever that parent actually is in the warehouse. What gets substituted depends on the parent's materialization. If the parent is a table or a view, <code>ref()</code> resolves to its fully qualified relation name for the active target, such as <code>"AIRBNB"."DEV"."DIM_HOSTS_CLEANSED"</code>. If the parent is ephemeral, as every <code>src_</code> model in this project is, there is no relation to point at, so dbt inlines the parent's compiled SQL as a CTE at the top of the child's query instead.</p>
+
+          <p>That distinction explains something readers hit immediately in this section: you can query <code>DIM_LISTINGS_CLEANSED</code> in Snowflake after a run, but there is no <code>SRC_LISTINGS</code> object to query, even though <code>dbt run</code> reported success for it. Nothing is broken &mdash; the staging model exists only as text that was pasted into its children.</p>
+
+          <p>Three things happen in one macro call:</p>
+          <ol>
+            <li><strong>Dependency registration.</strong> dbt adds an edge <code>src_listings → dim_listings_cleansed</code> to the manifest. Build order follows these edges.</li>
+            <li><strong>Environment resolution.</strong> The same project code builds into <code>DEV</code> for you and <code>PROD</code> for production without editing SQL. <code>ref()</code> looks up where that model was (or will be) built for the active target.</li>
+            <li><strong>Lineage.</strong> <code>dbt docs generate</code> and dbt Cloud's lineage view read these edges to draw the graph.</li>
+          </ol>
+
+<pre data-lang="sql" data-title="models/dim/dim_listings_cleansed.sql" data-explain="ref('src_listings') declares that this dimension depends on the staging model. dbt builds src_listings logic before dim_listings_cleansed."><code>WITH src_listings AS (
+  SELECT
+    *
+  FROM
+    {{ ref('src_listings') }}
+)
+SELECT
+  listing_id,
+  listing_name,
+  room_type,
+  CASE
+    WHEN minimum_nights = 0 THEN 1
+    ELSE minimum_nights
+  END AS minimum_nights,
+  host_id,
+  REPLACE(
+    price_str,
+    '$'
+  ) :: NUMBER(
+    10,
+    2
+  ) AS price,
+  created_at,
+  updated_at
+FROM
+  src_listings</code></pre>
+
+          <div class="callout danger"><strong>Never hard-code a dbt-built table name.</strong> Writing <code>FROM AIRBNB.DEV.SRC_LISTINGS</code> instead of <code>{{ ref('src_listings') }}</code> compiles and may even run &mdash; but dbt no longer knows about the dependency. Build order breaks, lineage disappears, and a dev run might read a stale or wrong schema. This is the most common beginner mistake in dbt interviews and in production incidents.</div>
+
+          <h3>The DAG for Section 7 models</h3>
+          <p>After this section, the Airbnb project has a small but complete DAG: three raw tables feed three ephemeral staging models, which feed two dimension tables. There are no cycles &mdash; dbt refuses to compile cyclic dependencies.</p>
+
+          <div class="diagram">
+            <p class="diagram-title">Airbnb model DAG after Section 7 — raw sources through dimensions</p>
+            <div class="dag">
+              <div class="dag-col">
+                <p class="dag-label">Raw (Snowflake)</p>
+                <div class="node is-source"><b>raw_listings</b></div>
+                <div class="node is-source"><b>raw_reviews</b></div>
+                <div class="node is-source"><b>raw_hosts</b></div>
+              </div>
+              <div class="dag-col">
+                <p class="dag-label">Staging (ephemeral)</p>
+                <div class="node is-model"><b>src_listings</b></div>
+                <div class="node is-model"><b>src_reviews</b></div>
+                <div class="node is-model"><b>src_hosts</b></div>
+              </div>
+              <div class="dag-col">
+                <p class="dag-label">Dimensions (table)</p>
+                <div class="node is-mart pulse"><b>dim_listings_cleansed</b></div>
+                <div class="node is-mart"><b>dim_hosts_cleansed</b></div>
+              </div>
+            </div>
+          </div>
+
+          <p><code>src_reviews</code> has no downstream model yet in this section &mdash; it sits ready for <code>fct_reviews</code> in <a href="s08-materializations.html#incremental-models">Section&nbsp;8</a>. dbt still parses and includes it in the manifest; it simply has no children until you add the fact model.</p>
+
+          <h3>How dbt picks build order</h3>
+          <p>dbt topologically sorts the DAG. Models with no dependencies (or only source dependencies) compile first. Models that depend on them come next. Independent branches run in parallel up to the <code>threads</code> limit in <code>profiles.yml</code>.</p>
+
+          <p>When you run <code>dbt run --select dim_listings_cleansed</code>, dbt still builds <code>src_listings</code> first even though you did not name it, because <code>dim_listings_cleansed</code> depends on it. That behaviour is called <em>parent inclusion</em> and is the default for selection syntax.</p>
+
+          <div class="diagram">
+            <p class="diagram-title">Build order for dim_listings_cleansed with parent inclusion</p>
+            <div class="flow">
+              <div class="node is-model"><b>src_listings</b><small>ephemeral · step 1</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-mart pulse"><b>dim_listings_cleansed</b><small>table · step 2</small></div>
+            </div>
+          </div>
+
+          <h3>Inspecting the DAG without the warehouse</h3>
+          <p>After any parse or run, <code>target/manifest.json</code> contains every node and edge. Useful commands before you have run anything:</p>
+
+          <div class="terminal">
+            <p class="term-head">List models and dependencies</p>
+            <pre class="term-body"><span class="tt-cmd">dbt ls --resource-type model</span>
+<span class="tt-ok">dim_hosts_cleansed
+dim_listings_cleansed
+src_hosts
+src_listings
+src_reviews</span>
+<span class="tt-cmd">dbt ls --select +dim_listings_cleansed</span>
+<span class="tt-ok">src_listings
+dim_listings_cleansed</span></pre>
+          </div>
+
+          <p>The <code>+</code> prefix means "this model and all its parents". A trailing <code>+</code> (<code>dim_listings_cleansed+</code>) means "this model and all its children". <a href="s17-selectors-commands.html">Section&nbsp;17</a> covers the full selection language.</p>
+
+          <div class="callout tip"><strong>BigQuery and Postgres note.</strong> On Snowflake, dbt creates objects in the schema from <code>profiles.yml</code> (<code>DEV</code> in the course). On BigQuery, the schema maps to a dataset; on Postgres, a schema inside a database. <code>ref()</code> resolves correctly on all adapters &mdash; the difference is only in how the warehouse names and bills for the resulting objects.</div>
+
+          <h3>Reading dependencies from manifest.json</h3>
+          <p>After <code>dbt parse</code> or any run, each model node in <code>target/manifest.json</code> includes <code>depends_on.nodes</code> &mdash; a list of upstream model and source IDs. Tools (dbt Cloud, Elementary, custom scripts) read this file rather than re-parsing SQL.</p>
+
+          <p>For <code>dim_listings_cleansed</code>, you would see a dependency on <code>model.airbnb.src_listings</code>. That edge is what powers:</p>
+          <ul>
+            <li>Automatic parent builds when you select a child model</li>
+            <li>Impact analysis ("if I change src_listings, what breaks?")</li>
+            <li>State-aware CI in production (<a href="s19-production.html">Section&nbsp;19</a>)</li>
+          </ul>
+
+          <div class="terminal">
+            <p class="term-head">Show direct parents of a model</p>
+            <pre class="term-body"><span class="tt-cmd">dbt ls --select 1+dim_listings_cleansed --output json</span>
+<span class="tt-dim"># lists src_listings (depth 1) and dim_listings_cleansed</span>
+<span class="tt-cmd">dbt ls --select 2+dim_listings_cleansed</span>
+<span class="tt-dim"># would include grandparents if dim_listings_cleansed had a longer chain</span></pre>
+          </div>
+        </section>
+
+        <section class="section" id="compiled-sql">
+          <h2>Compiled SQL</h2>
+          <p class="lead">dbt is a compiler first and a runner second. Every model passes through Jinja rendering to produce warehouse-native SQL, which lands in <code>target/compiled/</code>. When you actually execute, dbt wraps that SQL in DDL and writes the final script to <code>target/run/</code>. Reading these files is the fastest way to understand what dbt really sent to Snowflake.</p>
+
+          <h3>target/compiled versus target/run</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Directory</th><th>Contents</th><th>When it appears</th><th>Use it to</th></tr></thead>
+              <tbody>
+                <tr><td><code>target/compiled/</code></td><td>Pure SQL after Jinja expansion &mdash; your <code>SELECT</code> with <code>ref()</code> resolved and ephemeral parents inlined as CTEs</td><td><code>dbt compile</code>, <code>dbt run</code>, <code>dbt build</code></td><td>Debug logic errors, verify CTE inlining, share logic with a DBA</td></tr>
+                <tr><td><code>target/run/</code></td><td>Full DDL dbt executed: <code>CREATE TABLE AS …</code> or <code>CREATE VIEW AS …</code> plus any hooks</td><td>After a successful <code>dbt run</code> or <code>dbt build</code></td><td>Audit exact warehouse statements, reproduce failures in a worksheet</td></tr>
+                <tr><td><code>target/manifest.json</code></td><td>Parsed project graph: nodes, edges, configs, compiled paths</td><td>Any parse command</td><td>Power selectors, defer, state comparison, docs</td></tr>
+                <tr><td><code>logs/dbt.log</code></td><td>Full debug log with timings and adapter messages</td><td>Every invocation</td><td>Connection issues, adapter errors, slow model diagnosis</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>Path pattern for a model file at <code>models/dim/dim_listings_cleansed.sql</code>:</p>
+          <ul>
+            <li><code>target/compiled/airbnb/models/dim/dim_listings_cleansed.sql</code></li>
+            <li><code>target/run/airbnb/models/dim/dim_listings_cleansed.sql</code></li>
+          </ul>
+
+          <h3>What compiled SQL looks like for a dimension</h3>
+          <p>After <code>dbt compile --select dim_listings_cleansed</code>, the compiled file expands <code>ref('src_listings')</code>. Because <code>src_listings</code> is ephemeral, dbt inlines its entire query as nested CTEs rather than referencing a table:</p>
+
+<pre data-lang="sql" data-title="target/compiled/airbnb/models/dim/dim_listings_cleansed.sql (representative)" data-explain="Ephemeral src_listings becomes a WITH clause. ref() is gone; raw table name is fully qualified."><code>WITH raw_listings AS (
+    SELECT * FROM AIRBNB.RAW.RAW_LISTINGS
+),
+src_listings AS (
+    SELECT
+        id AS listing_id,
+        listing_url,
+        name AS listing_name,
+        room_type,
+        minimum_nights,
+        host_id,
+        price AS price_str,
+        created_at,
+        updated_at
+    FROM raw_listings
+)
+SELECT
+  listing_id,
+  listing_name,
+  room_type,
+  CASE WHEN minimum_nights = 0 THEN 1 ELSE minimum_nights END AS minimum_nights,
+  host_id,
+  REPLACE(price_str, '$')::NUMBER(10, 2) AS price,
+  created_at,
+  updated_at
+FROM src_listings</code></pre>
+
+          <div class="callout warn"><strong>Typo check.</strong> If your compiled SQL shows a wrong column name or a missing CTE, the bug is in your model file or an upstream ephemeral model &mdash; not in dbt's compiler. Fix the source <code>.sql</code> and recompile.</div>
+
+          <h3>What run SQL adds</h3>
+          <p>The run artifact wraps compiled logic in the materialization DDL. For a table materialization (the <code>dim/</code> folder default), dbt generates something like:</p>
+
+<pre data-lang="sql" data-title="target/run/airbnb/models/dim/dim_listings_cleansed.sql (representative)" data-explain="Run SQL includes CREATE OR REPLACE and any post-hooks from dbt_project.yml."><code>create or replace transient table AIRBNB.DEV.dim_listings_cleansed
+as (
+  -- compiled SELECT from target/compiled/... goes here
+);</code></pre>
+
+          <p>Exact DDL varies by adapter and dbt version. Snowflake uses <code>CREATE OR REPLACE TRANSIENT TABLE</code> for tables in dev; views get <code>CREATE OR REPLACE VIEW</code>. The course's <code>on-run-start</code> hook and per-model <code>post-hook</code> in <code>dbt_project.yml</code> also appear in run SQL or execute separately &mdash; check <code>logs/dbt.log</code> if row counts in <code>audit_log</code> do not match expectations.</p>
+
+          <h3>Commands that populate target/</h3>
+          <div class="terminal">
+            <p class="term-head">Compile without executing</p>
+            <pre class="term-body"><span class="tt-cmd">dbt compile --select dim_listings_cleansed</span>
+<span class="tt-dim">09:14:02  Running with dbt=1.11.12</span>
+<span class="tt-dim">09:14:03  Found 5 models, 0 sources, 0 exposures, 0 metrics, …</span>
+<span class="tt-ok">09:14:04  Concurrency: 1 threads (target='dev')</span>
+<span class="tt-ok">09:14:04  Done.</span></pre>
+          </div>
+
+          <p><code>dbt compile</code> is free from a warehouse perspective &mdash; no DDL runs, no tables created. Use it in CI to catch Jinja syntax errors before merge. Use it locally when you want to read expanded SQL without waiting for a warehouse build.</p>
+
+          <div class="callout exam"><strong>Certification:</strong> know the difference between compile and run. Compile renders Jinja and writes <code>target/compiled/</code>; run executes warehouse DDL/DML and writes <code>target/run/</code>. Tests compile and execute query SQL; they do not use the materialization wrapper.</div>
+
+          <h3>Debugging workflow the instructor recommends</h3>
+          <p>When a model fails or returns unexpected results, the course teaches this sequence rather than sprinkling <code>{{ log() }}</code> everywhere:</p>
+          <ol>
+            <li>Read the error message in the terminal &mdash; compilation errors cite the model file; database errors cite the warehouse.</li>
+            <li>Run <code>dbt compile --select failing_model</code> if compilation succeeded but results look wrong.</li>
+            <li>Open <code>target/compiled/airbnb/models/…/failing_model.sql</code> and copy the SQL into a Snowflake worksheet.</li>
+            <li>Execute piecemeal: run each CTE separately to find which step drops rows or throws a cast error.</li>
+            <li>Fix the <code>models/</code> file; never edit <code>target/</code> directly.</li>
+          </ol>
+
+          <p><a href="s16-debugging-logging.html">Section&nbsp;16</a> adds structured logging and test debugging, but compiled SQL remains the first tool for model logic issues.</p>
+
+          <h3>Side-by-side: model file, compiled, and run</h3>
+          <p>The same <code>dim_hosts_cleansed</code> model produces three representations. Understanding which file to open saves time when debugging:</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Artifact</th><th>Location</th><th>Contains Jinja?</th><th>Contains CREATE?</th></tr></thead>
+              <tbody>
+                <tr><td>Source model</td><td><code>models/dim/dim_hosts_cleansed.sql</code></td><td>Yes</td><td>No</td></tr>
+                <tr><td>Compiled</td><td><code>target/compiled/…/dim_hosts_cleansed.sql</code></td><td>No</td><td>No</td></tr>
+                <tr><td>Run</td><td><code>target/run/…/dim_hosts_cleansed.sql</code></td><td>No</td><td>Yes</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>Copy compiled SQL into a worksheet when testing logic. Copy run SQL when reproducing a permission error or hook failure that only appears at DDL execution time.</p>
+
+          <div class="callout tip"><strong>Use compile in CI before merge.</strong> A pull request that adds a model with a typo in <code>ref('src_listngs')</code> fails at compile time with a clear message. Catching that in CI avoids a broken nightly run against the warehouse. No rows are scanned; no credits spent.</div>
+        </section>
+
+        <section class="section" id="staging-src-models">
+          <h2>Staging src_ models</h2>
+          <p class="lead">Staging models sit between raw warehouse tables and business logic. In this project they live in <code>models/src/</code>, use the <code>src_</code> prefix, and default to ephemeral materialization. Their job is narrow: read one raw table, rename columns to stable names the rest of the project will use, and change nothing else.</p>
+
+          <h3>src_listings — the first model</h3>
+          <p>The instructor creates <code>models/src/src_listings.sql</code> and reads directly from the raw table. In the video the <code>FROM</code> clause is hard-coded; the finished repo uses <code>source()</code> once sources are defined.</p>
+
+<pre data-lang="sql" data-title="models/src/src_listings.sql" data-explain="Staging listings: CTE on raw, rename id to listing_id and price to price_str for downstream casting."><code>-- import raw_listings
+WITH raw_listings AS (
+        SELECT * FROM {{ source('airbnb', 'listings') }}
+)
+SELECT 
+   id AS listing_id,
+   listing_url,
+   name AS listing_name,
+   room_type,
+   minimum_nights,
+   host_id,
+   price AS price_str,
+   created_at,
+   updated_at
+FROM raw_listings</code></pre>
+
+          <p>Notice what staging deliberately does <em>not</em> do: no <code>CASE</code> on <code>minimum_nights</code>, no casting <code>price_str</code> to a number. Those are cleansing rules belonging in the dimension layer. Keeping staging dumb makes it obvious where renames stop and business rules begin.</p>
+
+          <p>In the lecture you type this equivalent first, before sources exist:</p>
+
+<pre data-lang="sql" data-title="models/src/src_listings.sql (as typed in the lecture)" data-explain="Hard-coded raw reference used in Section 7 video before sources.yml is introduced in Section 9." data-partial="true"><code>WITH raw_listings AS (
+    SELECT *
+    FROM AIRBNB.RAW.RAW_LISTINGS
+)
+SELECT
+    id AS listing_id,
+    name AS listing_name,
+    listing_url,
+    room_type,
+    minimum_nights,
+    host_id,
+    price AS price_str,
+    created_at,
+    updated_at
+FROM raw_listings</code></pre>
+
+          <h3>Building src_listings step by step (lecture flow)</h3>
+          <p>The instructor creates the file in this order during the recording:</p>
+          <ol>
+            <li><code>mkdir models/src</code> if the folder does not exist after <code>dbt init</code>.</li>
+            <li>Create <code>src_listings.sql</code> with a <code>raw_listings</code> CTE reading from <code>AIRBNB.RAW.RAW_LISTINGS</code>.</li>
+            <li>Add the final <code>SELECT</code> with column renames only &mdash; no filters, no casts.</li>
+            <li>Run <code>dbt run --select src_listings</code>. Terminal shows ephemeral SUCCESS; nothing new appears in <code>SHOW TABLES IN SCHEMA DEV</code>.</li>
+            <li>Run <code>dbt compile --select src_listings</code> and open compiled SQL to confirm the raw table reference expanded correctly.</li>
+          </ol>
+
+          <div class="terminal">
+            <p class="term-head">First staging model run — ephemeral, no warehouse object</p>
+            <pre class="term-body"><span class="tt-cmd">dbt run --select src_listings</span>
+<span class="tt-dim">09:02:01  Running with dbt=1.11.12</span>
+<span class="tt-dim">09:02:02  1 of 1 START sql ephemeral model DEV.src_listings ............... [RUN]</span>
+<span class="tt-ok">09:02:02  1 of 1 OK created sql ephemeral model DEV.src_listings .......... [SUCCESS 0 in 0.08s]</span>
+<span class="tt-ok">09:02:02  Completed successfully</span></pre>
+          </div>
+
+          <p>Students sometimes think this failed because SUCCESS shows <code>0</code>. Zero is correct: ephemeral models do not insert rows into a named relation; they only verify compilation and dependency resolution.</p>
+
+          <h3>src_reviews</h3>
+          <p>Reviews staging follows the same pattern: one CTE on the raw table, column renames in the final <code>SELECT</code>.</p>
+
+<pre data-lang="sql" data-title="models/src/src_reviews.sql" data-explain="Renames date to review_date and comments to review_text; keeps sentiment as review_sentiment."><code>WITH raw_reviews AS (
+    SELECT
+        *
+    FROM
+        {{ source('airbnb', 'reviews') }}
+)
+SELECT
+    listing_id,
+    DATE AS review_date,
+    reviewer_name,
+    comments AS review_text,
+    sentiment AS review_sentiment
+FROM
+    raw_reviews</code></pre>
+
+          <p>Snowflake uppercases unquoted identifiers, so <code>DATE</code> in the raw table becomes <code>review_date</code> in staging. On Postgres you would quote reserved words; on BigQuery, backtick if needed. The staging layer is where you normalise naming once so downstream models never think about raw column quirks.</p>
+
+          <h3>Exercise: src_hosts</h3>
+          <p>The course exercise asks you to build <code>src_hosts</code> yourself. Requirements from the lesson script:</p>
+          <ol>
+            <li>Create <code>models/src/src_hosts.sql</code>.</li>
+            <li>Define a CTE called <code>raw_hosts</code> selecting all columns from <code>AIRBNB.RAW.RAW_HOSTS</code>.</li>
+            <li>In the final <code>SELECT</code>, rename <code>id</code> to <code>host_id</code> and <code>name</code> to <code>host_name</code>; pass through <code>is_superhost</code>, <code>created_at</code>, <code>updated_at</code>.</li>
+          </ol>
+
+<pre data-lang="sql" data-title="models/src/src_hosts.sql" data-explain="Exercise solution: same CTE pattern as src_listings with host-specific renames."><code>WITH raw_hosts AS (
+    SELECT
+        *
+    FROM
+       {{ source('airbnb', 'hosts') }}
+)
+SELECT
+    id AS host_id,
+    NAME AS host_name,
+    is_superhost,
+    created_at,
+    updated_at
+FROM
+    raw_hosts</code></pre>
+
+          <p>After saving the file, run <code>dbt compile --select src_hosts</code> to verify Jinja parses. Because <code>src_hosts</code> is ephemeral, <code>dbt run --select src_hosts</code> succeeds but creates no warehouse object &mdash; check compiled SQL instead.</p>
+
+          <div class="diagram">
+            <p class="diagram-title">Ephemeral staging — no SRC_* table in Snowflake after dbt run</p>
+            <div class="flow">
+              <div class="node is-source"><b>RAW_HOSTS</b><small>source table</small></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-model"><b>src_hosts</b><small>ephemeral · CTE only</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-mart pulse"><b>dim_hosts_cleansed</b><small>table · first persistent object</small></div>
+            </div>
+          </div>
+
+          <div class="callout info"><strong>Why ephemeral for staging?</strong> Staging is plumbing, not a product. Analysts should query <code>dim_*</code> and <code>fct_*</code>, not fifteen lightly renamed copies of raw data. Ephemeral staging keeps the dev schema clean and guarantees staging logic is always current when a dimension rebuilds. Trade-off: you cannot <code>SELECT * FROM src_hosts</code> directly. <a href="s08-materializations.html#ephemeral-materialization">Section&nbsp;8</a> covers when to break that rule.</div>
+
+          <h3>Column mapping reference for all three staging models</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Raw column</th><th>Staging name</th><th>Model</th><th>Notes</th></tr></thead>
+              <tbody>
+                <tr><td><code>id</code></td><td><code>listing_id</code></td><td>src_listings</td><td>Surrogate key naming for joins</td></tr>
+                <tr><td><code>name</code></td><td><code>listing_name</code></td><td>src_listings</td><td>Avoids ambiguous <code>name</code> in joins</td></tr>
+                <tr><td><code>price</code></td><td><code>price_str</code></td><td>src_listings</td><td>String suffix signals cast happens in dim layer</td></tr>
+                <tr><td><code>date</code></td><td><code>review_date</code></td><td>src_reviews</td><td>Reserved word on some engines</td></tr>
+                <tr><td><code>comments</code></td><td><code>review_text</code></td><td>src_reviews</td><td>Clearer for downstream NLP/sentiment</td></tr>
+                <tr><td><code>sentiment</code></td><td><code>review_sentiment</code></td><td>src_reviews</td><td>Prefixed for wide joins later</td></tr>
+                <tr><td><code>id</code></td><td><code>host_id</code></td><td>src_hosts</td><td>Matches <code>listing.host_id</code> FK naming</td></tr>
+                <tr><td><code>name</code> / <code>NAME</code></td><td><code>host_name</code></td><td>src_hosts</td><td>Snowflake stores unquoted as uppercase NAME</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>Consistent rename rules across staging models mean dimension and fact files never need to remember whether the raw table called it <code>id</code> or <code>listing_id</code>. That is the staging contract the rest of the project depends on.</p>
+
+          <p>When you clone the course repo instead of typing along, all three staging files already exist with <code>source()</code> macros. If you are following the video from scratch, create each file in order: listings first (the instructor demo), reviews second (copy the pattern), hosts third (the exercise). Each file should parse independently before you add dimensions that depend on them. Run <code>dbt parse</code> after each new file to catch syntax errors early.</p>
+        </section>
+
+        <section class="section" id="dimension-dim-models">
+          <h2>Dimension dim_ models</h2>
+          <p class="lead">Dimension models apply business cleansing and typing on top of staging. They live in <code>models/dim/</code>, reference staging through <code>ref()</code>, and persist as tables by default. This section builds two dimensions: listings (with type casting and a minimum-nights rule) and hosts (with a null-name default).</p>
+
+          <h3>dim_listings_cleansed</h3>
+          <p>The listings dimension reads from <code>src_listings</code> and implements three cleansing steps the staging layer deferred:</p>
+          <ul>
+            <li><strong>Minimum nights.</strong> Raw data sometimes has <code>0</code>; the business rule treats that as <code>1</code>.</li>
+            <li><strong>Price.</strong> <code>price_str</code> holds values like <code>$125.00</code>; strip the dollar sign and cast to <code>NUMBER(10,2)</code>.</li>
+            <li><strong>Column selection.</strong> Drop <code>listing_url</code> from the dimension if not needed for analytics (the course keeps the core attributes).</li>
+          </ul>
+
+<pre data-lang="sql" data-title="models/dim/dim_listings_cleansed.sql" data-explain="Dimension layer: ref() to staging, CASE for minimum_nights, REPLACE and cast for price. Config overrides dim folder default to view in finished repo."><code>{{
+  config(
+    materialized = 'view',
+    event_time='created_at'
+  )
+}} 
+WITH src_listings AS (
+    SELECT * FROM {{ ref('src_listings') }}
+)
+SELECT 
+  listing_id,
+  listing_name,
+  room_type,
+  CASE
+    WHEN minimum_nights = 0 THEN 1
+    ELSE minimum_nights
+  END AS minimum_nights,
+  host_id,
+  REPLACE(
+    price_str,
+    '$'
+  ) :: NUMBER(
+    10,
+    2
+  ) AS price,
+  created_at,
+  updated_at
+FROM
+  src_listings</code></pre>
+
+          <p>In the lecture recording, the model has no <code>config()</code> block and inherits the folder default of <code>table</code>. The finished repo overrides to <code>view</code> and adds <code>event_time='created_at'</code> for microbatch features introduced later. When following the video, omit the config block; when cloning the repo, keep it as-is.</p>
+
+          <p>On BigQuery you would use <code>SAFE_CAST(REPLACE(price_str, '$', '') AS NUMERIC)</code> instead of Snowflake's <code>:: NUMBER</code> syntax. On Postgres, <code>CAST(REPLACE(price_str, '$', '') AS NUMERIC(10,2))</code>. The pattern is the same; only the cast function differs.</p>
+
+          <h3>dim_hosts_cleansed</h3>
+          <p>The hosts dimension demonstrates a single cleansing rule: replace null host names with a readable default.</p>
+
+<pre data-lang="sql" data-title="models/dim/dim_hosts_cleansed.sql" data-explain="NVL(host_name, 'Anonymous') replaces null names. Finished repo uses table materialization for constraints in Section 11."><code>{#
+  You might have `view` as the materialization as we only 
+  replace `materialized` with `table` when we implement constraints. 
+#}
+{{
+  config(
+    materialized = 'table' 
+    )
+}} 
+WITH src_hosts AS (
+    SELECT
+        *
+    FROM
+        {{ ref('src_hosts') }}
+)
+SELECT
+    host_id,
+    NVL(
+        host_name,
+        'Anonymous'
+    ) AS host_name,
+    is_superhost,
+    created_at,
+    updated_at
+FROM
+    src_hosts</code></pre>
+
+          <p>The exercise version in the lecture uses no config block (inherits <code>table</code> from the <code>dim/</code> folder) or explicitly sets <code>materialized = 'view'</code> as in course-resources. The comment in the repo file explains why it later becomes a table: primary key constraints in <a href="s11-tests.html">Section&nbsp;11</a> require a table materialization on Snowflake.</p>
+
+          <h3>Exercise: dim_hosts_cleansed</h3>
+          <p>Course exercise requirements:</p>
+          <ol>
+            <li>Create <code>models/dim/dim_hosts_cleansed.sql</code>.</li>
+            <li>Use a CTE referencing <code>{{ ref('src_hosts') }}</code>.</li>
+            <li>Select all columns; apply <code>NVL(host_name, 'Anonymous')</code>.</li>
+            <li>Run <code>dbt run</code> and verify the model exists in Snowflake.</li>
+          </ol>
+
+          <p>Solution matches the file above without the comment block. Verify with:</p>
+
+<pre data-lang="sql" data-title="Snowflake worksheet verification" data-explain="Confirm null host names became Anonymous after the dimension build."><code>SELECT host_id, host_name
+FROM AIRBNB.DEV.dim_hosts_cleansed
+WHERE host_name = 'Anonymous'
+LIMIT 10;</code></pre>
+
+          <h3>CTE structure as a modelling habit</h3>
+          <p>Both dimensions follow the same shape: one CTE named after the upstream model (<code>src_listings</code>, <code>src_hosts</code>), then a final <code>SELECT</code> with business logic. When you add joins later (<code>dim_listings_w_hosts</code> in Section&nbsp;8), you add CTEs rather than nesting subqueries. Readable diffs in pull requests follow directly from this habit.</p>
+
+          <div class="grid-2">
+            <div class="mini-card">
+              <h4>Staging CTE</h4>
+              <p><code>WITH src_listings AS (SELECT * FROM {{ ref('src_listings') }})</code> &mdash; one line of dependency, easy to swap for a different staging version or a unit-test input later.</p>
+            </div>
+            <div class="mini-card">
+              <h4>Final SELECT</h4>
+              <p>Business rules only here. Reviewers know every <code>CASE</code>, cast and filter in the dimension file is intentional product logic.</p>
+            </div>
+          </div>
+
+          <h3>dim_listings_cleansed — line-by-line cleansing logic</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Output column</th><th>Logic</th><th>Why not in staging?</th></tr></thead>
+              <tbody>
+                <tr><td><code>minimum_nights</code></td><td><code>CASE WHEN minimum_nights = 0 THEN 1 ELSE minimum_nights END</code></td><td>Business rule: zero means one night minimum for reporting</td></tr>
+                <tr><td><code>price</code></td><td><code>REPLACE(price_str, '$')::NUMBER(10,2)</code></td><td>Type coercion belongs after string staging; failures surface here</td></tr>
+                <tr><td><code>listing_name</code></td><td>Pass-through from staging</td><td>Already renamed in src_listings</td></tr>
+                <tr><td><code>host_id</code></td><td>Pass-through</td><td>FK to dim_hosts_cleansed for joins in Section&nbsp;8</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>The instructor runs <code>dbt run --select dim_listings_cleansed</code> immediately after saving to show parent inclusion and the first persisted dimension object in Snowflake. Query a sample row to confirm <code>price</code> is numeric and <code>minimum_nights</code> has no zeros.</p>
+
+<pre data-lang="sql" data-title="Snowflake · spot-check dim_listings_cleansed" data-explain="Verify cleansing rules applied after first successful run."><code>SELECT
+  listing_id,
+  minimum_nights,
+  price,
+  TYPEOF(price) AS price_type
+FROM AIRBNB.DEV.dim_listings_cleansed
+WHERE minimum_nights = 1
+LIMIT 5;</code></pre>
+
+          <h3>dim_hosts_cleansed — NVL cleansing pattern</h3>
+          <p>Host names are nullable in the raw feed. Downstream joins and dashboards break on null labels, so the dimension replaces nulls with a readable default. Snowflake's <code>NVL(a, b)</code> returns <code>b</code> when <code>a</code> is null; other warehouses use <code>COALESCE(a, b)</code> or <code>IFNULL(a, b)</code> with identical semantics.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Function</th><th>Engine</th><th>Equivalent in dim_hosts_cleansed</th></tr></thead>
+              <tbody>
+                <tr><td><code>NVL(host_name, 'Anonymous')</code></td><td>Snowflake, Oracle</td><td>What the course uses</td></tr>
+                <tr><td><code>COALESCE(host_name, 'Anonymous')</code></td><td>ANSI · Postgres · BigQuery</td><td>Portable alternative</td></tr>
+                <tr><td><code>IFNULL(host_name, 'Anonymous')</code></td><td>BigQuery · MySQL</td><td>Same behaviour, different name</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>After building both dimensions, the dev schema holds two queryable objects (table or view depending on config). Staging remains invisible except through compiled SQL. That is the intended medallion-style separation at small scale.</p>
+
+          <div class="diagram">
+            <p class="diagram-title">What persists in Snowflake after Section 7 dbt run</p>
+            <div class="flow">
+              <div class="node is-source"><b>AIRBNB.RAW</b><small>3 raw tables · unchanged</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-model"><b>src_*</b><small>ephemeral · not in DEV schema</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-mart pulse"><b>DEV.dim_*</b><small>2 tables/views · queryable</small></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="section" id="running-and-selecting-models">
+          <h2>Running and selecting models</h2>
+          <p class="lead"><code>dbt run</code> executes every model in dependency order (or a subset you name). The terminal output tells you materialization type, success or failure, and timing. Learning to read that output saves hours when a pipeline fails in production.</p>
+
+          <h3>First full run after Section 7</h3>
+          <p>With all five models saved, a full run builds the two dimension tables and compiles the three ephemeral staging models inline:</p>
+
+          <div class="terminal">
+            <p class="term-head">dbt run — first build of Section 7 models</p>
+            <pre class="term-body"><span class="tt-cmd">dbt run</span>
+<span class="tt-dim">14:22:01  Running with dbt=1.11.12</span>
+<span class="tt-dim">14:22:02  Found 5 models, 3 sources, 0 exposures, …</span>
+<span class="tt-dim">14:22:03  Concurrency: 1 threads (target='dev')</span>
+<span class="tt-dim">14:22:03  1 of 5 START sql ephemeral model DEV.src_listings ............... [RUN]</span>
+<span class="tt-ok">14:22:03  1 of 5 OK created sql ephemeral model DEV.src_listings .......... [SUCCESS 0 in 0.12s]</span>
+<span class="tt-dim">14:22:03  2 of 5 START sql ephemeral model DEV.src_reviews ................ [RUN]</span>
+<span class="tt-ok">14:22:03  2 of 5 OK created sql ephemeral model DEV.src_reviews ............ [SUCCESS 0 in 0.10s]</span>
+<span class="tt-dim">14:22:03  3 of 5 START sql ephemeral model DEV.src_hosts .................. [RUN]</span>
+<span class="tt-ok">14:22:03  3 of 5 OK created sql ephemeral model DEV.src_hosts .............. [SUCCESS 0 in 0.11s]</span>
+<span class="tt-dim">14:22:04  4 of 5 START sql table model DEV.dim_listings_cleansed ........... [RUN]</span>
+<span class="tt-ok">14:22:05  4 of 5 OK created sql table model DEV.dim_listings_cleansed ...... [SUCCESS 1 in 1.24s]</span>
+<span class="tt-dim">14:22:05  5 of 5 START sql table model DEV.dim_hosts_cleansed .............. [RUN]</span>
+<span class="tt-ok">14:22:06  5 of 5 OK created sql table model DEV.dim_hosts_cleansed ......... [SUCCESS 1 in 0.89s]</span>
+<span class="tt-ok">14:22:06  Completed successfully</span>
+<span class="tt-dim">14:22:06  Done. PASS=5 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=5</span></pre>
+          </div>
+
+          <p>Read the log line carefully:</p>
+          <ul>
+            <li><strong>Model type.</strong> <code>sql ephemeral model</code> versus <code>sql table model</code> (or <code>view</code>) tells you what materialization ran.</li>
+            <li><strong>SUCCESS N.</strong> For tables and views, <code>N</code> is often the number of rows affected or a placeholder depending on adapter. Ephemeral models show <code>0</code> because nothing persisted.</li>
+            <li><strong>Timing.</strong> Large fact tables dominate runtime; dimensions in this section finish in seconds.</li>
+            <li><strong>SKIP.</strong> If an upstream model fails, downstream models show <code>SKIP</code> instead of running with stale data.</li>
+          </ul>
+
+          <h3>Selecting a subset of models</h3>
+          <p>You rarely need a full project rebuild during development. Selection flags limit what runs:</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Command</th><th>What runs</th><th>When to use it</th></tr></thead>
+              <tbody>
+                <tr><td><code>dbt run --select dim_hosts_cleansed</code></td><td><code>dim_hosts_cleansed</code> plus parent <code>src_hosts</code></td><td>Iterating on one dimension</td></tr>
+                <tr><td><code>dbt run --select dim_*</code></td><td>All models matching the glob</td><td>Rebuild both dimensions after a shared change</td></tr>
+                <tr><td><code>dbt run --select src_*</code></td><td>All three staging models (ephemeral only)</td><td>Verify staging compiles; no warehouse objects created</td></tr>
+                <tr><td><code>dbt run --select +dim_listings_cleansed</code></td><td>All parents and the model itself</td><td>Explicit parent inclusion syntax</td></tr>
+                <tr><td><code>dbt run --select path:models/dim</code></td><td>Every model under the dim folder</td><td>Folder-based selection</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="terminal">
+            <p class="term-head">Run one dimension during development</p>
+            <pre class="term-body"><span class="tt-cmd">dbt run --select dim_listings_cleansed</span>
+<span class="tt-dim">14:30:01  Running with dbt=1.11.12</span>
+<span class="tt-dim">14:30:02  1 of 2 START sql ephemeral model DEV.src_listings ............... [RUN]</span>
+<span class="tt-ok">14:30:02  1 of 2 OK created sql ephemeral model DEV.src_listings .......... [SUCCESS 0 in 0.11s]</span>
+<span class="tt-dim">14:30:02  2 of 2 START sql view model DEV.dim_listings_cleansed ........... [RUN]</span>
+<span class="tt-ok">14:30:03  2 of 2 OK created sql view model DEV.dim_listings_cleansed ...... [SUCCESS 1 in 0.95s]</span>
+<span class="tt-ok">14:30:03  Completed successfully</span></pre>
+          </div>
+
+          <p>If your output says <code>view model</code> instead of <code>table model</code>, you have the repo's <code>config(materialized='view')</code> on <code>dim_listings_cleansed</code>. Both succeed; the object type in Snowflake differs.</p>
+
+          <h3>Verifying in Snowflake</h3>
+          <p>After a successful run, confirm objects exist:</p>
+
+<pre data-lang="sql" data-title="Snowflake · list dbt-built objects" data-explain="SHOW TABLES/VIEWS in your target schema after dbt run."><code>SHOW TABLES IN SCHEMA AIRBNB.DEV;
+SHOW VIEWS IN SCHEMA AIRBNB.DEV;
+
+SELECT COUNT(*) AS listing_rows FROM AIRBNB.DEV.dim_listings_cleansed;
+SELECT COUNT(*) AS host_rows FROM AIRBNB.DEV.dim_hosts_cleansed;</code></pre>
+
+          <p>Row counts should match raw tables minus any filters (there are none yet in these dimensions). A dimension with zero rows while raw has data means staging or <code>ref()</code> is pointing at the wrong source.</p>
+
+          <div class="callout cost"><strong>Full runs add up.</strong> These five models are cheap. The habit of running <code>dbt run</code> with no selection after every save does not scale once incremental facts and tests arrive. Learn selection syntax now: <code>--select model_name</code> is the default workflow for the rest of the course.</div>
+
+          <h3>Common failure output and how to read it</h3>
+          <div class="terminal">
+            <p class="term-head">Compilation failure — missing ref target</p>
+            <pre class="term-body"><span class="tt-cmd">dbt run --select dim_hosts_cleansed</span>
+<span class="tt-dim">14:45:01  Running with dbt=1.11.12</span>
+<span class="tt-err">14:45:02  Compilation Error in model dim_hosts_cleansed (models/dim/dim_hosts_cleansed.sql)</span>
+<span class="tt-err">  Model 'dim_hosts_cleansed' depends on a node named 'src_hosts' which was not found</span>
+<span class="tt-dim">14:45:02  Done. PASS=0 WARN=0 ERROR=1 SKIP=0 NO-OP=0 TOTAL=1</span></pre>
+          </div>
+
+          <p>The fix is always upstream: create or rename the missing model file so the name in <code>ref()</code> matches the file name exactly (case-sensitive on some adapters).</p>
+
+          <div class="terminal">
+            <p class="term-head">Database failure — cast error in dimension</p>
+            <pre class="term-body"><span class="tt-cmd">dbt run --select dim_listings_cleansed</span>
+<span class="tt-dim">14:48:01  1 of 2 OK created sql ephemeral model DEV.src_listings .......... [SUCCESS 0 in 0.10s]</span>
+<span class="tt-err">14:48:02  2 of 2 ERROR creating sql table model DEV.dim_listings_cleansed .. [ERROR in 0.45s]</span>
+<span class="tt-err">14:48:02  Database Error in model dim_listings_cleansed</span>
+<span class="tt-err">  Numeric value 'N/A' is not recognized</span>
+<span class="tt-ok">14:48:02  Done. PASS=1 WARN=0 ERROR=1 SKIP=0 NO-OP=0 TOTAL=2</span></pre>
+          </div>
+
+          <p>Compilation passed; the warehouse rejected bad data during the cast. Open compiled SQL, find rows where <code>price_str</code> is not numeric, fix with a <code>CASE</code> or filter in the dimension, or clean upstream in staging.</p>
+
+          <h3>build versus run at this stage</h3>
+          <p><code>dbt build</code> runs models and tests together in DAG order. In Section 7 you have no tests yet, so <code>dbt build</code> behaves like <code>dbt run</code>. Once tests exist in Section&nbsp;11, prefer <code>dbt build --select dim_hosts_cleansed</code> to run the dimension and its tests in one command.</p>
+        </section>
+
+        <section class="section" id="deeper">
+          <h2>Deeper detail and edge cases</h2>
+          <p class="lead">Operational detail the videos skip: how model behaviour changed across dbt versions, what each run costs, traps that burn teams in production, and how experienced analytics engineers structure staging and dimensions beyond the course project.</p>
+
+          <h3>Version notes</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Behaviour</th><th>Before</th><th>Now</th><th>Version</th></tr></thead>
+              <tbody>
+                <tr><td>Model selection flag</td><td><code>--models</code> (deprecated)</td><td><code>--select</code></td><td>1.0+</td></tr>
+                <tr><td>Default materialization</td><td><code>view</code></td><td>Still <code>view</code> at project level</td><td>1.x</td></tr>
+                <tr><td>Ephemeral inlining</td><td>CTE injection into parent</td><td>Same behaviour</td><td>1.x</td></tr>
+                <tr><td><code>ref()</code> with version</td><td>Not available</td><td><code>ref('model', v=2)</code></td><td>1.5+</td></tr>
+                <tr><td>Sources in YAML</td><td><code>sources.yml</code> only</td><td>Also supported in <code>models/_sources/</code></td><td>1.0+</td></tr>
+                <tr><td><code>dbt build</code></td><td>Run + test separately</td><td>Single command for run, test, snapshot, seed</td><td>1.0+</td></tr>
+                <tr><td>Python models</td><td>Experimental</td><td>Supported on Snowflake, BigQuery, Databricks</td><td>1.3+</td></tr>
+                <tr><td>Microbatch incremental</td><td>Not available</td><td><code>event_time</code> config on models</td><td>1.9+</td></tr>
+                <tr><td>Selector syntax</td><td><code>--selector name</code></td><td><code>-s selector:name</code> also supported</td><td>1.12+</td></tr>
+                <tr><td>Manifest node format</td><td><code>compiled_sql</code> in node</td><td>Path to compiled file; read artifact on disk</td><td>1.5+</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>What it costs to run</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>What runs</th><th>Where the cost lands</th><th>How to spend less</th></tr></thead>
+              <tbody>
+                <tr><td><code>dbt compile</code></td><td>Local CPU only; no warehouse query</td><td>Use for CI syntax checks instead of full runs</td></tr>
+                <tr><td>Ephemeral staging (src_)</td><td>Cost folded into parent model's query</td><td>Keep staging light; heavy transforms belong in persisted models</td></tr>
+                <tr><td>Table dimensions (dim_)</td><td>Full table scan of staging + write on every rebuild</td><td>Use <code>--select</code> during dev; switch large dims to incremental later</td></tr>
+                <tr><td>View dimensions</td><td>No storage; cost hits every query against the view</td><td>Fine for small dims; expensive if BI scans repeatedly</td></tr>
+                <tr><td>Full <code>dbt run</code></td><td>Every persisted model rebuilds</td><td>Selection syntax; defer in CI for unchanged parents</td></tr>
+                <tr><td>Idle warehouse after run</td><td>Snowflake auto-suspend delay bills compute</td><td>Use <code>AUTO_SUSPEND = 60</code> on dev warehouses</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout cost"><strong>Biggest waste in this section:</strong> running full <code>dbt run</code> after every one-line edit to a dimension. A single <code>dbt run --select dim_hosts_cleansed</code> rebuilds one table and its ephemeral parent. Full runs are for "does the whole DAG still work", not for save-and-refresh loops.</div>
+
+          <h3>Traps that catch people</h3>
+          <ul>
+            <li><strong>Hard-coded schema names —</strong> <code>FROM AIRBNB.DEV.DIM_LISTINGS</code> works in your laptop schema and breaks in CI or a colleague's schema. Always use <code>ref()</code> for dbt-built models and <code>source()</code> for raw tables once sources exist.</li>
+            <li><strong>Expecting to query ephemeral models —</strong> <code>SELECT * FROM src_listings</code> fails because no object exists. Compile the downstream model or temporarily set materialization to <code>view</code> while debugging.</li>
+            <li><strong>Wrong build order assumption —</strong> dbt builds parents before children automatically, but only when dependencies are declared via <code>ref()</code>. A hard-coded table name removes that guarantee.</li>
+            <li><strong>Stale views after switching to ephemeral —</strong> if you previously materialized staging as views, old <code>DEV.SRC_*</code> views remain until dropped manually. Queries against them return stale data. See <a href="s08-materializations.html#dropping-views">Section&nbsp;8</a>.</li>
+            <li><strong>Case sensitivity on Snowflake —</strong> unquoted identifiers fold to uppercase. <code>NAME AS host_name</code> in <code>src_hosts</code> reads the raw column correctly because Snowflake stored it uppercase. On Postgres, quote mixed-case identifiers explicitly.</li>
+            <li><strong>Cast failures on price —</strong> if <code>price_str</code> contains unexpected characters, <code>:: NUMBER</code> fails the whole model run. Staging keeps the string; dimension casting is where you discover dirty data. Add tests in <a href="s11-tests.html">Section&nbsp;11</a>.</li>
+            <li><strong>Running from wrong directory —</strong> commands must run from the folder containing <code>dbt_project.yml</code>. Running from repo root finds no project.</li>
+            <li><strong>Confusing compiled and run SQL —</strong> editing files in <code>target/</code> has no effect. Changes must go in <code>models/</code>; target is regenerated every run.</li>
+            <li><strong>Thread count of 1 in dev —</strong> the course uses one thread for clarity. Independent model branches could run in parallel with higher <code>threads</code>; leaving it at 1 makes every run feel slower than necessary.</li>
+            <li><strong>Forgetting parent hooks —</strong> the project's <code>post-hook</code> inserts into <code>audit_log</code> on every table build. If that table is missing, the model fails even when SQL is correct. Run once after setup or check Section&nbsp;6 hooks.</li>
+          </ul>
+
+          <h3>Troubleshooting playbook</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Symptom</th><th>Most likely cause</th><th>What to check / fix</th></tr></thead>
+              <tbody>
+                <tr><td><em>Compilation Error: ref('src_listings') depends on a node named 'src_listings' which was not found</em></td><td>File missing or wrong name</td><td>Confirm <code>models/src/src_listings.sql</code> exists; model name must match file name</td></tr>
+                <tr><td><em>Database Error: Object 'SRC_LISTINGS' does not exist</em></td><td>Hard-coded ref instead of ephemeral inlining, or wrong materialization</td><td>Check <code>dbt_project.yml</code> has <code>src: +materialized: ephemeral</code>; read <code>target/compiled/...</code></td></tr>
+                <tr><td>Model succeeds but dimension has 0 rows</td><td>Wrong raw table or empty RAW schema</td><td>Count rows in <code>AIRBNB.RAW.RAW_LISTINGS</code>; verify setup from Section&nbsp;6</td></tr>
+                <tr><td><em>Numeric value '$125.00' is not recognized</em></td><td>Cast before REPLACE</td><td>Ensure <code>REPLACE(price_str, '$')</code> runs before <code>:: NUMBER</code></td></tr>
+                <tr><td>Compiled SQL shows wrong database/schema</td><td>Wrong target in profiles.yml</td><td><code>dbt debug</code>; check <code>target:</code> and <code>schema:</code> keys</td></tr>
+                <tr><td><em>SQL access control error</em> on CREATE TABLE</td><td>TRANSFORM role lacks CREATE on DEV</td><td>Re-run grants from setup; <code>SHOW GRANTS TO ROLE TRANSFORM</code></td></tr>
+                <tr><td>Downstream model SKIP in run output</td><td>Upstream model failed earlier in same run</td><td>Scroll up for first ERROR line; fix upstream first</td></tr>
+                <tr><td><code>dbt ls</code> shows fewer models than expected</td><td>Parse error in a model file excluded from DAG</td><td><code>dbt parse</code>; read error message and fix syntax</td></tr>
+                <tr><td>Changes to model not reflected in warehouse</td><td>Edited wrong file or run did not include model</td><td>Confirm save path; run with explicit <code>--select</code></td></tr>
+                <tr><td>audit_log insert fails on run</td><td>Hook table missing</td><td><code>on-run-start</code> hook should create it; run <code>dbt run</code> once or create manually</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Production patterns</h3>
+          <p>Real teams extend the <code>src_</code> / <code>dim_</code> / <code>fct_</code> prefix convention with an <code>int_</code> (intermediate) layer for reusable joins that are not yet marts. Staging stays one-to-one with sources; intermediate holds complex logic shared by multiple marts; dimensions and facts face consumers or other models. The course skips <code>int_</code> until the power-user branch, but the principle starts here: each layer has one job.</p>
+
+          <p>Staging as ephemeral is the default in many Snowflake dbt projects; BigQuery teams sometimes prefer staging as views when query planners handle nested views well and analysts want to inspect staging in the console. Postgres teams often use views for staging because ephemeral chains can hit statement-length limits on deep projects. The course choice (ephemeral) is correct for Snowflake at this scale.</p>
+
+          <div class="grid-2">
+            <div class="mini-card">
+              <h4>Convention: one source, one staging model</h4>
+              <p>Each raw table gets exactly one <code>src_</code> model. Joins happen in intermediate or mart layers, not in staging. Violating this makes lineage misleading and reuse harder.</p>
+            </div>
+            <div class="mini-card">
+              <h4>Anti-pattern: god staging model</h4>
+              <p>A single <code>src_all</code> that joins listings, hosts and reviews "for convenience" cannot be reused when only one source changes. Dependencies become opaque and incremental strategies impossible.</p>
+            </div>
+          </div>
+
+          <div class="diagram">
+            <p class="diagram-title">Layered modelling beyond the course project</p>
+            <div class="stack">
+              <div class="layer"><b>sources</b> · raw tables · AIRBNB.RAW</div>
+              <div class="layer"><b>staging (src_)</b> · rename · ephemeral</div>
+              <div class="layer"><b>intermediate (int_)</b> · joins · optional persisted layer</div>
+              <div class="layer"><b>dimensions &amp; facts (dim_, fct_)</b> · business entities and events</div>
+              <div class="layer"><b>marts (mart_)</b> · department-specific datasets</div>
+            </div>
+          </div>
+
+<pre data-lang="sql" data-title="models/staging/stg_listings.sql (common production naming)" data-explain="Many teams use stg_ instead of src_; same pattern, different prefix. Pick one and enforce it in code review."><code>with source as (
+    select * from {{ source('airbnb', 'listings') }}
+),
+renamed as (
+    select
+        id as listing_id,
+        name as listing_name,
+        /* … */
+    from source
+)
+select * from renamed</code></pre>
+
+          <h3>Certification pointers</h3>
+          <p>The dbt Analytics Engineering certification tests models heavily: what a model is, how <code>ref()</code> builds the DAG, the difference between compile and run, and what ephemeral materialization produces in the warehouse (nothing queryable). Expect multiple-choice questions that show SQL with a hard-coded table name and ask what breaks (lineage, environments, build order).</p>
+
+          <ul>
+            <li><a href="s08-materializations.html">Section&nbsp;8</a> &mdash; materialization is the other half of "what happens when dbt runs a model"; exam questions often pair ref() with view/table/ephemeral outcomes.</li>
+            <li><a href="s09-seeds-sources.html">Section&nbsp;9</a> &mdash; replaces hard-coded RAW references with <code>source()</code>; know the difference between <code>ref()</code> and <code>source()</code>.</li>
+            <li><a href="s11-tests.html">Section&nbsp;11</a> &mdash; tests attach to models you build here; unique and not-null tests assume persisted relations.</li>
+            <li><a href="s16-debugging-logging.html">Section&nbsp;16</a> &mdash; compiled SQL in target/ is the primary debug tool the exam assumes you know.</li>
+          </ul>
+
+          <div class="callout exam"><strong>Certification:</strong> memorise the sentence "ephemeral models are inlined as CTEs in downstream models and do not create database objects." That exact distinction appears in multiple exam questions.</div>
+        </section>
+
+        <section class="section" id="interview">
+          <h2>Interview questions</h2>
+          <p class="muted">Answer each one out loud before opening it.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+
+            <details class="qa">
+              <summary>What is a dbt model, and how is it different from a table in your warehouse?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>A dbt model is a <code>.sql</code> file under <code>models/</code> containing a <code>SELECT</code> statement plus optional Jinja config. dbt compiles it, determines dependencies, and executes the appropriate DDL to create or replace a warehouse object (or inline it as a CTE if ephemeral).</p>
+                <p>A table in the warehouse is the persisted result. The model is the source code; the table is one possible output of running that code. You version-control models; tables are regenerated on each run.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Explain what {{ ref('model_name') }} does and why you should use it instead of a hard-coded table name.<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p><code>ref()</code> resolves to the correct relation for the active target environment, registers a dependency in the DAG so build order is correct, and enables lineage in documentation. Hard-coded names break all three: wrong schema in another environment, arbitrary build order, and missing lineage edges.</p>
+                <p>In production, hard-coded dev schema names are a common source of "works on my machine" incidents where CI reads empty tables or production data leaks into dev queries.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What is the dbt DAG, and what guarantees does dbt make about it?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>The DAG (directed acyclic graph) is the dependency graph of all models, sources, seeds, snapshots and tests. Edges come from <code>ref()</code>, <code>source()</code> and test relationships. dbt guarantees acyclicity &mdash; it refuses circular dependencies &mdash; and topological sort for execution order.</p>
+                <p>Independent subgraphs can run in parallel up to the thread limit. Failed nodes block descendants from running in the same invocation.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What is the difference between target/compiled and target/run?<span class="qa-tag">Troubleshooting</span></summary>
+              <div class="qa-body">
+                <p><code>target/compiled/</code> holds SQL after Jinja rendering &mdash; essentially your model's <code>SELECT</code> with macros expanded. It is written by <code>dbt compile</code> and <code>dbt run</code> without executing warehouse DDL for the compiled file alone.</p>
+                <p><code>target/run/</code> holds the full statement dbt executed, including <code>CREATE TABLE/VIEW AS</code> wrappers, hooks and adapter-specific syntax. Use compiled to debug logic; use run to reproduce exactly what the warehouse received.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Why does the course materialize src_ models as ephemeral?<span class="qa-tag">Modelling</span></summary>
+              <div class="qa-body">
+                <p>Staging is an implementation detail, not an analytics product. Ephemeral materialization inlines staging SQL into downstream models as CTEs, avoiding clutter in the dev schema and guaranteeing staging is always fresh when a dimension rebuilds.</p>
+                <p>The trade-off is that you cannot query staging directly or easily run singular tests against it in isolation. Teams accept that for thin renames; heavy staging sometimes becomes views instead.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Walk me through what happens when you run dbt run --select dim_listings_cleansed.<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>dbt parses the project, computes the subgraph for the selection, includes parents by default, and sorts topologically. It compiles <code>src_listings</code> (ephemeral) and executes its logic as part of compiling <code>dim_listings_cleansed</code>. It then runs the DDL for <code>dim_listings_cleansed</code> (table or view depending on config) against the warehouse.</p>
+                <p>Terminal output shows two steps: ephemeral success for staging (no persisted object) and table/view success for the dimension. Compiled and run artifacts land in <code>target/</code>.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How do folder-level configs in dbt_project.yml interact with a config block inside a model file?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p>Model-level <code>{{ config() }}</code> in the SQL file overrides folder-level settings in <code>dbt_project.yml</code>, which override project-level defaults. Most specific wins.</p>
+                <p>Example: <code>dim/</code> defaults to <code>table</code>, but <code>dim_listings_cleansed.sql</code> sets <code>materialized='view'</code> &mdash; that model becomes a view. Interviewers use this to test whether you know config precedence without guessing.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Your dimension model succeeds but returns zero rows. How do you debug it?<span class="qa-tag">Troubleshooting</span></summary>
+              <div class="qa-body">
+                <p>Work upstream. Count rows in the raw source table. Run <code>dbt compile --select dim_model</code> and read <code>target/compiled/</code> to verify the FROM clause points at the expected source. Check for silent filters in staging or dimension SQL.</p>
+                <p>If raw has rows but compiled SQL points at an empty schema, you likely hard-coded a schema name or are on the wrong target. <code>dbt debug</code> confirms active schema.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>When would you use a CTE in a dbt model versus creating a separate staging model?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>Use a separate staging model when the transform is reused by multiple downstream models or represents a stable contract on a source (renamed columns). Use an inline CTE within one model for steps only that model needs (a one-off filter or intermediate aggregation).</p>
+                <p>Over-splitting creates DAG noise; under-splitting duplicates logic. The course uses one staging model per source because every dimension and fact will reuse those renames.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Compare ref() and source(). When do you use each?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p><code>source()</code> references raw tables defined in YAML that dbt does not build &mdash; ingestion owns them. <code>ref()</code> references other dbt models in the project. Sources get freshness checks and appear as source nodes in lineage; refs form the model-to-model DAG.</p>
+                <p>Section 7 uses hard-coded raw names in the video; Section 9 moves to <code>source()</code>. Using <code>ref()</code> on a raw table or <code>source()</code> on a dbt model are both wrong and fail compilation or misrepresent lineage.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What happens if two models ref each other?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p>dbt detects cyclic dependencies at parse time and refuses to compile. If model A references model B and model B references model A, you get a compilation error describing the cycle. The DAG must be acyclic.</p>
+                <p>Fix by introducing an intermediate model that breaks the cycle, or restructuring so one direction uses a source or snapshot instead of a ref. Cycles are a design smell in analytics modelling anyway &mdash; they usually mean two definitions claim to be the source of truth for the same entity.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Why might dim_listings_cleansed be a view in the repo but a table in the lecture?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p>The lecture follows folder defaults: <code>dim/</code> means table unless overridden. The finished repo sets <code>materialized='view'</code> on <code>dim_listings_cleansed</code> and adds <code>event_time</code> for later microbatch lessons. Both are valid teaching paths.</p>
+                <p>Views cost no storage and always reflect current upstream logic; tables cost a rebuild but query faster for heavy BI. The exam tests whether you know config overrides folder defaults, not which choice the course repo made.</p>
+              </div>
+            </details>
+
+          </div>
+        </section>
+
+        <section class="section" id="practice">
+          <h2>Hands-on practice</h2>
+          <p class="muted">Run these from the <code>airbnb</code> folder with your virtualenv active.</p>
+          <ol class="practice-list">
+
+            <li class="practice">
+              <p class="practice-task">Build <code>src_reviews.sql</code> following the same CTE pattern as <code>src_listings</code>. Rename <code>date</code> to <code>review_date</code>, <code>comments</code> to <code>review_text</code>, and <code>sentiment</code> to <code>review_sentiment</code>.</p>
+              <span class="console-path">airbnb/models/src/src_reviews.sql</span>
+              <p class="practice-expect"><code>dbt compile --select src_reviews</code> completes without error; compiled SQL shows the renamed columns.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Create <code>models/src/src_reviews.sql</code>.</li>
+                    <li>Add a <code>raw_reviews</code> CTE selecting from the raw reviews table (or <code>source('airbnb', 'reviews')</code> if sources exist).</li>
+                    <li>Final <code>SELECT</code> with the column renames from the lesson script.</li>
+                    <li>Run <code>dbt compile --select src_reviews</code> and open <code>target/compiled/airbnb/models/src/src_reviews.sql</code>.</li>
+                  </ol>
+<pre data-lang="sql" data-title="models/src/src_reviews.sql"><code>WITH raw_reviews AS (
+    SELECT
+        *
+    FROM
+        {{ source('airbnb', 'reviews') }}
+)
+SELECT
+    listing_id,
+    DATE AS review_date,
+    reviewer_name,
+    comments AS review_text,
+    sentiment AS review_sentiment
+FROM
+    raw_reviews</code></pre>
+                  <p class="muted">Undo: delete <code>models/src/src_reviews.sql</code> if you want to redo the exercise from scratch.</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">Complete the <code>src_hosts</code> exercise: CTE on raw hosts, rename <code>id</code> to <code>host_id</code> and <code>name</code> to <code>host_name</code>.</p>
+              <span class="console-path">airbnb/models/src/src_hosts.sql</span>
+              <p class="practice-expect">Compiled SQL selects from RAW_HOSTS with the two renames applied.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Create the file under <code>models/src/</code>.</li>
+                    <li>Mirror the listings pattern with host-specific column names.</li>
+                    <li>Compile and inspect output.</li>
+                  </ol>
+<pre data-lang="sql" data-title="models/src/src_hosts.sql"><code>WITH raw_hosts AS (
+    SELECT
+        *
+    FROM
+       {{ source('airbnb', 'hosts') }}
+)
+SELECT
+    id AS host_id,
+    NAME AS host_name,
+    is_superhost,
+    created_at,
+    updated_at
+FROM
+    raw_hosts</code></pre>
+                  <p class="muted">Undo: delete <code>models/src/src_hosts.sql</code>.</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">Build <code>dim_hosts_cleansed</code> with <code>NVL(host_name, 'Anonymous')</code>, run <code>dbt run --select dim_hosts_cleansed</code>, and verify rows in Snowflake.</p>
+              <span class="console-path">airbnb/models/dim/dim_hosts_cleansed.sql</span>
+              <p class="practice-expect">Table or view <code>dim_hosts_cleansed</code> exists in DEV; query returns host rows with no null <code>host_name</code>.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Create <code>models/dim/dim_hosts_cleansed.sql</code> with a CTE on <code>{{ ref('src_hosts') }}</code>.</li>
+                    <li>Apply <code>NVL(host_name, 'Anonymous')</code> in the SELECT list.</li>
+                    <li>Run <code>dbt run --select dim_hosts_cleansed</code>.</li>
+                    <li>Verify: <code>SELECT COUNT(*) FROM AIRBNB.DEV.dim_hosts_cleansed;</code></li>
+                  </ol>
+<pre data-lang="sql" data-title="models/dim/dim_hosts_cleansed.sql"><code>WITH src_hosts AS (
+    SELECT
+        *
+    FROM
+        {{ ref('src_hosts') }}
+)
+SELECT
+    host_id,
+    NVL(
+        host_name,
+        'Anonymous'
+    ) AS host_name,
+    is_superhost,
+    created_at,
+    updated_at
+FROM
+    src_hosts</code></pre>
+                  <p class="muted">Undo: <code>DROP TABLE IF EXISTS AIRBNB.DEV.dim_hosts_cleansed;</code> (or drop view if materialized as view), then delete the model file.</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">Build <code>dim_listings_cleansed</code> with the minimum-nights CASE and price cast from the lesson. Run with selection and confirm numeric <code>price</code> in Snowflake.</p>
+              <span class="console-path">airbnb/models/dim/dim_listings_cleansed.sql</span>
+              <p class="practice-expect"><code>dbt run --select dim_listings_cleansed</code> succeeds; sample query shows no <code>minimum_nights = 0</code> and <code>price</code> is numeric.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Create <code>models/dim/dim_listings_cleansed.sql</code> with CTE on <code>{{ ref('src_listings') }}</code>.</li>
+                    <li>Add CASE for <code>minimum_nights</code> and REPLACE/cast for <code>price</code>.</li>
+                    <li>Run <code>dbt run --select dim_listings_cleansed</code>.</li>
+                    <li>Verify with the spot-check query in the dimension section.</li>
+                  </ol>
+<pre data-lang="sql" data-title="models/dim/dim_listings_cleansed.sql"><code>WITH src_listings AS (
+  SELECT * FROM {{ ref('src_listings') }}
+)
+SELECT
+  listing_id,
+  listing_name,
+  room_type,
+  CASE WHEN minimum_nights = 0 THEN 1 ELSE minimum_nights END AS minimum_nights,
+  host_id,
+  REPLACE(price_str, '$')::NUMBER(10, 2) AS price,
+  created_at,
+  updated_at
+FROM src_listings</code></pre>
+                  <p class="muted">Undo: <code>DROP TABLE IF EXISTS AIRBNB.DEV.dim_listings_cleansed;</code> or drop view if configured; delete model file to redo.</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">Run <code>dbt compile --select dim_listings_cleansed</code> and compare <code>target/compiled/</code> with <code>target/run/</code> after a full <code>dbt run</code>. Identify what the run artifact adds.</p>
+              <span class="console-path">airbnb/target/</span>
+              <p class="practice-expect">You can explain that run SQL wraps compiled SELECT in CREATE TABLE/VIEW DDL.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li><code>dbt compile --select dim_listings_cleansed</code></li>
+                    <li>Open <code>target/compiled/airbnb/models/dim/dim_listings_cleansed.sql</code> &mdash; note inlined <code>src_listings</code> CTE.</li>
+                    <li><code>dbt run --select dim_listings_cleansed</code></li>
+                    <li>Open <code>target/run/airbnb/models/dim/dim_listings_cleansed.sql</code> &mdash; note CREATE wrapper.</li>
+                  </ol>
+                  <p>The compiled file is the logic you wrote; the run file is what Snowflake executed including materialization DDL and any hooks.</p>
+                  <p class="muted">Undo: read-only inspection; optional <code>DROP VIEW/TABLE</code> if you created the object only for this exercise.</p>
+                </div>
+              </details>
+            </li>
+
+          </ol>
+        </section>
+
+        <section class="section" id="recap">
+          <h2>Recap</h2>
+          <div class="recap">
+            <ul class="checklist">
+              <li>A dbt model is a <code>.sql</code> file under <code>models/</code> with a single <code>SELECT</code>; dbt handles DDL and execution order.</li>
+              <li>File name (without extension) is the model name; subfolders organise but do not prefix the name.</li>
+              <li><code>src_</code> models in <code>models/src/</code> default to ephemeral &mdash; inlined as CTEs, no warehouse object.</li>
+              <li><code>dim_</code> models in <code>models/dim/</code> default to table &mdash; persisted, queryable dimensions.</li>
+              <li><code>{{ ref('model_name') }}</code> declares dependencies, resolves environments, and powers lineage.</li>
+              <li>Never hard-code dbt-built table names; use <code>ref()</code> so the DAG and build order stay correct.</li>
+              <li><code>target/compiled/</code> = Jinja expanded; <code>target/run/</code> = full DDL dbt executed.</li>
+              <li>Staging renames columns; dimensions apply business cleansing (CASE, casts, NVL).</li>
+              <li><code>dbt run --select model_name</code> builds the model and its parents; full runs rebuild everything persisted.</li>
+              <li>Ephemeral models show SUCCESS 0 in run output; table/view models report row counts or adapter-specific metrics.</li>
+              <li>Lesson uses hard-coded <code>AIRBNB.RAW.*</code>; repo uses <code>source()</code> after <a href="s09-seeds-sources.html">Section&nbsp;9</a>.</li>
+              <li><a href="s08-materializations.html">Section&nbsp;8</a> explains view, table, ephemeral and incremental in depth.</li>
+              <li>The DAG after this section has five models; only <code>dim_listings_cleansed</code> and <code>dim_hosts_cleansed</code> appear as objects in your dev schema.</li>
+            </ul>
+            <p style="margin-top:1rem;">
+              <button type="button" data-complete="section-07">Mark complete</button>
+            </p>
+          </div>
+        </section>
+
+      </div>
+
+      <aside class="toc" aria-label="On this page">
+        <strong>On this page</strong>
+        <ol>
+          <li><a href="#lectures">Lectures</a></li>
+          <li><a href="#model-basics">Model basics</a></li>
+          <li><a href="#ref-and-dag">ref() and DAG</a></li>
+          <li><a href="#compiled-sql">Compiled SQL</a></li>
+          <li><a href="#staging-src-models">Staging src_ models</a></li>
+          <li><a href="#dimension-dim-models">Dimension dim_ models</a></li>
+          <li><a href="#running-and-selecting-models">Running and selecting</a></li>
+          <li><a href="#deeper">Deeper detail</a></li>
+          <li><a href="#interview">Interview questions</a></li>
+          <li><a href="#practice">Hands-on practice</a></li>
+          <li><a href="#recap">Recap</a></li>
+        </ol>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<footer class="footer">The Complete dbt Bootcamp: Zero to Hero · Section 7 · Offline study edition</footer>
+</body>
+</html>

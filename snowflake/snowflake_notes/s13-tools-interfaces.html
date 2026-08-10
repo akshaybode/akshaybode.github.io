@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="SnowPro Core COF-C03 Section 13: Snowflake SQL API, drivers and connectors, Snowflake Scripting, Snowpark, and Snowsight dashboards.">
+<title>Section 13 — Snowflake Tools and Interfaces | Snowflake COF-C03 Course Notes</title>
+<link rel="stylesheet" href="assets/snowflake.css">
+<script defer src="assets/search-index.js"></script>
+<script defer src="assets/sql-glossary.js"></script>
+<script defer src="assets/sql-highlight.js"></script>
+<script defer src="assets/snowflake.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">Course section 13 of 17 · SnowPro Core (COF-C03)</p>
+    <h1>Snowflake Tools and Interfaces</h1>
+    <p class="subtitle">Connect applications and analysts to Snowflake through the SQL API, native drivers, procedural scripting, Snowpark runtimes, and Snowsight dashboards — the interface layer around the warehouse.</p>
+    <div class="hero-meta">
+      <span class="chip">5 lectures · 13min</span>
+      <span class="chip">Exam domain: Data Loading, Unloading &amp; Connectivity</span>
+      <span class="chip">Last verified: 28 Jul 2026</span>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <nav class="pager" aria-label="Section navigation">
+    <a href="s12-data-sharing.html">← Data Sharing</a>
+    <a href="../index.html">Course contents</a>
+    <a href="s14-advance-concepts.html">Next: Advance Concepts →</a>
+  </nav>
+
+  <main id="main">
+    <div class="layout">
+      <div class="content">
+
+        <section class="section" id="lectures">
+          <h2>Lectures in this section</h2>
+          <p class="muted">Every lecture below links to the notes that cover it.</p>
+          <ol class="lecture-list">
+            <li class="lecture">
+              <a class="lec-title" href="#sql-api">Snowflake SQL API</a>
+              <span class="lec-time">1:31</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#drivers-connectors">Drivers &amp; Connectors</a>
+              <span class="lec-time">0:49</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#scripting">Demo : Snowflake Scripting</a>
+              <span class="lec-time">5:19</span>
+              <span class="lec-src">Snowflake Tools and Interfaces/Snowflake Scripting.txt</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#snowpark">Snowpark</a>
+              <span class="lec-time">2:02</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#dashboard">Dashboard</a>
+              <span class="lec-time">3:10</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#quiz">Quiz</a>
+            </li>
+          </ol>
+        </section>
+
+        <section class="section" id="sql-api">
+          <h2>Snowflake SQL API</h2>
+          <p class="lead">The <strong>Snowflake SQL API</strong> is a REST API for accessing and updating data in a Snowflake database without installing a JDBC or ODBC driver. Authenticate with <strong>OAuth</strong> or <strong>key-pair authentication</strong> — not username/password in the request body for production workloads.</p>
+          <p>It suits lightweight integrations, serverless functions, and CI pipelines that submit SQL and poll for results over HTTPS. Pass role, warehouse, database, and schema in each request so the statement runs with the correct privileges.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Capability</th><th>What it does</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><strong>Execute SQL</strong></td><td>Submit statements for execution — queries, DDL, and DML</td></tr>
+                <tr><td><strong>Check status</strong></td><td>Poll the execution status of a submitted statement</td></tr>
+                <tr><td><strong>Cancel</strong></td><td>Cancel a statement that is still running</td></tr>
+                <tr><td><strong>Manage deployments</strong></td><td>Provision users, roles, and other account objects programmatically</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="grid-2">
+            <div class="mini-card">
+              <h4>Supported</h4>
+              <ul>
+                <li>SQL execution (SELECT, DDL, DML)</li>
+                <li>Statement status polling and cancellation</li>
+                <li>Deployment and provisioning operations</li>
+              </ul>
+            </div>
+            <div class="mini-card">
+              <h4>Not supported</h4>
+              <ul>
+                <li><code>PUT</code> and <code>GET</code> for stage file transfer</li>
+                <li>Any operation that needs a client with local filesystem access</li>
+              </ul>
+            </div>
+          </div>
+
+          <p>The <code>PUT</code>/<code>GET</code> limitation is exam-worthy: file movement to and from stages requires a driver, SnowSQL, or Snowflake CLI that can reach the local filesystem. The SQL API cannot upload or download stage files over REST alone.</p>
+          <p><strong>Billing</strong> for SQL API calls leverages the <strong>cloud services layer</strong>, not warehouse compute — metadata-only and lightweight REST operations do not spin up a virtual warehouse unless your submitted SQL explicitly needs one.</p>
+
+          <div class="callout exam">
+            <strong>COF-C03 exam tip:</strong> SQL API = REST + OAuth/key-pair; no <code>PUT</code>/<code>GET</code>; billing on cloud services. Drivers = JDBC/ODBC/Python/Node for thick clients and stage file movement. Snowpipe automation also uses key-pair JWT, but that is a different endpoint — do not conflate Snowpipe ingestion with the SQL API.
+          </div>
+        </section>
+
+        <section class="section" id="drivers-connectors">
+          <h2>Drivers &amp; Connectors</h2>
+          <p>Snowflake ships a family of native drivers and connectors so BI tools, ETL platforms, and custom apps can authenticate and run queries through standard interfaces — and perform stage file operations (<code>PUT</code>/<code>GET</code>) that the SQL API cannot.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-296-drivers.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-296-drivers.png" alt="Snowflake drivers and connectors family: JDBC, ODBC, Python, Node.js, Go, .NET, Spark, SnowSQL, and Snowflake CLI logos arranged as the official connectivity options" loading="lazy" width="1920" height="1080">
+            </a>
+            <figcaption><span class="slide-no">Slide 296</span>The drivers and connectors Snowflake maintains — pick the one that matches your client language or tool.</figcaption>
+          </figure>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Interface</th><th>Typical client</th><th>Notes</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><strong>JDBC</strong></td><td>Tableau, Power BI, Informatica, Java apps</td><td>Industry-standard Java Database Connectivity</td></tr>
+                <tr><td><strong>ODBC</strong></td><td>Tableau, Power BI, legacy BI tools</td><td>Open Database Connectivity for Windows-centric stacks</td></tr>
+                <tr><td><strong>Python connector</strong></td><td>Data science, Airflow, custom ETL</td><td>Pairs with the Snowpark Python library</td></tr>
+                <tr><td><strong>Node.js connector</strong></td><td>Web backends, serverless functions</td><td>JavaScript/TypeScript applications</td></tr>
+                <tr><td><strong>Go connector</strong></td><td>Microservices, cloud-native backends</td><td>Same auth options as other drivers</td></tr>
+                <tr><td><strong>.NET connector</strong></td><td>C# / .NET enterprise applications</td><td>Native driver for the Microsoft stack</td></tr>
+                <tr><td><strong>Spark connector</strong></td><td>Databricks / Spark jobs</td><td>External compute reading and writing Snowflake tables</td></tr>
+                <tr><td><strong>SnowSQL</strong></td><td>Legacy CLI scripting</td><td>SQL plus stage <code>PUT</code>/<code>GET</code>; being superseded by Snowflake CLI</td></tr>
+                <tr><td><strong>Snowflake CLI</strong></td><td>DevOps, project deploy</td><td>SQL + object management beyond SnowSQL. Setup in <a href="s04-data-loading-unloading.html#cli-connect">Section 04</a></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout tip">
+            <strong>Service accounts:</strong> Prefer <strong>key-pair authentication</strong> for non-interactive connectors. Assign a least-privilege role; never embed <code>ACCOUNTADMIN</code> in application configs.
+          </div>
+        </section>
+
+        <section class="section" id="scripting">
+          <h2>Demo : Snowflake Scripting</h2>
+          <p class="muted">Course file: <code>Snowflake Tools and Interfaces/Snowflake Scripting.txt</code></p>
+          <p><strong>Snowflake Scripting</strong> is an extension to Snowflake SQL that adds procedural logic. You use it to write stored procedures and also to run procedural code outside a stored procedure — anonymous blocks in Snowsight worksheets are the usual pattern.</p>
+          <p>For full coverage of UDFs and stored procedures (which wrap Scripting), see <a href="s05-advance-data-loading.html">Section 5 — Advance Data Loading</a>. This section focuses on the Scripting language itself.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-299-scripting-block.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-299-scripting-block.png" alt="Snowflake Scripting block structure: DECLARE section for variables, BEGIN section for executable statements, optional EXCEPTION handler, and END closing the block" loading="lazy" width="1920" height="1080">
+            </a>
+            <figcaption><span class="slide-no">Slide 299</span>Every Scripting block follows DECLARE → BEGIN → optional EXCEPTION → END.</figcaption>
+          </figure>
+
+          <h3>Block structure</h3>
+          <p>A Scripting block has four named sections. You declare variables in <code>DECLARE</code>, run statements in <code>BEGIN</code>, optionally catch errors in <code>EXCEPTION</code>, and close with <code>END</code>:</p>
+          <pre><code>DECLARE
+  &lt;variable declarations&gt;
+BEGIN
+  &lt;executable statements&gt;
+EXCEPTION
+  &lt;exception handlers&gt;
+END;</code></pre>
+
+          <h3>What Scripting adds beyond plain SQL</h3>
+          <ul>
+            <li><strong>Declare variables</strong> and return a value from the block or procedure.</li>
+            <li><strong>Branching:</strong> <code>IF</code> and <code>CASE</code> constructs.</li>
+            <li><strong>Loops:</strong> <code>FOR</code>, <code>WHILE</code>, <code>REPEAT</code>, and <code>LOOP</code>.</li>
+            <li><strong>Cursors</strong> for row-by-row processing over a result set.</li>
+            <li><strong><code>RESULTSET</code></strong> for capturing the output of a query inside the block.</li>
+            <li><strong>DML row counts:</strong> <code>SQLROWCOUNT</code>, <code>SQLFOUND</code>, and <code>SQLNOTFOUND</code> report how many rows the last DML affected.</li>
+            <li><strong>Exception handling</strong> in the <code>EXCEPTION</code> section when something fails.</li>
+          </ul>
+
+          <pre><code>USE ROLE ACCOUNTADMIN;
+USE WAREHOUSE COMPUTE_WH;
+
+CREATE OR REPLACE PROCEDURE circle_area()
+  RETURNS FLOAT
+  LANGUAGE SQL
+  AS
+  $$
+    DECLARE
+      radius FLOAT;
+      area   FLOAT;
+    BEGIN
+      radius := 3;
+      area := PI() * radius * radius;
+      RETURN area;
+    END;
+  $$;
+
+CALL circle_area();
+
+-- Anonymous block in Snowsight (worksheet)
+EXECUTE IMMEDIATE $$
+DECLARE
+  count INTEGER DEFAULT 1;
+BEGIN
+  IF (count &lt; 0) THEN
+    RETURN 'negative';
+  ELSEIF (count = 0) THEN
+    RETURN 'zero';
+  ELSE
+    RETURN 'positive';
+  END IF;
+END;
+$$;
+
+-- SQLROWCOUNT after DML
+EXECUTE IMMEDIATE $$
+BEGIN
+  CREATE OR REPLACE TABLE study_script.tmp_ids (id INT);
+  INSERT INTO study_script.tmp_ids VALUES (1), (2), (3);
+  RETURN SQLROWCOUNT;  -- 3
+END;
+$$;</code></pre>
+
+          <div class="callout tip">
+            <strong>SnowSQL / legacy console:</strong> Wrap anonymous scripts in <code>EXECUTE IMMEDIATE $$ … $$</code> as shown in the course file. Snowsight worksheets accept bare <code>BEGIN … END</code> blocks in many builds.
+          </div>
+        </section>
+
+        <section class="section" id="snowpark">
+          <h2>Snowpark</h2>
+          <p><strong>Snowpark</strong> is Snowflake's developer framework for writing <strong>Python, Scala, or Java</strong> that runs inside the platform. You manipulate DataFrames and call ML libraries without shipping large datasets out of the account — the client sends program logic; the warehouse executes it on data that already lives in Snowflake.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-303-snowpark.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-303-snowpark.png" alt="Snowpark architecture: client application sends DataFrame operations to Snowflake, which pushes compute down into the virtual warehouse while data stays in database storage" loading="lazy" width="1920" height="1080">
+            </a>
+            <figcaption><span class="slide-no">Slide 303</span>Snowpark pushes DataFrame work into the warehouse so data never leaves the account.</figcaption>
+          </figure>
+
+          <ul>
+            <li>Data stays in Snowflake; compute runs on the warehouse you select.</li>
+            <li>Integrates with scikit-learn, pandas, and the Snowpark API.</li>
+            <li>Stored procedures can use <code>LANGUAGE PYTHON</code> with <code>RUNTIME_VERSION</code> and <code>PACKAGES</code>.</li>
+            <li>Tasks can call Snowpark procedures; memory-heavy ML may need a <strong>Snowpark-optimized warehouse</strong> (see <a href="s15-cof-c03-exclusive.html">Section 15</a>).</li>
+            <li><strong>External functions</strong> call out to external APIs via cloud infrastructure — separate from in-warehouse Snowpark.</li>
+          </ul>
+
+          <div class="diagram" role="img" aria-label="Flow from SQL through Scripting to Snowpark">
+            <div class="flow">
+              <div class="node">SQL SELECT</div>
+              <span class="arrow" aria-hidden="true">→</span>
+              <div class="node pulse">Snowflake Scripting</div>
+              <span class="arrow" aria-hidden="true">→</span>
+              <div class="node">Stored procedure</div>
+              <span class="arrow" aria-hidden="true">→</span>
+              <div class="node">Snowpark (Py/Scala/Java)</div>
+            </div>
+          </div>
+
+          <pre><code>CREATE OR REPLACE PROCEDURE study_sp.train_model()
+  RETURNS TABLE(warehouse STRING, duration_sec FLOAT, status STRING)
+  LANGUAGE PYTHON
+  RUNTIME_VERSION = '3.10'
+  PACKAGES = ('snowflake-snowpark-python', 'scikit-learn', 'pandas')
+  HANDLER = 'run'
+  AS $$
+import time
+from sklearn.ensemble import RandomForestClassifier
+
+def run(session):
+    df = session.table('study_sp.demo_data').to_pandas()
+    X = df[['FEATURE_1','FEATURE_2','FEATURE_3','FEATURE_4']].values
+    y = df['LABEL'].values
+    start = time.time()
+    model = RandomForestClassifier(n_estimators=20, max_depth=5)
+    model.fit(X, y)
+    duration = time.time() - start
+    wh = session.get_current_warehouse()
+    return session.create_dataframe(
+        [[wh, duration, 'SUCCESS']],
+        schema=['WAREHOUSE','DURATION_SEC','STATUS']
+    )
+$$;</code></pre>
+        </section>
+
+        <section class="section" id="dashboard">
+          <h2>Dashboard</h2>
+          <p><strong>Snowsight dashboards</strong> let you build visual tiles (charts, tables, single values) from saved queries — a lightweight BI layer inside the Snowflake UI without exporting data to a separate tool.</p>
+          <ul>
+            <li>Create a dashboard from <strong>Projects</strong> in Snowsight; add tiles backed by worksheet queries or existing charts.</li>
+            <li>Each tile query runs against your selected <strong>warehouse</strong> — dashboards do not bypass compute billing.</li>
+            <li>Share dashboards with roles that have SELECT on the underlying objects; row access and masking policies still apply at query time.</li>
+            <li>Parameters and filters can make one dashboard serve multiple audiences (region, date range).</li>
+          </ul>
+          <div class="callout warn">
+            <strong>Cost habit:</strong> A dashboard left open with auto-refresh can resume warehouses repeatedly. Set conservative refresh intervals and use right-sized warehouses for BI (often Small or X-Small with <code>AUTO_SUSPEND = 60</code>).
+          </div>
+          <div class="callout exam">
+            <strong>Exam note:</strong> Dashboards are Snowsight-native. Streamlit in Snowflake (Section 14) is a separate app-building path for custom Python UIs — both need warehouse compute for data operations.
+          </div>
+        </section>
+
+        <section class="section" id="quiz">
+          <h2>Quiz</h2>
+          <p class="muted">Self-check before moving on:</p>
+          <ul>
+            <li>Can you name two authentication methods for the SQL API?</li>
+            <li>What must you wrap anonymous Scripting in when using SnowSQL?</li>
+            <li>Why does Snowpark keep data inside Snowflake instead of exporting to a laptop?</li>
+            <li>Does a Snowsight dashboard tile run without a warehouse when it scans table data?</li>
+          </ul>
+        </section>
+
+        <section class="section" id="interview">
+          <h2>Interview questions</h2>
+          <p class="muted">Try to answer each one before opening it.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+            <details class="qa">
+              <summary>When would you use the Snowflake SQL API instead of a JDBC or Python driver?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p>Reach for the SQL API when you need lightweight, driverless SQL execution from serverless functions, CI pipelines, or microservices that only submit statements and poll for results. It is REST-based and authenticates with OAuth or key-pair JWT — not username/password in the body. Drivers are better for thick clients, BI tools, and anything that needs stage file movement (<code>PUT</code>/<code>GET</code>), which the SQL API does not support. If your app already uses ODBC/JDBC/Python connectors and needs binary stage transfers, stay on a driver.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How should a non-interactive service account authenticate to Snowflake connectors?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>Use <strong>key-pair authentication</strong> rather than embedding passwords in config files. Generate an RSA key pair, register the public key on the Snowflake user, and sign JWTs from the application. Assign a least-privilege role — never <code>ACCOUNTADMIN</code> in connector configs. The same pattern applies across JDBC, ODBC, Python, Node.js, Go, and .NET connectors; only the client library differs. Rotate keys on a schedule and store the private key in a secrets manager, not source control.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What procedural features does Snowflake Scripting add beyond plain SQL?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>Snowflake Scripting adds variables (<code>DECLARE</code>/<code>LET</code>), branching (<code>IF</code>/<code>CASE</code>), loops, cursors for row-by-row processing, <code>RESULTSET</code> for capturing query output, and exception handlers around <code>BEGIN … END</code> blocks. DML helpers include <code>SQLROWCOUNT</code>, <code>SQLFOUND</code>, and <code>SQLNOTFOUND</code>. You use it inside stored procedures (<code>LANGUAGE SQL</code>) or as anonymous blocks in Snowsight worksheets. The course Scripting demo builds a procedure that computes circle area with declared variables — the same patterns extend to ETL control flow.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Why do anonymous Scripting blocks in SnowSQL need <code>EXECUTE IMMEDIATE $$ … $$</code>?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p>SnowSQL and the legacy console parse input line-by-line as individual SQL statements. A bare <code>BEGIN … END</code> block is not a valid standalone statement in that context — the client would split or reject it. Wrapping the block in <code>EXECUTE IMMEDIATE $$ … $$</code> sends the entire script as one dynamic SQL string for Snowflake to compile and run. Snowsight worksheets accept bare blocks in many builds, which catches people who copy a Snowsight lab into SnowSQL and get syntax errors. Stored procedures do not need the wrapper because the body is already inside the procedure DDL.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What do <code>SQLROWCOUNT</code> and <code>SQLID</code> tell you in a Scripting block?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p><code>SQLROWCOUNT</code> returns rows affected by the <em>last DML</em> (INSERT, UPDATE, DELETE, MERGE) — the course demo inserts three rows and returns <code>3</code>. A <code>SELECT</code> does not update it. <code>SQLFOUND</code>/<code>SQLNOTFOUND</code> boolean-test the same DML. <code>SQLID</code> returns the query ID of the last statement executed in the block, useful for correlating with Query History when debugging procedural code. Do not confuse <code>SQLROWCOUNT</code> with JDBC result-set row counts or with <code>COUNT(*)</code> from a separate query.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What is Snowpark, and where does the code actually execute?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>Snowpark is Snowflake's developer framework for Python, Scala, and Java that exposes DataFrame-style APIs inside the platform. Your handler code runs <strong>on the warehouse</strong> you select — compute is pushed down to Snowflake, not executed on your laptop. Data stays in the account; the client only sends the program logic. Stored procedures with <code>LANGUAGE PYTHON</code>, <code>RUNTIME_VERSION</code>, and <code>PACKAGES</code> are the usual deployment path. External functions are different — they call out to cloud APIs outside the warehouse.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How would you choose between a Snowpark stored procedure, a SQL Scripting procedure, and a UDF?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p>Use a <strong>SQL Scripting stored procedure</strong> for procedural SQL, cursors, and DML orchestration without leaving SQL. Use a <strong>Snowpark stored procedure</strong> when you need pandas, scikit-learn, or custom Python/Scala logic on in-warehouse DataFrames — as in the course <code>train_model()</code> demo. Use a <strong>UDF</strong> for a scalar or tabular function invoked per row or per query inside SQL (<code>SELECT my_udf(col)</code>), not for multi-step workflows. UDFs are lighter for simple transforms; procedures own transactions, multiple statements, and side effects.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Do Snowsight dashboard tiles run without a warehouse, and how does SnowSQL differ from Snowflake CLI?<span class="qa-tag">Scenario</span></summary>
+              <div class="qa-body">
+                <p>Dashboard tiles backed by queries that scan table data <strong>require an active warehouse</strong> — dashboards do not bypass compute billing, and auto-refresh can repeatedly resume warehouses. Row access and masking policies still apply at query time. <strong>SnowSQL</strong> is the legacy CLI focused on SQL scripting and stage operations. <strong>Snowflake CLI</strong> is the newer tool for broader dev workflows — SQL plus object management and project deploy. For exam and architecture questions: both are connectivity options, but CLI is the forward-looking choice for DevOps-style tasks; neither replaces the SQL API for REST-only integrations.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Why does the SQL API bill on cloud services instead of warehouse compute, and what cannot it do?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p>SQL API REST calls themselves leverage the <strong>cloud services layer</strong> for submission, status polling, cancellation, and deployment management — you are not charged warehouse credits until the submitted SQL actually needs compute. The hard limitation is file transfer: <code>PUT</code> and <code>GET</code> are <strong>not supported</strong> because stage uploads and downloads require a client with local filesystem access. Use JDBC, ODBC, Python, SnowSQL, or Snowflake CLI for stage operations. Exam trap: "Use the SQL API to upload files to a stage" is always wrong.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What is the Snowflake Scripting block structure, and which loop types exist?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>Every block follows <code>DECLARE</code> (variables) → <code>BEGIN</code> (statements) → optional <code>EXCEPTION</code> (error handlers) → <code>END</code>. Beyond branching with <code>IF</code> and <code>CASE</code>, Scripting supports four loop constructs: <code>FOR</code>, <code>WHILE</code>, <code>REPEAT</code>, and <code>LOOP</code>. You can also use cursors, <code>RESULTSET</code>, and DML helpers (<code>SQLROWCOUNT</code>, <code>SQLFOUND</code>, <code>SQLNOTFOUND</code>). Use it inside <code>LANGUAGE SQL</code> stored procedures or as anonymous blocks in Snowsight.</p>
+              </div>
+            </details>
+          </div>
+        </section>
+
+        <section class="section" id="practice">
+          <h2>Hands-on practice</h2>
+          <p class="muted">Run these in a trial account on an X-Small warehouse with <code>AUTO_SUSPEND = 60</code>. Clean up when you finish.</p>
+          <ol class="practice-list">
+            <li class="practice">
+              <p class="practice-task">Create schema <code>study_script</code> in a lab database, then build and call the <code>circle_area()</code> SQL Scripting procedure from the course file (radius 3, returns πr²).</p>
+              <p class="practice-expect"><code>CALL circle_area()</code> returns approximately <code>28.274…</code> (9π).</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">SQL</span></summary>
+                <div class="qa-body">
+<pre><code>USE ROLE ACCOUNTADMIN;
+USE WAREHOUSE COMPUTE_WH;
+
+CREATE DATABASE IF NOT EXISTS study_script_db;
+CREATE SCHEMA IF NOT EXISTS study_script_db.study_script;
+USE SCHEMA study_script_db.study_script;
+
+CREATE OR REPLACE PROCEDURE circle_area()
+  RETURNS FLOAT
+  LANGUAGE SQL
+  AS
+  $$
+    DECLARE
+      radius FLOAT;
+      area   FLOAT;
+    BEGIN
+      radius := 3;
+      area := PI() * radius * radius;
+      RETURN area;
+    END;
+  $$;
+
+CALL circle_area();</code></pre>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Run an anonymous Scripting block that creates a temp table, inserts three rows, and returns <code>SQLROWCOUNT</code>. Use <code>EXECUTE IMMEDIATE</code> if your client requires it.</p>
+              <p class="practice-expect">The block returns <code>3</code>. A subsequent <code>SELECT</code> inside the same block does not change <code>SQLROWCOUNT</code>.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">SQL</span></summary>
+                <div class="qa-body">
+<pre><code>EXECUTE IMMEDIATE $$
+BEGIN
+  CREATE OR REPLACE TABLE study_script_db.study_script.tmp_ids (id INT);
+  INSERT INTO study_script_db.study_script.tmp_ids VALUES (1), (2), (3);
+  RETURN SQLROWCOUNT;
+END;
+$$;</code></pre>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Drop the procedure, temp table, schema, and database created in this section. Suspend the warehouse when finished.</p>
+              <p class="practice-expect">All objects removed; <code>SHOW PROCEDURES LIKE 'circle_area%'</code> in the schema returns no rows; warehouse shows <code>SUSPENDED</code>.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">SQL</span></summary>
+                <div class="qa-body">
+<pre><code>DROP PROCEDURE IF EXISTS study_script_db.study_script.circle_area();
+DROP TABLE IF EXISTS study_script_db.study_script.tmp_ids;
+DROP SCHEMA IF EXISTS study_script_db.study_script;
+DROP DATABASE IF EXISTS study_script_db;
+
+ALTER WAREHOUSE IF EXISTS COMPUTE_WH SUSPEND;</code></pre>
+                </div>
+              </details>
+            </li>
+          </ol>
+        </section>
+
+        <section class="section" id="recap">
+          <h2>Recap</h2>
+          <div class="recap">
+            <ul class="checklist">
+              <li>SQL API: REST + OAuth/key-pair; submit/cancel/status/deploy; no PUT/GET; bills on cloud services.</li>
+              <li>Drivers: JDBC, ODBC, Python, Node.js, Go, .NET, Spark, SnowSQL, Snowflake CLI.</li>
+              <li>Scripting: DECLARE/BEGIN/EXCEPTION/END; IF/CASE; FOR/WHILE/REPEAT/LOOP; cursors, RESULTSET, SQLROWCOUNT.</li>
+              <li>Snowpark: Python/Scala/Java DataFrames pushed down to warehouse compute.</li>
+              <li>Snowsight dashboards: query-backed tiles; warehouse required for data scans.</li>
+            </ul>
+            <p style="margin-top:1rem;">
+              <button type="button" data-complete="section-13">Mark complete</button>
+            </p>
+          </div>
+        </section>
+
+      </div>
+
+      <aside class="toc" aria-label="On this page">
+        <strong>On this page</strong>
+        <ol>
+          <li><a href="#lectures">Lectures</a></li>
+          <li><a href="#sql-api">SQL API</a></li>
+          <li><a href="#drivers-connectors">Drivers</a></li>
+          <li><a href="#scripting">Scripting</a></li>
+          <li><a href="#snowpark">Snowpark</a></li>
+          <li><a href="#dashboard">Dashboard</a></li>
+          <li><a href="#quiz">Quiz</a></li>
+          <li><a href="#interview">Interview questions</a></li>
+          <li><a href="#practice">Hands-on practice</a></li>
+          <li><a href="#recap">Recap</a></li>
+        </ol>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<footer class="footer">Snowflake COF-C03 Course Notes · Section 13 · Offline study edition</footer>
+</body>
+</html>

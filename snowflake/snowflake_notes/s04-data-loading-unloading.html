@@ -1,0 +1,942 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="SnowPro Core COF-C03 Section 4: stages, SnowSQL/CLI, PUT/GET, COPY INTO loading, and data unloading with MOCK.csv sample data.">
+<title>Section 4 — Data Loading and Unloading | Snowflake COF-C03 Course Notes</title>
+<link rel="stylesheet" href="assets/snowflake.css">
+<script defer src="assets/search-index.js"></script>
+<script defer src="assets/sql-glossary.js"></script>
+<script defer src="assets/sql-highlight.js"></script>
+<script defer src="assets/snowflake.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">Course section 4 of 17 · SnowPro Core (COF-C03)</p>
+    <h1>Data Loading and Unloading</h1>
+    <p class="subtitle">Internal stages (user, table, named), SnowSQL and Snowflake CLI file transfer, bulk COPY INTO from flat files, and unloading table data back to local disk.</p>
+    <div class="hero-meta">
+      <span class="chip">7 lectures · 44min</span>
+      <span class="chip">Exam domain: Perform data loading, unloading, and transformation</span>
+      <span class="chip">Last verified: 28 Jul 2026</span>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <nav class="pager" aria-label="Section navigation">
+    <a href="s03-time-travel-views.html">← Time Travel, Views</a>
+    <a href="../index.html">Course contents</a>
+    <a href="s05-advance-data-loading.html">Next: Advance Data Loading →</a>
+  </nav>
+
+  <main id="main">
+    <div class="layout">
+      <div class="content">
+
+        <section class="section" id="lectures">
+          <h2>Lectures in this section</h2>
+          <p class="muted">Every lecture below links to the notes that cover it.</p>
+          <ol class="lecture-list">
+            <li class="lecture">
+              <a class="lec-title" href="#data-loading-concept">Data Loading : Concept</a>
+              <span class="lec-time">3:55</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#demo-data-loading">Demo : Data Loading</a>
+              <span class="lec-time">12:57</span>
+              <span class="lec-src">Data Loading and Unloading/Data Loading.txt</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#snowflake-cli">Snowflake CLI Installation</a>
+              <span class="lec-time">5:40</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#demo-user-stage">Demo : Snowsql Data loading - User Stage</a>
+              <span class="lec-time">7:27</span>
+              <span class="lec-src">Data Loading and Unloading/User Stage - Snowsql.txt</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#demo-table-stage">Demo : Type of Stages - Table Stage</a>
+              <span class="lec-time">3:01</span>
+              <span class="lec-src">Data Loading and Unloading/table stage snowsql.txt</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#demo-named-stage">Demo : Type of Stages - Named Stage</a>
+              <span class="lec-time">3:04</span>
+              <span class="lec-src">Data Loading and Unloading/named stage snowsql.txt</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#data-unloading">Snowflake Data Unloading</a>
+              <span class="lec-time">7:41</span>
+              <span class="lec-src">Data Loading and Unloading/Data Unloading.txt</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#loading-quiz">Data Loading And Unloading Quiz</a>
+            </li>
+          </ol>
+        </section>
+
+        <section class="section" id="data-loading-concept">
+          <h2>Data Loading : Concept</h2>
+          <p class="lead">Snowflake stores data in its own compressed micro-partition format. Before rows land in a table, source files usually sit in a <strong>stage</strong> — Snowflake's term for the location of data files in cloud storage. You describe the file structure with a file format, upload files with <code>PUT</code>, then run <code>COPY INTO</code> to load data into a table.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-072-loading-overview.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-072-loading-overview.png" alt="Data loading flow: various data sources upload to a stage, then COPY INTO loads from the stage into a Snowflake table" loading="lazy" width="1920" height="1080">
+            </a>
+            <figcaption><span class="slide-no">Slide 72</span>Every bulk load follows the same path — source files land in a stage first, then <code>COPY INTO</code> ingests them.</figcaption>
+          </figure>
+
+          <div class="analogy">
+            <strong>Everyday analogy — airport baggage:</strong> A stage is the conveyor belt before your suitcase enters the plane's cargo hold (the table). The file format is the customs form describing what's inside each bag. <code>COPY INTO</code> is the loader that scans bags and places contents into the correct compartments.
+          </div>
+
+          <div class="diagram" role="img" aria-label="Bulk load path from local file through stage to table">
+            <p class="muted" style="text-align:center;margin:0 0 14px;font-size:.85rem;text-transform:uppercase;letter-spacing:.08em;">Bulk load path</p>
+            <div class="flow">
+              <div class="node">Local file<br><small class="muted">MOCK.csv</small></div>
+              <span class="arrow" aria-hidden="true">→</span>
+              <div class="node pulse">Stage<br><small class="muted">@stage_name</small></div>
+              <span class="arrow" aria-hidden="true">→</span>
+              <div class="node">Table<br><small class="muted">COPY INTO</small></div>
+              <span class="packet" aria-hidden="true"></span>
+            </div>
+          </div>
+
+          <h3>Internal vs external stages</h3>
+          <p>Stages are either <strong>internal</strong> (Snowflake-managed storage) or <strong>external</strong> (a reference to files already in your cloud bucket). All internal stage types accept uploads via <code>PUT</code> (SnowSQL or CLI).</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Stage type</th><th>Syntax</th><th>Created by</th><th>Scope</th><th>Can alter/drop?</th><th>Load with</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>Table stage</strong></td>
+                  <td><code>@%table_name</code></td>
+                  <td>Auto-created per table</td>
+                  <td>Multi-user access for one table</td>
+                  <td>No</td>
+                  <td><code>PUT</code></td>
+                </tr>
+                <tr>
+                  <td><strong>User stage</strong></td>
+                  <td><code>@~</code> or <code>@~/path</code></td>
+                  <td>Auto-created per user</td>
+                  <td>Single user, many tables</td>
+                  <td>No</td>
+                  <td><code>PUT</code></td>
+                </tr>
+                <tr>
+                  <td><strong>Named stage</strong></td>
+                  <td><code>@stage_name</code></td>
+                  <td>User</td>
+                  <td>Behaves like any other object; grantable</td>
+                  <td>Yes</td>
+                  <td><code>PUT</code></td>
+                </tr>
+                <tr>
+                  <td><strong>External stage</strong></td>
+                  <td><code>@ext_stage</code></td>
+                  <td>User</td>
+                  <td>Points to cloud object storage via URL</td>
+                  <td>Yes</td>
+                  <td>No <code>PUT</code> — files already in cloud</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-074-stages.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-074-stages.png" alt="Internal stage types table stage at-percent, user stage at-tilde, named stage at-name compared with external stage pointing to cloud URL; internal stages loaded with PUT; external cannot point to archived storage" loading="lazy" width="1920" height="1080">
+            </a>
+            <figcaption><span class="slide-no">Slide 74</span>Three internal stage flavours plus external stages — table and user stages are auto-created and cannot be dropped.</figcaption>
+          </figure>
+
+          <p>External stages reference objects already in S3, Azure Blob, or GCS. You specify a URL when creating the stage. External stages <strong>cannot point to archived storage classes</strong> (for example, S3 Glacier) — files must be in a readable storage tier.</p>
+
+          <div class="callout exam">
+            <strong>COF-C03 exam tip:</strong> <code>PUT</code> and <code>GET</code> are <strong>not available in Snowsight SQL worksheets</strong> — they run only in SnowSQL or the Snowflake CLI (<code>snow stage copy</code>). Snowsight can upload files via the UI (<em>Data → Stages → Upload</em>), but that path has a <strong>50 MB per-file limit</strong>. Files larger than 50 MB require SnowSQL or the CLI. Bulk <code>COPY INTO</code> runs on your virtual warehouse and defaults to <code>ON_ERROR = ABORT_STATEMENT</code>.
+          </div>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-076-snowsql-limit.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-076-snowsql-limit.png" alt="Snowsight browser upload limited to 50 MB per file; SnowSQL or CLI required for larger files" loading="lazy" width="1920" height="1080">
+            </a>
+            <figcaption><span class="slide-no">Slide 76</span>The Snowsight upload UI caps at 50 MB — use SnowSQL or the CLI for production-sized files.</figcaption>
+          </figure>
+
+          <p>File format objects, COPY options deep-dives, validation, and load-time transforms are covered in <a href="s05-advance-data-loading.html">Section 5 — Advance Data Loading</a>.</p>
+        </section>
+
+        <section class="section" id="demo-data-loading">
+          <h2>Demo : Data Loading</h2>
+          <p class="muted">Course file: <code>Data Loading and Unloading/Data Loading.txt</code></p>
+          <p>Sample data: <code>data/MOCK.csv</code> (~1,000 customer rows with header). Upload the file to a named stage first (SnowSQL, CLI, or Snowsight UI), then load with <code>COPY INTO</code>.</p>
+
+          <pre><code>USE ROLE SYSADMIN;
+USE WAREHOUSE compute_wh;
+USE DATABASE la_db;
+USE SCHEMA la_schema;
+
+CREATE OR REPLACE TABLE customers (
+  customer   NUMBER NOT NULL,
+  first_name VARCHAR NOT NULL,
+  last_name  VARCHAR NOT NULL,
+  region     VARCHAR NOT NULL,
+  email      VARCHAR NOT NULL,
+  gender     VARCHAR NOT NULL,
+  "order"    NUMBER NOT NULL
+);
+
+CREATE OR REPLACE STAGE cust_stage
+  FILE_FORMAT = (TYPE = CSV FIELD_DELIMITER = ',' SKIP_HEADER = 1);
+
+-- Upload MOCK.csv to @cust_stage via SnowSQL PUT or Snowsight UI first
+-- PUT file://&lt;local_path&gt;/MOCK.csv @cust_stage AUTO_COMPRESS = FALSE;
+
+LIST @cust_stage;
+
+COPY INTO customers
+FROM @cust_stage/MOCK.csv
+FILE_FORMAT = (
+  TYPE = CSV,
+  SKIP_HEADER = 1,
+  FIELD_DELIMITER = ',',
+  TRIM_SPACE = FALSE,
+  FIELD_OPTIONALLY_ENCLOSED_BY = NONE
+)
+ON_ERROR = ABORT_STATEMENT
+FORCE = TRUE;
+
+SELECT COUNT(*) AS row_count FROM customers;</code></pre>
+
+          <div class="callout warn">
+            <strong>Common mistakes:</strong>
+            <ul>
+              <li>Forgetting <code>SKIP_HEADER = 1</code> on CSV files with a header row — the header becomes row 1.</li>
+              <li>Quoting the reserved word column: use <code>"order"</code> in DDL when the source CSV header is <code>order</code>.</li>
+              <li>Running <code>PUT</code> in a Snowsight worksheet — use SnowSQL, CLI, or the Snowsight Upload UI.</li>
+            </ul>
+          </div>
+        </section>
+
+        <section class="section" id="snowflake-cli">
+          <h2>Snowflake CLI Installation</h2>
+          <p>Install the <strong>Snowflake CLI</strong> for account management and file transfer from your local machine. It complements (and in some workflows replaces) the legacy <strong>SnowSQL</strong> client.</p>
+
+          <ul>
+            <li><strong>SnowSQL:</strong> Legacy CLI — supports <code>PUT</code>, <code>GET</code>, DML/DDL, and loading/unloading data.</li>
+            <li><strong>Snowflake CLI:</strong> Modern CLI — use <code>snow stage copy</code> to upload/download files between local disk and stages.</li>
+            <li><strong>Connectors:</strong> Python, JDBC/ODBC for application pipelines.</li>
+          </ul>
+
+          <pre><code>-- SnowSQL upload (run outside Snowsight)
+PUT file://&lt;local_path&gt;/MOCK.csv @stage_name AUTO_COMPRESS = FALSE;
+
+-- Snowflake CLI equivalent
+-- snow stage copy &lt;local_path&gt;/MOCK.csv @stage_name
+
+-- Download
+GET @stage_name file://&lt;local_path&gt;/unload;
+-- snow stage copy @stage_name file://&lt;local_path&gt;/unload</code></pre>
+
+          <div class="callout danger">
+            <strong>Run this in SnowSQL or CLI, not Snowsight:</strong> <code>PUT</code> and <code>GET</code> are client-side file transfer commands. They do not appear in Snowsight SQL worksheets.
+          </div>
+        </section>
+
+        <section class="section" id="cli-connect">
+          <h2>Connecting the CLI to your account</h2>
+          <p class="lead">Installing <code>snow</code> only gives you the binary. Before it can run anything you have to tell it which account to talk to, and that is what a <strong>named connection</strong> is: a profile of account, user, credentials and session defaults, stored once in <code>config.toml</code> and referred to afterwards by name.</p>
+
+          <h3>1 &middot; Create the connection</h3>
+          <p><code>snow connection add</code> is interactive. Only the first handful of prompts matter for an ordinary password login &mdash; press Enter through the rest and the CLI leaves them unset.</p>
+
+<pre data-lang="shell" data-title="Snowflake CLI · create a named connection" data-explain="A full transcript of the interactive prompts. Only name, account, user and password are required; the role, warehouse, database and schema answers become session defaults, and everything after them can be left blank on an ordinary account."><code>C:\&gt; snow connection add
+
+Enter connection name: my_connection
+Enter account: ABCDEFG-HI12345
+Enter user: your_user
+Enter password:
+Enter role: accountadmin
+Enter warehouse: compute_wh
+Enter database: la_db
+Enter schema: la_schema
+Enter host:
+Enter port:
+Enter protocol:
+Enter region:
+Enter authenticator:
+Enter workload identity provider:
+Enter private key file:
+Enter token file path:
+Enter secondary roles:
+
+Wrote new connection my_connection to C:\Users\&lt;you&gt;\AppData\Local\snowflake\config.toml</code></pre>
+
+          <p>What each prompt is actually asking for:</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Prompt</th><th>What to enter</th><th>Needed?</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><code>connection name</code></td><td>A local label of your choosing. You will pass this to <code>--connection</code> later.</td><td>Yes</td></tr>
+                <tr><td><code>account</code></td><td>Your account identifier in <code>orgname-accountname</code> form, taken from the Snowsight account URL or the account menu. The older <code>xy12345.region.cloud</code> locator also works.</td><td>Yes</td></tr>
+                <tr><td><code>user</code></td><td>The Snowflake login name, not your email, unless they happen to match.</td><td>Yes</td></tr>
+                <tr><td><code>password</code></td><td>Typed hidden. Stored in <code>config.toml</code> in clear text &mdash; see the warning below.</td><td>For password auth</td></tr>
+                <tr><td><code>role</code>, <code>warehouse</code>, <code>database</code>, <code>schema</code></td><td>Session defaults, exactly equivalent to running <code>USE ROLE</code>, <code>USE WAREHOUSE</code> and so on at the start of every session. Skipping them means every script has to set its own context.</td><td>Recommended</td></tr>
+                <tr><td><code>host</code>, <code>port</code>, <code>protocol</code></td><td>Overrides for private connectivity or a proxy. Leave blank on a normal account &mdash; the CLI derives the host from the account identifier.</td><td>No</td></tr>
+                <tr><td><code>region</code></td><td>Only for the legacy locator format that does not already embed the region.</td><td>No</td></tr>
+                <tr><td><code>authenticator</code></td><td><code>externalbrowser</code> for SSO, <code>SNOWFLAKE_JWT</code> for key-pair, <code>username_password_mfa</code> to cache an MFA token. Blank means plain password.</td><td>No</td></tr>
+                <tr><td><code>workload identity provider</code></td><td>For federated workload identity from AWS, Azure, GCP or OIDC, so a job authenticates as its cloud identity rather than a stored secret.</td><td>No</td></tr>
+                <tr><td><code>private key file</code></td><td>Path to the private key when using key-pair authentication.</td><td>Key-pair only</td></tr>
+                <tr><td><code>token file path</code></td><td>File holding an OAuth or JWT token, typically injected by a container platform.</td><td>No</td></tr>
+                <tr><td><code>secondary roles</code></td><td><code>all</code> activates every role granted to the user alongside the primary role.</td><td>No</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout info">
+            <strong>Where the file lives.</strong> Windows: <code>%LOCALAPPDATA%\snowflake\config.toml</code>. macOS and Linux: <code>~/.snowflake/config.toml</code>. You can edit it by hand to add connections in bulk, and you can point the CLI somewhere else with <code>SNOWFLAKE_HOME</code>. On macOS and Linux the CLI refuses to read the file unless its permissions are <code>0600</code>.
+          </div>
+
+          <h3>2 &middot; Test it before you rely on it</h3>
+          <p><code>snow connection test</code> opens a real session and echoes back the context it resolved, which is the fastest way to catch a wrong account identifier or a role that does not have <code>USAGE</code> on the warehouse.</p>
+
+<pre data-lang="shell" data-title="Snowflake CLI · test the connection" data-explain="The command opens a real session and prints the context it resolved, so a wrong account identifier or a role without USAGE on the warehouse shows up here rather than inside a script. Values come back upper-cased because unquoted identifiers are stored that way."><code>C:\&gt; snow connection test --connection my_connection
+
++-----------------------------------------------------------+
+| key             | value                                   |
+|-----------------+-----------------------------------------|
+| Connection name | my_connection                           |
+| Status          | OK                                      |
+| Host            | ABCDEFG-HI12345.snowflakecomputing.com  |
+| Account         | ABCDEFG-HI12345                         |
+| User            | your_user                               |
+| Role            | ACCOUNTADMIN                            |
+| Database        | LA_DB                                   |
+| Warehouse       | COMPUTE_WH                              |
++-----------------------------------------------------------+</code></pre>
+
+          <p>Note that the resolved values come back upper-cased. You typed <code>la_db</code>; Snowflake stores unquoted identifiers in upper case, and this table is showing you what the session actually resolved to rather than what you typed.</p>
+
+          <h3>3 &middot; Set a default, or pass the connection every time</h3>
+          <p>This is the step people skip, and the failure is silent rather than loud:</p>
+
+<pre data-lang="shell" data-title="Snowflake CLI · the silent no-default failure"><code>C:\&gt; snow sql --query "select 1 as d"
+
+                                    &lt;-- nothing. No result, no error.
+
+C:\&gt; snow connection set-default my_connection
+Default connection set to: my_connection
+
+C:\&gt; snow sql --query "select 1 as d"
+select 1 as d
++---+
+| D |
+|---|
+| 1 |
++---+</code></pre>
+
+          <p>With no default set and no <code>--connection</code> flag, there was nothing for the CLI to run the statement against, so it produced no output at all. Either set a default once, as above, or name the connection on every command with <code>--connection my_connection</code> (short form <code>-c</code>). In a script, being explicit is better &mdash; it survives someone else's machine having a different default.</p>
+
+<pre data-lang="shell" data-title="Snowflake CLI · list stored connections" data-explain="Shows every stored connection and which one is the default. The password is masked in this output as a display courtesy only — it is still held in clear text in config.toml."><code>C:\&gt; snow connection list
+
++---------------------------------------------------------------------------------------+
+| connection_name | parameters                                                | is_default |
+|-----------------+-----------------------------------------------------------+------------|
+| my_connection   | {'account': 'ABCDEFG-HI12345', 'user': 'your_user',       | True       |
+|                 |  'password': '****', 'database': 'la_db',                 |            |
+|                 |  'schema': 'la_schema', 'warehouse': 'compute_wh',        |            |
+|                 |  'role': 'accountadmin'}                                  |            |
++---------------------------------------------------------------------------------------+</code></pre>
+
+          <p><code>snow connection list</code> masks the password in its output, but that is a display courtesy only &mdash; the value sits in <code>config.toml</code> in clear text.</p>
+
+          <h3>4 &middot; The commands you will actually use</h3>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Command</th><th>What it does</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><code>snow connection add</code></td><td>Create a named connection interactively.</td></tr>
+                <tr><td><code>snow connection list</code></td><td>Show every connection and which one is the default.</td></tr>
+                <tr><td><code>snow connection test -c &lt;name&gt;</code></td><td>Open a session and print the resolved context.</td></tr>
+                <tr><td><code>snow connection set-default &lt;name&gt;</code></td><td>Use this connection when no <code>-c</code> is given.</td></tr>
+                <tr><td><code>snow connection remove &lt;name&gt;</code></td><td>Delete it from <code>config.toml</code>.</td></tr>
+                <tr><td><code>snow sql -q "SELECT 1"</code></td><td>Run one statement.</td></tr>
+                <tr><td><code>snow sql -f script.sql</code></td><td>Run a whole file &mdash; this is how you script the labs in this section.</td></tr>
+                <tr><td><code>snow sql -q "..." --format json</code></td><td>Machine-readable output for pipelines. <code>csv</code> is also available.</td></tr>
+                <tr><td><code>snow stage copy ./MOCK.csv @my_stage</code></td><td>Upload &mdash; the CLI's equivalent of <code>PUT</code>.</td></tr>
+                <tr><td><code>snow stage copy @my_stage ./download/</code></td><td>Download &mdash; the equivalent of <code>GET</code>.</td></tr>
+                <tr><td><code>snow object list table --in schema la_schema</code></td><td>Browse objects without writing <code>SHOW</code> statements.</td></tr>
+                <tr><td><code>snow --info</code></td><td>Version, Python build and the config file path in use. First thing to run when something behaves oddly.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>Because the connection already carries a database and schema, <code>snow sql</code> starts in the right place:</p>
+
+<pre data-lang="shell" data-title="Snowflake CLI · PUT to the user stage"><code>C:\&gt; snow sql -q "PUT file://C:/data/MOCK.csv @~/customers_user/staged AUTO_COMPRESS = FALSE"
+C:\&gt; snow sql -q "LIST @~"</code></pre>
+
+          <p>That is the practical reason the CLI matters for this section: <code>PUT</code> and <code>GET</code> cannot run in a Snowsight worksheet, so the stage demos below need either SnowSQL or <code>snow</code>.</p>
+
+          <div class="callout warn">
+            <strong>The encoding warning on Windows.</strong> Every command may print <code>UserWarning: Encoding mismatch detected. Run 'snow helpers detect-encoding' for more details.</code> It is a warning about the encoding of <code>config.toml</code>, not a failure &mdash; the commands still run. Run <code>snow helpers detect-encoding</code> to see which file it objects to, then re-save that file as UTF-8 to silence it.
+          </div>
+
+          <div class="callout danger">
+            <strong>Do not leave a password in <code>config.toml</code> on anything but a personal laptop.</strong> It is stored unencrypted. For anything scheduled or shared, use key-pair authentication (<code>authenticator = SNOWFLAKE_JWT</code> with <code>private_key_file</code>) or supply the secret from the environment instead of the file &mdash; the CLI reads <code>SNOWFLAKE_CONNECTIONS_&lt;NAME&gt;_PASSWORD</code>, uppercased, for each field. Snowflake is also phasing out single-factor password sign-in, so key-pair is where CLI and service-account access is heading regardless.
+          </div>
+
+          <div class="callout tip">
+            <strong>Non-interactive setup</strong> for a build agent, where prompts are not an option:
+<pre data-lang="shell" data-title="Non-interactive connection for CI" data-explain="The same connection built entirely from flags, so no prompt appears. SNOWFLAKE_JWT with a private key file replaces the stored password, which is what makes it safe to run on a shared build agent."><code>snow connection add \
+  --connection-name ci \
+  --account ABCDEFG-HI12345 \
+  --user svc_ci \
+  --authenticator SNOWFLAKE_JWT \
+  --private-key-file /secrets/snowflake_key.p8 \
+  --role loader_role \
+  --warehouse etl_wh \
+  --database la_db \
+  --schema la_schema \
+  --no-interactive</code></pre>
+          </div>
+        </section>
+
+        <section class="section" id="demo-user-stage">
+          <h2>Demo : Snowsql Data loading - User Stage</h2>
+          <p class="muted">Course file: <code>Data Loading and Unloading/User Stage - Snowsql.txt</code></p>
+
+          <pre><code>USE ROLE SYSADMIN;
+USE WAREHOUSE compute_wh;
+USE DATABASE la_db;
+USE SCHEMA la_schema;
+
+CREATE OR REPLACE TABLE customers_user (
+  customer   NUMBER NOT NULL,
+  first_name VARCHAR NOT NULL,
+  last_name  VARCHAR NOT NULL,
+  region     VARCHAR NOT NULL,
+  email      VARCHAR NOT NULL,
+  gender     VARCHAR NOT NULL,
+  "order"    NUMBER NOT NULL
+);
+
+-- Run in SnowSQL or CLI — not Snowsight SQL
+-- PUT file://&lt;local_path&gt;/MOCK.csv  @~/customers_user/staged AUTO_COMPRESS = FALSE;
+-- PUT file://&lt;local_path&gt;/MOCK1.csv @~/customers_user/staged AUTO_COMPRESS = FALSE OVERWRITE = TRUE;
+
+LIST @~;
+
+COPY INTO customers_user
+FROM @~/customers_user/staged
+FILE_FORMAT = (TYPE = CSV SKIP_HEADER = 1)
+PURGE = FALSE;</code></pre>
+
+          <div class="callout tip">
+            <strong>User stage (<code>@~</code>):</strong> Private to your login. Good for quick personal uploads. Recommended compressed upload size: 100–250 MB per file for best performance.
+          </div>
+
+          <div class="callout warn">
+            <strong>Course file note:</strong> The original uses <code>PURGE = TRUE</code>, which deletes stage files after load — risky in labs where you may want to re-run. Use <code>PURGE = FALSE</code> unless you intentionally want files removed.
+          </div>
+        </section>
+
+        <section class="section" id="demo-table-stage">
+          <h2>Demo : Type of Stages - Table Stage</h2>
+          <p class="muted">Course file: <code>Data Loading and Unloading/table stage snowsql.txt</code></p>
+
+          <pre><code>CREATE OR REPLACE TABLE customers_table (
+  customer   NUMBER NOT NULL,
+  first_name VARCHAR NOT NULL,
+  last_name  VARCHAR NOT NULL,
+  region     VARCHAR NOT NULL,
+  email      VARCHAR NOT NULL,
+  gender     VARCHAR NOT NULL,
+  "order"    NUMBER NOT NULL
+);
+
+LIST @%customers_table;
+
+-- Run in SnowSQL or CLI
+-- PUT file://&lt;local_path&gt;/MOCK.csv @%customers_table/staged AUTO_COMPRESS = FALSE;
+
+COPY INTO customers_table
+FROM @%customers_table/staged
+FILE_FORMAT = (TYPE = CSV SKIP_HEADER = 1)
+PURGE = FALSE;</code></pre>
+
+          <p>Table stages are automatically created when the table exists. Syntax: <code>@%table_name</code>. Each table gets exactly one table stage.</p>
+        </section>
+
+        <section class="section" id="demo-named-stage">
+          <h2>Demo : Type of Stages - Named Stage</h2>
+          <p class="muted">Course file: <code>Data Loading and Unloading/named stage snowsql.txt</code></p>
+
+          <pre><code>CREATE OR REPLACE TABLE customers_named (
+  customer   NUMBER NOT NULL,
+  first_name VARCHAR NOT NULL,
+  last_name  VARCHAR NOT NULL,
+  region     VARCHAR NOT NULL,
+  email      VARCHAR NOT NULL,
+  gender     VARCHAR NOT NULL,
+  "order"    NUMBER NOT NULL
+);
+
+CREATE OR REPLACE STAGE internal_named_stage
+  FILE_FORMAT = (TYPE = CSV FIELD_DELIMITER = ',' SKIP_HEADER = 1);
+
+SHOW STAGES;
+
+-- Run PUT in SnowSQL or CLI
+-- PUT file://&lt;local_path&gt;/MOCK.csv  @internal_named_stage AUTO_COMPRESS = FALSE;
+-- PUT file://&lt;local_path&gt;/MOCK1.csv @internal_named_stage AUTO_COMPRESS = FALSE OVERWRITE = TRUE;
+
+LIST @internal_named_stage;
+
+COPY INTO customers_named
+FROM @internal_named_stage
+FILE_FORMAT = (TYPE = CSV SKIP_HEADER = 1)
+PURGE = FALSE;</code></pre>
+
+          <div class="callout warn">
+            <strong>Course file bug:</strong> The original creates stage <code>internal_named_stage1</code> but uploads to <code>@internal_named_stage</code> (different name). The cleaned SQL above uses one consistent name.
+          </div>
+
+          <div class="callout tip">
+            <strong>Named stages</strong> are first-class objects you can grant to roles, attach file formats to, and reuse across Snowpipe and team workflows. Prefer named stages for production loads.
+          </div>
+        </section>
+
+        <section class="section" id="data-unloading">
+          <h2>Snowflake Data Unloading</h2>
+          <p class="muted">Course file: <code>Data Loading and Unloading/Data Unloading.txt</code></p>
+
+          <p>Unloading reverses the load path. Use <code>COPY INTO &lt;location&gt; FROM &lt;table&gt;</code> to write table data to stage files. For an <strong>internal</strong> stage, download with <code>GET</code> (SnowSQL) or <code>snow stage copy</code> (CLI). For an <strong>external</strong> stage, <code>COPY INTO</code> writes directly to your cloud bucket — no <code>GET</code> step.</p>
+
+          <div class="slide-row">
+            <figure class="slide-fig">
+              <a href="assets/slides/slide-078-unload-internal.png" target="_blank" rel="noopener">
+                <img src="assets/slides/slide-078-unload-internal.png" alt="Unloading to internal stage: COPY INTO from table to table stage, user stage or named stage, then GET to download files locally" loading="lazy" width="1920" height="1080">
+              </a>
+              <figcaption><span class="slide-no">Slide 78</span>Internal unload: table → stage → <code>GET</code> to local disk.</figcaption>
+            </figure>
+            <figure class="slide-fig">
+              <a href="assets/slides/slide-079-unload-external.png" target="_blank" rel="noopener">
+                <img src="assets/slides/slide-079-unload-external.png" alt="Unloading to external stage: COPY INTO from table straight to external cloud storage" loading="lazy" width="1920" height="1080">
+              </a>
+              <figcaption><span class="slide-no">Slide 79</span>External unload: one <code>COPY INTO</code> writes files directly to your cloud bucket.</figcaption>
+            </figure>
+          </div>
+
+          <h3>Unload options</h3>
+          <p>Bulk unloading uses <code>COPY INTO &lt;location&gt;</code>. Set <code>SINGLE = TRUE</code> to force one output file instead of many parallel shards (<code>FALSE</code> is the default). Use <code>PARTITION BY &lt;col&gt;</code> to split output by column values.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Option category</th><th>Supported values</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><strong>File format</strong></td><td>CSV/TSV, JSON, Parquet</td></tr>
+                <tr><td><strong>File encoding</strong></td><td>UTF-8</td></tr>
+                <tr><td><strong>Compression</strong></td><td>Gzip, Bzip2, Brotli, Zstandard</td></tr>
+                <tr><td><strong>Encryption</strong></td><td>Internal (128/256-bit key) or external (customer-supplied cloud key)</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-080-unload-options.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-080-unload-options.png" alt="Unload options: COPY INTO location with SINGLE TRUE or FALSE and PARTITION BY; file formats CSV TSV JSON Parquet; UTF-8 encoding; Gzip Bzip2 Brotli Zstandard compression; internal or external encryption" loading="lazy" width="1920" height="1080">
+            </a>
+            <figcaption><span class="slide-no">Slide 80</span>Formats, compression, and encryption choices for bulk unload — defaults favour parallel multi-file output unless <code>SINGLE = TRUE</code>.</figcaption>
+          </figure>
+
+          <div class="diagram" role="img" aria-label="Unload flow from table to stage to local file">
+            <div class="flow">
+              <div class="node pulse">Table</div>
+              <span class="arrow" aria-hidden="true">→</span>
+              <div class="node">Stage</div>
+              <span class="arrow" aria-hidden="true">→</span>
+              <div class="node">Local disk<br><small class="muted">GET / snow stage copy</small></div>
+            </div>
+          </div>
+
+          <pre><code>SELECT COUNT(*) FROM customers_named;
+
+COPY INTO @internal_named_stage
+FROM customers_named
+FILE_FORMAT = (TYPE = CSV COMPRESSION = NONE)
+OVERWRITE = TRUE
+HEADER = TRUE;
+
+LIST @internal_named_stage;
+
+-- Run in SnowSQL or CLI — not Snowsight SQL
+-- GET @internal_named_stage file://&lt;local_path&gt;/unload;
+
+REMOVE @internal_named_stage;
+
+-- Partitioned unload by region
+CREATE OR REPLACE STAGE internal_named_stage_partition
+  FILE_FORMAT = (TYPE = CSV COMPRESSION = NONE);
+
+COPY INTO @internal_named_stage_partition
+FROM customers_named
+PARTITION BY region
+FILE_FORMAT = (TYPE = CSV COMPRESSION = NONE);
+
+LIST @internal_named_stage_partition;
+
+-- Single large output file (up to ~5 GB)
+COPY INTO @internal_named_stage
+FROM customers_named
+FILE_FORMAT = (TYPE = CSV COMPRESSION = NONE)
+OVERWRITE = TRUE
+HEADER = TRUE
+SINGLE = TRUE
+MAX_FILE_SIZE = 4900000000;</code></pre>
+
+          <div class="callout warn">
+            <strong>Cost note:</strong> Unloading consumes warehouse credits (compute) plus internal stage storage until you <code>REMOVE</code> files. External unloads to S3/Azure/GCS also incur cloud egress — see <a href="s07-connect-to-cloud.html">Section 7</a>.
+          </div>
+
+          <div class="lab">
+            <h3>Practical Lab — End-to-End with MOCK.csv</h3>
+            <div class="lab-meta">
+              <span>Prerequisites: Trial account, MOCK.csv locally</span>
+              <span>Role: SYSADMIN</span>
+              <span>Upload: SnowSQL PUT or Snowsight UI</span>
+              <span>Cost: Low (~fraction of a credit)</span>
+            </div>
+            <p>MOCK1.csv is identical except row 2 has a non-numeric <code>order</code> value — useful for testing error handling in <a href="s05-advance-data-loading.html">Section 5</a>.</p>
+            <h4>Cleanup</h4>
+            <pre><code>REMOVE @internal_named_stage;
+DROP TABLE IF EXISTS customers_named;
+DROP STAGE IF EXISTS internal_named_stage;
+DROP STAGE IF EXISTS internal_named_stage_partition;</code></pre>
+            <h4>Cost notes</h4>
+            <p>Loading 1,000 rows on X-Small costs fractions of a credit. Staged files incur storage charges until removed. Avoid <code>PURGE = TRUE</code> in labs unless you intentionally want stage files deleted on load.</p>
+          </div>
+        </section>
+
+        <section class="section" id="loading-quiz">
+          <h2>Data Loading And Unloading Quiz</h2>
+          <ul>
+            <li>What are the three internal stage types and their syntax?</li>
+            <li>Where can you run <code>PUT</code> and <code>GET</code>?</li>
+            <li>What is the default <code>ON_ERROR</code> behaviour for bulk <code>COPY INTO</code>?</li>
+            <li>Which stage type is recommended for production loads?</li>
+            <li>How do you unload a table to CSV files with headers?</li>
+          </ul>
+          <div class="callout exam">
+            <strong>Quick check:</strong> User <code>@~</code>, table <code>@%name</code>, named <code>@name</code>. Named stages are grantable and reusable. Unload with <code>COPY INTO @stage FROM table</code> + <code>HEADER = TRUE</code>; download with GET or CLI.
+          </div>
+        </section>
+
+        <section class="section" id="interview">
+          <h2>Interview questions</h2>
+          <p class="muted">Try to answer each one before opening it.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+            <details class="qa">
+              <summary>What are the three internal stage types, their syntax, and when would you use each?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p><strong>User stage</strong> — <code>@~</code> or <code>@~/path</code>; private to your login; quick personal uploads, not shareable. <strong>Table stage</strong> — <code>@%table_name</code>; one per table, auto-created when the table exists; ad-hoc loads for that specific table. <strong>Named stage</strong> — <code>@stage_name</code>; first-class grantable object with optional attached file format; recommended for production, Snowpipe, and team workflows. All three are internal stages backed by Snowflake-managed storage.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Why are <code>PUT</code> and <code>GET</code> unavailable in Snowsight worksheets, and what should you use instead?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p><code>PUT</code> and <code>GET</code> are client-side file transfer commands that run in SnowSQL or the Snowflake CLI (<code>snow stage copy</code>), not server-side SQL. Snowsight worksheets execute SQL against Snowflake's engine — they cannot access your local filesystem. Upload via SnowSQL/CLI <code>PUT</code>, CLI <code>snow stage copy</code>, or the Snowsight UI (<em>Data → Stages → Upload</em>). Download with <code>GET</code> or CLI after unloading to a stage.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>You run <code>snow sql -q "select 1"</code> and get no output and no error. Why?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p>The CLI had no connection to run it against. A named connection exists in <code>config.toml</code> only once you create it, and it is used only if you either mark it as the default with <code>snow connection set-default &lt;name&gt;</code> or name it explicitly with <code>-c &lt;name&gt;</code> on the command. Miss both and the statement goes nowhere quietly, which makes it look like the query returned nothing.</p>
+                <p>Diagnose it with <code>snow connection list</code>, which shows every profile and an <code>is_default</code> column, and <code>snow connection test -c &lt;name&gt;</code>, which opens a real session and prints the resolved account, role, warehouse and database. In scripts, always pass <code>-c</code> explicitly rather than relying on whatever default the machine happens to have.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What file size does Snowflake recommend for best load performance?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>For compressed uploads, aim for roughly <strong>100–250 MB per file</strong> for optimal parallelism during <code>COPY INTO</code>. Very small files create overhead; very large files reduce parallelism. The course uses <code>MOCK.csv</code> (~1,000 rows) for learning — far below that range, which is fine for labs but not representative of production bulk loads. Split large datasets into multiple files in that size band when loading at scale.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What does load metadata do, and why does a re-run of <code>COPY INTO</code> load zero rows?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>Snowflake tracks which files have already been loaded into a table. On a subsequent <code>COPY INTO</code> with the same files, it skips them and reports zero new rows loaded — the metadata shows the file was already ingested. To force a reload, use <code>FORCE = TRUE</code> (as in the course demo). This prevents accidental duplicate loads in production pipelines but surprises people in labs who expect idempotent re-runs to append again.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How do the loading and unloading data paths differ?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p><strong>Loading:</strong> local file → <code>PUT</code>/UI upload → stage → <code>COPY INTO table FROM @stage</code> → table micro-partitions. <strong>Unloading:</strong> table → <code>COPY INTO @stage FROM table</code> → stage files → <code>GET</code>/CLI download → local disk. Loading consumes warehouse credits to parse and write micro-partitions; unloading consumes warehouse credits to read and serialise rows. Both can incur stage storage charges until you <code>REMOVE</code> staged files.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What do <code>HEADER</code>, <code>SINGLE</code>, <code>PARTITION BY</code>, and <code>MAX_FILE_SIZE</code> do on unload?<span class="qa-tag">SQL</span></summary>
+              <div class="qa-body">
+                <p><code>HEADER = TRUE</code> writes a column-name header row in each output file. <code>SINGLE = TRUE</code> forces one output file instead of many parallel shards (subject to size limits). <code>PARTITION BY &lt;col&gt;</code> splits output into subdirectories/files grouped by column values (for example, one folder per <code>region</code>). <code>MAX_FILE_SIZE</code> caps bytes per file — the course demo uses <code>4900000000</code> (~4.9 GB) with <code>SINGLE = TRUE</code> to produce one large CSV up to Snowflake's per-file limit.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Why does unloading cost both compute and storage?<span class="qa-tag">Cost</span></summary>
+              <div class="qa-body">
+                <p><code>COPY INTO @stage FROM table</code> runs on your virtual warehouse — reading and serialising rows consumes compute credits just like a query. The resulting files sit in the stage until removed, billing at the normal storage rate. External unloads to customer-owned cloud buckets also incur cloud egress. Always <code>REMOVE @stage</code> after downloading in labs to avoid ongoing storage charges.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What happens if you forget <code>SKIP_HEADER = 1</code> when loading a CSV with a header row?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p>The header line is loaded as row 1 — string values like <code>customer</code> and <code>first_name</code> land in numeric or typed columns and cause a type conversion error (with default <code>ON_ERROR = ABORT_STATEMENT</code>) or silently bad data if errors are tolerated. Always match file format to file structure. The course <code>MOCK.csv</code> has a header row, so both the stage default and inline <code>COPY</code> file format need <code>SKIP_HEADER = 1</code>.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Why must the reserved column <code>order</code> be quoted in DDL when loading <code>MOCK.csv</code>?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p><code>ORDER</code> is a SQL reserved word. Unquoted identifiers are stored uppercase, but the CSV header is lowercase <code>order</code>. In the table DDL you must quote it as <code>"order"</code> to create a column that matches the source file and avoids parser conflicts. Omitting quotes can cause DDL errors or column mismatches during <code>COPY INTO</code>. This pattern applies whenever source headers collide with Snowflake reserved keywords.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What is the difference between table, user, and named internal stages?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p><strong>Table stage</strong> (<code>@%name</code>) is auto-created per table, shared by any user loading that one table, and cannot be altered or dropped. <strong>User stage</strong> (<code>@~</code>) is auto-created per user, private to that login for uploads across many tables, and also cannot be altered or dropped. <strong>Named stage</strong> (<code>@name</code>) is a first-class object you create, grant, alter, and drop like any other Snowflake object — recommended for production. All three accept <code>PUT</code>; external stages instead point to cloud URLs and skip <code>PUT</code>.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What is Snowsight's file upload limit and what should you use instead?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p>Snowsight's browser upload UI caps files at <strong>50 MB</strong>. Anything larger — or anything you want to script in CI — must go through <strong>SnowSQL</strong> (<code>PUT</code>) or the <strong>Snowflake CLI</strong> (<code>snow stage copy</code>). Both are client-side commands that run outside Snowsight worksheets. After upload, <code>COPY INTO</code> from the stage runs on your warehouse as usual.</p>
+              </div>
+            </details>
+          </div>
+        </section>
+
+        <section class="section" id="practice">
+          <h2>Hands-on practice</h2>
+          <p class="muted">Run these in a trial account on an X-Small warehouse with <code>AUTO_SUSPEND = 60</code>. Clean up when you finish.</p>
+          <ol class="practice-list">
+            <li class="practice">
+              <p class="practice-task">Set the Snowflake CLI up from scratch: create a named connection for your trial account, prove it works, make it the default, then run a query through it. Before setting the default, deliberately run <code>snow sql -q "select 1 as d"</code> with no <code>-c</code> flag so you see the silent-failure behaviour for yourself.</p>
+              <p class="practice-expect">The bare <code>snow sql</code> prints nothing. After <code>set-default</code>, the same command returns a one-row table containing <code>1</code>, and <code>snow connection list</code> shows <code>is_default = True</code>.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">SQL</span></summary>
+                <div class="qa-body">
+<pre data-lang="shell" data-title="SnowSQL · profile then run"><code># Create the profile (interactive - answer the prompts)
+snow connection add
+
+# Prove it reaches the account and resolves the right context
+snow connection test --connection my_connection
+
+# Before: no default and no -c, so nothing runs
+snow sql -q "select 1 as d"
+
+# After: make it the default, then the same command works
+snow connection set-default my_connection
+snow sql -q "select 1 as d"
+
+# Confirm what is stored and which profile is default
+snow connection list
+
+# Equivalent without touching the default at all
+snow sql -c my_connection -q "select current_role(), current_warehouse()"</code></pre>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Create the <code>customers</code> table and named stage <code>cust_stage</code> from the loading demo. Upload <code>MOCK.csv</code> via SnowSQL <code>PUT</code> or the Snowsight Upload UI, then run <code>COPY INTO customers FROM @cust_stage/MOCK.csv</code> with <code>SKIP_HEADER = 1</code> and <code>FORCE = TRUE</code>.</p>
+              <p class="practice-expect"><code>SELECT COUNT(*) FROM customers</code> returns <strong>1000</strong> rows. <code>LIST @cust_stage</code> shows the uploaded file.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">SQL</span></summary>
+                <div class="qa-body">
+<pre><code>USE ROLE SYSADMIN;
+USE WAREHOUSE compute_wh;
+USE DATABASE la_db;
+USE SCHEMA la_schema;
+
+CREATE OR REPLACE TABLE customers (
+  customer   NUMBER NOT NULL,
+  first_name VARCHAR NOT NULL,
+  last_name  VARCHAR NOT NULL,
+  region     VARCHAR NOT NULL,
+  email      VARCHAR NOT NULL,
+  gender     VARCHAR NOT NULL,
+  "order"    NUMBER NOT NULL
+);
+
+CREATE OR REPLACE STAGE cust_stage
+  FILE_FORMAT = (TYPE = CSV FIELD_DELIMITER = ',' SKIP_HEADER = 1);
+
+-- Upload MOCK.csv via SnowSQL PUT or Snowsight UI first
+-- PUT file://&lt;local_path&gt;/MOCK.csv @cust_stage AUTO_COMPRESS = FALSE;
+
+LIST @cust_stage;
+
+COPY INTO customers
+FROM @cust_stage/MOCK.csv
+FILE_FORMAT = (
+  TYPE = CSV,
+  SKIP_HEADER = 1,
+  FIELD_DELIMITER = ',',
+  TRIM_SPACE = FALSE,
+  FIELD_OPTIONALLY_ENCLOSED_BY = NONE
+)
+ON_ERROR = ABORT_STATEMENT
+FORCE = TRUE;
+
+SELECT COUNT(*) AS row_count FROM customers;</code></pre>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Run the same <code>COPY INTO</code> again without <code>FORCE = TRUE</code>. Confirm how many rows load on the second run.</p>
+              <p class="practice-expect">The second <code>COPY INTO</code> loads <strong>0</strong> rows — Snowflake skips the file because load metadata shows it was already ingested.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">SQL</span></summary>
+                <div class="qa-body">
+<pre><code>COPY INTO customers
+FROM @cust_stage/MOCK.csv
+FILE_FORMAT = (
+  TYPE = CSV,
+  SKIP_HEADER = 1,
+  FIELD_DELIMITER = ','
+);
+
+-- Check COPY result: rows_loaded = 0</code></pre>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Unload <code>customers</code> to <code>@cust_stage</code> with <code>HEADER = TRUE</code>, then run a partitioned unload by <code>region</code> to a new stage <code>cust_stage_partition</code>. List both stages.</p>
+              <p class="practice-expect">Unloaded CSV files appear in each stage. Partitioned unload creates separate files or paths per distinct <code>region</code> value. This consumes a small amount of warehouse compute and stage storage.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">SQL</span></summary>
+                <div class="qa-body">
+<pre><code>COPY INTO @cust_stage
+FROM customers
+FILE_FORMAT = (TYPE = CSV COMPRESSION = NONE)
+OVERWRITE = TRUE
+HEADER = TRUE;
+
+CREATE OR REPLACE STAGE cust_stage_partition
+  FILE_FORMAT = (TYPE = CSV COMPRESSION = NONE);
+
+COPY INTO @cust_stage_partition
+FROM customers
+PARTITION BY region
+FILE_FORMAT = (TYPE = CSV COMPRESSION = NONE);
+
+LIST @cust_stage;
+LIST @cust_stage_partition;</code></pre>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Unload <code>customers</code> to an internal stage with <code>SINGLE = TRUE</code> and <code>HEADER = TRUE</code>, then download the file with SnowSQL <code>GET</code> or <code>snow stage copy</code>. Confirm the CSV has a header row.</p>
+              <p class="practice-expect">One output file in the stage (unless row count forces splitting). Downloaded CSV opens with column names in row 1.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">SQL</span></summary>
+                <div class="qa-body">
+<pre><code>COPY INTO @cust_stage
+FROM customers
+FILE_FORMAT = (TYPE = CSV COMPRESSION = NONE)
+OVERWRITE = TRUE
+HEADER = TRUE
+SINGLE = TRUE;
+
+LIST @cust_stage;
+
+-- SnowSQL or CLI (not Snowsight SQL):
+-- GET @cust_stage file://&lt;local_path&gt;/unload;</code></pre>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Clean up: remove files from both stages, then drop the stages and the <code>customers</code> table.</p>
+              <p class="practice-expect">Stages and table are dropped. <code>LIST @cust_stage</code> errors or returns empty after removal and drop.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">SQL</span></summary>
+                <div class="qa-body">
+<pre><code>REMOVE @cust_stage;
+REMOVE @cust_stage_partition;
+
+DROP TABLE IF EXISTS customers;
+DROP STAGE IF EXISTS cust_stage;
+DROP STAGE IF EXISTS cust_stage_partition;</code></pre>
+                </div>
+              </details>
+            </li>
+          </ol>
+        </section>
+
+        <section class="section" id="recap">
+          <h2>Recap</h2>
+          <div class="recap">
+            <ul class="checklist">
+              <li>Load path: data source → stage (<code>PUT</code>) → table (<code>COPY INTO</code>).</li>
+              <li>Internal stages: table (<code>@%</code>, auto, multi-user, no drop), user (<code>@~</code>, auto, single-user, no drop), named (<code>@</code>, user-created, alter/drop OK).</li>
+              <li>External stages point to cloud URLs; no <code>PUT</code>; cannot use archived storage classes.</li>
+              <li>Snowsight upload limit 50 MB; larger files need SnowSQL or CLI.</li>
+              <li><code>PUT</code>/<code>GET</code> unavailable in Snowsight SQL; use SnowSQL, CLI, or Snowsight UI upload.</li>
+              <li>Bulk <code>COPY INTO</code> defaults to <code>ON_ERROR = ABORT_STATEMENT</code>; runs on warehouse credits.</li>
+              <li>Use <code>SKIP_HEADER = 1</code> for CSV headers; quote reserved column names like <code>"order"</code>.</li>
+              <li>Unload internal: <code>COPY INTO @stage FROM table</code> then <code>GET</code>; external: <code>COPY INTO</code> straight to bucket.</li>
+              <li>Unload formats: CSV/TSV, JSON, Parquet; UTF-8; Gzip/Bzip2/Brotli/Zstandard; internal or customer key encryption.</li>
+              <li><code>SINGLE = TRUE</code> for one file (default <code>FALSE</code>); <code>PARTITION BY</code> for split output.</li>
+              <li>Advanced file formats, validation, and transforms: <a href="s05-advance-data-loading.html">Section 5</a>.</li>
+            </ul>
+            <p style="margin-top:1rem;">
+              <button type="button" data-complete="section-04">Mark complete</button>
+            </p>
+          </div>
+        </section>
+
+      </div>
+
+      <aside class="toc" aria-label="On this page">
+        <strong>On this page</strong>
+        <ol>
+          <li><a href="#lectures">Lectures</a></li>
+          <li><a href="#data-loading-concept">Loading Concept</a></li>
+          <li><a href="#demo-data-loading">Loading Demo</a></li>
+          <li><a href="#snowflake-cli">CLI Installation</a></li>
+          <li><a href="#cli-connect">Connecting the CLI</a></li>
+          <li><a href="#demo-user-stage">User Stage</a></li>
+          <li><a href="#demo-table-stage">Table Stage</a></li>
+          <li><a href="#demo-named-stage">Named Stage</a></li>
+          <li><a href="#data-unloading">Unloading</a></li>
+          <li><a href="#loading-quiz">Quiz</a></li>
+          <li><a href="#interview">Interview questions</a></li>
+          <li><a href="#practice">Hands-on practice</a></li>
+          <li><a href="#recap">Recap</a></li>
+        </ol>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<footer class="footer">Snowflake COF-C03 Course Notes · Section 4 · Offline study edition</footer>
+</body>
+</html>

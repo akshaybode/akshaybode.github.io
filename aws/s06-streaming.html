@@ -1,0 +1,1086 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="DEA-C01 Section 6: Amazon Kinesis Data Streams, Firehose, Managed Service for Apache Flink, and Amazon MSK — streaming ingestion, throughput, fan-out, troubleshooting, and service comparisons.">
+<title>Section 6 — Data Streaming | AWS Data Engineer DEA-C01 Notes</title>
+<link rel="stylesheet" href="assets/aws.css">
+<script defer src="assets/search-index.js"></script>
+<script defer src="assets/code-highlight.js"></script>
+<script defer src="assets/aws.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">Course section 6 of 21 · AWS Certified Data Engineer Associate</p>
+    <h1>Data Streaming</h1>
+    <p class="subtitle">How AWS moves data in real time: Kinesis Data Streams for durable, replayable ingestion; Firehose for near-real-time delivery to S3 and analytics stores; Managed Flink for stateful stream SQL; and MSK when you need full Kafka.</p>
+    <div class="hero-meta">
+      <span class="chip">42 slides · ~55min</span>
+      <span class="chip">Exam domain: Data Ingestion and Transformation (34%)</span>
+      <span class="chip">Deck slides 82–123</span>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <nav class="pager" aria-label="Section navigation">
+    <a href="s05-lambda.html">← Serverless Compute with Lambda</a>
+    <a href="index.html">Course contents</a>
+    <a href="s07-s3.html">Next: Storage with S3 →</a>
+  </nav>
+
+  <main id="main">
+    <div class="layout">
+      <div class="content">
+
+        <section class="section" id="lectures">
+          <h2>Lectures in this section</h2>
+          <p class="muted">Each lecture links to the notes that cover it. Streaming labs create billable resources — delete them when finished.</p>
+          <ol class="lecture-list">
+            <li class="lecture">
+              <a class="lec-title" href="#kinesis-overview">Amazon Kinesis — the streaming family and use cases</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">Slides 84–85</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#kinesis-data-streams">Kinesis Data Streams — producers, shards, consumers</a>
+              <span class="lec-time">~8:00</span>
+              <span class="lec-src">Slides 87–90</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#throughput-latency">Throughput, bandwidth, and latency</a>
+              <span class="lec-time">~6:00</span>
+              <span class="lec-src">Slides 92–95</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#enhanced-fan-out">Enhanced fan-out versus shared throughput</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">Slides 97–100</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#troubleshooting">Troubleshooting Kinesis performance</a>
+              <span class="lec-time">~7:00</span>
+              <span class="lec-src">Slides 102–107</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#kinesis-firehose">Kinesis Data Firehose — delivery, buffering, transforms</a>
+              <span class="lec-time">~8:00</span>
+              <span class="lec-src">Slides 109–112</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#streams-vs-firehose">Kinesis Data Streams versus Firehose</a>
+              <span class="lec-time">~4:00</span>
+              <span class="lec-src">Slide 113</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#managed-flink">Managed Service for Apache Flink</a>
+              <span class="lec-time">~7:00</span>
+              <span class="lec-src">Slides 115–117</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#amazon-msk">Amazon MSK — managed Kafka</a>
+              <span class="lec-time">~7:00</span>
+              <span class="lec-src">Slides 119–121</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#msk-vs-kinesis">MSK versus Kinesis Data Streams</a>
+              <span class="lec-time">~4:00</span>
+              <span class="lec-src">Slides 122–123</span>
+            </li>
+          </ol>
+        </section>
+
+        <section class="section" id="kinesis-overview">
+          <h2>Amazon Kinesis overview</h2>
+          <p class="lead">Kinesis is not one service — it is a <strong>family of four</strong> that covers different parts of the streaming pipeline. The exam treats them as separate products with different latency, retention, and operational models. Picking the wrong one is one of the most common wrong answers on Domain 1.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-084.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-084.png" alt="Course slide listing the three Kinesis services: Data Streams for ingest and process, Firehose for delivery to destinations, and Managed Apache Flink for real-time SQL analytics." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 84</span>The Kinesis family at a glance. Data Streams is the durable buffer; Firehose is the delivery pipe; Managed Flink is the compute layer for SQL and stateful processing on top of a stream.</figcaption>
+          </figure>
+
+          <div class="grid-3">
+            <div class="mini-card">
+              <h4>Kinesis Data Streams (KDS)</h4>
+              <p>Ingest and process large volumes of streaming data. You manage shards (or use on-demand mode) and write custom producers and consumers. Data is retained 24 hours to 365 days and can be replayed.</p>
+            </div>
+            <div class="mini-card">
+              <h4>Kinesis Data Firehose</h4>
+              <p>Fully managed delivery to S3, Redshift (via S3), Amazon OpenSearch Service, Splunk, and HTTP endpoints. Buffers and batches — near real time, not sub-second. No retention, no replay.</p>
+            </div>
+            <div class="mini-card">
+              <h4>Managed Service for Apache Flink</h4>
+              <p>Formerly Kinesis Data Analytics. Run Flink applications with SQL, Python, Scala, or Java for real-time analytics, windowed aggregations, and anomaly detection on KDS or MSK sources.</p>
+            </div>
+          </div>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-085.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-085.png" alt="Course slide listing Kinesis use cases: real-time analytics, IoT processing, and security and fraud detection." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 85</span>Three canonical use cases. Real-time analytics needs sub-second latency — KDS plus Flink or Lambda. IoT ingestion at scale often lands in KDS first, then Firehose to S3 for the lake. Fraud detection needs stateful windowed rules — Flink or Lambda on KDS.</figcaption>
+          </figure>
+
+          <div class="callout exam"><strong>The latency discriminator.</strong> <em>Real time</em> (seconds or less) → Kinesis Data Streams with consumers, or Managed Flink. <em>Near real time</em> (tens of seconds to minutes) → Firehose is explicitly allowed and cheaper. The exam uses those exact phrases as tie-breakers — see <a href="s01-introduction.html#exam-format">Section 1</a>.</div>
+        </section>
+
+        <section class="section" id="kinesis-data-streams">
+          <h2>Kinesis Data Streams</h2>
+          <p class="lead">Kinesis Data Streams is a <strong> durable, ordered log</strong> partitioned into shards. Producers write records; the stream stores them for a configurable retention window; consumers read at their own pace and can re-read from any point within retention. Everything downstream — Lambda, Flink, Firehose, custom apps — is just a consumer.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-087.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-087.png" alt="Diagram showing a producer writing data records with partition keys into a Kinesis data stream divided into shards." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 87</span>The fundamental unit is a <strong>data record</strong> (up to 1 MB) with a mandatory <strong>partition key</strong>. AWS hashes the partition key to assign the record to exactly one shard. Records with the same partition key are strictly ordered within that shard.</figcaption>
+          </figure>
+
+          <h3>Producers — SDK, KPL, and Kinesis Agent</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Producer</th><th>When to use it</th><th>Key behaviour</th></tr></thead>
+              <tbody>
+                <tr><td><strong>AWS SDK / API</strong></td><td>Custom apps, Lambda, small volume</td><td><code>PutRecord</code> or <code>PutRecords</code> (batch up to 500 records or 5 MB). You handle retries and aggregation yourself.</td></tr>
+                <tr><td><strong>Kinesis Producer Library (KPL)</strong></td><td>High-throughput Java/C++ producers</td><td>Automatic aggregation (pack many user records into one KDS record), efficient batching, configurable retries and backoff. Adds a de-aggregation step on the consumer side.</td></tr>
+                <tr><td><strong>Kinesis Agent</strong></td><td>Log files on EC2</td><td>Daemon that tails files and ships lines to KDS. Zero custom code; configure paths and stream name in a properties file.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p><strong>KPL aggregation detail:</strong> The KPL packs hundreds of small user records into a single 1 MB KDS record using a protobuf envelope. This dramatically improves throughput when events are small (clickstream, metrics). Consumers must use the <strong>KCL with the KPL de-aggregation library</strong> (or Managed Flink / Firehose, which handle it automatically) to unpack individual user records. Writing with KPL and reading with a plain SDK loop without de-aggregation returns opaque blobs — a common integration bug.</p>
+
+          <pre data-lang="shell" data-title="AWS CLI — put a single record" data-explain="PutRecord writes one data record to a shard determined by the partition key. The stream-name and partition-key are required; data is base64-encoded on the CLI."><code>aws kinesis put-record \
+  --stream-name dea-lab-events \
+  --partition-key "customer-42" \
+  --data '{"event":"page_view","page":"/checkout"}' \
+  --region us-east-1
+
+# Response includes ShardId and SequenceNumber — both are unique per record.</code></pre>
+
+          <pre data-lang="python" data-title="boto3 — producer loop with batching and backoff" data-explain="PutRecords sends up to 500 records per call. On ProvisionedThroughputExceededException, exponential backoff and retry is mandatory — the exam expects you to know this pattern."><code>import json, time, boto3
+from botocore.exceptions import ClientError
+
+kinesis = boto3.client("kinesis", region_name="us-east-1")
+STREAM = "dea-lab-events"
+
+def put_batch(records):
+    for attempt in range(5):
+        try:
+            resp = kinesis.put_records(
+                StreamName=STREAM,
+                Records=[{
+                    "Data": json.dumps(r),
+                    "PartitionKey": r["customer_id"],  # spreads load across shards
+                } for r in records]
+            )
+            if resp["FailedRecordCount"] == 0:
+                return
+            # retry only failed entries
+            records = [records[i] for i, x in enumerate(resp["Records"]) if "ErrorCode" in x]
+        except ClientError as e:
+            if e.response["Error"]["Code"] != "ProvisionedThroughputExceededException":
+                raise
+        time.sleep(2 ** attempt)  # exponential backoff
+    raise RuntimeError("shard still hot after retries")
+
+events = [{"customer_id": f"c-{i}", "amount": i * 10} for i in range(100)]
+put_batch(events)</code></pre>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-088.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-088.png" alt="Kinesis Data Streams diagram with shard capacity limits: 1 MB per second in, 1000 records per second in, 2 MB per second out per shard, plus durability and retention notes." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 88</span>Per-shard limits are fixed: <strong>1 MB/s or 1,000 records/s in</strong>, <strong>2 MB/s out</strong> (shared across all standard consumers on that shard). Data is immutable, replicated across AZs, retained 24 hours by default up to 365 days.</figcaption>
+          </figure>
+
+          <h3>Partition keys, sequence numbers, and ordering</h3>
+          <p>The <strong>partition key</strong> is a string (max 256 characters) that determines shard assignment via MD5 hash. All records sharing a partition key land on the same shard and are <strong>strictly ordered</strong> by <strong>sequence number</strong> — a unique, increasing identifier per shard assigned by Kinesis at write time. Different partition keys may land on different shards and have no ordering relationship.</p>
+          <p>Design partition keys to spread load evenly. A key like <code>device-id</code> with millions of unique values distributes well. A key like <code>country=US</code> with one hot value creates a <strong>hot shard</strong> that throttles while other shards sit idle.</p>
+
+          <h3>Capacity modes — provisioned versus on-demand</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-089.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-089.png" alt="Kinesis Data Streams scaling slide showing provisioned mode with manual shard count and on-demand mode with automatic scaling and 4 MB per second default throughput." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 89</span>Two capacity modes. Provisioned: you set shard count and pay per shard-hour. On-demand: AWS scales automatically based on the last 30 days of traffic, starting at 4 MB/s and 4,000 records/s write throughput.</figcaption>
+          </figure>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Mode</th><th>How it scales</th><th>Default / limits</th><th>Best for</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Provisioned</strong></td><td>You add or remove shards manually, or use Application Auto Scaling on shard count</td><td>Per-shard: 1 MB/s in, 2 MB/s out (standard consumers)</td><td>Predictable, steady workloads where you want cost control</td></tr>
+                <tr><td><strong>On-demand</strong></td><td>AWS scales shard count automatically from observed peaks over the last 30 days</td><td>Starts at 4 MB/s and 4,000 records/s write; scales up to <strong>200 MB/s</strong> and 200,000 records/s</td><td>Spiky or unknown traffic; least operational overhead for capacity</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Resharding — split, merge, and the limits</h3>
+          <p>In provisioned mode you scale by <strong>splitting</strong> shards (one shard → two, doubling ingest capacity for that key range) or <strong>merging</strong> shards (two → one). You can also run <code>UpdateShardCount</code> for a target shard count. Splits and merges take minutes; during resharding consumers use both old and new shard iterators. On-demand mode handles this internally.</p>
+          <p>A stream supports up to <strong>500 shards</strong> (or the on-demand equivalent). Resharding cannot split below the minimum hash-key range of a parent shard.</p>
+
+          <h3>Consumers</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-090.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-090.png" alt="Kinesis Data Streams consumer diagram listing SDK, KCL, Firehose, Managed Flink, Lambda, and other services as consumers reading from shards." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 90</span>Consumers read via <code>GetRecords</code> using a shard iterator. The Kinesis Client Library (KCL) manages shard discovery, load balancing across workers, and checkpointing. Firehose, Lambda, and Managed Flink are managed consumers — you configure them, not code them.</figcaption>
+          </figure>
+
+          <p><strong>KCL checkpointing:</strong> KCL stores consumer progress in a DynamoDB table (one row per shard lease). On restart, the consumer resumes from the last checkpointed sequence number. If the DynamoDB table is under-provisioned, checkpoint writes fail and you get <code>ExpiredIteratorException</code> or lost progress — size the table for your shard count.</p>
+          <p><strong>Delivery semantics:</strong> KDS guarantees <strong>at-least-once</strong> delivery, not exactly-once. A consumer that crashes after processing but before checkpointing will re-read records. Design idempotent sinks — covered in <a href="s05-lambda.html">Section 5</a>.</p>
+
+          <div class="diagram">
+            <p class="diagram-title">Kinesis Data Streams — producers through to consumers</p>
+            <div class="flow">
+              <div class="node is-source"><b>Producers</b><small>SDK · KPL · Agent · IoT</small></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-store pulse"><b>Data Stream</b><small>N shards · 24h–365d retention</small></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-compute"><b>Consumers</b><small>KCL · Lambda · Flink · Firehose</small></div>
+            </div>
+          </div>
+
+          <h3>Security — encryption and VPC endpoints</h3>
+          <p><strong>Server-side encryption (SSE):</strong> Enable SSE-KMS on a stream so records are encrypted at rest with a customer-managed or AWS-managed KMS key. Producers and consumers need <code>kms:Decrypt</code> and <code>kms:GenerateDataKey</code> on the key in addition to Kinesis IAM permissions. In-flight data uses TLS by default.</p>
+          <p><strong>VPC endpoints:</strong> Use an interface VPC endpoint for <code>kinesis-streams</code> so producers and consumers inside a private subnet reach KDS without a NAT Gateway. Same pattern applies to Firehose and other AWS APIs — see <a href="s19-vpc.html">Section 19</a>.</p>
+
+          <pre data-lang="json" data-title="Lambda event — Kinesis Data Streams trigger payload" data-explain="Each Lambda invocation receives a batch of base64-encoded records from one or more shards. eventSourceARN identifies the stream; sequenceNumber and partitionKey are the ordering and routing keys."><code>{
+  "Records": [{
+    "kinesis": {
+      "kinesisSchemaVersion": "1.0",
+      "partitionKey": "customer-42",
+      "sequenceNumber": "49607533307480206604909095037592857366329529635723193219560170805475862598368",
+      "data": "eyJldmVudCI6InBhZ2VfdmlldyJ9",
+      "approximateArrivalTimestamp": 1722691200.123
+    },
+    "eventSource": "aws:kinesis",
+    "eventVersion": "1.0",
+    "eventID": "shardId-000000000000:49607533307480206604909095037592857366329529635723193219560170805475862598368",
+    "eventName": "aws:kinesis:record",
+    "eventSourceARN": "arn:aws:kinesis:us-east-1:123456789012:stream/dea-lab-events",
+    "awsRegion": "us-east-1"
+  }]
+}</code></pre>
+        </section>
+
+        <section class="section" id="throughput-latency">
+          <h2>Throughput and latency</h2>
+          <p class="lead">The exam distinguishes <strong>throughput</strong> (how much data moves per second) from <strong>bandwidth</strong> (the theoretical ceiling) and <strong>latency</strong> (how long from write to read). Confusing these three leads to wrong scaling decisions.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-092.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-092.png" alt="Slide defining throughput in Kinesis Data Streams as volume in MB or records per second, scaled by shard count." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 92</span>Total stream throughput is the per-shard limit multiplied by shard count. Ten shards in provisioned mode give 10 MB/s ingest and 20 MB/s aggregate read (standard consumers, shared).</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-093.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-093.png" alt="Slide defining bandwidth as the maximum theoretical data transfer rate for Kinesis Data Streams." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 93</span>Bandwidth is the hard ceiling per shard — 1 MB/s in, 2 MB/s out (standard). Throughput is what you actually achieve after aggregation, record sizes, and consumer polling behaviour.</figcaption>
+          </figure>
+
+          <div class="slide-row">
+            <figure class="slide-fig">
+              <a href="assets/slides/slide-094.png" target="_blank" rel="noopener">
+                <img src="assets/slides/slide-094.png" alt="Slide defining latency and propagation delay from record write to consumer read, influenced by polling interval." loading="lazy">
+              </a>
+              <figcaption><span class="slide-no">Slide 94</span>Propagation delay is the time from <code>PutRecord</code> returning to the record appearing in a <code>GetRecords</code> response. Polling interval is the main lever you control.</figcaption>
+            </figure>
+            <figure class="slide-fig">
+              <a href="assets/slides/slide-095.png" target="_blank" rel="noopener">
+                <img src="assets/slides/slide-095.png" alt="Slide recommending one poll per shard per second per consumer, KCL default polling, and trade-offs of faster polling." loading="lazy">
+              </a>
+              <figcaption><span class="slide-no">Slide 95</span>KCL polls once per second by default — average delay under one second. Faster polling reduces latency but burns <code>GetRecords</code> API quota (five calls per shard per second per consumer is the soft limit).</figcaption>
+            </figure>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Consumer type</th><th>Typical propagation delay</th><th>Read throughput per shard</th></tr></thead>
+              <tbody>
+                <tr><td>Standard (shared throughput)</td><td>~200 ms after record is available, plus polling interval</td><td>2 MB/s shared across all standard consumers</td></tr>
+                <tr><td>Enhanced fan-out (EFO)</td><td>~70 ms — push over HTTP/2</td><td>2 MB/s dedicated per registered consumer</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="section" id="enhanced-fan-out">
+          <h2>Enhanced fan-out</h2>
+          <p class="lead">By default, every standard consumer on a shard <strong>shares</strong> the 2 MB/s read limit — that is fan-out with a bottleneck. Enhanced fan-out (EFO) gives each registered consumer its own 2 MB/s pipe per shard, pushed over HTTP/2 instead of polled.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-097.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-097.png" alt="Slide comparing fan-out as one stream to many consumers versus fan-in as many sources to one destination." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 97</span><strong>Fan-out:</strong> one stream feeds many consumers (analytics, archiving, alerting). <strong>Fan-in:</strong> many producers or streams converge into one destination — common in IoT aggregation patterns.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-098.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-098.png" alt="Slide explaining enhanced fan-out: dedicated 2 MB per second per consumer per shard, up to 20 consumers, HTTP/2 push, example of 10 consumers at 20 MB per second total." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 98</span>With standard consumers, ten apps sharing one shard still split 2 MB/s. With EFO, ten registered consumers each get 2 MB/s — 20 MB/s total from that shard. Maximum <strong>20 EFO consumers per stream</strong>.</figcaption>
+          </figure>
+
+          <div class="slide-row">
+            <figure class="slide-fig">
+              <a href="assets/slides/slide-099.png" target="_blank" rel="noopener">
+                <img src="assets/slides/slide-099.png" alt="Slide listing enhanced fan-out benefits: dedicated bandwidth, scalability, reduced latency near 70 ms, simpler development." loading="lazy">
+              </a>
+              <figcaption><span class="slide-no">Slide 99</span>EFO removes the need for complex workarounds like duplicating streams or throttling consumers to share read bandwidth.</figcaption>
+            </figure>
+            <figure class="slide-fig">
+              <a href="assets/slides/slide-100.png" target="_blank" rel="noopener">
+                <img src="assets/slides/slide-100.png" alt="Slide on when to use enhanced fan-out: higher cost, many consumers, need reduced latency." loading="lazy">
+              </a>
+              <figcaption><span class="slide-no">Slide 100</span>Use EFO when you have multiple concurrent consumers that each need full read speed or sub-200 ms latency. Stick with standard consumers when one or two consumers suffice — EFO costs extra per consumer-shard-hour and per GB retrieved.</figcaption>
+            </figure>
+          </div>
+
+          <div class="callout cost"><strong>EFO pricing unit.</strong> You pay for each consumer registered for enhanced fan-out, per shard, per hour, plus data retrieval charges. A stream with four shards and five EFO consumers bills as twenty consumer-shard pairs — not one shared read.</div>
+        </section>
+
+        <section class="section" id="troubleshooting">
+          <h2>Troubleshooting and performance</h2>
+          <p class="lead">Most Kinesis production issues fall into three buckets: producers hitting shard write limits, consumers falling behind, and iterator or checkpoint failures. The deck spreads these across six slides — consolidated here as an exam-ready reference.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-102.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-102.png" alt="Slide on Kinesis producer performance: throttling, hot shards from bad partition keys, and inefficient small batches." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 102</span>Producer-side failures almost always trace back to shard limits or skewed partition keys — not network issues.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-103.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-103.png" alt="Slide on Kinesis consumer performance: shard read limits, GetRecords batch size, and slow ProcessRecords logic." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 103</span>Consumer-side slowness is either read-capacity bound (add shards or EFO) or compute bound (optimise <code>processRecords</code>).</figcaption>
+          </figure>
+
+          <div class="slide-row">
+            <figure class="slide-fig">
+              <a href="assets/slides/slide-104.png" target="_blank" rel="noopener">
+                <img src="assets/slides/slide-104.png" alt="Slide explaining empty GetRecords responses and null shard iterators when a shard is closed." loading="lazy">
+              </a>
+              <figcaption><span class="slide-no">Slide 104</span>Empty <code>Records</code> arrays are normal — they mean no new data at the iterator position yet. A <code>null</code> iterator means the shard was closed after a split or merge; obtain a new iterator.</figcaption>
+            </figure>
+            <figure class="slide-fig">
+              <a href="assets/slides/slide-105.png" target="_blank" rel="noopener">
+                <img src="assets/slides/slide-105.png" alt="Slide on skipped records from unhandled exceptions and expired shard iterators from idle consumers or under-provisioned DynamoDB checkpoint table." loading="lazy">
+              </a>
+              <figcaption><span class="slide-no">Slide 105</span>Skipped records usually mean an unhandled exception in your consumer — wrap <code>processRecords</code> and checkpoint only after success. Expired iterators mean the consumer did not call <code>GetRecords</code> for more than five minutes, or the KCL DynamoDB lease table lacks write capacity.</figcaption>
+            </figure>
+          </div>
+
+          <div class="slide-row">
+            <figure class="slide-fig">
+              <a href="assets/slides/slide-106.png" target="_blank" rel="noopener">
+                <img src="assets/slides/slide-106.png" alt="Slide on consumers falling behind: increase retention, monitor IteratorAgeMilliseconds, distinguish transient spikes from steady growth." loading="lazy">
+              </a>
+              <figcaption><span class="slide-no">Slide 106</span><code>GetRecords.IteratorAgeMilliseconds</code> (or <code>MillisBehindLatest</code>) is the lag metric. Spikes often mean transient API errors; a steady climb means under-provisioned consumers or shards.</figcaption>
+            </figure>
+            <figure class="slide-fig">
+              <a href="assets/slides/slide-107.png" target="_blank" rel="noopener">
+                <img src="assets/slides/slide-107.png" alt="Slide on KMS permission errors when writing to an encrypted Kinesis stream without decrypt rights on the master key." loading="lazy">
+              </a>
+              <figcaption><span class="slide-no">Slide 107</span>Encrypted streams require both Kinesis IAM actions and KMS key policy permissions for every producer and consumer identity.</figcaption>
+            </figure>
+          </div>
+
+          <h3>Troubleshooting reference table</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead>
+              <tbody>
+                <tr><td><code>ProvisionedThroughputExceededException</code> on write</td><td>Shard ingest limit exceeded (1 MB/s or 1,000 records/s per shard)</td><td>Add shards, switch to on-demand mode, use KPL aggregation, implement exponential backoff retries</td></tr>
+                <tr><td>Throttling on one shard only; others idle</td><td>Hot shard — skewed partition key</td><td>Redesign partition key for even distribution (suffix with random salt, then dedupe downstream)</td></tr>
+                <tr><td>High API costs; low effective throughput</td><td>Many small <code>PutRecord</code> calls without batching</td><td>Batch with <code>PutRecords</code> or use KPL aggregation</td></tr>
+                <tr><td>Slow consumer read; iterator age climbing</td><td>Shared 2 MB/s read limit hit across consumers</td><td>Register consumers for enhanced fan-out, or add shards to spread partitions</td></tr>
+                <tr><td><code>GetRecords</code> returns empty array repeatedly</td><td>No new records yet at iterator position</td><td>Normal — keep polling; KCL handles this automatically</td></tr>
+                <tr><td><code>ExpiredIteratorException</code></td><td>Consumer idle &gt; 5 minutes, or shard closed after resharding</td><td>Resume from TRIM_HORIZON or LATEST; after resharding, call <code>DescribeStream</code> for new shard IDs</td></tr>
+                <tr><td>Records processed twice or gaps in output</td><td>At-least-once semantics; checkpoint after failed processing or unhandled exception</td><td>Checkpoint only after successful processing; make sinks idempotent</td></tr>
+                <tr><td>KCL stops advancing; DynamoDB errors</td><td>Checkpoint table under-provisioned for shard count</td><td>Increase DynamoDB WCU on the KCL lease table, or use on-demand billing on the table</td></tr>
+                <tr><td><code>IteratorAgeMilliseconds</code> steady increase</td><td>Consumer logic slower than ingest rate</td><td>Scale out KCL workers, optimise processing, add shards, or increase retention as a buffer</td></tr>
+                <tr><td><code>IteratorAgeMilliseconds</code> sudden spike</td><td>Transient API or dependency failure</td><td>Check CloudWatch for throttling; verify downstream service health</td></tr>
+                <tr><td>KMS AccessDenied on put or get</td><td>SSE-KMS enabled but IAM role lacks key permissions</td><td>Add <code>kms:Decrypt</code>, <code>kms:GenerateDataKey</code> to producer/consumer role; update key policy</td></tr>
+                <tr><td>Too many consumers throttled</td><td>More than five <code>GetRecords</code> calls per shard per second</td><td>Reduce polling frequency, consolidate consumers, or enable EFO</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout info"><strong>Deck correction — slide 105.</strong> The slide text conflates two separate issues. <code>ExpiredIteratorException</code> happens when you stop calling <code>GetRecords</code> for more than five minutes — not because DynamoDB lacks capacity. DynamoDB capacity problems on the KCL lease table cause checkpoint failures and shard lease loss, which is a different failure mode with similar symptoms (reprocessing or stalling).</div>
+        </section>
+
+        <section class="section" id="kinesis-firehose">
+          <h2>Kinesis Data Firehose</h2>
+          <p class="lead">Firehose is the <strong>load</strong> service: it accepts streaming records, optionally transforms them, buffers them into batches, and delivers them to a destination. You do not write consumer code, manage shards, or replay data. If the question says "deliver logs to S3 with least effort", Firehose is the answer unless the requirements explicitly need sub-minute latency with replay.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-109.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-109.png" alt="Firehose overview slide: fully managed, captures transforms and loads data, automatic scaling." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 109</span>Firehose is fully managed — no shards, no iterators, no consumer applications. AWS scales capacity to match incoming volume.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-110.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-110.png" alt="Firehose architecture diagram: producers, buffering up to 128 MB or 900 seconds, Lambda transformation, fallback S3 bucket, destinations S3 Redshift OpenSearch Splunk." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 110</span>The delivery pipeline: producers → buffer → optional Lambda transform → destination. Failed or unprocessable records land in a <strong>fallback S3 error prefix</strong> for replay or inspection.</figcaption>
+          </figure>
+
+          <div class="diagram">
+            <p class="diagram-title">Firehose — buffer, transform, deliver, and error handling</p>
+            <div class="flow">
+              <div class="node is-source"><b>Producers</b><small>KDS · Logs · IoT · Direct PUT</small></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-store"><b>Buffer</b><small>1–128 MB · 60–900 s</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-compute pulse"><b>Lambda transform</b><small>optional · format conversion</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-serve"><b>Destination</b><small>S3 · OpenSearch · Splunk</small></div>
+            </div>
+            <div class="flow" style="margin-top:14px;">
+              <div class="node is-source"><b>Error / backup S3</b><small>failed records · retries</small></div>
+            </div>
+          </div>
+
+          <h3>Producers and destinations</h3>
+          <p>Producers include direct <code>PutRecord</code>/<code>PutRecordBatch</code> API calls, Kinesis Data Streams (Firehose as a consumer), CloudWatch Logs subscriptions, CloudWatch Events/EventBridge, AWS IoT rules, and custom applications. Destinations are Amazon S3, Amazon Redshift (via an intermediate S3 stage and a COPY command), Amazon OpenSearch Service, Splunk, Datadog, New Relic, MongoDB, and generic HTTP endpoints.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-111.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-111.png" alt="Firehose key features: near real-time buffering, format conversion to Parquet or ORC, compression and encryption, real-time analytics use cases." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 111</span>Near-real-time delivery is the trade-off: buffering improves efficiency and reduces small-file problems in S3, at the cost of latency.</figcaption>
+          </figure>
+
+          <h3>Buffer size and buffer interval</h3>
+          <p>Firehose flushes a batch when <strong>either</strong> threshold is hit:</p>
+          <ul>
+            <li><strong>Buffer size:</strong> 1–128 MB (default varies by destination; S3 default is 5 MB)</li>
+            <li><strong>Buffer interval:</strong> 60–900 seconds (minimum 60 s for S3; up to 900 s for some destinations)</li>
+          </ul>
+          <p>Smaller buffers and shorter intervals → lower latency, more S3 objects, higher cost. Larger buffers → better compression and fewer files, higher latency. Exam questions that say "within one minute" need a buffer interval ≤ 60 seconds.</p>
+
+          <h3>Transformation and format conversion</h3>
+          <p><strong>Lambda transformation:</strong> Each buffered batch is passed to a Lambda function. The handler must return a <code>records</code> array where every input record has a matching entry with <code>recordId</code>, <code>result</code> (<code>Ok</code>, <code>Dropped</code>, or <code>ProcessingFailed</code>), and optionally transformed <code>data</code> (base64).</p>
+
+          <pre data-lang="python" data-title="Firehose Lambda transformation handler" data-explain="Firehose requires one output record per input record with the same recordId. result Ok means deliver the (possibly transformed) data; ProcessingFailed sends the original to the error prefix."><code>import base64, json
+
+def handler(event, context):
+    output = []
+    for record in event["records"]:
+        payload = json.loads(base64.b64decode(record["data"]))
+        # example: drop test events, enrich others
+        if payload.get("env") == "test":
+            output.append({"recordId": record["recordId"], "result": "Dropped"})
+        else:
+            payload["processed"] = True
+            out_data = base64.b64encode(json.dumps(payload).encode()).decode()
+            output.append({"recordId": record["recordId"], "result": "Ok", "data": out_data})
+    return {"records": output}  # must return the records array</code></pre>
+
+          <p><strong>Format conversion:</strong> Built-in conversion from JSON to <strong>Parquet</strong> or <strong>ORC</strong> using a Glue Data Catalog table schema — no Lambda required for the conversion itself. Needs S3 as the destination. Pair with partitioning for efficient Athena queries in <a href="s03-athena.html">Section 3</a>.</p>
+
+          <h3>Dynamic partitioning</h3>
+          <p>Enabled with Lambda or a JQ-like metadata extraction, dynamic partitioning writes each batch to an S3 prefix derived from record content — e.g. <code>s3://bucket/year=!{timestamp:yyyy}/month=!{timestamp:MM}/</code> or a key parsed from the payload. This replaces a downstream Glue partitioner for streaming landings and is heavily tested alongside Parquet conversion.</p>
+          <pre data-lang="yaml" data-title="Firehose S3 prefix — dynamic partitioning example" data-explain="Firehose substitution keys let you embed record metadata or timestamps into the S3 key without a separate partitioning job."><code># Error prefix (always configure this)
+ErrorOutputPrefix: firehose-errors/!{firehose:error-output-type}/year=!{timestamp:yyyy}/
+
+# Dynamic prefix from a Lambda metadata extraction
+Prefix: curated/events/year=!{partitionKeyFromQuery:year}/month=!{partitionKeyFromQuery:month}/
+
+# Static + dynamic combined — results in hive-style folders for Athena
+Prefix: curated/clickstream/!{partitionKeyFromQuery:country}/!{timestamp:yyyy/MM/dd}/</code></pre>
+
+          <div class="callout info"><strong>Deck correction — slide 84.</strong> The slide lists "Amazon Elasticsearch Service" as a Firehose destination. That service was renamed to <strong>Amazon OpenSearch Service</strong>. Firehose delivery to OpenSearch is the current name on the exam.</div>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-112.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-112.png" alt="Firehose pricing slide: consumption-based pricing tied to volume of data processed." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 112</span>Firehose bills per <strong>GB ingested and delivered</strong>, plus optional Lambda invocation and format conversion charges. There is no shard-hour component.</figcaption>
+          </figure>
+
+          <div class="callout danger"><strong>No retention, no replay.</strong> Firehose is forward-only. If delivery fails after retries, records go to the error S3 prefix — the only recovery path. You cannot re-read historical data from Firehose itself. If replay matters, ingest to Kinesis Data Streams first and attach Firehose as one consumer among several.</div>
+        </section>
+
+        <section class="section" id="streams-vs-firehose">
+          <h2>Kinesis Data Streams versus Firehose</h2>
+          <p class="lead">Both move streaming data on AWS, but they solve different problems. Data Streams is a durable, replayable buffer for real-time processing. Firehose is a managed delivery truck to storage and analytics endpoints.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-113.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-113.png" alt="Comparison slide: Kinesis Data Streams requires manual shards and custom code with real-time latency and up to 365 days storage, versus Firehose fully managed near-real-time delivery with ease of use." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 113</span>The deck's high-level comparison. The table below adds rows the slide omits but the exam tests.</figcaption>
+          </figure>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Feature</th><th>Kinesis Data Streams</th><th>Kinesis Data Firehose</th></tr></thead>
+              <tbody>
+                <tr><td>Operational model</td><td>Manual shard setup (provisioned) or automatic (on-demand)</td><td>Fully managed — no shards</td></tr>
+                <tr><td>Producers / consumers</td><td>You code producers and consumers (SDK, KPL, KCL, Lambda, Flink)</td><td>Configure source and destination — minimal code</td></tr>
+                <tr><td>Latency</td><td>Real time — ~200 ms propagation (standard), ~70 ms (EFO)</td><td>Near real time — buffer interval 60–900 s</td></tr>
+                <tr><td>Retention</td><td>24 hours default, up to <strong>365 days</strong></td><td><strong>None</strong> — no data stored in Firehose</td></tr>
+                <tr><td>Replay</td><td>Yes — consumers re-read within retention window</td><td><strong>No replay</strong> — forward delivery only</td></tr>
+                <tr><td>Scaling</td><td>Add/split/merge shards or on-demand auto-scale</td><td>Automatic — AWS scales capacity</td></tr>
+                <tr><td>Transformation</td><td>In consumer (Lambda, Flink, custom)</td><td>Built-in Lambda transform; JSON → Parquet/ORC conversion</td></tr>
+                <tr><td>Multiple consumers</td><td>Many independent consumers on same stream</td><td>One delivery pipeline per delivery stream (fan-out via KDS upstream)</td></tr>
+                <tr><td>Destinations</td><td>Any consumer you build</td><td>S3, Redshift, OpenSearch, Splunk, HTTP, third-party partners</td></tr>
+                <tr><td>Ordering</td><td>Strict per partition key within a shard</td><td>Best effort — batching may reorder within a buffer window</td></tr>
+                <tr><td>Pricing unit</td><td>Shard-hour + PUT payload units (+ EFO fees)</td><td>Per GB ingested/delivered</td></tr>
+                <tr><td>Typical pattern</td><td>Real-time analytics, fan-out to multiple apps, replay</td><td>Load streaming logs/events into S3 or a warehouse with least code</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout exam"><strong>Classic exam pattern.</strong> "Ingest clickstream data, run real-time fraud scoring <em>and</em> archive to S3" → KDS as the hub, Lambda or Flink for fraud, Firehose as a second consumer for S3. "Load CloudWatch Logs to S3 as Parquet with least operational overhead" → Firehose alone.</div>
+        </section>
+
+        <section class="section" id="managed-flink">
+          <h2>Managed Service for Apache Flink</h2>
+          <p class="lead">Amazon Managed Service for Apache Flink (formerly <strong>Kinesis Data Analytics</strong>) runs Apache Flink applications without you managing clusters. You write SQL, Python, Scala, or Java; AWS provisions KPUs, handles checkpoints, and scales capacity. Use it when the question needs <strong>stateful windowed aggregations</strong> or stream SQL over KDS or MSK — not for simple record forwarding (that is Lambda or Firehose).</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-115.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-115.png" alt="Managed Service for Apache Flink overview: fully managed Flink, real-time SQL Python Scala Java, serverless and scalable." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 115</span>Flink is the engine; AWS manages patching, scaling, and fault tolerance. Studio mode adds an interactive SQL notebook for prototyping.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-116.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-116.png" alt="Flink architecture diagram: sources KDS MSK S3, sinks KDS MSK S3, stateful computations, checkpoints and snapshots, anomaly detection and event-driven actions." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 116</span>Flink maintains <strong>state</strong> across events (counts, windows, session context). Checkpoints and snapshots to S3 provide fault tolerance — on failure the application restores state and resumes from the last checkpoint.</figcaption>
+          </figure>
+
+          <h3>Streaming SQL and the Flink application model</h3>
+          <p>A Flink application has a <strong>source</strong> (KDS, MSK, or custom), one or more SQL or DataStream transformations, and a <strong>sink</strong> (KDS, MSK, S3, Lambda, JDBC, etc.). In SQL mode you define streams and tables, then run continuous queries that never terminate — unlike batch SQL in Athena.</p>
+
+          <h3>Windowing — tumbling, sliding, and session</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Window type</th><th>Behaviour</th><th>Example use</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Tumbling</strong></td><td>Fixed-size, non-overlapping time buckets</td><td>Count orders per minute</td></tr>
+                <tr><td><strong>Sliding</strong></td><td>Fixed-size buckets that overlap by a slide interval</td><td>Moving average over the last five minutes, updated every minute</td></tr>
+                <tr><td><strong>Session</strong></td><td>Gap-based — a window closes after N seconds of inactivity</td><td>User session length on a website</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <pre data-lang="sql" data-title="Flink SQL — tumbling window aggregation" data-explain="TUMBLE groups events into non-overlapping one-minute buckets. GROUP BY TUMBLE(...) is the Flink SQL pattern the exam expects for per-window counts."><code>CREATE TABLE clickstream (
+  user_id    STRING,
+  page       STRING,
+  event_time TIMESTAMP(3),
+  WATERMARK FOR event_time AS event_time - INTERVAL '5' SECOND
+) WITH (
+  'connector' = 'kinesis',
+  'stream' = 'dea-lab-events',
+  'aws.region' = 'us-east-1',
+  'format' = 'json'
+);
+
+CREATE TABLE page_counts (
+  page       STRING,
+  window_start TIMESTAMP(3),
+  hits       BIGINT,
+  PRIMARY KEY (page, window_start) NOT ENFORCED
+) WITH (
+  'connector' = 'upsert-kafka'  -- or kinesis / jdbc sink
+);
+
+INSERT INTO page_counts
+SELECT
+  page,
+  TUMBLE_START(event_time, INTERVAL '1' MINUTE),
+  COUNT(*)
+FROM clickstream
+GROUP BY page, TUMBLE(event_time, INTERVAL '1' MINUTE);</code></pre>
+
+          <h3>Built-in anomaly detection algorithms</h3>
+          <p>Managed Flink ships SQL functions for unsupervised anomaly detection on streams — no ML pipeline required:</p>
+          <ul>
+            <li><strong>RANDOM_CUT_FOREST</strong> — general-purpose anomaly scoring on numeric streams; flags points that do not fit the learned forest model.</li>
+            <li><strong>HOTSPOTS</strong> — detects localized spikes in multidimensional data (e.g. one API endpoint suddenly dominating traffic).</li>
+          </ul>
+          <p>Both operate in real time within Flink windows and are exam distractors alongside SageMaker — choose Flink when the question says "SQL on a stream" or "detect anomalies without training a model".</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-117.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-117.png" alt="Managed Flink pricing: KPUs at 1 vCPU and 4 GB RAM each, one extra KPU for orchestration, storage and Studio mode charges." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 117</span>Pricing is per <strong>KPU-hour</strong> (1 KPU = 1 vCPU + 4 GB RAM). Every application uses at least one KPU for orchestration plus compute KPUs. Auto-scaling adjusts KPUs to workload; Studio interactive mode bills two extra KPUs while open.</figcaption>
+          </figure>
+        </section>
+
+        <section class="section" id="amazon-msk">
+          <h2>Amazon MSK</h2>
+          <p class="lead">Amazon Managed Streaming for Apache Kafka (MSK) runs open-source Apache Kafka on AWS. You get Kafka APIs, topics, partitions, consumer groups, and the entire Kafka ecosystem (Connect, MirrorMaker, ksqlDB on EC2) — with AWS handling broker patching, AZ failover, and storage. Choose MSK when the workload is already Kafka-native or needs message sizes, retention, and auth models that Kinesis does not offer.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-118.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-118.png" alt="Amazon MSK title slide for Managed Streaming for Apache Kafka." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 118</span>MSK is the Kafka-compatible option in the AWS streaming portfolio — separate from the Kinesis family but often compared on the exam.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-119.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-119.png" alt="MSK overview: managed Kafka, brokers and ZooKeeper nodes for cluster coordination." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 119</span>Cluster architecture: <strong>Kafka brokers</strong> store and serve records; <strong>ZooKeeper</strong> (or KRaft in newer Kafka versions) coordinates cluster metadata. AWS manages both in provisioned clusters.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-120.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-120.png" alt="MSK high availability: multi-AZ deployment, EBS storage, configurable message sizes up to 10 MB, scalable broker count." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 120</span>Brokers span multiple AZs for fault tolerance. Data persists on EBS volumes with configurable retention. Message size defaults to 1 MB but can be raised to <strong>10 MB</strong> — a key differentiator from Kinesis's hard 1 MB record limit.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-121.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-121.png" alt="MSK producers and consumers with comparison to Kinesis on customization versus convenience and message size." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 121</span>Producers and consumers are standard Kafka clients — any language with a Kafka library works. MSK trades operational simplicity for configurability compared to Kinesis.</figcaption>
+          </figure>
+
+          <h3>MSK Serverless</h3>
+          <p>MSK Serverless removes broker sizing — AWS scales compute and storage automatically. You pay for cluster hours and data in/out rather than per broker instance. Good for variable workloads and teams that want Kafka semantics without capacity planning. Still <strong>no free tier</strong>.</p>
+
+          <h3>MSK Connect</h3>
+          <p>Managed Kafka Connect workers for streaming data between MSK and external systems (S3, JDBC databases, OpenSearch, Debezium CDC) without writing custom consumers. AWS hosts the Connect cluster; you deploy pre-built or custom connectors. Pairs with <a href="s18-migration.html">Section 18</a> migration patterns for CDC ingestion.</p>
+
+          <h3>Authentication options</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Method</th><th>How it works</th><th>When to use</th></tr></thead>
+              <tbody>
+                <tr><td><strong>IAM</strong></td><td>AWS SigV4 authentication; policies on cluster ARN</td><td>AWS-native apps, least external credential management</td></tr>
+                <tr><td><strong>SASL/SCRAM</strong></td><td>Username/password stored in Secrets Manager; Kafka ACLs authorise topics</td><td>Non-AWS clients, fine-grained topic ACLs</td></tr>
+                <tr><td><strong>Mutual TLS (mTLS)</strong></td><td>Client and broker present certificates; private CA in ACM</td><td>Strict zero-trust, on-prem clients</td></tr>
+                <tr><td><strong>Unauthenticated TLS</strong></td><td>Encryption in transit without client auth (or plain text in VPC — not recommended)</td><td>Legacy dev/test only</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout danger"><strong>MSK has no free tier.</strong> A minimal three-broker cluster bills continuously. Delete the cluster immediately after any lab — do not leave it running overnight.</div>
+        </section>
+
+        <section class="section" id="msk-vs-kinesis">
+          <h2>MSK versus Kinesis Data Streams</h2>
+          <p class="lead">Both ingest streaming data at scale, but MSK gives you Kafka's full flexibility while Kinesis gives you AWS-native integration with less to operate. The exam often presents a scenario where either could work — the qualifier tells you which wins.</p>
+
+          <div class="slide-row">
+            <figure class="slide-fig">
+              <a href="assets/slides/slide-122.png" target="_blank" rel="noopener">
+                <img src="assets/slides/slide-122.png" alt="MSK versus Kinesis comparison on management complexity, message size up to 10 MB versus 1 MB, topics and partitions versus streams and shards." loading="lazy">
+              </a>
+              <figcaption><span class="slide-no">Slide 122</span>MSK offers more control and larger messages; Kinesis offers faster setup and tighter Lambda/Flink/Firehose integration.</figcaption>
+            </figure>
+            <figure class="slide-fig">
+              <a href="assets/slides/slide-123.png" target="_blank" rel="noopener">
+                <img src="assets/slides/slide-123.png" alt="MSK versus Kinesis security comparison: MSK supports mTLS SASL SCRAM and IAM; Kinesis uses IAM and TLS by default with KMS at rest." loading="lazy">
+              </a>
+              <figcaption><span class="slide-no">Slide 123</span>Security models diverge: Kinesis is IAM-only and TLS-by-default; MSK supports the full Kafka auth stack including mTLS and SASL/SCRAM with Kafka ACLs.</figcaption>
+            </figure>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Feature</th><th>Amazon MSK</th><th>Kinesis Data Streams</th></tr></thead>
+              <tbody>
+                <tr><td>Operational overhead</td><td>More management — broker count, Kafka version, storage, ACLs</td><td>More managed — shards or on-demand; no brokers to patch</td></tr>
+                <tr><td>Pipeline complexity</td><td>Full Kafka ecosystem — Connect, MirrorMaker, ksqlDB</td><td>Straightforward AWS-native fan-out to Lambda, Flink, Firehose</td></tr>
+                <tr><td>Message size limit</td><td>Configurable up to <strong>10 MB</strong> (default 1 MB)</td><td>Hard <strong>1 MB</strong> per record</td></tr>
+                <tr><td>Partitioning unit</td><td>Topics and partitions</td><td>Streams and shards</td></tr>
+                <tr><td>Scaling</td><td>Add brokers; increase partition count (cannot shrink partitions)</td><td>Split/merge shards; on-demand auto-scale up to 200 MB/s</td></tr>
+                <tr><td>Retention</td><td>Per-topic, limited by EBS storage (days to weeks typical; unbounded with tiered storage)</td><td>24 h default, up to 365 days — time-based, not size-based</td></tr>
+                <tr><td>Encryption in flight</td><td>TLS or plain text (configurable)</td><td>TLS by default</td></tr>
+                <tr><td>Encryption at rest</td><td>KMS</td><td>KMS (SSE-KMS)</td></tr>
+                <tr><td>Access control</td><td>IAM, SASL/SCRAM, mTLS, Kafka ACLs</td><td>IAM policies only</td></tr>
+                <tr><td>Ordering guarantee</td><td>Per partition</td><td>Per partition key within shard</td></tr>
+                <tr><td>Consumer model</td><td>Kafka consumer groups with offset commits</td><td>Shard iterators, KCL checkpoints in DynamoDB</td></tr>
+                <tr><td>AWS integration</td><td>Good — MSK Connect, Lambda event source (with auth setup)</td><td>Native — Lambda, Firehose, Flink, CloudWatch metrics</td></tr>
+                <tr><td>Pricing model</td><td>Broker-hour + EBS storage (+ Serverless cluster-hour)</td><td>Shard-hour + PUT payload units</td></tr>
+                <tr><td>Free tier</td><td><strong>None</strong></td><td>No always-free tier; on-demand has no minimum shards beyond usage</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout exam"><strong>When MSK wins.</strong> Existing Kafka clients, messages &gt; 1 MB, need Kafka Connect or SASL/SCRAM, or multi-cloud Kafka replication. <strong>When Kinesis wins.</strong> Greenfield AWS pipeline, tight Lambda/Flink/Firehose integration, least operational overhead, or on-demand scaling without broker management.</div>
+        </section>
+
+        <section class="section" id="deeper">
+          <h2>Deeper detail and exam edge cases</h2>
+          <p class="lead">Shard-hour economics, extended retention tiers, Firehose buffer gotchas, and MSK Serverless ceilings — the pricing and quota layer beneath the architecture diagrams.</p>
+
+          <h3>Limits and quotas that decide answers</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Limit</th><th>Value</th><th>Adjustable?</th><th>Why it matters</th></tr></thead>
+              <tbody>
+                <tr><td>Per-shard write throughput</td><td>1 MB/s or 1,000 records/s (whichever hits first)</td><td>Yes — add shards or on-demand scale</td><td>Hot partition keys throttle one shard while others sit idle.</td></tr>
+                <tr><td>Per-shard read (standard consumers)</td><td>2 MB/s shared across all standard consumers on the shard</td><td>Yes — EFO or more shards</td><td>Five consumers still split 2 MB/s — not 2 MB/s each.</td></tr>
+                <tr><td><code>GetRecords</code> calls per shard per consumer</td><td>5 per second (soft)</td><td>Partially — reduce poll rate or use EFO</td><td>Aggressive polling returns empty arrays and wastes API quota.</td></tr>
+                <tr><td>Enhanced fan-out read per consumer per shard</td><td>2 MB/s dedicated; ~70 ms propagation</td><td>Yes — register up to 20 EFO consumers per stream</td><td>Each consumer-shard pair bills hourly regardless of read volume.</td></tr>
+                <tr><td>Maximum record size (KDS)</td><td>1 MB including partition key</td><td>No (hard)</td><td>Larger payloads require MSK (up to 10 MB configurable) or S3 reference pattern.</td></tr>
+                <tr><td>Default retention (KDS)</td><td>24 hours</td><td>Yes — up to 365 days extended retention</td><td>Replay window for Lambda/Flink recovery; extended tiers bill per GB-month beyond 24 h.</td></tr>
+                <tr><td>On-demand write capacity</td><td>Starts 4 MB/s and 4,000 records/s; scales to 200 MB/s and 200,000 records/s</td><td>Automatic — doubles capacity when exceeded for 30 days</td><td>Spike traffic raises the floor for a month; not instant shrink when load drops.</td></tr>
+                <tr><td><code>PutRecords</code> batch</td><td>Up to 500 records or 5 MB per call</td><td>No (hard)</td><td>Partial failure in response — retry only failed records, not the whole batch.</td></tr>
+                <tr><td>Firehose buffer size (S3 destination)</td><td>1 – 128 MB; interval 0 – 900 s for S3 (0 s = flush as soon as possible subject to 1 MB minimum)</td><td>Yes — per delivery stream</td><td>Legacy exam answers say 60 s minimum; S3 destinations now support 0-second interval for lowest latency.</td></tr>
+                <tr><td>Firehose transform Lambda timeout</td><td>Up to 6 minutes per batch</td><td>Yes — function timeout setting</td><td>Separate from the 15-minute Lambda max when the same code runs as a Kinesis consumer.</td></tr>
+                <tr><td>Managed Flink KPU</td><td>1 KPU = 1 vCPU + 4 GB RAM; minimum one orchestration KPU plus compute KPUs</td><td>Yes — auto-scaling</td><td>Idle minimum is orchestration KPU even when no records flow.</td></tr>
+                <tr><td>MSK message size</td><td>Default 1 MB; configurable up to 10 MB per broker</td><td>Yes — broker configuration</td><td>Key differentiator from Kinesis 1 MB hard cap.</td></tr>
+                <tr><td>MSK Serverless max partitions</td><td>2,400 partitions per cluster (soft)</td><td>Yes — quota increase</td><td>Serverless removes broker sizing but retains partition and throughput ceilings.</td></tr>
+                <tr><td>MSK Connect workers</td><td>Per connector capacity units (MCUs)</td><td>Yes — scale workers</td><td>CDC connectors to S3 or OpenSearch bill continuously while workers run.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>What you actually pay for</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Billed dimension</th><th>Unit</th><th>How to spend less</th></tr></thead>
+              <tbody>
+                <tr><td>KDS shard-hour (provisioned)</td><td>Per shard per hour per stream (us-east-1: ~0.015 USD/shard-hour)</td><td>Right-size shard count; merge idle shards; consider on-demand for spiky workloads.</td></tr>
+                <tr><td>KDS PUT payload units</td><td>Per million records (25 KB rounded up per record)</td><td>KPL aggregation packs many user records into one 1 MB KDS record.</td></tr>
+                <tr><td>Extended retention (beyond 24 h)</td><td>Per GB-month tiered by retention window (24 h–7 d, 7–30 d, 30–365 d)</td><td>Land to S3 via Firehose for long-term archive instead of 365-day stream retention.</td></tr>
+                <tr><td>Enhanced fan-out</td><td>Consumer-shard-hour plus data retrieval per GB</td><td>Use standard consumers when one or two readers suffice; EFO only when read bandwidth or latency requires it.</td></tr>
+                <tr><td>Firehose data ingestion</td><td>Per GB ingested and delivered (us-east-1: ~0.029 USD/GB for first 500 TB tier)</td><td>Larger buffers → fewer S3 PUTs but higher latency; enable compression on S3 destination.</td></tr>
+                <tr><td>Firehose dynamic partitioning</td><td>Additional per GB processed when enabled</td><td>Skip if a downstream Glue crawler can partition batch landings cheaply enough.</td></tr>
+                <tr><td>Firehose Lambda transform</td><td>Lambda invoke and duration charges per buffered batch</td><td>Keep transforms lightweight; use built-in Parquet conversion when schema is stable.</td></tr>
+                <tr><td>Managed Flink KPU-hour</td><td>Per KPU-hour plus one orchestration KPU always on (us-east-1: ~0.11 USD/KPU-hour)</td><td>Right-size auto-scaling bounds; stop applications when idle; compare against Lambda at low volume.</td></tr>
+                <tr><td>Flink checkpoints / snapshots in S3</td><td>S3 storage for state backend</td><td>Tune checkpoint interval; expire old savepoints after upgrades.</td></tr>
+                <tr><td>MSK broker-hour + EBS storage</td><td>Per broker instance hour plus GB-month on broker volumes</td><td>Delete lab clusters same day; MSK Serverless for variable load but watch partition limits.</td></tr>
+                <tr><td>MSK Serverless</td><td>Cluster-hour plus data in/out</td><td>Cheaper than three idle <code>kafka.m5.large</code> brokers at low throughput; still no free tier.</td></tr>
+                <tr><td>Cross-AZ Kinesis / MSK traffic</td><td>Per GB data transfer between AZs</td><td>Co-locate producers and consumers in the same AZ where architecture allows.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout cost"><strong>Biggest streaming leak.</strong> Provisioned KDS shards left running after a lab, or MSK brokers overnight. A ten-shard stream costs roughly 3.60 USD/day in shard-hours alone — more than most Firehose delivery charges for the same data volume.</div>
+          <div class="callout danger"><strong>EFO multiplication.</strong> Four shards × five EFO consumers = twenty consumer-shard-hour meters every hour, even if each consumer reads sparingly. Standard shared throughput is often enough for Firehose plus one analytics consumer.</div>
+
+          <h3>Traps that catch people</h3>
+          <ul>
+            <li><strong>PutRecords partial success —</strong> <code>PutRecords</code> can return HTTP 200 with <code>FailedRecordCount &gt; 0</code>. Retry only failed entries with exponential backoff; blind full-batch retry duplicates successful records downstream.</li>
+            <li><strong>On-demand capacity floor —</strong> When write rate exceeds current capacity, on-demand mode doubles throughput limits for 30 days. Cost and capacity do not snap back when traffic drops — plan for the elevated floor.</li>
+            <li><strong>Firehose 60-second minimum is outdated for S3 —</strong> Many exam scenarios still assume 60 s buffer interval. S3 destinations now support 0-second interval (flush as soon as practical). Near-real-time questions may accept Firehose where they once required KDS only.</li>
+            <li><strong>Firehose has no replay —</strong> Failed records after retries land in the error prefix; successfully delivered data cannot be re-read from Firehose. Recovery requires the upstream KDS stream (within retention) or S3 reprocessing.</li>
+            <li><strong>Dynamic partitioning cost —</strong> Parsing metadata for S3 prefixes in Firehose adds a per-GB charge on top of ingestion. Cheap at small volume; expensive at TB/day compared with periodic Glue partitioners.</li>
+            <li><strong>KPL without de-aggregation —</strong> Consumers using plain SDK loops see protobuf blobs, not JSON. KCL de-aggregation library, Managed Flink, and Firehose handle this automatically — custom consumers must not skip the step.</li>
+            <li><strong>Flink orchestration KPU —</strong> Every Managed Flink application pays for at least one orchestration KPU in addition to compute KPUs. Stopping the app stops compute KPUs; forgetting to stop the application does not.</li>
+            <li><strong>Checkpoint vs savepoint —</strong> Checkpoints are automatic fault-tolerance snapshots; savepoints are manual, consistent images for code upgrades. Restarting from the wrong one after a schema change replays wrong state.</li>
+            <li><strong>MSK partition count is one-way —</strong> You can increase partitions but not decrease them. Over-partitioning small topics wastes broker resources and exam scenarios testing "reduce partitions" have no valid answer.</li>
+            <li><strong>Hot shard ≠ add consumer —</strong> Write throttling on one shard is fixed by resharding or better partition keys, not by adding Lambda consumers. Consumers only read; they do not increase ingest capacity.</li>
+          </ul>
+
+          <h3>Troubleshooting playbook</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Symptom</th><th>Most likely cause</th><th>What to check / fix</th></tr></thead>
+              <tbody>
+                <tr><td><code>WriteProvisionedThroughputExceeded</code> on one shard</td><td>Skewed partition key (hot shard)</td><td>CloudWatch <code>WriteProvisionedThroughputExceeded</code> by <code>ShardId</code>; redesign key cardinality or add random suffix.</td></tr>
+                <tr><td><code>FailedRecordCount</code> in <code>PutRecords</code> response</td><td>Per-record throttling or internal error</td><td>Retry failed indices only; backoff; split batch; check shard-level metrics.</td></tr>
+                <tr><td>Firehose S3 prefix empty after traffic</td><td>Buffer interval not elapsed; transform returns <code>ProcessingFailed</code></td><td>Check Firehose <code>DeliveryToS3.Success</code> metrics; inspect error prefix; verify Lambda returns one output record per input with matching <code>recordId</code>.</td></tr>
+                <tr><td>Firehose objects too small / high S3 PUT cost</td><td>Buffer size and interval too low</td><td>Raise buffer to 5–128 MB and interval toward 60–900 s unless latency SLA forbids it.</td></tr>
+                <tr><td>Managed Flink <code>KafkaConsumer</code> lag growing</td><td>Under-provisioned KPUs or slow state backend</td><td>Flink dashboard <code>records-lag-max</code>; increase KPUs; check checkpoint duration and S3 checkpoint errors.</td></tr>
+                <tr><td>Flink job restarts from old state after deploy</td><td>Automatic checkpoint used instead of savepoint</td><td>Create savepoint before stop; restore from savepoint with new code; verify operator state compatibility.</td></tr>
+                <tr><td>MSK consumer cannot connect from Lambda</td><td>Auth mismatch — IAM vs SASL/SCRAM</td><td>Event source mapping auth type must match cluster; Secrets Manager for SCRAM; security groups on brokers.</td></tr>
+                <tr><td>MSK Connect task FAILED</td><td>Connector misconfiguration or MCU under-provisioned</td><td>Connect worker logs in CloudWatch; increase MCUs; verify source/target IAM and network path.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Production patterns</h3>
+          <p>The standard AWS-native pipeline is <strong>KDS as durable hub</strong>: producers write once; Lambda handles real-time alerts; Managed Flink runs windowed aggregations; Firehose delivers near-real-time batches to S3 in Parquet with dynamic partitioning. MSK replaces KDS when teams bring Kafka clients, Connect connectors, or messages above 1 MB — not because MSK is "more enterprise".</p>
+          <div class="grid-2">
+            <div class="mini-card">
+              <h4>Hub-and-spoke on KDS</h4>
+              <ul>
+                <li>24-hour minimum retention; extend to 7+ days only when replay SLA requires it and S3 raw is not yet landing.</li>
+                <li>Firehose as one consumer for lake load; never the sole copy if compliance requires replay.</li>
+                <li>CloudWatch alarm on <code>GetRecords.IteratorAgeMilliseconds</code> &gt; 60 s for each consumer group.</li>
+              </ul>
+            </div>
+            <div class="mini-card">
+              <h4>Anti-pattern</h4>
+              <p>Firehose-only pipeline for fraud scoring that must react in seconds. Buffer interval alone adds tens of seconds; no stream retention means no rewind after a bad transform deploy. Put KDS upstream.</p>
+            </div>
+          </div>
+          <div class="diagram">
+            <p class="diagram-title">Dual-path streaming — real time plus lake landing</p>
+            <div class="flow">
+              <div class="node is-source"><b>Producers</b><small>SDK · KPL</small></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-store pulse"><b>Kinesis Data Streams</b><small>retention · replay</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-compute"><b>Lambda / Flink</b><small>real-time path</small></div>
+            </div>
+            <div class="flow" style="margin-top:14px;">
+              <div class="node is-store"><b>Same stream</b><small>second consumer</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-serve"><b>Firehose → S3 Parquet</b><small>near-real-time archive</small></div>
+            </div>
+          </div>
+<pre data-lang="shell" data-title="Firehose — list failed delivery records in error prefix" data-explain="When S3 destination shows gaps, error-output-type prefixes separate processing-failed from delivery-failed records for replay."><code>aws s3 ls s3://dea-lab-ab-4821/curated/firehose-errors/processing-failed/ --recursive
+
+# Replay: re-ingest to KDS or run Glue job on error prefix after fixing transform</code></pre>
+
+          <h3>Where this fits with the rest of the exam</h3>
+          <p>Streaming is the spine of Domain 1 (34%). Almost every ingestion scenario connects to storage, compute, or integration elsewhere.</p>
+          <ul>
+            <li><a href="s05-lambda.html">Section 5 — Lambda</a> — Kinesis and MSK event source mappings, partial batch failure, poison-pill recovery; Lambda is a consumer, not a stream store.</li>
+            <li><a href="s07-s3.html">Section 7 — S3</a> — Firehose destinations, Parquet landing zones, lifecycle on curated prefixes fed by streaming load.</li>
+            <li><a href="s03-athena.html">Section 3 — Athena</a> — query Firehose-delivered Parquet with partition projection after dynamic partitioning.</li>
+            <li><a href="s04-glue.html">Section 4 — Glue</a> — batch reprocessing from S3 when stream retention expired; Glue streaming as alternative to Flink for Spark teams.</li>
+            <li><a href="s18-migration.html">Section 18 — Migration</a> — MSK Connect and Debezium CDC into MSK or S3 for database capture.</li>
+          </ul>
+          <div class="callout exam"><strong>Exam framing.</strong> Read <em>real time</em> vs <em>near real time</em> first. Sub-second fan-out with replay → Kinesis Data Streams (plus Lambda or Flink). Load logs to S3 with least code and 60+ second latency OK → Firehose. Existing Kafka clients or &gt; 1 MB messages → MSK. Stateful SQL windows → Managed Flink. Firehose alone is wrong when the scenario requires replay or multiple independent consumers on the same retained log.</div>
+        </section>
+
+        <section class="section" id="interview">
+          <h2>Interview questions</h2>
+          <p class="muted">Answer each one out loud before opening it.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+            <details class="qa">
+              <summary>When would you choose Kinesis Data Streams over Firehose?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p>Choose <strong>Kinesis Data Streams</strong> when you need <strong>sub-second latency</strong>, <strong>multiple independent consumers</strong> on the same data, or <strong>replay</strong> within a retention window. Typical patterns: real-time fraud scoring with Flink, fan-out to both Lambda alerting and Firehose archiving, or reprocessing yesterday's events after a bug fix.</p>
+                <p>Choose <strong>Firehose</strong> when the goal is simply to <strong>deliver</strong> streaming data to S3, Redshift, or OpenSearch with minimal code and near-real-time latency (60+ seconds) is acceptable. Firehose also wins on "least operational overhead" for load-to-lake scenarios.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Explain how partition keys affect ordering and throughput in Kinesis Data Streams.<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>Kinesis hashes the partition key to assign each record to exactly one shard. Records with the <strong>same partition key are strictly ordered</strong> by sequence number within that shard. Records with different keys may land on different shards and have no ordering guarantee relative to each other.</p>
+                <p>For throughput, a partition key with low cardinality (e.g. <code>country=US</code> for all US traffic) creates a hot shard that hits the 1 MB/s ingest limit while other shards stay idle. High-cardinality keys (device ID, user ID, UUID suffix) spread load evenly across shards.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What is enhanced fan-out and when is the extra cost justified?<span class="qa-tag">Performance</span></summary>
+              <div class="qa-body">
+                <p>Standard consumers on a shard <strong>share</strong> 2 MB/s of read throughput — ten consumers still split that 2 MB/s. <strong>Enhanced fan-out</strong> registers a consumer for dedicated 2 MB/s per shard, pushed over HTTP/2 with ~70 ms propagation delay instead of ~200 ms polling.</p>
+                <p>Justify the cost when you have <strong>more than two or three concurrent consumers</strong> that each need full read bandwidth, or when latency requirements drop below 200 ms. With only one consumer, standard mode is cheaper and sufficient. Maximum 20 EFO consumers per stream.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>A producer is getting ProvisionedThroughputExceededException. What do you check?<span class="qa-tag">Troubleshooting</span></summary>
+              <div class="qa-body">
+                <p>First, check CloudWatch <code>WriteProvisionedThroughputExceeded</code> per shard to confirm whether one shard is hot. If a single shard spikes, the partition key is skewed — redesign for higher cardinality or add a random suffix and deduplicate downstream.</p>
+                <p>If all shards are evenly loaded and still throttling, you need more capacity: add shards in provisioned mode, switch to on-demand, or reduce per-record size with KPL aggregation. Implement exponential backoff on retries — tight retry loops make throttling worse.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Why does Firehose have no replay, and how do you architect around that?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p>Firehose is a forward-only delivery pipeline — it buffers, optionally transforms, and writes to a destination. It does not store a replayable log. Failed records after retries go to an error S3 prefix, but successfully delivered data cannot be re-read from Firehose.</p>
+                <p>If replay is a requirement, place <strong>Kinesis Data Streams upstream</strong> as the durable buffer with retention, attach Firehose as one consumer for S3 delivery, and keep other consumers for real-time processing. Alternatively, rely on S3 as the system of record and reprocess from there with Glue or Athena.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Compare provisioned and on-demand capacity mode for Kinesis Data Streams.<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p><strong>Provisioned:</strong> you set shard count explicitly and pay per shard-hour. Scale by splitting, merging, or updating shard count. Best when traffic is predictable and you want precise cost control.</p>
+                <p><strong>On-demand:</strong> AWS auto-scales shards from observed traffic over the last 30 days. Starts at 4 MB/s and 4,000 records/s write, scales up to 200 MB/s and 200,000 records/s. Best for spiky or unknown workloads and "least operational overhead" exam answers. Both modes share the same per-shard throughput limits once shards exist.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What delivery semantics does Kinesis guarantee, and what must your consumer do about it?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>Kinesis Data Streams guarantees <strong>at-least-once</strong> delivery — records may be delivered more than once, especially after consumer failures or resharding. There is no exactly-once guarantee at the stream level.</p>
+                <p>Consumers must be <strong>idempotent</strong>: checkpoint with KCL only after successful processing, use deterministic write keys in DynamoDB or S3, or deduplicate on a natural key. Lambda event source mappings expose <code>bisectBatchOnFunctionError</code> and parallelisation factor to limit blast radius of duplicates.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>When would you pick MSK over Kinesis Data Streams?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p>Pick <strong>MSK</strong> when the workload is Kafka-native: existing Kafka producers/consumers, need for Kafka Connect or MirrorMaker, messages larger than 1 MB (up to 10 MB), SASL/SCRAM or mTLS auth, or fine-grained Kafka ACLs per topic.</p>
+                <p>Pick <strong>Kinesis</strong> for greenfield AWS pipelines where tight integration with Lambda, Firehose, and Managed Flink matters more than Kafka API compatibility, and where 1 MB records and IAM-only auth are sufficient. Kinesis also wins on "straightforward setup" and on-demand scaling without broker management.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Describe the Firehose Lambda transformation contract.<span class="qa-tag">Exam</span></summary>
+              <div class="qa-body">
+                <p>Firehose invokes Lambda with a batch of records, each containing <code>recordId</code> and base64 <code>data</code>. The handler must return <code>{"records": [...]}</code> with <strong>one output entry per input entry</strong>, matching <code>recordId</code> values.</p>
+                <p>Each output record needs a <code>result</code> field: <code>Ok</code> (deliver transformed or original data), <code>Dropped</code> (skip), or <code>ProcessingFailed</code> (send to error prefix). Omitting the <code>records</code> array or mismatched IDs causes delivery failures. Processing time limit is six minutes per batch.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What are KPUs in Managed Service for Apache Flink, and how does pricing work?<span class="qa-tag">Cost</span></summary>
+              <div class="qa-body">
+                <p>A <strong>Kinesis Processing Unit (KPU)</strong> is one vCPU and 4 GB of memory running your Flink application. AWS charges per KPU-hour. Every application consumes at least <strong>one KPU for orchestration</strong> plus additional KPUs for compute — auto-scaling adds KPUs under load.</p>
+                <p>Additional charges apply for durable application backups (checkpoints/snapshots stored in S3) and for Studio interactive mode (two extra KPUs while a Studio session is open). Compare against Lambda cost when the question asks for the most cost-effective option at low volume.</p>
+              </div>
+            </details>
+          </div>
+        </section>
+
+        <section class="section" id="practice">
+          <h2>Hands-on practice</h2>
+          <p class="muted">Streaming resources bill by the hour while they exist. Delete everything at the end of each task. <strong>MSK has no free tier</strong> — skip task 3 unless you accept the cost.</p>
+          <ol class="practice-list">
+            <li class="practice">
+              <p class="practice-task">Create an on-demand Kinesis Data Stream named <code>dea-lab-events</code>, put ten records with varied partition keys using the CLI, and confirm they arrived via <code>get-shard-iterator</code> and <code>get-records</code>.</p>
+              <span class="console-path">Kinesis → Data streams → Create data stream</span>
+              <p class="practice-expect">CloudWatch <code>IncomingRecords</code> shows ten; <code>get-records</code> returns base64 JSON payloads.</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">Console + CLI</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li><strong>Kinesis → Data streams → Create</strong>. Name <code>dea-lab-events</code>, capacity mode <em>On-demand</em>.</li>
+                    <li>Put records from the CLI (vary partition keys to spread across shards).</li>
+                    <li>Read back from one shard to verify.</li>
+                  </ol>
+<pre data-lang="shell"><code>aws kinesis create-stream --stream-name dea-lab-events \
+  --stream-mode-details StreamMode=ON_DEMAND --region us-east-1
+
+for i in $(seq 1 10); do
+  aws kinesis put-record --stream-name dea-lab-events \
+    --partition-key "user-$i" \
+    --data "{\"n\":$i}" --region us-east-1
+done
+
+SHARD=$(aws kinesis list-shards --stream-name dea-lab-events \
+  --query 'Shards[0].ShardId' --output text --region us-east-1)
+ITER=$(aws kinesis get-shard-iterator --stream-name dea-lab-events \
+  --shard-id "$SHARD" --shard-iterator-type TRIM_HORIZON \
+  --query 'ShardIterator' --output text --region us-east-1)
+aws kinesis get-records --shard-iterator "$ITER" --region us-east-1</code></pre>
+                  <p class="muted">Cleanup: Kinesis → <code>dea-lab-events</code> → Delete. On-demand streams still accrue charges until deleted.</p>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Create a Firehose delivery stream to your lab bucket prefix <code>curated/firehose/</code> with a 60-second buffer, then send five records with <code>put-record</code> and verify the S3 object appears.</p>
+              <span class="console-path">Kinesis → Data Firehose → Create Firehose stream → Direct PUT → S3</span>
+              <p class="practice-expect">An object under <code>s3://dea-lab-…/curated/firehose/</code> within about 60 seconds of the last record.</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">Console + CLI</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li><strong>Firehose → Create</strong> → Source <em>Direct PUT</em>, destination <em>Amazon S3</em>, bucket <code>dea-lab-&lt;initials&gt;-&lt;random&gt;</code>, prefix <code>curated/firehose/</code>.</li>
+                    <li>Buffer size <code>1</code> MB, buffer interval <code>60</code> seconds. Enable the S3 error output prefix <code>curated/firehose-errors/</code>.</li>
+                    <li>Send test records and list S3 after one minute.</li>
+                  </ol>
+<pre data-lang="shell"><code>STREAM=dea-lab-firehose
+BUCKET=dea-lab-ab-4821
+
+aws firehose put-record --delivery-stream-name $STREAM \
+  --record '{"Data":"{\"event\":\"test-1\"}"}' --region us-east-1
+
+sleep 70
+aws s3 ls s3://$BUCKET/curated/firehose/ --recursive</code></pre>
+                  <p class="muted">Cleanup: delete the Firehose delivery stream, then delete objects under <code>curated/firehose/</code> and <code>curated/firehose-errors/</code> in the bucket.</p>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Create a Lambda function triggered by <code>dea-lab-events</code> that logs each record's partition key, then invoke the stream with test data and confirm CloudWatch Logs output.</p>
+              <span class="console-path">Lambda → Create function → Add trigger → Kinesis</span>
+              <p class="practice-expect">CloudWatch log group for the function shows partition keys from the test records within seconds.</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">Console</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Create a Python Lambda with basic execution role plus <code>AWSLambdaKinesisExecutionRole</code>.</li>
+                    <li>Add a Kinesis trigger on <code>dea-lab-events</code>, batch size 10, starting position <em>Latest</em>.</li>
+                    <li>Handler: decode base64 <code>record["kinesis"]["data"]</code> and print <code>partitionKey</code>.</li>
+                    <li>Put a record to the stream and check CloudWatch Logs.</li>
+                  </ol>
+                  <p class="muted">Cleanup: remove the Kinesis trigger, delete the Lambda function, then delete the Kinesis stream if no longer needed.</p>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Optional and billable: launch a minimal MSK provisioned cluster (kafka.t3.small, one broker per AZ is not supported — use three brokers), confirm the bootstrap brokers string, then delete the cluster within 30 minutes.</p>
+              <span class="console-path">Amazon MSK → Create cluster → Provisioned</span>
+              <p class="practice-expect">Cluster state <em>Active</em>; bootstrap broker list visible on the cluster detail page.</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">Console</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li><strong>MSK → Create cluster</strong> → Provisioned, Kafka 3.x, <code>kafka.t3.small</code>, 3 brokers, 100 GB EBS each, IAM auth enabled.</li>
+                    <li>Wait for Active (~15–20 min). Copy bootstrap brokers from the cluster details.</li>
+                    <li>Do not leave running — MSK has <strong>no free tier</strong>.</li>
+                  </ol>
+                  <p class="muted">Cleanup: MSK → select cluster → Delete. Confirm deletion completes (brokers terminate). Also delete the MSK security group if it is no longer used.</p>
+                </div>
+              </details>
+            </li>
+          </ol>
+        </section>
+
+        <section class="section" id="recap">
+          <h2>Recap</h2>
+          <div class="recap">
+            <ul class="checklist">
+              <li>Kinesis family: Data Streams (durable buffer), Firehose (delivery), Managed Flink (compute). MSK is Kafka, not Kinesis.</li>
+              <li>Per shard: 1 MB/s or 1,000 records/s in; 2 MB/s out shared (standard) or 2 MB/s per EFO consumer (max 20).</li>
+              <li>Partition key → shard assignment → strict ordering by sequence number within a shard. Avoid hot keys.</li>
+              <li>On-demand mode: starts 4 MB/s write, scales to 200 MB/s. Provisioned: you manage shard splits and merges.</li>
+              <li>At-least-once delivery — idempotent consumers; KCL checkpoints in DynamoDB.</li>
+              <li>Firehose: buffer 1–128 MB or 60–900 s; Lambda transform must return <code>records</code> array; no retention, no replay.</li>
+              <li>Real time → KDS/Flink. Near real time → Firehose. Replay → KDS or MSK, not Firehose.</li>
+              <li>Managed Flink: tumbling/sliding/session windows; RANDOM_CUT_FOREST and HOTSPOTS for anomalies; KPU pricing.</li>
+              <li>MSK: up to 10 MB messages; IAM, SASL/SCRAM, mTLS; MSK Connect for Kafka Connect; no free tier.</li>
+              <li>Record size limit: 1 MB (Kinesis) vs configurable up to 10 MB (MSK).</li>
+              <li>SSE-KMS on streams requires KMS permissions on producers and consumers.</li>
+              <li>Iterator age climbing → consumer too slow or too few shards; EFO or scale out.</li>
+            </ul>
+            <p style="margin-top:1rem;">
+              <button type="button" data-complete="section-06">Mark complete</button>
+            </p>
+          </div>
+        </section>
+
+
+      </div>
+
+      <aside class="toc" aria-label="On this page">
+        <strong>On this page</strong>
+        <ol>
+          <li><a href="#lectures">Lectures</a></li>
+          <li><a href="#kinesis-overview">Kinesis overview</a></li>
+          <li><a href="#kinesis-data-streams">Data Streams</a></li>
+          <li><a href="#throughput-latency">Throughput &amp; latency</a></li>
+          <li><a href="#enhanced-fan-out">Enhanced fan-out</a></li>
+          <li><a href="#troubleshooting">Troubleshooting</a></li>
+          <li><a href="#kinesis-firehose">Data Firehose</a></li>
+          <li><a href="#streams-vs-firehose">Streams vs Firehose</a></li>
+          <li><a href="#managed-flink">Managed Flink</a></li>
+          <li><a href="#amazon-msk">Amazon MSK</a></li>
+          <li><a href="#msk-vs-kinesis">MSK vs Kinesis</a></li>
+          <li><a href="#deeper">Deeper detail</a></li>
+          <li><a href="#interview">Interview questions</a></li>
+          <li><a href="#practice">Hands-on practice</a></li>
+          <li><a href="#recap">Recap</a></li>
+        </ol>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<footer class="footer">AWS Certified Data Engineer Associate (DEA-C01) · Section 6 · Offline study edition</footer>
+</body>
+</html>

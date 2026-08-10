@@ -1,0 +1,1287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="DEA-C01 Section 13: AWS Lake Formation governance, Amazon EMR and Hive, Managed Grafana, OpenSearch Service, and QuickSight BI including SPICE, RLS, and cross-account access.">
+<title>Section 13 — Analytics | AWS Data Engineer DEA-C01 Notes</title>
+<link rel="stylesheet" href="assets/aws.css">
+<script defer src="assets/search-index.js"></script>
+<script defer src="assets/code-highlight.js"></script>
+<script defer src="assets/aws.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">Course section 13 of 21 · AWS Certified Data Engineer Associate</p>
+    <h1>Analytics</h1>
+    <p class="subtitle">Govern the data lake with Lake Formation, run petabyte Spark and Hive on EMR, monitor with Managed Grafana, search and analyse logs in OpenSearch, and deliver BI with QuickSight SPICE, row-level security, and Amazon Q.</p>
+    <div class="hero-meta">
+      <span class="chip">70 slides · ~69min</span>
+      <span class="chip">Exam domains: Data Operations (22%) · Data Security and Governance (18%)</span>
+      <span class="chip">Deck slides 426–495</span>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <nav class="pager" aria-label="Section navigation">
+    <a href="s12-compute.html">← Compute Services</a>
+    <a href="index.html">Course contents</a>
+    <a href="s14-sagemaker.html">Next: Machine Learning with SageMaker →</a>
+  </nav>
+
+  <main id="main">
+    <div class="layout">
+      <div class="content">
+
+        <section class="section" id="lectures">
+          <h2>Lectures in this section</h2>
+          <p class="muted">Analytics and governance services for the data lake, big-data compute, search, and BI. Sample dataset: <code>data/customers.csv</code>.</p>
+          <ol class="lecture-list">
+            <li class="lecture">
+              <a class="lec-title" href="#lake-formation">AWS Lake Formation</a>
+              <span class="lec-time">~12:00</span>
+              <span class="lec-src">Slides 427–436</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#emr">Amazon EMR</a>
+              <span class="lec-time">~14:00</span>
+              <span class="lec-src">Slides 437–446</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#hive">Apache Hive</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">Slides 447–449</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#grafana">Amazon Managed Grafana</a>
+              <span class="lec-time">~4:00</span>
+              <span class="lec-src">Slides 450–453</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#opensearch">Amazon OpenSearch Service</a>
+              <span class="lec-time">~18:00</span>
+              <span class="lec-src">Slides 454–473</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#quicksight">Amazon QuickSight</a>
+              <span class="lec-time">~16:00</span>
+              <span class="lec-src">Slides 474–495</span>
+            </li>
+          </ol>
+          <div class="svc-pills">
+            <span class="badge">Lake Formation</span>
+            <span class="badge">EMR</span>
+            <span class="badge">Hive</span>
+            <span class="badge">Grafana</span>
+            <span class="badge">OpenSearch</span>
+            <span class="badge">QuickSight</span>
+          </div>
+        </section>
+
+        <section class="section" id="lake-formation">
+          <h2>AWS Lake Formation</h2>
+          <p class="lead"><strong>AWS Lake Formation</strong> is a governance layer on top of Amazon S3 and the <a href="s04-glue.html">AWS Glue Data Catalog</a>. It does not replace S3 storage or Glue crawlers — it centralises <em>who may read which tables, columns, and rows</em> in a data lake, and enforces those permissions across Athena, Redshift Spectrum, EMR, and Glue jobs without duplicating IAM policies on every bucket prefix.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-428.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-428.png" alt="Lake Formation workflow: data collection, cataloging, preparation, security and access, data sharing, analytics integration." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 428</span>The six-stage Lake Formation lifecycle. Security sits between cataloguing and consumption — permissions are defined once in Lake Formation and enforced at query time by integrated engines.</figcaption>
+          </figure>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-429.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-429.png" alt="Lake Formation collects data from on-premises and AWS sources, organises it in S3, crawls metadata into the Glue Data Catalog, and secures access for analytics services." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 429</span>Data lands in S3; crawlers populate the Glue Data Catalog; Lake Formation wraps both with fine-grained grants. Redshift, Athena, Glue, and EMR consume catalogued data through LF-enforced permissions.</figcaption>
+          </figure>
+
+          <h3>How it works — end to end</h3>
+          <p>Lake Formation implements a governed data lake in five practical steps that mirror the deck workflow:</p>
+          <ol>
+            <li><strong>Define data sources</strong> — register S3 buckets and paths (and optional JDBC connections) as Lake Formation data lake locations. LF becomes the data lake administrator for those prefixes.</li>
+            <li><strong>Data ingestion</strong> — copy or stream data into registered locations (Glue jobs, DMS, Firehose, or manual upload). Blueprints automate common ingestion patterns.</li>
+            <li><strong>Catalog and organise</strong> — Glue crawlers discover schema and partitions; Lake Formation creates or adopts databases and tables in the Glue Data Catalog.</li>
+            <li><strong>Clean and transform</strong> — Glue ETL, EMR, or Athena CTAS prepare curated datasets; LF permissions apply to outputs in registered locations.</li>
+            <li><strong>Set up security and analyse</strong> — grant <code>SELECT</code>, <code>INSERT</code>, <code>ALTER</code>, etc. at database, table, column, or row level; consumers query through Athena, Redshift Spectrum, or EMR with LF enforcing filters.</li>
+          </ol>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-430.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-430.png" alt="Lake Formation steps: define data sources, ingestion, catalog and organize, clean and transform, set up security, use and analyze." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 430</span>The numbered workflow from source registration through to governed analytics. Steps 4–5 are where most exam scenarios focus: transform data, then grant least-privilege access before opening the lake to analysts.</figcaption>
+          </figure>
+
+          <div class="diagram">
+            <p class="diagram-title">Governed data lake — S3 through Lake Formation to consumers</p>
+            <div class="flow">
+              <div class="node is-source"><b>S3 data lake</b><small>raw/ · staging/ · curated/</small></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-store"><b>Glue Data Catalog</b><small>databases · tables · partitions</small></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-compute pulse"><b>Lake Formation</b><small>grants · LF-Tags · filters</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-serve"><b>Consumers</b><small>Athena · Spectrum · EMR · Glue</small></div>
+            </div>
+          </div>
+
+          <h3>Relationship to the Glue Data Catalog and IAM</h3>
+          <p>Lake Formation does not replace the <strong>Glue Data Catalog</strong> — it governs access <em>to</em> catalogue objects. Crawlers and Glue jobs still create databases, tables, and partitions in Glue; LF registers underlying S3 locations and issues grants on those catalogue entries. When Athena runs <code>SELECT * FROM sales</code>, the engine asks Lake Formation whether the caller's IAM role has <code>SELECT</code> on that table (and applies any column/row filter). If allowed, LF returns temporary data-access credentials scoped to the permitted S3 prefixes and columns.</p>
+          <p><strong>IAM</strong> still matters: principals must be able to call Athena, Glue, and <code>lakeformation:GetDataAccess</code>. LF sits between IAM and the data — denying at the LF layer blocks access even when S3 bucket policy would allow <code>s3:GetObject</code>. For encrypted tables, KMS key policies must also permit the role. Think of IAM as "can this principal use the analytics service" and LF as "which tables/rows/columns may they see".</p>
+
+          <h3>What Lake Formation adds over S3 bucket policies plus IAM</h3>
+          <p>Plain S3 + IAM can restrict <em>object prefixes</em>, but analysts need <em>table-level</em> access in SQL engines. Without Lake Formation you must either expose whole prefixes or maintain duplicate ACL logic in every service. Lake Formation adds:</p>
+          <ul>
+            <li><strong>Central catalogue permissions</strong> — one grant model for Athena, Redshift Spectrum, EMR, and Glue against Glue Catalog tables, not per-bucket IAM policies.</li>
+            <li><strong>Column-, row-, and cell-level security</strong> — data filters hide columns or rows at query time; IAM and bucket policies cannot express this.</li>
+            <li><strong>LF-Tags (tag-based access control)</strong> — attach tags like <code>Environment=Prod</code>, <code>Classification=PII</code>; grant permissions by tag expression instead of naming every table.</li>
+            <li><strong>Cross-account sharing via RAM</strong> — share databases/tables without copying data; recipient creates resource links for local querying.</li>
+            <li><strong>Audit trail</strong> — Lake Formation logs permission changes; combined with CloudTrail for API calls.</li>
+          </ul>
+          <div class="callout exam"><strong>The exam question.</strong> "Centralise fine-grained access to a shared S3 data lake queried by multiple teams through Athena" → Lake Formation on top of Glue Catalog + S3. Bucket policies alone are insufficient when the requirement mentions column-level, row-level, or cross-account table sharing.</div>
+
+          <div class="analogy"><strong>Everyday analogy —</strong> S3 bucket policies are building keys (which floors you may enter). Lake Formation is the room-level access card system — same building, but marketing may enter the "campaigns" room while finance enters "ledger", even though both share one S3 warehouse.</div>
+
+          <h3>Security — database, table, and column grants</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-431.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-431.png" alt="Lake Formation security: centralized security management, control access at database table or column level." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 431</span>LF permissions are catalogue-native. A grant on <code>SELECT</code> for table <code>sales</code> lets Athena read it; the same grant governs Spectrum and EMR Hive metastore views backed by Glue.</figcaption>
+          </figure>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-432.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-432.png" alt="Data filtering: row-level, column-level, and cell-level security restrict access to rows, columns, or specific cells." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 432</span>Data filters combine column lists with row predicates (SQL WHERE clauses). Cell-level security is the intersection — certain roles see only approved columns for approved rows.</figcaption>
+          </figure>
+
+          <p><strong>Database-level</strong> grants apply to all current and future tables in the database. <strong>Table-level</strong> is the most common — <code>SELECT</code> for analysts, <code>INSERT</code> for ETL roles. <strong>Column-level</strong> lists permitted columns in a data filter. <strong>Row-level</strong> adds a filter expression (e.g. <code>region = 'EU'</code>). <strong>Cell-level</strong> combines both — only specific columns for rows matching the predicate.</p>
+
+          <h3>LF-Tags and LF-TBAC versus named-resource grants</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-433.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-433.png" alt="LF-Tags: attach tag to catalogue resource, assign permissions based on tag values for tag-based access control." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 433</span>LF-TBAC scales when hundreds of tables share classification tags. Named-resource grants are simpler for small lakes with a handful of databases.</figcaption>
+          </figure>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-434.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-434.png" alt="Lake Formation security includes RBAC and cross-account access." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 434</span>Role-based access: IAM principals receive LF grants directly or through IAM Identity Center groups mapped to LF permissions.</figcaption>
+          </figure>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Approach</th><th>How it works</th><th>Best for</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Named resources</strong></td><td>Grant <code>SELECT</code> on <code>database.table</code> to an IAM role</td><td>Small teams, explicit tables, exam scenarios naming one database</td></tr>
+                <tr><td><strong>LF-Tags (LF-TBAC)</strong></td><td>Tag tables with <code>Team=Finance</code>; grant <code>SELECT</code> where tag matches</td><td>Enterprise lakes, auto-provisioned tables inherit tags, least ops</td></tr>
+                <tr><td><strong>Hybrid access mode</strong></td><td>LF permissions <em>and</em> IAM policies both evaluated (IAM allowed only if LF also allows)</td><td>Migration from legacy IAM-only lakes; default on new registrations</td></tr>
+                <tr><td><strong>IAM-only (legacy)</strong></td><td>Disable LF enforcement; S3 + IAM only</td><td>Not recommended — loses column/row filters</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p><strong>Hybrid access mode</strong> means a principal needs <em>both</em> an IAM permission (e.g. <code>s3:GetObject</code> on the prefix) <em>and</em> a Lake Formation grant. <strong>IAM Allowed Principals</strong> (IAM-only passthrough) lets legacy IAM policies satisfy access without an LF grant — useful during migration but bypasses LF row/column filters for those principals. New data lake locations should use LF-first permissions.</p>
+
+          <h3>Cross-account sharing</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-435.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-435.png" alt="Lake Formation cross-account sharing via RAM, data filters, resource links for Athena and Redshift Spectrum." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 435</span>Producer account registers data and creates a RAM share. Consumer accepts, creates resource links pointing at shared tables, and assigns local LF grants to its analysts.</figcaption>
+          </figure>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-436.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-436.png" alt="Cross-account troubleshooting: RAM permission issues and IAM role misconfiguration." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 436</span>When shared tables are invisible, check RAM acceptance, LF grant on the resource link, and that the consumer IAM role trusts the querying service (Athena, Spectrum).</figcaption>
+          </figure>
+
+          <ul>
+            <li><strong>Share setup</strong> — producer shares databases or tables (or LF-Tag policies) through AWS Resource Access Manager (RAM).</li>
+            <li><strong>Granular access</strong> — data filters on shared tables enforce row/column rules in the consumer account.</li>
+            <li><strong>Resource links</strong> — consumer creates a resource link (alias) in their Glue Catalog; Athena and Spectrum query through the link without copying S3 data.</li>
+            <li><strong>Troubleshooting</strong> — verify RAM invitation accepted, LF <code>DESCRIBE</code> on resource link, IAM role has <code>lakeformation:GetDataAccess</code>, and S3 bucket policy allows consumer account if using external locations.</li>
+          </ul>
+
+          <h3>Grant permissions — CLI examples</h3>
+<pre data-lang="shell" data-title="Lake Formation — named-resource GRANT" data-explain="Grant SELECT on one table to an IAM role. Lake Formation calls Glue under the hood; Athena checks LF before returning data."><code>aws lakeformation grant-permissions \
+  --principal DataLakePrincipalIdentifier=arn:aws:iam::123456789012:role/DataAnalystRole \
+  --resource '{"Table": {"DatabaseName": "sales_db", "Name": "orders"}}' \
+  --permissions SELECT
+
+aws lakeformation grant-permissions \
+  --principal DataLakePrincipalIdentifier=arn:aws:iam::123456789012:role/FinanceRole \
+  --resource '{"LFTagPolicy": {"ResourceType": "TABLE", "Expression": [{"TagKey": "Team", "TagValues": ["Finance"]}]}}' \
+  --permissions SELECT DESCRIBE</code></pre>
+          <p>The second command is <strong>LF-TBAC</strong>: any table tagged <code>Team=Finance</code> becomes readable by the Finance role without naming each table.</p>
+        </section>
+
+        <section class="section" id="emr">
+          <h2>Amazon EMR</h2>
+          <p class="lead"><strong>Amazon EMR (Elastic MapReduce)</strong> runs open-source big-data frameworks — Apache Spark, Hive, HBase, Presto/Trino, and Flink — on managed Hadoop clusters. You pay for underlying EC2 (or EKS/Fargate for newer deployment models) plus an EMR hourly premium per instance. EMR wins when you need petabyte-scale custom Spark/Hive, existing Hadoop tooling, or frameworks Glue does not expose.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-438.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-438.png" alt="Amazon EMR: fast distributed processing with Spark and Hadoop for petabyte scale; Glue is easier but not ideal for heaviest workloads; good for on-prem migration." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 438</span>The console cluster wizard shows application bundles: Spark Interactive, Core Hadoop, Flink, HBase, Presto, Trino. Pick the bundle matching your workload; you can add steps later.</figcaption>
+          </figure>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-439.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-439.png" alt="EMR cluster architecture, EC2-based pricing, security via IAM VPC KMS." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 439</span>EMR is cluster-based — you choose instance types, node counts, and release label (e.g. emr-7.x). Security layers: IAM roles for EC2, security groups, encryption at rest with KMS, in-transit TLS.</figcaption>
+          </figure>
+
+          <h3>Security — IAM, VPC, and encryption</h3>
+          <p>Every cluster uses IAM roles: a <strong>service role</strong> for EMR itself, an <strong>EC2 instance profile</strong> for nodes (S3 access via EMRFS, CloudWatch logs), and optional <strong>Auto Scaling role</strong>. Launch clusters in private subnets with security groups restricting SSH and internal Hadoop ports. Enable encryption at rest for EBS volumes and S3 (SSE-S3 or SSE-KMS) and in-transit TLS between nodes. Kerberos authentication is supported for multi-tenant Hadoop environments migrated from on-premises.</p>
+
+          <h3>Frameworks and when to choose EMR</h3>
+          <ul>
+            <li><strong>Apache Spark</strong> — default for ETL, ML feature prep, and large-scale SQL (<code>spark-sql</code>).</li>
+            <li><strong>Apache Hive</strong> — HiveQL over catalogued data; metastore backed by Glue on modern clusters.</li>
+            <li><strong>HBase</strong> — random read/write on billions of rows (time-series keys, wide-column NoSQL on HDFS).</li>
+            <li><strong>Presto / Trino</strong> — interactive federated SQL across S3, Hive, JDBC sources.</li>
+            <li><strong>Apache Flink</strong> — stateful stream processing on EMR (batch and streaming unified).</li>
+          </ul>
+
+          <h3>Cluster node topology</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-440.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-440.png" alt="EMR cluster structure: master node manages cluster, core nodes run tasks and store data, task nodes process only without storing HDFS data." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 440</span>Master = single point of coordination (YARN ResourceManager, NameNode). Core = HDFS storage + compute. Task = compute-only — scale these for bursty jobs. Graviton instances offer roughly 20% savings over x86.</figcaption>
+          </figure>
+
+          <div class="diagram">
+            <p class="diagram-title">EMR cluster node roles</p>
+            <div class="stack">
+              <div class="layer"><div class="node is-compute pulse"><b>Primary (master) node</b><small>YARN RM · NameNode · cluster manager · 1 only</small></div></div>
+              <div class="layer">
+                <div class="flow">
+                  <div class="node is-store"><b>Core node</b><small>HDFS + tasks · do not use Spot alone</small></div>
+                  <div class="node is-store"><b>Core node</b><small>replication factor 3</small></div>
+                  <div class="node is-compute"><b>Task node</b><small>tasks only · Spot OK</small></div>
+                  <div class="node is-compute"><b>Task node</b><small>scale in/out freely</small></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <ul>
+            <li><strong>Primary (master) node</strong> — tracks cluster health, schedules jobs, hosts HDFS NameNode. Always On-Demand; never Spot-only.</li>
+            <li><strong>Core nodes</strong> — run tasks <em>and</em> store HDFS blocks. Minimum count depends on HDFS replication; losing all core nodes loses data not on S3.</li>
+            <li><strong>Task nodes</strong> — compute-only workers; no HDFS. Safe to run on <strong>Spot Instances</strong> for fault-tolerant, idempotent jobs.</li>
+          </ul>
+
+          <h3>Cluster types — transient versus long-running</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-442.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-442.png" alt="EMR cluster types: transient clusters terminate after job completes; long-running clusters stay up for continuous processing." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 442</span>Transient = submit steps with <code>--auto-terminate</code>; cluster shuts down when steps finish. Long-running = persistent cluster for streaming or interactive notebooks.</figcaption>
+          </figure>
+
+          <p><strong>Transient clusters</strong> launch, run one or more steps, then terminate — ideal for nightly batch and cost control. <strong>Long-running clusters</strong> stay up for streaming (Spark Structured Streaming), interactive notebooks, or always-on Hive/Presto. Long-running costs more but avoids cluster startup latency (minutes).</p>
+
+          <h3>Storage — HDFS, EMRFS, and local disk</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-443.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-443.png" alt="EMR storage options: HDFS on local disks, EMRFS for S3 persistence, local filesystem, EBS for HDFS." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 443</span>Production lakes store input/output on S3 via EMRFS (<code>s3://</code> paths). HDFS on core nodes is for shuffle and intermediate cache; treat it as ephemeral unless you accept recompute on node loss.</figcaption>
+          </figure>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Storage</th><th>Location</th><th>Persistence</th><th>Use case</th></tr></thead>
+              <tbody>
+                <tr><td><strong>HDFS</strong></td><td>Local/instance-store disks on core nodes</td><td>Lost if core nodes terminate</td><td>Shuffle spill, intermediate cache, legacy Hadoop apps</td></tr>
+                <tr><td><strong>EMRFS (S3)</strong></td><td><code>s3://bucket/prefix</code></td><td>Durable</td><td>Input, output, data lake — default for new workloads</td></tr>
+                <tr><td><strong>Local FS</strong></td><td>Each EC2 instance</td><td>Ephemeral</td><td>Temp files, staging before upload</td></tr>
+                <tr><td><strong>EBS for HDFS</strong></td><td>Attached EBS volumes</td><td>Survives stop/start if configured</td><td>When instance store is too small; slower than NVMe</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout info"><strong>EMRFS consistency — deck correction.</strong> Older exams referenced EMRFS "consistent view" because S3 was eventually consistent for LIST operations. Since December 2020 S3 provides <strong>strong read-after-write consistency</strong> for all operations. You no longer need the EMRFS consistent-view configuration for new clusters — treat S3 as strongly consistent.</div>
+
+          <h3>Scalability — manual, managed, and auto scaling</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-445.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-445.png" alt="EMR scalability: manual scaling, EMR managed scaling, custom automatic scaling for instance groups only." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 445</span>Managed scaling lets EMR resize core and task nodes based on YARN pending memory/vCPU. Custom auto scaling policies attach to instance groups — not instance fleets.</figcaption>
+          </figure>
+
+          <ul>
+            <li><strong>Manual scaling</strong> — change instance group counts in console or CLI.</li>
+            <li><strong>EMR managed scaling</strong> — EMR adds/removes task (and optionally core) nodes based on cluster utilisation; least operational overhead.</li>
+            <li><strong>Managed scaling policies (custom)</strong> — CloudWatch metrics trigger scale-out/in; only supported with <strong>instance groups</strong>, not instance fleets.</li>
+          </ul>
+
+          <h3>Instance groups versus instance fleets</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Feature</th><th>Instance groups</th><th>Instance fleets</th></tr></thead>
+              <tbody>
+                <tr><td>Instance type</td><td>One type per group (e.g. all <code>m5.xlarge</code>)</td><td>Mix On-Demand + Spot across multiple types in one fleet</td></tr>
+                <tr><td>Spot</td><td>Separate task group can be Spot-only</td><td>Target Spot capacity percentage in fleet config</td></tr>
+                <tr><td>Auto scaling policies</td><td>Supported</td><td>Not supported — use managed scaling instead</td></tr>
+                <tr><td>Exam tip</td><td>"Custom auto scaling policy" → instance groups</td><td>"Lowest cost mixed Spot/On-Demand" → instance fleets</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>EMR steps and transient cluster pattern</h3>
+          <p>An <strong>EMR step</strong> is a unit of work — a JAR, script, or <code>spark-submit</code> command. Steps run sequentially by default. Combine steps with <code>ActionOnFailure: TERMINATE_CLUSTER</code> and <code>--auto-terminate</code> for pay-only-while-running batch jobs.</p>
+<pre data-lang="shell" data-title="EMR — spark-submit step JSON" data-explain="Submit a Spark job as step 1. The cluster runs the step then terminates when auto-terminate is enabled."><code>{
+  "Name": "Daily ETL",
+  "ActionOnFailure": "TERMINATE_CLUSTER",
+  "HadoopJarStep": {
+    "Jar": "command-runner.jar",
+    "Args": [
+      "spark-submit",
+      "--deploy-mode", "cluster",
+      "--class", "com.example.DailyETL",
+      "s3://dea-lab-ab-4821/scripts/daily-etl.jar",
+      "s3://dea-lab-ab-4821/raw/customers/",
+      "s3://dea-lab-ab-4821/curated/customers/"
+    ]
+  }
+}</code></pre>
+<pre data-lang="shell" data-title="EMR — create transient cluster with auto-terminate" data-explain="Launch a single-node test cluster that runs one Spark step and terminates. Always set auto-terminate for labs to avoid overnight charges."><code>aws emr create-cluster \
+  --name dea-emr-lab-transient \
+  --release-label emr-7.1.0 \
+  --applications Name=Spark \
+  --instance-type m5.xlarge \
+  --instance-count 1 \
+  --auto-terminate \
+  --use-default-roles \
+  --steps '[{
+    "Name": "Count customers",
+    "ActionOnFailure": "TERMINATE_CLUSTER",
+    "HadoopJarStep": {
+      "Jar": "command-runner.jar",
+      "Args": ["spark-submit","--deploy-mode","cluster",
+        "--class","org.apache.spark.examples.SparkPi",
+        "/usr/lib/spark/examples/jars/spark-examples.jar","10"]
+    }
+  }]'</code></pre>
+
+          <h3>Deployment options</h3>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-446.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-446.png" alt="EMR deployment: EMR on EC2 clusters, EMR on EKS for containerized big data, EMR Serverless pay-per-use runtime." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 446</span>EMR on EC2 = classic clusters. EMR on EKS = submit Spark jobs as Kubernetes jobs without managing YARN. EMR Serverless = no cluster to manage; upload job; pay for vCPU/memory used.</figcaption>
+          </figure>
+
+          <ul>
+            <li><strong>EMR on EC2</strong> — full control, all frameworks, familiar Hadoop ops.</li>
+            <li><strong>EMR on EKS</strong> — run Spark/Flink as jobs on an existing EKS cluster; no separate EMR master node.</li>
+            <li><strong>EMR Serverless</strong> — submit Spark/Hive jobs without provisioning clusters; fast startup, automatic scaling, pay per worker vCPU-hour and memory-GB-hour.</li>
+          </ul>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Deployment</th><th>You manage</th><th>Best for</th></tr></thead>
+              <tbody>
+                <tr><td><strong>EMR on EC2</strong></td><td>Instance types, scaling, Spot mix, patches via release label</td><td>Long-running clusters, HBase, custom Hadoop configs</td></tr>
+                <tr><td><strong>EMR on EKS</strong></td><td>EKS cluster, pod sizing, Spark job definitions</td><td>Teams already on Kubernetes; shared infra with microservices</td></tr>
+                <tr><td><strong>EMR Serverless</strong></td><td>Job script and IAM only</td><td>Intermittent Spark/Hive jobs, labs, least cluster ops</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>EMR versus AWS Glue</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Dimension</th><th>AWS Glue</th><th>Amazon EMR</th></tr></thead>
+              <tbody>
+                <tr><td>Operational model</td><td>Serverless — no cluster to manage</td><td>Managed cluster — you choose nodes, scaling, Spot mix</td></tr>
+                <tr><td>Primary engine</td><td>Glue ETL (PySpark/Scala), crawlers, Data Catalog</td><td>Spark, Hive, HBase, Presto/Trino, Flink — full Hadoop stack</td></tr>
+                <tr><td>Scale sweet spot</td><td>GB to low TB per job; standard ETL pipelines</td><td>TB to petabytes; heavy shuffles, custom JARs, legacy Hive/HBase</td></tr>
+                <tr><td>Pricing</td><td>DPU-hour (minimum 2 DPUs for ETL jobs)</td><td>EC2/Spot hours + EMR premium per instance-hour</td></tr>
+                <tr><td>Startup time</td><td>Minutes (cold start)</td><td>Minutes for cluster bootstrap; EMR Serverless reduces this</td></tr>
+                <tr><td>Catalog integration</td><td>Native Glue Data Catalog</td><td>Hive metastore → Glue Catalog on EMR 5.x+</td></tr>
+                <tr><td>Exam "easiest" ETL</td><td>Glue wins when question asks least effort</td><td>EMR when question mentions petabytes, HBase, Presto, or on-prem Hadoop migration</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout exam"><strong>Guaranteed comparison question.</strong> Read the scale and tooling hints: "petabyte Spark with custom Scala JAR" → EMR. "Scheduled PySpark ETL with least operational overhead" → Glue. "Interactive SQL on data lake without managing clusters" → Athena, not EMR.</div>
+        </section>
+
+        <section class="section" id="hive">
+          <h2>Apache Hive</h2>
+          <p class="lead"><strong>Apache Hive</strong> is a distributed SQL layer over files in HDFS or S3. It stores table metadata in a <strong>Hive metastore</strong> (schema, location, partitions) while data stays in open formats (Parquet, ORC, text). On AWS, the metastore maps to the <a href="s04-glue.html">Glue Data Catalog</a>, so Athena, EMR, and Redshift Spectrum share one catalogue.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-448.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-448.png" alt="Apache Hive: distributed data warehousing, tables over text Parquet ORC, HiveQL queries, HDFS and S3 compatible, Hive metastore and query flow." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 448</span>Hive translates HiveQL to MapReduce or Tez (or Spark via Hive-on-Spark). The metastore is the source of truth for table definitions.</figcaption>
+          </figure>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-449.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-449.png" alt="Hive on EMR integrates with Glue Data Catalog; migration from standalone Hive metastore to Glue is supported; Glue ETL and Hive can share metadata." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 449</span>EMR can use the Glue Data Catalog as its Hive metastore — one set of tables visible to Athena, Spectrum, and EMR Hive simultaneously.</figcaption>
+          </figure>
+
+          <h3>Hive metastore and Glue Data Catalog</h3>
+          <p>The metastore holds databases, table DDL, column types, SerDe info, and partition lists. When EMR is configured with <code>hive.metastore.client.factory.class=com.amazonaws.glue.catalog.metastore.AWSGlueDataCatalogHiveClientFactory</code>, DDL in Hive creates tables in Glue. Crawlers and Glue jobs see the same tables without export/import.</p>
+
+          <h3>External versus managed tables</h3>
+          <ul>
+            <li><strong>Managed tables</strong> — Hive owns data; <code>DROP TABLE</code> deletes S3/HDFS files. Rare in modern lakes (prefer explicit lifecycle on S3).</li>
+            <li><strong>External tables</strong> — Hive stores metadata only; <code>DROP TABLE</code> removes catalogue entry but leaves data. Standard for data lakes where multiple engines read the same prefix.</li>
+          </ul>
+
+          <h3>Partitions</h3>
+          <p>Partition columns (e.g. <code>year</code>, <code>month</code>, <code>day</code>) map to directory paths. Queries with partition predicates skip irrelevant paths — critical for cost and performance on S3.</p>
+<pre data-lang="sql" data-title="Hive — CREATE EXTERNAL TABLE with partitions" data-explain="External table over Parquet in a Hive-style layout. MSCK REPAIR or ALTER ADD PARTITION registers new paths after loads."><code>CREATE EXTERNAL TABLE IF NOT EXISTS sales_db.orders (
+  order_id    BIGINT,
+  customer_id INT,
+  amount      DECIMAL(10,2),
+  order_ts    TIMESTAMP
+)
+PARTITIONED BY (region STRING, dt STRING)
+STORED AS PARQUET
+LOCATION 's3://dea-lab-ab-4821/curated/orders/';
+
+ALTER TABLE sales_db.orders ADD IF NOT EXISTS
+  PARTITION (region='us-east', dt='2026-08-01')
+  LOCATION 's3://dea-lab-ab-4821/curated/orders/region=us-east/dt=2026-08-01/';
+
+-- After bulk load of new date folders:
+MSCK REPAIR TABLE sales_db.orders;</code></pre>
+
+          <h3>Where Hive still beats Spark SQL</h3>
+          <ul>
+            <li><strong>Hive ACID transactions</strong> on ORC for row-level updates/deletes in batch pipelines (Spark has Delta/Iceberg alternatives).</li>
+            <li><strong>Mature HiveQL UDF ecosystem</strong> and existing on-prem Hive scripts during migration.</li>
+            <li><strong>Hive LLAP</strong> (Low Latency Analytical Processing) for interactive SQL on Hadoop without a separate Presto cluster.</li>
+            <li><strong>Strict Hive compatibility</strong> when third-party tools expect Hive metastore Thrift API verbatim.</li>
+          </ul>
+          <p>For greenfield ETL on AWS, Glue Spark or EMR Spark SQL usually replaces Hive — but exam scenarios mentioning "existing Hive warehouse" or "HiveQL" expect EMR + Glue Catalog integration.</p>
+
+          <h3>HiveQL and execution engines</h3>
+          <p>HiveQL resembles SQL with Hadoop extensions (<code>CLUSTER BY</code>, <code>DISTRIBUTE BY</code>, <code>LATERAL VIEW EXPLODE</code>). On EMR, the default execution engine is often Tez or Spark (Hive-on-Spark) rather than classic MapReduce — still invoked via <code>hive -e</code> or Beeline. Partition pruning is automatic when the WHERE clause filters on partition columns; missing partitions require <code>MSCK REPAIR</code> or manual <code>ALTER ADD PARTITION</code> after new S3 folders land.</p>
+        </section>
+
+        <section class="section" id="grafana">
+          <h2>Amazon Managed Grafana</h2>
+          <p class="lead"><strong>Amazon Managed Grafana</strong> is a fully managed deployment of open-source Grafana for operational dashboards — metrics, logs, and traces. It targets DevOps and SRE monitoring, not business BI. Reach for Grafana when you need real-time infrastructure dashboards; reach for QuickSight when business analysts need governed BI over warehouses and SPICE.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-450.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-450.png" alt="Amazon Managed Grafana service introduction slide." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 450</span>Managed Grafana removes the need to run Grafana on EC2 — AWS handles patching, scaling, and HA of the Grafana server.</figcaption>
+          </figure>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-451.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-451.png" alt="Managed Grafana: open-source visualization, dashboards for metrics logs traces, use cases monitoring applications sensor data IT infrastructure alerts." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 451</span>Common data sources: CloudWatch (AWS metrics/logs), Amazon Managed Prometheus, X-Ray, Timestream, OpenSearch, RDS.</figcaption>
+          </figure>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-452.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-452.png" alt="Grafana workspace, data sources, user authentication via SAML 2.0 and IAM Identity Center." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 452</span>A workspace is an isolated Grafana tenant. Authentication integrates with IAM Identity Center (SSO) or SAML IdPs — not plain IAM users logging into Grafana directly.</figcaption>
+          </figure>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-453.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-453.png" alt="How Managed Grafana works: create workspace, manage user access, setup dashboards, connect data sources CloudWatch Timestream OpenSearch." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 453</span>Typical flow: create workspace → assign SSO groups → add CloudWatch/Timestream data sources → build dashboards and alert rules.</figcaption>
+          </figure>
+
+          <h3>Workspace and data sources</h3>
+          <ul>
+            <li><strong>Workspace</strong> — logically isolated Grafana server (URL, plugins, users). One workspace per environment is common.</li>
+            <li><strong>Data sources</strong> — CloudWatch, AMP, X-Ray, Timestream, OpenSearch, Prometheus, SQL databases via plugins.</li>
+            <li><strong>Authentication</strong> — AWS IAM Identity Center (successor to SSO) or external SAML 2.0; map IdP groups to Grafana roles (Admin, Editor, Viewer).</li>
+          </ul>
+
+          <h3>Grafana versus QuickSight</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Need</th><th>Choose</th></tr></thead>
+              <tbody>
+                <tr><td>Real-time ops dashboards (CPU, queue depth, error rates)</td><td><strong>Managed Grafana</strong> + CloudWatch/Prometheus</td></tr>
+                <tr><td>Business KPIs, SPICE, row-level security for analysts</td><td><strong>QuickSight</strong></td></tr>
+                <tr><td>Log search and ad-hoc JSON queries</td><td><strong>OpenSearch Dashboards</strong> or Grafana + OpenSearch datasource</td></tr>
+                <tr><td>IoT time-series at scale</td><td>Grafana + <strong>Timestream</strong> datasource</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="section" id="opensearch">
+          <h2>Amazon OpenSearch Service</h2>
+          <p class="lead"><strong>Amazon OpenSearch Service</strong> is a managed search and analytics engine for log analytics, full-text search, and real-time application monitoring. A <strong>domain</strong> is a cluster of nodes; <strong>OpenSearch Dashboards</strong> provides Kibana-compatible visualisation. Ingest via API, Kinesis Data Firehose, Lambda, or Logstash.</p>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-455.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-455.png" alt="Amazon OpenSearch: fully managed search engine with Dashboards for real-time analysis, use cases application monitoring and BI." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 455</span>OpenSearch (forked from Elasticsearch) powers log analytics, full-text search, and observability. Dashboards (formerly Kibana) ships with the service.</figcaption>
+          </figure>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-456.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-456.png" alt="OpenSearch pricing pay as you go, fully managed infrastructure, manual scale, AWS integration, multi-AZ snapshots." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 456</span>You scale instance types and counts manually or via Auto-Tune. Multi-AZ and automated snapshots improve availability — not serverless unless you pick OpenSearch Serverless.</figcaption>
+          </figure>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-457.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-457.png" alt="OpenSearch components: documents as JSON, indices as collections, types deprecated in modern versions." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 457</span>A document is JSON with fields. An index groups related documents. Document _type is deprecated — one mapping per index in OpenSearch 2.x.</figcaption>
+          </figure>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-458.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-458.png" alt="OpenSearch nodes data master client, cluster equals domain, shards primary and replica partitions." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 458</span>Data nodes hold shards; dedicated master nodes coordinate cluster state (recommended at production scale); optional client/coordinating nodes route queries.</figcaption>
+          </figure>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-459.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-459.png" alt="OpenSearch infrastructure diagram showing nodes and primary replica shards across cluster." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 459</span>Primary shards hold authoritative data; replica shards copy primaries for read scaling and failover. Shard count is fixed at index creation.</figcaption>
+          </figure>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-460.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-460.png" alt="Creating OpenSearch index with PUT settings number_of_shards and mappings for name and age fields." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 460</span>Index settings include shard and replica counts — choose shard count based on data volume (guidance below). Mappings define field types and analyzers.</figcaption>
+          </figure>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-461.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-461.png" alt="Adding document to OpenSearch index with POST and JSON body." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 461</span>Index documents with explicit ID or auto-generated ID. Bulk API (<code>_bulk</code>) ingests high-throughput streams from Firehose or Lambda.</figcaption>
+          </figure>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-462.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-462.png" alt="Searching OpenSearch index with GET _search and match query on name field." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 462</span>Query DSL supports match, term, bool, aggregations. Dashboards builds visualisations on top of saved searches.</figcaption>
+          </figure>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-463.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-463.png" alt="OpenSearch domain configuration, dedicated master nodes, S3 snapshot repository for restore." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 463</span>Register an S3 snapshot repository for point-in-time recovery. Dedicated masters prevent data nodes from electing split-brain under load.</figcaption>
+          </figure>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-464.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-464.png" alt="OpenSearch what to avoid: OLTP workloads, over-sharding, using as primary transactional store." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 464</span>OpenSearch is an search/analytics engine — not OLTP. Too many tiny shards exhaust JVM heap (each shard has overhead).</figcaption>
+          </figure>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-465.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-465.png" alt="OpenSearch performance: JVM memory pressure, shard optimization, delete old indices, archive to Glacier." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 465</span><code>JVMMemoryPressure</code> above ~85% triggers alerts; circuit breakers reject queries before OOM. Reduce shards, delete cold indices, or scale up.</figcaption>
+          </figure>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-466.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-466.png" alt="OpenSearch security authentication native and external SAML OpenID, RBAC and ABAC authorization." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 466</span>Fine-grained access control (FGAC) integrates with IAM or internal user DB. SAML/OIDC for SSO. Map roles to index patterns.</figcaption>
+          </figure>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-467.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-467.png" alt="OpenSearch encryption in transit TLS at rest KMS, audit logging for security issues." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 467</span>Enable node-to-node encryption and HTTPS. Use KMS for at-rest encryption. Enable audit logs to S3/CloudWatch for compliance.</figcaption>
+          </figure>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-468.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-468.png" alt="OpenSearch Dashboards visualization line bar pie charts customizable dashboards." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 468</span>Dashboards is the built-in visual layer — similar role to Kibana. Not a replacement for QuickSight business BI.</figcaption>
+          </figure>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-469.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-469.png" alt="OpenSearch storage tiers Hot UltraWarm Cold with S3 backing for cost-effective archival." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 469</span>Hot = SSD data nodes for active indices. UltraWarm = S3-backed read-only warm tier. Cold = lowest-cost S3 archival attachable to UltraWarm nodes.</figcaption>
+          </figure>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-470.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-470.png" alt="OpenSearch cross-cluster replication for availability and disaster recovery." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 470</span>Cross-cluster replication (CCR) copies indices to a follower domain in another Region for DR and geo-read scaling.</figcaption>
+          </figure>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-471.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-471.png" alt="OpenSearch index state management ISM automates index lifecycle for cost and performance." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 471</span>Index State Management (ISM) policies transition indices: hot → warm → cold → delete on age or size thresholds.</figcaption>
+          </figure>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-472.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-472.png" alt="OpenSearch infrastructure management disk scale master node count for resilience." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 472</span>Right-size data nodes (heap ≈ 50% of RAM; AWS recommends leaving headroom). Use 3 dedicated masters in production multi-AZ domains.</figcaption>
+          </figure>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-473.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-473.png" alt="OpenSearch Serverless auto-scales on demand pay per use integrates Lambda S3 Kinesis." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 473</span>Serverless removes capacity planning; collections auto-scale OCUs. Good for variable log/search workloads without domain tuning.</figcaption>
+          </figure>
+
+          <h3>UltraWarm and cold storage tiers</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Tier</th><th>Backing</th><th>Access pattern</th><th>Cost</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Hot</strong></td><td>SSD on data nodes</td><td>Frequent read/write, real-time dashboards</td><td>Highest compute + storage</td></tr>
+                <tr><td><strong>UltraWarm</strong></td><td>S3 + local cache on warm nodes</td><td>Read-only, infrequent query, searchable</td><td>Lower — fewer data nodes for same TB</td></tr>
+                <tr><td><strong>Cold</strong></td><td>S3 only (attached to UltraWarm)</td><td>Rare access, archival compliance</td><td>Lowest — minimal compute until rehydrate</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>ISM policies automate transitions: e.g. day 7 hot → warm, day 30 snapshot to cold, day 365 delete. Moving back to hot for reindexing is supported but slower than hot-only indices. The deck also mentions archiving to Glacier for unused indices — in practice ISM snapshot-to-S3 and cold tier achieve the same cost goal within OpenSearch without exporting to a separate Glacier vault.</p>
+
+          <h3>Performance — JVM memory pressure and circuit breakers</h3>
+          <p>OpenSearch runs on the JVM. Each shard, segment, and field cache consumes heap. CloudWatch metric <code>JVMMemoryPressure</code> measures heap usage; sustained values above ~85% risk GC thrashing and rejected requests. OpenSearch uses <strong>circuit breakers</strong> (parent, fielddata, request) to fail queries before out-of-memory kills — a breaker trip means "reduce load or scale up", not "disable safety". Mitigations: fewer/larger shards on new indices, force-merge old segments, delete unused indices, move cold data to UltraWarm, upgrade to larger <code>r6g</code> data nodes, and avoid <code>wildcard</code> queries on high-cardinality text fields in production.</p>
+
+          <h3>Key components recap</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Term</th><th>Meaning</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Index</strong></td><td>Logical namespace — like a database table for JSON documents</td></tr>
+                <tr><td><strong>Document</strong></td><td>JSON object with fields; smallest unit indexed and searched</td></tr>
+                <tr><td><strong>Shard</strong></td><td>Horizontal partition of an index; primary + optional replicas</td></tr>
+                <tr><td><strong>Node</strong></td><td>EC2 instance running OpenSearch process (data, master, or ultrawarm)</td></tr>
+                <tr><td><strong>Domain</strong></td><td>AWS-managed cluster — endpoint, version, VPC, security config</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Shard sizing</h3>
+          <p>Shard count is set at index creation and is hard to change without reindexing. Guidance:</p>
+          <ul>
+            <li>Target <strong>10–50 GB per primary shard</strong> for log analytics (balance parallelism vs overhead).</li>
+            <li>Each shard consumes JVM heap — over-sharding causes <code>JVMMemoryPressure</code> and circuit breaker trips.</li>
+            <li>Formula starting point: <code>primary_shards = ceil(expected_index_size_GB / 30)</code>, then validate against query latency and heap.</li>
+            <li>Replicas multiply storage but improve read throughput and HA — <code>number_of_replicas: 1</code> minimum for production.</li>
+          </ul>
+
+          <h3>Index, bulk ingest, and search — REST API</h3>
+<pre data-lang="json" data-title="OpenSearch — create index" data-explain="Define three primary shards and one replica. Mappings lock field types — text for full-text, keyword for exact filters."><code>PUT /logs-app-2026.08.01
+{
+  "settings": {
+    "index": {
+      "number_of_shards": 3,
+      "number_of_replicas": 1
+    }
+  },
+  "mappings": {
+    "properties": {
+      "@timestamp": { "type": "date" },
+      "level":      { "type": "keyword" },
+      "message":    { "type": "text" }
+    }
+  }
+}</code></pre>
+<pre data-lang="json" data-title="OpenSearch — bulk index" data-explain="Bulk API for high-throughput ingestion. Firehose and Lambda use the same pattern when shipping logs to a domain."><code>POST /_bulk
+{ "index": { "_index": "logs-app-2026.08.01" } }
+{ "@timestamp": "2026-08-01T12:00:00Z", "level": "ERROR", "message": "Timeout" }
+{ "index": { "_index": "logs-app-2026.08.01" } }
+{ "@timestamp": "2026-08-01T12:00:01Z", "level": "INFO", "message": "OK" }</code></pre>
+<pre data-lang="json" data-title="OpenSearch — search query" data-explain="Bool query combines filters. Use keyword fields for exact match; text fields for full-text search."><code>GET /logs-app-2026.08.01/_search
+{
+  "size": 100,
+  "query": {
+    "bool": {
+      "filter": [
+        { "term": { "level": "ERROR" } },
+        { "range": { "@timestamp": { "gte": "now-1h" } } }
+      ]
+    }
+  },
+  "aggs": {
+    "errors_by_host": { "terms": { "field": "host.keyword", "size": 10 } }
+  }
+}</code></pre>
+
+          <h3>Ingestion paths</h3>
+          <ul>
+            <li><strong>Kinesis Data Firehose</strong> — near-real-time delivery from streams/logs to OpenSearch with optional Lambda transform; handles buffering and retries.</li>
+            <li><strong>Lambda</strong> — custom parsing/enrichment on CloudWatch Logs subscriptions or S3 events before bulk index.</li>
+            <li><strong>Logstash / OpenSearch Ingestion</strong> — managed ingestion pipelines (successor patterns to self-managed Logstash).</li>
+          </ul>
+
+          <h3>Snapshots and ISM</h3>
+          <p>Register an S3 snapshot repository on the domain; take automated snapshots for restore and migration. <strong>Index State Management (ISM)</strong> policies move indices to UltraWarm after N days, snapshot to cold tier, then delete — controlling cost without manual curation.</p>
+
+          <h3>Security — FGAC, IAM, and network isolation</h3>
+          <p><strong>Fine-grained access control (FGAC)</strong> enables an internal user database or IAM-based roles mapped to OpenSearch security roles. Index-level, document-level, and field-level permissions restrict which indices a user searches. External IdPs integrate via SAML 2.0 or OpenID Connect for SSO.</p>
+          <ul>
+            <li><strong>IAM principal access</strong> — attach IAM policies allowing <code>es:ESHttp*</code> on the domain ARN; FGAC maps the IAM role to OpenSearch permissions. Useful for Lambda/Firehose delivery roles.</li>
+            <li><strong>Internal user database</strong> — master user defined at domain creation; additional users in Dashboards security UI when FGAC enabled.</li>
+            <li><strong>VPC domain</strong> — endpoints only in your VPC; no public internet path. Access from Dashboards, Lambda, or Firehose requires VPC endpoints or same-VPC placement.</li>
+            <li><strong>Public domain</strong> — domain endpoint on internet; combine resource-based access policies with FGAC and IP allow lists.</li>
+            <li><strong>Encryption</strong> — require HTTPS (TLS 1.2+); enable encryption at rest with KMS on EBS; optional node-to-node encryption.</li>
+            <li><strong>Audit logs</strong> — publish search, index, and error logs to CloudWatch or S3 for compliance forensics.</li>
+          </ul>
+
+          <h3>Reliability — dedicated masters, multi-AZ, and snapshots</h3>
+          <p>Production domains should use <strong>three dedicated master nodes</strong> (small instance types suffice — masters coordinate, they do not hold all data) across three AZs to avoid split-brain. Data nodes run in multi-AZ with replica shards on different AZs. Register an <strong>S3 snapshot repository</strong> (<code>repository-s3</code> plugin configured on domain) and schedule automated snapshots; restore to a new domain for DR tests. Cross-cluster replication copies indices to a follower domain in another Region for geo-redundancy.</p>
+
+          <h3>OpenSearch Serverless</h3>
+          <p><strong>OpenSearch Serverless</strong> removes domain capacity planning. Collections (time series, search, vector) auto-scale in OpenSearch Compute Units (OCUs). Data and indexing OCUs bill separately; ideal for spiky log volumes without provisioning <code>r6g</code> data nodes. Integrates with Lambda, S3, and Kinesis for ingestion. Trade-off: less manual control over shard topology and version plugins versus managed domains.</p>
+
+          <div class="callout warn"><strong>Memory pressure.</strong> When <code>JVMMemoryPressure</code> stays high, scale up data nodes, reduce shard count on new indices, delete unused indices, or move old data to UltraWarm/Cold — not "add more replicas" (replicas increase memory use).</div>
+        </section>
+
+        <section class="section" id="quicksight">
+          <h2>Amazon QuickSight</h2>
+          <p class="lead"><strong>Amazon QuickSight</strong> is AWS's serverless business intelligence service. Authors build analyses and publish dashboards; readers consume them in-browser or embedded in apps. Data comes from SPICE (in-memory cache) or <strong>direct query</strong> to live sources.</p>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-475.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-475.png" alt="Amazon QuickSight AWS visualization service ML-powered dashboards data exploration anomaly detection forecasting." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 475</span>QuickSight is AWS-native BI — analyses, dashboards, ML insights (forecast, anomaly detection), and embedded analytics.</figcaption>
+          </figure>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-476.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-476.png" alt="QuickSight scalability serverless fully managed ML-powered auto scales." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 476</span>Serverless — no infra to scale. SPICE or direct query to sources. Pricing is per-user (authors/readers) plus SPICE capacity.</figcaption>
+          </figure>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-477.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-477.png" alt="QuickSight analysis workspace visuals charts published dashboards." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 477</span>Workflow: connect data source → create dataset → build analysis with visuals → publish dashboard to readers.</figcaption>
+          </figure>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-478.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-478.png" alt="QuickSight SPICE in-memory engine 10GB per user speed automatic refresh synchronization." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 478</span>SPICE = Super-fast Parallel In-memory Calculation Engine. Caches dataset snapshots for sub-second visuals without re-querying the warehouse.</figcaption>
+          </figure>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-479.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-479.png" alt="QuickSight dashboard features automatic refresh collaboration sharing mobile responsive." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 479</span>Dashboards refresh on schedule (hourly in Enterprise). Share via link or email; mobile layouts supported.</figcaption>
+          </figure>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-480.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-480.png" alt="QuickSight data sources AWS S3 RDS Aurora Redshift Athena pipeline scenario." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 480</span>Typical lake pipeline: S3 → Glue → Athena → QuickSight. QuickSight can also connect directly to Redshift, RDS, SaaS connectors.</figcaption>
+          </figure>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-481.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-481.png" alt="QuickSight data sources CSV Excel OpenSearch JDBC ODBC third-party databases." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 481</span>Direct query supports live SQL sources; SPICE import supports files and many AWS services. OpenSearch as a source for log-derived KPIs.</figcaption>
+          </figure>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-482.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-482.png" alt="QuickSight what to avoid overloading dashboards poor security using for ETL." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 482</span>Do not use QuickSight as ETL — transform in Glue/EMR. Too many visuals on one sheet slows SPICE refresh.</figcaption>
+          </figure>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-484.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-484.png" alt="QuickSight Standard edition pricing 9 or 12 dollars per user 10GB SPICE." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 484</span>Standard: ~$9/user/month (annual) or $12 monthly; 10 GB SPICE included; $0.25/GB extra. No RLS or hourly refresh.</figcaption>
+          </figure>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-485.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-485.png" alt="QuickSight Enterprise RLS hourly refresh ML insights admin encryption pay-per-session readers." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 485</span>Enterprise adds RLS, column-level security, hourly SPICE refresh, ML Insights, SSO admin, encryption at rest controls.</figcaption>
+          </figure>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-486.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-486.png" alt="QuickSight Enterprise author reader licenses SPICE pricing per GB month." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 486</span>Authors create content ($18–24/month); Readers pay per session ($0.30, capped $5/month) or per-user pricing. SPICE overage $0.38/GB/month.</figcaption>
+          </figure>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-487.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-487.png" alt="QuickSight Enterprise embedded paginated reports alerts anomaly Author Pro Reader Pro QuickSight Q." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 487</span>Embedded analytics (API/SDK), paginated reports, alerts, Author Pro/Reader Pro for Amazon Q generative BI.</figcaption>
+          </figure>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-489.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-489.png" alt="QuickSight security IAM Active Directory MFA IAM role for data source access encrypted sources." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 489</span>QuickSight assumes an IAM role in your account to reach S3, Athena, Redshift. Encrypted sources need KMS decrypt on that role.</figcaption>
+          </figure>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-490.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-490.png" alt="QuickSight VPC access via ENI Direct Connect private subnet network isolation IP restriction." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 490</span>Enterprise VPC connections place ENIs in your subnets so QuickSight reaches private RDS/Redshift without public endpoints.</figcaption>
+          </figure>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-491.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-491.png" alt="QuickSight cross-region account Standard edition security group on RDS data source." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 491</span>Standard edition cannot run inside your VPC — data sources must be reachable publicly or via allowed security group from QuickSight service.</figcaption>
+          </figure>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-492.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-492.png" alt="QuickSight Enterprise cross-account VPC ENI peering for private RDS Redshift." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 492</span>Enterprise: create VPC connection ENI in account A; peer or share VPC to account B RDS/Redshift in private subnets.</figcaption>
+          </figure>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-493.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-493.png" alt="QuickSight Enterprise Transit Gateway PrivateLink VPC sharing cross-account connectivity." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 493</span>At scale: Transit Gateway, PrivateLink, or RAM-shared VPC for multi-account BI without exposing databases to the internet.</figcaption>
+          </figure>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-494.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-494.png" alt="QuickSight row-level security and column-level security Enterprise edition dataset filters." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 494</span>RLS filters rows per viewer using username or group rules on datasets. Column-level security hides fields from specific roles — Enterprise only.</figcaption>
+          </figure>
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-495.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-495.png" alt="Amazon Q in QuickSight natural language queries visualizations summaries generative BI." loading="lazy">
+            </a>
+            <figcaption><span class="slide-no">Slide 495</span>Amazon Q in QuickSight answers natural-language questions and builds visuals — Author Pro / Reader Pro licensing.</figcaption>
+          </figure>
+
+          <h3>SPICE capacity planning</h3>
+          <p>Each Standard author includes <strong>10 GB SPICE</strong> per user; Enterprise authors share pooled capacity purchased per GB ($0.38/GB/month beyond included allocation). Size imports by aggregating in Athena/Redshift before SPICE load when possible — importing a 500 GB fact table into SPICE fails or incurs heavy overage. Incremental refresh (Enterprise) updates changed partitions only. When data exceeds SPICE or must be live, switch the dataset to <strong>direct query</strong> and accept source latency/cost.</p>
+
+          <h3>SPICE versus direct query</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Aspect</th><th>SPICE</th><th>Direct query</th></tr></thead>
+              <tbody>
+                <tr><td>Data location</td><td>Copied into QuickSight in-memory store</td><td>Live query to source on each visual refresh</td></tr>
+                <tr><td>Performance</td><td>Fast — optimised columnar engine</td><td>Depends on source (Redshift, Athena latency)</td></tr>
+                <tr><td>Freshness</td><td>Scheduled refresh (daily Standard; hourly Enterprise)</td><td>Always current at query time</td></tr>
+                <tr><td>Capacity</td><td>10 GB/user Standard; purchase additional SPICE GB</td><td>No SPICE storage — source bears load</td></tr>
+                <tr><td>Cost</td><td>Included allocation + $0.38/GB/month overage</td><td>No SPICE charge; source query costs (Athena TB scanned)</td></tr>
+                <tr><td>When to pick</td><td>Dashboards with many users hitting same metrics</td><td>Real-time ops metrics, huge datasets that won't fit SPICE</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Authentication to data sources</h3>
+          <p>QuickSight runs in the AWS service account and assumes an <strong>IAM role</strong> you configure (or auto-created) to read S3, Athena, Glue Catalog, Redshift, and RDS. For <strong>Athena</strong>, the role needs S3 read on query results and data paths plus Glue catalog permissions. For <strong>Redshift</strong>, use a Redshift data source with credentials stored in QuickSight or IAM-based federation. For <strong>RDS/Aurora in a private VPC</strong>, create a <strong>VPC connection</strong> (Enterprise) — QuickSight attaches ENIs in your subnets with security groups allowing inbound from QuickSight to the database port.</p>
+
+          <h3>Embedded analytics</h3>
+          <p><strong>QuickSight Embedded</strong> (Enterprise) registers domains and generates signed URLs or uses the embedding SDK to place dashboards in SaaS apps. Row-level security rules still apply per embedded viewer identity.</p>
+
+          <h3>Licensing recap</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Edition</th><th>Who</th><th>Key limits</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Standard</strong></td><td>Small teams, authors only</td><td>10 GB SPICE/user, no RLS, no VPC data sources</td></tr>
+                <tr><td><strong>Enterprise</strong></td><td>Enterprise BI, embedded, SSO</td><td>RLS, column-level security, hourly refresh, VPC connections, readers per-session</td></tr>
+                <tr><td><strong>Author Pro / Reader Pro</strong></td><td>Generative BI</td><td>Amazon Q natural language Q&amp;A on datasets</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Row-level and column-level security</h3>
+          <p><strong>Row-level security (RLS)</strong> applies dataset rules that filter rows based on the viewer's QuickSight username or group membership — e.g. <code>{region} = &lt;user's region attribute&gt;</code>. Rules attach to datasets before dashboards; the same dashboard shows different rows per viewer. <strong>Column-level security</strong> hides sensitive fields (salary, SSN) from specific groups while other columns remain visible — configured per dataset field.</p>
+          <p>Both features require <strong>Enterprise edition</strong>. Standard edition shows all rows/columns in a published dashboard to every reader with access.</p>
+
+          <h3>Amazon Q in QuickSight</h3>
+          <p><strong>Amazon Q</strong> adds generative BI: users ask questions in natural language ("What were top products last quarter?") and Q generates visuals, narratives, or SQL-backed answers from SPICE or direct-query datasets. Requires <strong>Author Pro</strong> or <strong>Reader Pro</strong> licensing on top of Enterprise. Q respects RLS — users only see answers scoped to their permitted rows.</p>
+
+          <h3>Cross-Region and cross-account access patterns</h3>
+          <p>QuickSight runs in a chosen Region; datasets can reference cross-Region S3/Athena if IAM permits. For <strong>cross-account private databases</strong>: Enterprise VPC connections plus VPC peering, Transit Gateway, PrivateLink, or RAM-shared VPC (slides 491–493). Standard edition cannot deploy ENIs into your VPC — RDS/Redshift must allow inbound from the QuickSight service CIDR or use public endpoints (not recommended for production).</p>
+
+          <div class="callout exam"><strong>RLS and column-level security</strong> are Enterprise-only. Exam scenarios where "each sales rep sees only their region" → QuickSight Enterprise with row-level security dataset rules, not IAM alone.</div>
+        </section>
+
+        <section class="section" id="deeper">
+          <h2>Deeper detail and exam edge cases</h2>
+          <p class="lead">Operational limits, billing meters, and failure modes for Lake Formation, EMR, OpenSearch, and QuickSight — the numbers and traps the deck slides over because they assume you already run these services in production.</p>
+
+          <h3>Limits and quotas that decide answers</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Limit</th><th>Value</th><th>Adjustable?</th><th>Why it matters</th></tr></thead>
+              <tbody>
+                <tr><td>Lake Formation permissions model</td><td>Layers on IAM — does not replace it</td><td>N/A (design)</td><td>Both LF grants and IAM must allow access; LF alone is insufficient if IAM denies S3.</td></tr>
+                <tr><td><code>IAMAllowedPrincipals</code> data lake setting</td><td>When enabled, IAM-only access bypasses LF enforcement</td><td>Yes — disable for LF-only governance</td><td>Exam trap: "LF permissions not working" often means this backwards-compatibility flag is still on.</td></tr>
+                <tr><td>LF-Tag values per tag key</td><td>Up to 50 values per key</td><td>Soft (tag design)</td><td>Tag inheritance applies to new tables; over-tagging complicates grant expressions.</td></tr>
+                <tr><td>LF-Tag keys / values on a resource</td><td>Up to 50 LF-Tags per resource</td><td>Soft</td><td>LF-TBAC grants match tag expressions — plan keys like <code>Team</code>, <code>Environment</code> early.</td></tr>
+                <tr><td>Cross-account sharing</td><td>RAM share + consumer resource link required</td><td>N/A (workflow)</td><td>Consumer queries through a resource link alias, not the producer table name directly.</td></tr>
+                <tr><td>EMR managed scaling — max core/task nodes</td><td>Up to 10,000 instances per instance group (soft quota)</td><td>Yes — Service Quotas request</td><td>Large Spark jobs need headroom; default account EC2 limits may bind first.</td></tr>
+                <tr><td>EMR custom auto scaling</td><td>Instance groups only — not instance fleets</td><td>No (hard product limit)</td><td>"Custom scaling policy" in a question implies instance groups, not fleets.</td></tr>
+                <tr><td>EMR on EKS / EMR Serverless</td><td>No persistent HDFS — S3 via EMRFS</td><td>N/A</td><td>Serverless bills vCPU-hours and memory-GB-hours per job, not cluster idle time.</td></tr>
+                <tr><td>OpenSearch dedicated masters (production)</td><td>Three master nodes recommended (quorum)</td><td>No (best practice)</td><td>Odd count avoids split-brain; masters should not hold data-heavy indices.</td></tr>
+                <tr><td>OpenSearch shard size guidance</td><td>Target 10–50 GB per shard</td><td>N/A (sizing)</td><td>Over-sharding wastes JVM heap; under-sharding limits parallelism on reindex.</td></tr>
+                <tr><td>OpenSearch Serverless OCUs</td><td>Minimum 2 OCUs for indexing + 2 for search (typical floor)</td><td>Yes — scales with load</td><td>OCUs bill hourly even at minimum capacity — not true scale-to-zero.</td></tr>
+                <tr><td>QuickSight SPICE — Standard</td><td>10 GB SPICE per author included</td><td>Yes — purchase additional GB</td><td>Importing raw fact tables blows the allocation; aggregate in Athena first.</td></tr>
+                <tr><td>QuickSight Reader sessions</td><td>~$0.30 per session, capped ~$5/month per reader</td><td>N/A (pricing)</td><td>Enterprise per-session readers differ from per-user author pricing.</td></tr>
+                <tr><td>QuickSight RLS / column-level security</td><td>Enterprise edition only</td><td>No (edition lock)</td><td>Standard cannot enforce row filters — wrong edition is a common exam distractor.</td></tr>
+                <tr><td>QuickSight SPICE refresh — Standard vs Enterprise</td><td>Daily vs hourly (and incremental on Enterprise)</td><td>Edition upgrade</td><td>Near-real-time dashboards need Enterprise or direct query.</td></tr>
+                <tr><td>Hive metastore on EMR</td><td>Local (MySQL on master), external RDS, or Glue Data Catalog</td><td>N/A (architecture)</td><td>Transient labs use local; production uses Glue Catalog or external RDS for durability.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>What you actually pay for</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Billed dimension</th><th>Unit</th><th>How to spend less</th></tr></thead>
+              <tbody>
+                <tr><td>Lake Formation</td><td>No LF-specific charge — pay underlying Glue, S3, Athena</td><td>Disable <code>IAMAllowedPrincipals</code> only after migrating grants; avoid duplicate crawlers.</td></tr>
+                <tr><td>EMR on EC2</td><td>EC2 instance-hour + EMR uplift per instance-hour (per-second billing with 1-minute minimum)</td><td>Use Spot on task nodes only; transient clusters with <code>--auto-terminate</code>; EMR Serverless for intermittent jobs.</td></tr>
+                <tr><td>EMR Serverless</td><td>vCPU-hour + memory-GB-hour per worker while job runs</td><td>Right-size executors; prefer over long-running idle EC2 clusters for batch-only workloads.</td></tr>
+                <tr><td>EMR on EKS</td><td>EKS cluster cost + EC2/Fargate for pods + EMR on EKS premium</td><td>Share EKS with other workloads; avoid a dedicated cluster for one nightly job.</td></tr>
+                <tr><td>OpenSearch managed domain</td><td>Instance-hour per data/master/UltraWarm node + EBS + S3 (UltraWarm/Cold)</td><td>ISM policies to UltraWarm/Cold; right-size shards; delete idle domains after labs.</td></tr>
+                <tr><td>OpenSearch Serverless</td><td>OCU-hour (indexing and search billed separately)</td><td>Use for spiky logs; domains win for steady, predictable query load with custom plugins.</td></tr>
+                <tr><td>Amazon Managed Grafana</td><td>Active user per workspace-month + optional enterprise plugins</td><td>SSO users you actually log in; do not duplicate QuickSight for business BI.</td></tr>
+                <tr><td>QuickSight authors</td><td>Per author per month (Standard ~$9–12; Enterprise ~$18–24)</td><td>Minimise author seats; use Readers for consumers.</td></tr>
+                <tr><td>QuickSight SPICE overage</td><td>~$0.38/GB/month beyond included allocation</td><td>Pre-aggregate in SQL; direct query when data is too large for SPICE.</td></tr>
+                <tr><td>QuickSight Reader sessions</td><td>Per session (~$0.30) up to monthly cap</td><td>Per-user reader pricing if dashboards are opened daily.</td></tr>
+                <tr><td>Amazon Q in QuickSight</td><td>Author Pro / Reader Pro add-on on Enterprise</td><td>Enable only for teams that need NL queries; Q respects RLS but adds seat cost.</td></tr>
+                <tr><td>Cross-AZ / NAT (EMR, OpenSearch VPC)</td><td>Data transfer per GB + NAT processing</td><td>Keep cluster and data in same AZ where possible; use VPC endpoints for S3.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout cost"><strong>Biggest waste in this section.</strong> A long-running EMR EC2 cluster left up "for convenience" bills EC2 plus EMR uplift 24×7 — often more than the entire analytics pipeline should cost. Use transient clusters, managed scaling, or EMR Serverless for batch-only Spark.</div>
+          <div class="callout danger"><strong>OpenSearch domains do not pause.</strong> A forgotten <code>r6g.large.search</code> domain after a lab runs continuously. EMR HDFS on core nodes is lost on termination — if you stored output only on HDFS, it is gone; production paths must use EMRFS on S3.</div>
+
+          <h3>Traps that catch people</h3>
+          <ul>
+            <li><strong>LF replaces IAM —</strong> Teams grant LF <code>SELECT</code> but forget the analyst role still needs IAM S3 and <code>lakeformation:GetDataAccess</code>. Athena fails with opaque access errors. Fix both layers.</li>
+            <li><strong><code>IAMAllowedPrincipals</code> silently bypasses LF —</strong> The backwards-compatibility setting lets legacy IAM-only principals ignore LF table permissions. New LF grants appear ignored until you disable it account-wide.</li>
+            <li><strong>Spot on master or sole core nodes —</strong> Spot interruption on the master kills the cluster; core nodes hold HDFS replicas. Use Spot on task nodes only for fault-tolerant compute.</li>
+            <li><strong>Instance fleets with custom scaling policies —</strong> Custom CloudWatch scaling attaches to instance groups, not fleets. Fleets use managed scaling only — exam wording matters.</li>
+            <li><strong>EMRFS consistent view —</strong> Pre-2020 exams required consistent view for S3 LIST consistency. S3 is strongly consistent now — enabling consistent view adds unnecessary overhead on new clusters.</li>
+            <li><strong>HDFS as durable storage —</strong> Core node HDFS dies with the cluster. Treat HDFS as shuffle cache; land curated data on S3 via EMRFS.</li>
+            <li><strong>Over-sharding OpenSearch —</strong> Too many small shards exhaust JVM heap on data nodes. Aim for 10–50 GB per shard on new indices; use _shrink or reindex to consolidate.</li>
+            <li><strong>Skipping dedicated masters at scale —</strong> Data nodes doubling as masters under load cause cluster instability. Production domains use three dedicated master nodes.</li>
+            <li><strong>QuickSight Standard for RLS —</strong> Row-level and column-level security require Enterprise. Buying Standard and trying dataset user filters fails compliance scenarios.</li>
+            <li><strong>SPICE for huge raw tables —</strong> Importing hundreds of GB into SPICE triggers overage charges or import failure. Aggregate in Athena/Redshift first or use direct query.</li>
+            <li><strong>Grafana vs QuickSight —</strong> Managed Grafana monitors infrastructure metrics; it is not governed BI with SPICE and RLS. Wrong tool for "sales dashboard per region".</li>
+            <li><strong>Cross-account LF without resource link —</strong> Consumer accepts RAM share but analysts query empty catalog until a resource link is created and granted locally.</li>
+          </ul>
+
+          <h3>Troubleshooting playbook</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Symptom</th><th>Most likely cause</th><th>What to check / fix</th></tr></thead>
+              <tbody>
+                <tr><td>Athena "not authorized" despite LF grant</td><td>IAM deny, <code>IAMAllowedPrincipals</code>, or missing <code>GetDataAccess</code></td><td>Lake Formation → Data lake settings; IAM role policy; LF grant on table or resource link; CloudTrail for <code>GetDataAccess</code> denials.</td></tr>
+                <tr><td>Shared LF table invisible in consumer account</td><td>RAM not accepted or no resource link</td><td>RAM console share status; create resource link; grant <code>DESCRIBE</code>/<code>SELECT</code> on link to analyst role.</td></tr>
+                <tr><td>EMR job slow, YARN pending memory high</td><td>Under-provisioned task nodes or skewed partitions</td><td>CloudWatch <code>YARNMemoryAvailablePercentage</code>; add task nodes or enable managed scaling; repartition input in Spark.</td></tr>
+                <tr><td>EMR cluster terminated — data missing</td><td>Output written to HDFS not S3</td><td>Use <code>s3://</code> paths with EMRFS; confirm <code>fs.s3a</code> or EMRFS settings; re-run job with S3 destination.</td></tr>
+                <tr><td>OpenSearch <code>JVMMemoryPressure</code> &gt; 85%</td><td>Too many shards, heavy aggregations, or undersized nodes</td><td>CloudWatch domain metrics; reduce shard count; ISM to UltraWarm; scale up data nodes; avoid wildcard text queries.</td></tr>
+                <tr><td>OpenSearch yellow/red cluster</td><td>Master unreachable or replica unassigned</td><td>Cluster health API; dedicated master quorum; disk watermarks on data nodes; AZ balance.</td></tr>
+                <tr><td>QuickSight SPICE refresh failed</td><td>Source timeout, schema change, or capacity exceeded</td><td>QuickSight dataset refresh history; reduce import size; fix SQL; purchase SPICE capacity or switch to direct query.</td></tr>
+                <tr><td>QuickSight RLS not filtering rows</td><td>RLS rules not applied to dataset or wrong edition</td><td>Enterprise edition; dataset RLS rules; user name must match rule column; republish dashboard.</td></tr>
+                <tr><td>Hive table missing after EMR restart</td><td>Local Derby/MySQL metastore on terminated master</td><td>Point Hive to Glue Data Catalog or external RDS; use <code>hive.metastore.client.factory.class</code> for AWS Glue metastore.</td></tr>
+                <tr><td>EMR Serverless job stuck starting</td><td>Application idle timeout or IAM on job role</td><td>EMR Serverless console job run logs; S3/KMS permissions on job execution role; pre-start application if cold.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Production patterns</h3>
+          <p>A governed lake pattern registers S3 locations in Lake Formation, applies LF-Tags by domain (<code>Finance</code>, <code>PII</code>), and shares read-only resource links to consumer accounts via RAM — Athena and Redshift Spectrum query through the same Glue Catalog without copying data. Row and column data filters enforce analyst scope; IAM execution roles for Glue and Athena still need least-privilege S3 and <code>lakeformation:GetDataAccess</code>. Disable <code>IAMAllowedPrincipals</code> only after every principal has LF grants.</p>
+          <div class="grid-2">
+            <div class="mini-card">
+              <h4>Batch analytics compute</h4>
+              <ul>
+                <li><strong>EMR Serverless</strong> or transient EMR for nightly Spark on S3.</li>
+                <li>Spot task nodes; core nodes On-Demand; Glue Data Catalog as Hive metastore.</li>
+                <li>Long-running custom libraries or sustained clusters → EMR on EC2 over Glue when DPU cost or Spark version control wins.</li>
+              </ul>
+            </div>
+            <div class="mini-card">
+              <h4>Search and BI layer</h4>
+              <ul>
+                <li>OpenSearch with ISM: hot → UltraWarm → cold snapshot; dedicated masters in prod.</li>
+                <li>QuickSight Enterprise with SPICE for shared KPIs; direct query for live ops.</li>
+                <li>Managed Grafana for pipeline/infra metrics — not analyst dashboards.</li>
+              </ul>
+            </div>
+          </div>
+          <p>Anti-pattern: running EMR as a 24×7 cluster for one hourly job because "startup is slow". Transient clusters with bootstrap actions, EMR Serverless, or Glue for the same transform cost less and reduce patch burden. Another anti-pattern: OpenSearch as primary data lake — index derived metrics and logs, not canonical Parquet.</p>
+          <div class="diagram">
+            <p class="diagram-title">Governed lake query path</p>
+            <div class="flow">
+              <div class="node is-source"><b>S3 raw/curated</b><small>registered in LF</small></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-store"><b>Glue Catalog</b><small>LF grants · filters</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-compute pulse"><b>Athena / Spectrum</b><small>GetDataAccess</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-serve"><b>QuickSight</b><small>SPICE · RLS</small></div>
+            </div>
+          </div>
+<pre data-lang="shell" data-title="Transient EMR — auto-terminate after Spark job" data-explain="Classic pattern for batch-only workloads: cluster shuts down when steps complete so you do not pay idle EC2 plus EMR uplift overnight."><code>aws emr create-cluster \
+  --name dea-batch-count \
+  --release-label emr-7.0.0 \
+  --applications Name=Spark Name=Hive \
+  --instance-type m5.xlarge --instance-count 3 \
+  --use-default-roles \
+  --auto-terminate \
+  --steps Type=Spark,Name=Count,ActionOnFailure=TERMINATE_CLUSTER,Args=[--class,org.apache.spark.examples.SparkPi,/usr/lib/spark/examples/jars/spark-examples.jar,10]</code></pre>
+
+          <h3>Where this fits with the rest of the exam</h3>
+          <p>Section 13 closes the analytics and governance loop after storage and SQL foundations. Lake Formation permissions assume you already understand S3 prefixes and the Glue Catalog from earlier sections; EMR and Hive overlap directly with Glue Spark jobs; OpenSearch and QuickSight sit at the serve layer of the pipeline.</p>
+          <ul>
+            <li><a href="s07-s3.html">Section 7 — S3</a>: LF registers S3 locations; EMRFS and Athena read the same <code>s3://</code> prefixes — lifecycle and encryption choices here affect every service in this section.</li>
+            <li><a href="s04-glue.html">Section 4 — Glue</a>: Glue Data Catalog is the default Hive metastore for EMR; compare Glue ETL versus EMR when a scenario mentions serverless Spark versus cluster control.</li>
+            <li><a href="s03-athena.html">Section 3 — Athena</a>: Lake Formation enforces column and row filters at Athena query time — the SQL engine section shows cost control; this section shows access control.</li>
+            <li><a href="s10-redshift.html">Section 10 — Redshift</a>: Redshift Spectrum and cross-account LF shares use the same Glue metadata; warehouse BI may stay in QuickSight or native Redshift dashboards.</li>
+            <li><a href="s16-management.html">Section 16 — Management</a>: CloudTrail audits LF API calls; IAM roles for EMR and Athena tie back to permission evaluation order and <code>PassRole</code>.</li>
+            <li><a href="s20-security.html">Section 20 — Security</a>: KMS encryption on S3 and OpenSearch domains; Macie complements LF-Tags for PII discovery before granting <code>SELECT</code>.</li>
+          </ul>
+          <div class="callout exam"><strong>How the exam frames choices here.</strong> "Centralise fine-grained access on a shared lake" → Lake Formation, not bucket policies alone. "Petabyte Spark with custom libraries and long runtime" → EMR on EC2, not Glue. "Least cluster operations for intermittent Spark" → EMR Serverless. "Sales rep sees only their region in dashboards" → QuickSight Enterprise RLS, not IAM. "Operational metrics and alerting" → Managed Grafana, not QuickSight.</div>
+        </section>
+
+        <section class="section" id="interview">
+          <h2>Interview questions</h2>
+          <p class="muted">Answer each one out loud before opening it.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+            <details class="qa">
+              <summary>What does Lake Formation add that S3 bucket policies and IAM cannot do alone?<span class="qa-tag">Exam</span></summary>
+              <div class="qa-body">
+                <p>LF adds <strong>centralised catalogue permissions</strong> on Glue tables with column-, row-, and cell-level data filters, LF-Tags for tag-based access, and cross-account sharing via RAM without copying data. IAM/S3 operate at the object prefix level and cannot enforce SQL-level column or row restrictions across Athena, Spectrum, and EMR consistently.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Explain LF-TBAC versus naming every table in a grant.<span class="qa-tag">Security</span></summary>
+              <div class="qa-body">
+                <p><strong>LF-Tags</strong> attach key-value labels to databases/tables/columns. Grants reference tag expressions (<code>Team=Finance</code>) so new tagged tables inherit access automatically. <strong>Named-resource grants</strong> list explicit <code>database.table</code> pairs — simpler for small lakes but operational overhead grows with table count.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>When would you choose EMR over AWS Glue for an ETL job?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p>Choose <strong>EMR</strong> for petabyte-scale Spark/Hive, custom JARs, HBase/Presto/Flink, fine-grained cluster tuning, or migrating on-prem Hadoop. Choose <strong>Glue</strong> when the question emphasises least operational overhead, native Data Catalog/crawler integration, or standard scheduled PySpark ETL at GB–TB scale.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Why should Spot Instances be used on task nodes but not the sole master node?<span class="qa-tag">Cost</span></summary>
+              <div class="qa-body">
+                <p>The <strong>master</strong> coordinates the cluster and runs critical services — losing it stops the cluster. <strong>Task nodes</strong> are stateless workers; Spot interruption with 2-minute notice is acceptable if YARN retries failed tasks. Core nodes hold HDFS data — Spot-only core fleets risk data loss if too many nodes disappear at once.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What is the difference between EMR core nodes and task nodes?<span class="qa-tag">Architecture</span></summary>
+              <div class="qa-body">
+                <p><strong>Core nodes</strong> run tasks and participate in HDFS — they store replicated blocks. <strong>Task nodes</strong> only run YARN containers; they do not store HDFS data. Scale task nodes for bursty compute; keep minimum core count for HDFS replication when not using S3-only (EMRFS) storage.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How does the Hive metastore relate to the Glue Data Catalog on EMR?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>EMR can configure the Hive metastore client to use <strong>AWS Glue Data Catalog</strong> as its backing store. DDL executed in Hive creates/updates Glue tables — the same metadata Athena and Spectrum query. Migration path: point EMR at Glue instead of self-managed RDS/Derby metastore.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Managed Grafana or QuickSight for a CloudWatch ops dashboard?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p><strong>Managed Grafana</strong> — built for metrics/logs/traces, native CloudWatch and Prometheus plugins, alerting on infra thresholds. <strong>QuickSight</strong> — business BI over warehouses with SPICE, RLS for analysts, not ideal for sub-minute infra alerting.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>OpenSearch domain is hitting JVMMemoryPressure alerts — what do you check?<span class="qa-tag">Troubleshooting</span></summary>
+              <div class="qa-body">
+                <p>Check <strong>shard count</strong> (too many small shards), force-merge or delete old indices, move aged data to <strong>UltraWarm/Cold</strong>, reduce field cardinality, scale up data node RAM, and verify queries are not returning huge result sets. Circuit breakers trip before OOM — fix root cause rather than disabling breakers.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How do you size primary shards for a new log index?<span class="qa-tag">Performance</span></summary>
+              <div class="qa-body">
+                <p>Estimate total index size, divide by target <strong>30 GB per shard</strong> (within the 10–50 GB guidance), round up for primaries. Set replicas separately for HA/read scaling. Shard count is fixed at creation — overshooting wastes heap; undershooting creates hot shards.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>SPICE or direct query for a Redshift dashboard refreshed every minute?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p><strong>Direct query</strong> — SPICE refresh minimum is daily (Standard) or hourly (Enterprise), not every minute. Direct query hits live Redshift for current data; accept higher source load or aggregate in Redshift materialised views first.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How does QuickSight reach an RDS instance in a private subnet?<span class="qa-tag">Security</span></summary>
+              <div class="qa-body">
+                <p><strong>Enterprise edition</strong> with a <strong>VPC connection</strong>: QuickSight creates ENIs in your subnets/security groups allowing traffic to RDS. Standard edition cannot — the database would need a public endpoint or unsupported workarounds. Cross-account uses VPC peering, PrivateLink, or shared VPC.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Cross-account Lake Formation share is accepted but Athena cannot query the table — what do you verify?<span class="qa-tag">Troubleshooting</span></summary>
+              <div class="qa-body">
+                <p>Confirm RAM share status, consumer created a <strong>resource link</strong>, LF <code>DESCRIBE/SELECT</code> granted on the link to the analyst role, IAM role has <code>lakeformation:GetDataAccess</code>, Athena workgroup uses that role, and underlying S3 bucket policy permits consumer if required.</p>
+              </div>
+            </details>
+          </div>
+        </section>
+
+        <section class="section" id="practice">
+          <h2>Hands-on practice</h2>
+          <p class="muted">Free tier where possible. Delete everything at the end of each task.</p>
+          <div class="callout danger"><strong>Billable services.</strong> EMR clusters and OpenSearch domains charge by the hour even when idle. Prefer <strong>EMR Serverless</strong> or transient EMR with <code>--auto-terminate</code>. For OpenSearch use the free-tier <code>t3.small.search</code> allowance (750 h/month in first 12 months) and delete the domain immediately after labs.</div>
+          <ol class="practice-list">
+            <li class="practice">
+              <p class="practice-task">Register an S3 prefix in Lake Formation, run a Glue crawler, and grant your IAM user <code>SELECT</code> on the resulting table. Query it in Athena.</p>
+              <span class="console-path">Lake Formation → Register location → Glue → Crawlers → Athena</span>
+              <p class="practice-expect">Athena query returns rows from <code>data/customers.csv</code> under <code>s3://dea-lab-&lt;initials&gt;-&lt;random&gt;/curated/</code> with LF permissions enforced.</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">Console</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Upload <code>data/customers.csv</code> to <code>s3://dea-lab-ab-4821/raw/customers/</code>.</li>
+                    <li><strong>Lake Formation → Administrative roles and tasks</strong> — add yourself as LF admin.</li>
+                    <li><strong>Register location</strong> — bucket/prefix; use service-linked roles.</li>
+                    <li><strong>Glue crawler</strong> on <code>raw/customers/</code>; database <code>dea_lab</code>.</li>
+                    <li><strong>Lake Formation → Data permissions</strong> — grant <code>SELECT</code> on table to your user/role.</li>
+                    <li><strong>Athena</strong> — <code>SELECT * FROM dea_lab.customers LIMIT 10;</code></li>
+                  </ol>
+                  <p class="muted">Cleanup: delete crawler, database tables, S3 objects, deregister LF location if desired.</p>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Run a transient EMR Serverless Spark job (or smallest transient EMR cluster with <code>--auto-terminate</code>) that counts rows in the sample CSV on S3.</p>
+              <span class="console-path">EMR → EMR Serverless → Applications → Job runs</span>
+              <p class="practice-expect">Job succeeds and output shows row count 11 (including duplicate row 6).</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">Console + CLI</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Create EMR Serverless application (Spark) or use CLI transient cluster below.</li>
+                    <li>Submit job reading <code>s3://dea-lab-ab-4821/raw/customers/</code>.</li>
+                  </ol>
+<pre data-lang="shell"><code>aws emr create-cluster \
+  --name dea-emr-lab-count \
+  --release-label emr-7.1.0 \
+  --applications Name=Spark \
+  --instance-type m5.xlarge \
+  --instance-count 1 \
+  --auto-terminate \
+  --use-default-roles \
+  --steps file://count-step.json</code></pre>
+                  <p class="muted">Cleanup: terminate cluster if still running; delete EMR Serverless application; confirm zero RUNNING clusters in EMR console.</p>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Create a single-node OpenSearch domain (<code>t3.small.search</code>), index three JSON documents, and run a match search in Dashboards.</p>
+              <span class="console-path">OpenSearch Service → Create domain → Dashboards</span>
+              <p class="practice-expect">Search returns matching documents; domain health green.</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">Console + Dev Tools</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li><strong>OpenSearch → Create domain</strong> — production template disabled; 1 <code>t3.small.search</code> data node; public access with fine-grained master user for lab only.</li>
+                    <li>In Dashboards Dev Tools, run the index/create/bulk/search JSON from the OpenSearch section above.</li>
+                  </ol>
+                  <p class="muted">Cleanup: OpenSearch → Domain → Delete — type <code>delete</code> to confirm. Domains bill until fully deleted.</p>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Connect QuickSight to Athena (Glue catalog table over your lab bucket), import to SPICE, and publish a one-visual dashboard.</p>
+              <span class="console-path">QuickSight → Datasets → New dataset → Athena</span>
+              <p class="practice-expect">Dashboard visual shows customer data from SPICE; dataset shows import success.</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">Console</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Enable QuickSight in <code>us-east-1</code>; allow Athena and S3 access when prompted (creates IAM role).</li>
+                    <li><strong>New dataset → Athena</strong> — select <code>dea_lab.customers</code>, SPICE import.</li>
+                    <li>Build analysis → bar chart by column → publish dashboard.</li>
+                  </ol>
+                  <p class="muted">Cleanup: delete analysis, dataset, dashboard; optionally unsubscribe QuickSight user to avoid author charges.</p>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Create a Managed Grafana workspace, add CloudWatch as a data source, and build a simple metric panel (e.g. EC2 CPUUtilization).</p>
+              <span class="console-path">Amazon Grafana → Create workspace → Data sources</span>
+              <p class="practice-expect">Dashboard panel renders CloudWatch metric time series.</p>
+              <details class="qa">
+                <summary>Show steps<span class="qa-tag">Console</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li><strong>Amazon Grafana → Create workspace</strong> — SSO authentication; assign yourself Admin.</li>
+                    <li>In workspace UI: Configuration → Data sources → CloudWatch (default region).</li>
+                    <li>New dashboard → panel → select namespace AWS/EC2, metric CPUUtilization.</li>
+                  </ol>
+                  <p class="muted">Cleanup: delete Grafana workspace — charges continue until workspace is deleted.</p>
+                </div>
+              </details>
+            </li>
+          </ol>
+        </section>
+
+        <section class="section" id="recap">
+          <h2>Recap</h2>
+          <div class="recap">
+            <ul class="checklist">
+              <li>Lake Formation = governance on Glue Catalog + S3; column/row/cell filters and LF-Tags; cross-account via RAM + resource links.</li>
+              <li>Hybrid access mode requires both IAM and LF grants; IAM Allowed Principals bypass LF for migration only.</li>
+              <li>EMR: master (1) + core (HDFS + tasks) + task (compute-only, Spot OK); transient clusters use <code>--auto-terminate</code>.</li>
+              <li>EMRFS → S3 is strongly consistent — no EMRFS consistent-view needed on new workloads.</li>
+              <li>Instance fleets = mixed Spot/On-Demand; instance groups = custom auto scaling policies.</li>
+              <li>Glue = least ops ETL; EMR = petabyte/custom Hadoop/Spark/HBase/Presto.</li>
+              <li>Hive external tables + partitions; metastore → Glue Catalog on EMR.</li>
+              <li>Grafana = ops metrics/logs; QuickSight = business BI + SPICE + RLS (Enterprise).</li>
+              <li>OpenSearch: watch JVMMemoryPressure; 10–50 GB/shard; UltraWarm/Cold for cost; ISM for lifecycle.</li>
+              <li>QuickSight VPC data sources and RLS require Enterprise; Athena/Redshift via IAM role assumed by QuickSight.</li>
+            </ul>
+            <p style="margin-top:1rem;">
+              <button type="button" data-complete="section-13">Mark complete</button>
+            </p>
+          </div>
+        </section>
+
+      </div>
+
+      <aside class="toc" aria-label="On this page">
+        <strong>On this page</strong>
+        <ol>
+          <li><a href="#lectures">Lectures</a></li>
+          <li><a href="#lake-formation">Lake Formation</a></li>
+          <li><a href="#emr">Amazon EMR</a></li>
+          <li><a href="#hive">Apache Hive</a></li>
+          <li><a href="#grafana">Managed Grafana</a></li>
+          <li><a href="#opensearch">OpenSearch</a></li>
+          <li><a href="#quicksight">QuickSight</a></li>
+          <li><a href="#deeper">Deeper detail</a></li>
+          <li><a href="#interview">Interview questions</a></li>
+          <li><a href="#practice">Hands-on practice</a></li>
+          <li><a href="#recap">Recap</a></li>
+        </ol>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<footer class="footer">AWS Certified Data Engineer Associate (DEA-C01) · Section 13 · Offline study edition</footer>
+</body>
+</html>

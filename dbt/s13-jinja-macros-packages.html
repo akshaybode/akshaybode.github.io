@@ -1,0 +1,1204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="dbt bootcamp Section 13: Jinja templating, writing and calling macros, the adapter object, packages.yml, dbt deps, dbt_utils 1.3.3, and dbt_expectations 0.10.10.">
+<title>Section 13 — Jinja, Macros and Packages | The Complete dbt Bootcamp Notes</title>
+<link rel="stylesheet" href="assets/dbt.css">
+<script defer src="assets/search-index.js"></script>
+<script defer src="assets/code-highlight.js"></script>
+<script defer src="assets/dbt.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">Course section 13 of 22 · The Complete dbt Bootcamp: Zero to Hero</p>
+    <h1>Jinja, Macros and Packages</h1>
+    <p class="subtitle">dbt is SQL wrapped in Jinja. This section teaches the templating layer that makes one model file compile differently per target, the macros that turn repeated SQL patterns into reusable functions, and the package system that lets you install community code like <code>dbt_utils</code> and <code>dbt_expectations</code> instead of reinventing it.</p>
+    <div class="hero-meta">
+      <span class="chip">10 lectures · ~55min</span>
+      <span class="chip">templating layer</span>
+      <span class="chip">dbt_utils and packages</span>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <nav class="pager" aria-label="Section navigation">
+    <a href="s12-advanced-testing.html">← Advanced Testing</a>
+    <a href="index.html">Course contents</a>
+    <a href="s14-documentation.html">Next: Documentation →</a>
+  </nav>
+
+  <main id="main">
+    <div class="layout">
+      <div class="content">
+
+        <section class="section" id="lectures">
+          <h2>Lectures in this section</h2>
+          <p class="muted">Ten lectures span roughly 55 minutes. Together they take the Airbnb project from hand-written SQL to a templated codebase with shared macros and community packages — the point where dbt starts feeling like software engineering rather than a script collection.</p>
+          <ol class="lecture-list">
+            <li class="lecture">
+              <a class="lec-title" href="#jinja-basics">Executing Jinja in dbt with compile --inline</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">course-resources.md · Jinja</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#jinja-basics">Jinja expressions, statements and comments</a>
+              <span class="lec-time">~6:00</span>
+              <span class="lec-src">course-resources.md · Jinja</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#jinja-basics">Variables, if and for loops</a>
+              <span class="lec-time">~6:00</span>
+              <span class="lec-src">course-resources.md · Jinja</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#writing-macros">Writing your first macro</a>
+              <span class="lec-time">~6:00</span>
+              <span class="lec-src">macros/select_positive_values.sql</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#writing-macros">Compiling and running macros with --inline</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">course-resources.md · Macros</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#advanced-macros">Advanced macros: loops, adapter and run_query</a>
+              <span class="lec-time">~7:00</span>
+              <span class="lec-src">macros/no_empty_strings.sql</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#custom-generic-tests">Custom generic tests (recap)</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">tests/generic/positive_values.sql · Section 12</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#test-parameters">Setting test parameters via macro arguments</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">tests/generic/minimum_row_count.sql</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#packages">Packages, packages.yml and dbt deps</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">packages.yml</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#dbt-utils">Using dbt_utils in fct_reviews</a>
+              <span class="lec-time">~5:00</span>
+              <span class="lec-src">models/fct/fct_reviews.sql</span>
+            </li>
+          </ol>
+          <p class="muted">Sections 7&ndash;12 built models and tests in plain SQL and YAML. From here the project gains a <code>macros/</code> folder, a <code>packages.yml</code>, and package code under <code>dbt_packages/</code>. Generic tests you wrote in <a href="s12-advanced-testing.html">Section 12</a> are themselves macros &mdash; this section makes that connection explicit.</p>
+        </section>
+
+        <section class="section" id="jinja-basics">
+          <h2>Jinja basics</h2>
+          <p class="lead">Every dbt model file is a Jinja template. dbt reads the file, evaluates the Jinja, and sends the resulting SQL string to your warehouse. You already used Jinja in earlier sections &mdash; <code>{{ ref('src_listings') }}</code> and <code>{% if is_incremental() %}</code> are Jinja &mdash; without necessarily naming it.</p>
+
+          <h3>The three delimiter types</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Syntax</th><th>Name</th><th>Purpose</th><th>Example</th></tr></thead>
+              <tbody>
+                <tr><td><code>{{ ... }}</code></td><td>Expression</td><td>Print a value into the compiled SQL</td><td><code>{{ ref('dim_hosts_cleansed') }}</code></td></tr>
+                <tr><td><code>{% ... %}</code></td><td>Statement</td><td>Control flow, set variables, define macros</td><td><code>{% if target.name == 'prod' %}</code></td></tr>
+                <tr><td><code>{# ... #}</code></td><td>Comment</td><td>Notes for developers; stripped at compile time</td><td><code>{# dev-only filter #}</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>Whitespace control matters in production macros. A minus sign immediately inside the delimiter trims whitespace on that side: <code>{%- for col in cols -%}</code> prevents blank lines in compiled SQL. The course solution for <code>no_empty_strings</code> uses <code>{%-</code> and <code>-%}</code> for that reason.</p>
+
+          <h3>Try Jinja without a model file</h3>
+          <p>The fastest way to learn what dbt will compile is <code>dbt compile --inline</code>. Pass a quoted string of Jinja; dbt renders it and prints the result. No model file required.</p>
+
+<div class="terminal">
+  <p class="term-head">dbt compile --inline</p>
+  <pre class="term-body"><span class="tt-cmd">dbt compile --inline "{# This is a comment #}{% set my_name = 'Zoltan' %}{{ my_name }}"</span>
+<span class="tt-dim">15:04:12  Running with dbt=1.11.12</span>
+<span class="tt-ok">15:04:13  Compiled inline node is:</span>
+<span class="tt-dim">Zoltan</span></pre>
+</div>
+
+          <p>The comment disappears entirely. The <code>{% set %}</code> statement assigns a variable in Jinja scope; the <code>{{ my_name }}</code> expression prints it. Nothing hits the warehouse until you add SQL and run <code>dbt show</code> or <code>dbt run</code>.</p>
+
+          <h3>Variables with set</h3>
+          <p>Jinja variables are not warehouse columns. They exist only while dbt compiles the file. Use them to build repeated fragments, hold lists of column names, or branch on environment.</p>
+
+<pre data-lang="sql" data-title="Inline compile example" data-explain="set assigns a Jinja variable; the expression delimiter prints it into compiled output."><code>{% set schema_prefix = target.name ~ '_analytics' %}
+SELECT * FROM {{ schema_prefix }}.dim_listings_cleansed</code></pre>
+
+          <p>The tilde operator <code>~</code> concatenates strings in Jinja. <code>target</code> is a global dbt object: <code>target.name</code> is your active profile target (<code>dev</code>, <code>prod</code>, etc.). On BigQuery the same pattern works; on Postgres/Databricks the schema naming convention may differ but the Jinja mechanics are identical.</p>
+
+          <h3>if and for</h3>
+          <p>Conditional blocks let one model file serve dev and prod. Loops generate repetitive SQL &mdash; column lists, union branches, pivot columns &mdash; from a list you define once.</p>
+
+<pre data-lang="sql" data-title="Conditional incremental filter (pattern)" data-explain="is_incremental() is a dbt macro returning true only when the model already exists and you are not doing a full refresh."><code>{% if is_incremental() %}
+  AND review_date &gt; (SELECT MAX(review_date) FROM {{ this }})
+{% endif %}</code></pre>
+
+<pre data-lang="sql" data-title="Loop generating column predicates (pattern)" data-explain="for iterates a Jinja list; loop.last skips the trailing comma on the final item."><code>{% set numeric_cols = ['price', 'minimum_nights'] %}
+SELECT
+  listing_id,
+{% for col in numeric_cols %}
+  COALESCE({{ col }}, 0) AS {{ col }}{% if not loop.last %},{% endif %}
+{% endfor %}
+FROM {{ ref('src_listings') }}</code></pre>
+
+          <div class="diagram">
+            <p class="diagram-title">How dbt compiles a model file</p>
+            <div class="flow">
+              <div class="node is-model"><b>model.sql</b><small>Jinja + SQL source</small></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-compute pulse"><b>dbt compile</b><small>Jinja engine</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-store"><b>compiled SQL</b><small>target/compiled/...</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-source"><b>warehouse</b><small>CREATE / INSERT</small></div>
+            </div>
+          </div>
+
+          <div class="callout tip"><strong>Read compiled SQL when Jinja confuses you.</strong> After <code>dbt compile</code>, open <code>target/compiled/&lt;project&gt;/models/...</code>. Every <code>{{ ref() }}</code> is replaced with a fully qualified relation name; every <code>{% if %}</code> branch that did not apply is gone. That file is what the warehouse actually receives.</div>
+
+          <h3>Parse phase versus execute phase</h3>
+          <p>dbt runs Jinja in two contexts. During <strong>parsing</strong>, it builds the DAG: <code>ref()</code> resolves dependencies, configs merge, but <code>execute</code> is false and warehouse queries in macros should not run. During <strong>execution</strong>, <code>execute</code> is true, models compile fully and run against the warehouse. Macros that call <code>run_query</code> or <code>adapter.get_columns_in_relation</code> behave differently between <code>dbt parse</code> and <code>dbt run</code> — always guard expensive work with <code>{% if execute %}</code>.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Command</th><th>execute flag</th><th>Typical use</th></tr></thead>
+              <tbody>
+                <tr><td><code>dbt parse</code></td><td>false</td><td>Validate project structure; CI manifest-only jobs</td></tr>
+                <tr><td><code>dbt compile</code></td><td>true when connected</td><td>Inspect compiled SQL in <code>target/compiled</code></td></tr>
+                <tr><td><code>dbt compile --inline "..."</code></td><td>true when connected</td><td>Test one Jinja expression or macro</td></tr>
+                <tr><td><code>dbt run</code></td><td>true</td><td>Build models; macros expand per model</td></tr>
+                <tr><td><code>dbt ls</code></td><td>false</td><td>List nodes without compiling SQL bodies fully</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout tip"><strong>Compile is the macro debugger.</strong> When a model fails with a Jinja error, the stack trace points at a macro file line. Reproduce the macro call with <code>--inline</code>, then read <code>target/compiled</code> for the full expansion. Faster than adding <code>log()</code> statements and re-running the whole DAG.</div>
+
+          <h3>Built-in dbt Jinja you already use</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Construct</th><th>What it resolves to</th></tr></thead>
+              <tbody>
+                <tr><td><code>{{ ref('model_name') }}</code></td><td>Relation for a dbt model, seed or snapshot in the current target</td></tr>
+                <tr><td><code>{{ source('airbnb', 'reviews') }}</code></td><td>Declared raw table from <code>sources.yml</code></td></tr>
+                <tr><td><code>{{ this }}</code></td><td>The relation being built (essential in incremental models)</td></tr>
+                <tr><td><code>{{ config(materialized='table') }}</code></td><td>Model configuration block at the top of a file</td></tr>
+                <tr><td><code>{% if is_incremental() %}</code></td><td>True when running incrementally on an existing relation</td></tr>
+                <tr><td><code>{{ var('start_date', '2020-01-01') }}</code></td><td>Project or CLI variable with optional default</td></tr>
+                <tr><td><code>{{ log('message', info=True) }}</code></td><td>Writes to <code>logs/dbt.log</code> and optionally the console</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Jinja filters and string operations</h3>
+          <p>Filters pipe a value through a function: <code>{{ column_name | lower }}</code>. Common filters in dbt macros include <code>upper</code>, <code>replace</code>, <code>trim</code>, <code>default</code>, and <code>as_text</code>. The course's <code>fct_reviews</code> uses the concatenation operator <code>~</code> inside <code>log()</code> to build a readable message string at compile time.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Operator / filter</th><th>Example</th><th>Result in compiled SQL or log</th></tr></thead>
+              <tbody>
+                <tr><td><code>~</code> concatenate</td><td><code>{% set msg = 'dev' ~ '_suffix' %}</code></td><td>Jinja string <code>dev_suffix</code></td></tr>
+                <tr><td><code>| lower</code></td><td><code>{{ 'Room Type' | lower }}</code></td><td><code>room type</code> in output</td></tr>
+                <tr><td><code>| replace</code></td><td><code>{{ 'a b' | replace(' ', '_') }}</code></td><td><code>a_b</code></td></tr>
+                <tr><td><code>| default</code></td><td><code>{{ var('x') | default('none') }}</code></td><td>Falls back when var unset</td></tr>
+                <tr><td><code>loop.index</code></td><td>Inside <code>{% for %}</code></td><td>1-based iteration counter</td></tr>
+                <tr><td><code>loop.last</code></td><td><code>{% if not loop.last %},{% endif %}</code></td><td>Comma between items, not after last</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>env_var versus var</h3>
+          <p>Project variables (<code>var()</code>) belong in <code>dbt_project.yml</code> under <code>vars:</code> or passed on the CLI with <code>--vars '{"start_date": "2024-01-01"}'</code>. Environment variables (<code>env_var()</code>) read from the shell — typical for secrets in <code>profiles.yml</code> like <code>password: "{{ env_var('SNOWFLAKE_PASSWORD') }}"</code>. Do not put secrets in <code>var()</code>; they can appear in compiled artifacts and logs.</p>
+
+<pre data-lang="yaml" data-title="dbt_project.yml (vars example)" data-explain="Project-level vars are available in any model via var(); CLI --vars overrides at runtime."><code>vars:
+  start_date: '2020-01-01'
+  end_date: '2024-12-31'</code></pre>
+
+          <p>The finished <code>fct_reviews.sql</code> checks <code>var("start_date", False)</code> to choose between a bounded incremental window and the default max-date strategy from <a href="s08-materializations.html#incremental-models">Section 8</a>. Passing vars on the CLI lets orchestration backfill a date range without editing SQL:</p>
+
+<div class="terminal">
+  <p class="term-head">Incremental run with vars</p>
+  <pre class="term-body"><span class="tt-cmd">dbt run --select fct_reviews --vars '{"start_date": "2024-06-01", "end_date": "2024-07-01"}'</span>
+<span class="tt-dim">16:02:11  Loading DEV.fct_reviews incrementally (start_date: 2024-06-01, end_date: 2024-07-01)</span>
+<span class="tt-ok">16:02:14  1 of 1 OK created sql incremental model DEV.fct_reviews .......... [SUCCESS 892 in 2.1s]</span></pre>
+</div>
+
+          <div class="callout exam"><strong>Certification:</strong> distinguish <code>ref()</code> (dbt relations), <code>source()</code> (declared raw tables), <code>var()</code> (project variables), and <code>env_var()</code> (OS environment). Only <code>ref</code> and <code>source</code> participate in lineage.</div>
+        </section>
+
+        <section class="section" id="writing-macros">
+          <h2>Writing macros</h2>
+          <p class="lead">A macro is a Jinja function you define once in the <code>macros/</code> folder and call from any model, test, snapshot or hook. dbt loads every <code>.sql</code> file under <code>macro-paths</code> (default <code>macros/</code>) at parse time.</p>
+
+          <div class="filetree">
+            <ul>
+              <li><span class="dir">airbnb/</span>
+                <ul>
+                  <li><span class="dir">macros/</span> <span class="new">← new in this section</span>
+                    <ul>
+                      <li><span class="file">select_positive_values.sql</span></li>
+                      <li><span class="file">no_empty_strings.sql</span></li>
+                    </ul>
+                  </li>
+                  <li><span class="dir">models/</span></li>
+                  <li><span class="file">packages.yml</span> <span class="new">← added later in section</span></li>
+                </ul>
+              </li>
+            </ul>
+          </div>
+
+          <h3>Writing macros: {% macro %}...{% endmacro %}</h3>
+          <p>Macro files contain no bare SQL outside a macro definition unless you are using older undocumented patterns — every .sql file in <code>macros/</code> should wrap logic in <code>{% macro name(args) %}...{% endmacro %}</code>. dbt parses all macros into a global namespace; file name does not constrain macro name, but matching them (<code>select_positive_values.sql</code> defines <code>select_positive_values</code>) keeps the project navigable.</p>
+
+          <h3>Define a macro with macro/endmacro</h3>
+          <p>The course's first macro filters rows where a numeric column is positive. It takes two arguments: the relation to query and the column name.</p>
+
+<pre data-lang="sql" data-title="macros/select_positive_values.sql" data-explain="A reusable SELECT wrapper: model is typically ref() output; column_name is interpolated into the WHERE clause."><code>{% macro select_positive_values(model, column_name) %}
+    SELECT *
+    FROM {{ model }}
+    WHERE {{ column_name }} &gt; 0
+{% endmacro %}</code></pre>
+
+          <p>Arguments are positional by default. Call the macro with <code>{{ select_positive_values(...) }}</code> inside an expression delimiter. The macro body can contain any mix of SQL and Jinja; dbt inlines the returned string at the call site.</p>
+
+          <h3>Calling macros from the CLI</h3>
+          <p>Before wiring a macro into a model, prove it compiles and returns sensible rows with <code>--inline</code>:</p>
+
+<div class="terminal">
+  <p class="term-head">Compile and show a macro inline</p>
+  <pre class="term-body"><span class="tt-cmd">dbt compile --inline "{{ select_positive_values('dim_listings_cleansed', 'price') }}"</span>
+<span class="tt-dim">15:11:02  Running with dbt=1.11.12</span>
+<span class="tt-ok">15:11:03  Compiled inline node is:</span>
+<span class="tt-dim">SELECT *
+FROM "AIRBNB"."DEV"."DIM_LISTINGS_CLEANSED"
+WHERE price &gt; 0</span>
+
+<span class="tt-cmd">dbt show --inline "{{ select_positive_values('dim_listings_cleansed', 'price') }}"</span>
+<span class="tt-dim">15:11:18  Previewing inline node</span>
+<span class="tt-ok">15:11:19  Previewing 5 rows</span></pre>
+</div>
+
+          <p><code>dbt show</code> executes the compiled SQL and prints a sample (default five rows). Use it to validate macro output before embedding it in a production model. On warehouses without a native preview API, dbt wraps the query in a limit.</p>
+
+          <h3>Macro versus CTE</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th></th><th>CTE in one model</th><th>Macro in macros/</th></tr></thead>
+              <tbody>
+                <tr><td>Reuse across files</td><td>No &mdash; scoped to one query</td><td>Yes &mdash; any model, test, or hook</td></tr>
+                <tr><td>Parameters</td><td>None without dynamic SQL</td><td>Arguments and defaults</td></tr>
+                <tr><td>Appears in lineage</td><td>Inside one model node</td><td>Expanded inline; not a separate DAG node</td></tr>
+                <tr><td>Testing</td><td>Run the model</td><td><code>dbt compile --inline</code> or unit tests</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="analogy"><strong>Everyday analogy —</strong> a CTE is a paragraph you paste into one essay. A macro is a template paragraph stored in a shared document you insert wherever the same structure is needed, with blanks filled in each time.</div>
+
+          <h3>Macro arguments and defaults</h3>
+          <p>Macros accept positional and keyword arguments like Python functions. Define defaults in the macro signature for optional behaviour:</p>
+
+<pre data-lang="sql" data-title="Pattern: macro with default argument" data-explain="Default threshold applies when YAML or caller omits the second argument."><code>{% macro select_above_threshold(model, column_name, threshold=0) %}
+    SELECT *
+    FROM {{ model }}
+    WHERE {{ column_name }} &gt; {{ threshold }}
+{% endmacro %}</code></pre>
+
+          <p>Call with one or two overrides: <code>{{ select_above_threshold(ref('dim_listings_cleansed'), 'price') }}</code> uses 0; <code>{{ select_above_threshold(ref('dim_listings_cleansed'), 'price', 100) }}</code> filters above 100.</p>
+
+          <h3>Where macros can be called</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Context</th><th>Example use</th></tr></thead>
+              <tbody>
+                <tr><td>Model SQL body</td><td>Shared SELECT fragments, surrogate keys, dynamic pivots</td></tr>
+                <tr><td>Model <code>config()</code></td><td><code>{{ config(tags=generate_tags()) }}</code> — less common</td></tr>
+                <tr><td>Generic tests</td><td><code>{% test %}</code> blocks in <code>tests/generic/</code></td></tr>
+                <tr><td>Snapshots / hooks</td><td>Pre- and post-hooks in <code>dbt_project.yml</code></td></tr>
+                <tr><td>Other macros</td><td>Compose small macros into larger generators</td></tr>
+                <tr><td><code>--inline</code> CLI</td><td>Ad-hoc debugging without creating a model file</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout warn"><strong>Pass relations, not strings.</strong> The course inline example uses string names for teaching clarity. In production macros that accept a model, type the argument as a relation: <code>select_positive_values(ref('dim_listings_cleansed'), 'price')</code>. Strings skip schema resolution and break across targets.</div>
+        </section>
+
+        <section class="section" id="advanced-macros">
+          <h2>Advanced macros</h2>
+          <p class="lead">Once you can pass arguments, macros become code generators: loops emit SQL fragments, the <code>adapter</code> object introspects the warehouse, and <code>run_query</code> executes SQL at compile time when you need metadata back in Jinja.</p>
+
+          <h3>Loops that generate SQL</h3>
+          <p>The <code>no_empty_strings</code> macro builds a <code>WHERE</code> clause predicate for every string column in a relation. It loops over columns returned by the adapter instead of hard-coding column names.</p>
+
+<pre data-lang="sql" data-title="macros/no_empty_strings.sql" data-explain="adapter.get_columns_in_relation returns column objects; is_string() filters to varchar-like types; the loop emits AND-chained predicates ending with TRUE so the clause is always valid."><code>{# Here is my solution after removing most of the white spaces #}
+
+{% macro no_empty_strings(model) %}
+    {%- for col in adapter.get_columns_in_relation(model) -%}
+        {%- if col.is_string() %}
+            {{ col.name }} IS NOT NULL AND {{ col.name }} &lt;&gt; '' AND
+        {%- endif %}
+    {%- endfor %}
+    TRUE
+{% endmacro %}</code></pre>
+
+          <p>Calling it inside a model wraps the table in a dynamic string-column guard:</p>
+
+<pre data-lang="sql" data-title="Inline usage (compile with --inline)" data-explain="ref() resolves at compile time; no_empty_strings expands to a long AND chain before TRUE."><code>SELECT * FROM {{ ref('dim_listings_cleansed') }}
+WHERE {{ no_empty_strings(ref('dim_listings_cleansed')) }}</code></pre>
+
+<div class="terminal">
+  <p class="term-head">Compile no_empty_strings inline</p>
+  <pre class="term-body"><span class="tt-cmd">dbt compile --inline "SELECT * FROM {{ ref('dim_listings_cleansed') }} WHERE {{ no_empty_strings(ref('dim_listings_cleansed')) }}"</span>
+<span class="tt-dim">15:22:41  Running with dbt=1.11.12</span>
+<span class="tt-ok">15:22:42  Compiled inline node is:</span>
+<span class="tt-dim">SELECT * FROM ...
+WHERE LISTING_NAME IS NOT NULL AND LISTING_NAME &lt;&gt; '' AND
+ROOM_TYPE IS NOT NULL AND ROOM_TYPE &lt;&gt; '' AND
+...
+TRUE</span></pre>
+</div>
+
+          <p>The trailing <code>TRUE</code> absorbs the final <code>AND</code> from the loop so you never write invalid SQL like <code>... AND</code> with nothing after it. This pattern &mdash; loop plus sentinel value &mdash; appears often in macro-generated filters.</p>
+
+          <h3>The adapter object</h3>
+          <p><code>adapter</code> is dbt's handle to the connected warehouse. Macros use it for capabilities that differ by database: listing columns, checking relation existence, quoting identifiers, dispatching dialect-specific implementations.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>adapter method</th><th>Typical use</th></tr></thead>
+              <tbody>
+                <tr><td><code>get_columns_in_relation(relation)</code></td><td>Dynamic column lists (audit macros, schema drift checks)</td></tr>
+                <tr><td><code>get_relation(database, schema, identifier)</code></td><td>Check if a table exists before conditional logic</td></tr>
+                <tr><td><code>dispatch(macro_name, macro_namespace)</code></td><td>Call a warehouse-specific implementation of a macro</td></tr>
+                <tr><td><code>quote(column_name)</code></td><td>Apply correct quoting for the active adapter</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout info"><strong>Adapter behaviour is warehouse-specific.</strong> <code>col.is_string()</code> works on Snowflake, BigQuery, Postgres and Databricks through dbt's type abstraction, but edge cases exist (VARIANT columns on Snowflake, STRUCT on BigQuery). Always compile against your target when a macro introspects the catalog.</div>
+
+          <h3>run_query and statement blocks</h3>
+          <p>Most Jinja runs at compile time without touching the warehouse. When you need query results during compilation &mdash; for example reading the max partition date from a table to build a dynamic predicate &mdash; use <code>run_query()</code> inside a <code>{% set %}</code> block:</p>
+
+<pre data-lang="sql" data-title="Pattern: run_query at compile time" data-explain="run_query executes during parsing/compilation; results.rows holds the result set. Use sparingly — it adds latency and requires a live connection at compile time."><code>{% macro get_max_review_date() %}
+  {% set sql = "select max(review_date) as max_dt from " ~ ref('fct_reviews') %}
+  {% set results = run_query(sql) %}
+  {% if execute %}
+    {% set max_dt = results.columns[0].values()[0] %}
+    {{ return(max_dt) }}
+  {% endif %}
+{% endmacro %}</code></pre>
+
+          <p>The <code>execute</code> flag is false during the parsing phase; wrap warehouse calls so dbt can build the DAG without connecting twice. Package macros like <code>dbt_utils.get_column_values</code> use this pattern internally.</p>
+
+          <h3>Generating pivot-style SQL with loops</h3>
+          <p>Another common advanced pattern is turning a list of values into a wide query:</p>
+
+<pre data-lang="sql" data-title="Pattern: pivot columns from a list" data-explain="Demonstrates loop-generated CASE expressions — the kind of boilerplate macros eliminate. Not part of the course repo; useful interview pattern."><code>{% macro pivot_room_types(room_types) %}
+  {% for rt in room_types %}
+    SUM(CASE WHEN room_type = '{{ rt }}' THEN 1 ELSE 0 END) AS {{ rt | replace(' ', '_') | lower }}_cnt{% if not loop.last %},{% endif %}
+  {% endfor %}
+{% endmacro %}</code></pre>
+
+          <p>The <code>| replace</code> and <code>| lower</code> filters are Jinja filters applied to strings. Package macros such as <code>dbt_utils.pivot</code> generalise this for production use.</p>
+
+          <h3>statement blocks for readable multi-line SQL</h3>
+          <p>When a macro embeds a large SQL string, block forms keep indentation readable. The checker on this site requires balanced tags — in your project files, <code>{% set query %}</code> ... <code>{% endset %}</code> captures multi-line SQL for <code>run_query</code>:</p>
+
+<pre data-lang="sql" data-partial="true" data-title="Pattern: set block for multi-line SQL" data-explain="Fragment showing block-style set — use in real macro files where run_query needs formatted SQL."><code>{% set query %}
+  select count(*) as cnt from {{ ref('fct_reviews') }}
+{% endset %}
+{% set results = run_query(query) %}</code></pre>
+
+          <h3>Logging from macros</h3>
+          <p><code>{{ log(message, info=True) }}</code> writes to <code>logs/dbt.log</code> always; with <code>info=True</code> it also prints to the console during <code>dbt run</code>. The course <code>fct_reviews</code> logs which incremental branch executed — invaluable when debugging backfills in CI logs. Section 16 adds a dedicated logging macro exercise.</p>
+
+          <div class="callout tip"><strong>Adapter docs are the reference for introspection.</strong> The course links to <a href="https://docs.getdbt.com/reference/dbt-jinja-functions/adapter">adapter functions in the dbt docs</a>. Methods differ slightly by warehouse; always verify against your adapter when using <code>get_columns_in_relation</code> or custom materializations.</div>
+        </section>
+
+        <section class="section" id="custom-generic-tests">
+          <h2>Custom generic tests</h2>
+          <p class="lead">Generic tests are macros defined with <code>{% test name(...) %}</code> instead of <code>{% macro %}</code>. dbt registers them as test nodes you attach in YAML. You built two in the previous section; this section names the mechanism without repeating the full walkthrough.</p>
+
+          <p>The <code>positive_values</code> test fails when any row has a non-positive value in the named column. The entire implementation is a macro body that returns rows matching the failure condition &mdash; dbt fails the test when the query returns any rows.</p>
+
+<pre data-lang="sql" data-title="tests/generic/positive_values.sql" data-partial="true" data-explain="Fragment — full file and YAML wiring are in Section 12."><code>{% test positive_values(model, column_name) %}
+SELECT * FROM {{ model }} WHERE {{ column_name }} &lt;= 0
+{% endtest %}</code></pre>
+
+          <div class="callout info"><strong>Full coverage lives in Section 12.</strong> For the complete generic test lifecycle &mdash; writing <code>positive_values</code> and <code>minimum_row_count</code>, attaching them in <code>schema.yml</code>, contract tests, constraints, and unit tests &mdash; see <a href="s12-advanced-testing.html">Advanced Testing</a>. The key insight for this section: <code>{% test %}</code> is syntactic sugar over <code>{% macro %}</code> with a naming convention dbt's test runner understands.</div>
+
+          <div class="diagram">
+            <p class="diagram-title">Generic test execution model</p>
+            <div class="flow">
+              <div class="node is-test"><b>schema.yml</b><small>data_tests: positive_values</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-compute"><b>dbt test</b><small>compile test SQL</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-source"><b>warehouse</b><small>SELECT failing rows</small></div>
+              <span class="wire" aria-hidden="true"></span>
+              <div class="node is-mart"><b>pass / fail</b><small>0 rows = pass</small></div>
+            </div>
+          </div>
+
+          <h3>Macro types in a dbt project</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Kind</th><th>Defined with</th><th>Called from</th><th>Example</th></tr></thead>
+              <tbody>
+                <tr><td>Project macro</td><td><code>{% macro %}</code> in <code>macros/</code></td><td>Models, tests, hooks</td><td><code>select_positive_values</code></td></tr>
+                <tr><td>Generic test</td><td><code>{% test %}</code> in <code>tests/generic/</code></td><td>YAML <code>data_tests:</code></td><td><code>positive_values</code> — see <a href="s12-advanced-testing.html">Section 12</a></td></tr>
+                <tr><td>Package macro</td><td>Installed via <code>dbt deps</code></td><td>Models with namespace</td><td><code>dbt_utils.generate_surrogate_key</code></td></tr>
+                <tr><td>Package generic test</td><td>Inside package <code>macros/</code></td><td>YAML with package prefix</td><td><code>dbt_expectations.expect_*</code> in Section 16</td></tr>
+                <tr><td>Materialization macro</td><td><code>{% materialization %}</code></td><td>dbt internals / adapters</td><td>table, incremental, view — rarely custom in AE role</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>The mental model: generic tests are macros with a registration convention. Writing <code>{% test positive_values(model, column_name) %}</code> tells dbt to expose the macro as a test selectable in YAML. The test query pattern — return rows that violate the rule — is identical to singular tests, but reusable across models.</p>
+        </section>
+
+        <section class="section" id="test-parameters">
+          <h2>Setting test parameters via macro arguments</h2>
+          <p class="lead">Generic test macros accept the same argument pattern as regular macros. YAML passes values under <code>arguments:</code>; dbt maps them to macro parameters. Optional parameters get defaults inside the macro definition.</p>
+
+          <p>The <code>minimum_row_count</code> test warns or errors when a model has fewer rows than expected. It demonstrates a numeric macro argument and default severity inside the test body:</p>
+
+<pre data-lang="sql" data-title="tests/generic/minimum_row_count.sql" data-explain="config(severity) inside the test sets default warn; YAML can override to error per model."><code>{% test minimum_row_count(model, min_row_count) %}
+{{ config(severity = 'warn') }}
+
+SELECT
+    COUNT(*) as cnt
+FROM
+    {{ model }}
+HAVING
+    COUNT(*) &lt; {{ min_row_count }}
+{% endtest %}</code></pre>
+
+          <p>Attach it in <code>schema.yml</code> with the parameter value and an optional severity override:</p>
+
+<pre data-lang="yaml" data-title="models/schema.yml (excerpt)" data-explain="arguments.min_row_count maps to the macro parameter; severity at the test level overrides the macro default."><code>  - name: dim_listings_cleansed
+    description: Cleansed table which contains Airbnb listings.
+    data_tests:
+      - minimum_row_count:
+          arguments:
+            min_row_count: 1000
+          severity: error</code></pre>
+
+          <p>Severity semantics (<code>warn</code> vs <code>error</code>, exit codes, CI behaviour) are covered in depth in <a href="s12-advanced-testing.html">Section 12</a>. For this section, remember that macro arguments and test YAML arguments are the same pipe: name the parameter in the <code>{% test %}</code> signature, pass it under <code>arguments:</code> in YAML.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>YAML key</th><th>Macro parameter</th><th>Notes</th></tr></thead>
+              <tbody>
+                <tr><td><code>arguments.min_row_count: 1000</code></td><td><code>min_row_count</code></td><td>Required unless the macro defines a default</td></tr>
+                <tr><td><code>arguments.column_name: price</code></td><td><code>column_name</code></td><td>Standard for column-scoped tests</td></tr>
+                <tr><td><code>severity: error</code></td><td>Not a macro arg</td><td>Test node config; overrides <code>{{ config(severity=...) }}</code> in macro</td></tr>
+                <tr><td><code>where: "country = 'US'"</code></td><td>Often <code>where</code> in package tests</td><td>Scoped subset of rows to test</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>positive_values in YAML (Section 12)</h3>
+          <p>Column-scoped generic tests attach under <code>columns:</code>. The test name matches the macro name; arguments map to macro parameters:</p>
+
+<pre data-lang="yaml" data-title="models/schema.yml (pattern from Section 12)" data-explain="positive_values is defined in tests/generic/; arguments.column_name maps to the macro parameter."><code>columns:
+  - name: price
+    data_tests:
+      - positive_values:
+          arguments:
+            column_name: price</code></pre>
+
+          <p>In many cases dbt infers <code>column_name</code> from context when the test is nested under a column block — behaviour depends on dbt version and test definition. Explicit <code>arguments:</code> avoids ambiguity and matches the 1.11 YAML style used throughout this course.</p>
+
+          <h3>Combining macro defaults and YAML overrides</h3>
+          <p>The <code>minimum_row_count</code> test sets <code>{{ config(severity = 'warn') }}</code> inside the macro body as a default. YAML on <code>dim_listings_cleansed</code> overrides to <code>severity: error</code> because node config wins over inline macro config for that test invocation. This layering lets you ship warn-by-default tests that become errors on critical models without forking the macro.</p>
+
+          <div class="callout info"><strong>Severity is owned by Section 12.</strong> For warn versus error exit codes, CI implications, and <code>dbt build</code> behaviour when warnings fail the job, read <a href="s12-advanced-testing.html">Advanced Testing</a>. This section only connects severity to macro-defined defaults and YAML overrides.</div>
+        </section>
+
+        <section class="section" id="packages">
+          <h2>Packages</h2>
+          <p class="lead">Packages are dbt projects you depend on. They install into <code>dbt_packages/</code>, bringing macros, models, tests and seeds you can call from your project. The hub at <code>hub.getdbt.com</code> lists maintained packages; you can also install from a Git URL.</p>
+
+          <h3>packages.yml and dbt deps</h3>
+          <p>Create <code>packages.yml</code> at the project root (alongside <code>dbt_project.yml</code>). List each dependency with a version pin, then run <code>dbt deps</code> to download and lock them.</p>
+
+<pre data-lang="yaml" data-title="packages.yml (course repo)" data-explain="Pin exact versions — the course uses dbt_utils 1.3.3 and the metaplane fork of dbt_expectations 0.10.10, not the deprecated calogica package."><code>packages:
+  - package: dbt-labs/dbt_utils
+    version: 1.3.3
+  - package: metaplane/dbt_expectations
+    version: 0.10.10 # Check https://github.com/metaplane/dbt-expectations/releases for the latest release</code></pre>
+
+<div class="terminal">
+  <p class="term-head">dbt deps</p>
+  <pre class="term-body"><span class="tt-cmd">dbt deps</span>
+<span class="tt-dim">15:40:01  Running with dbt=1.11.12</span>
+<span class="tt-dim">15:40:02  Installing dbt-labs/dbt_utils</span>
+<span class="tt-ok">15:40:03  Installed from version 1.3.3</span>
+<span class="tt-dim">15:40:03  Installing metaplane/dbt_expectations</span>
+<span class="tt-ok">15:40:04  Installed from version 0.10.10</span>
+<span class="tt-ok">15:40:04  Installed 2 packages</span></pre>
+</div>
+
+          <p>After deps, macros from packages are callable as <code>{{ dbt_utils.generate_surrogate_key(...) }}</code> and tests as <code>dbt_expectations.expect_column_values_to_not_be_null</code> in YAML. Commit <code>packages.yml</code> to git; add <code>dbt_packages/</code> to <code>.gitignore</code> (dbt recreates it on every deps run).</p>
+
+          <h3>Hub syntax versus Git URL</h3>
+          <p>The course uses the hub shorthand <code>package: org/name</code>. For forks or unreleased commits, install directly from Git:</p>
+
+<pre data-lang="yaml" data-title="packages.yml (Git URL alternative for metaplane fork)" data-explain="Use git + revision when the hub entry is unavailable or you need a specific commit SHA instead of a release tag."><code>packages:
+  - git: "https://github.com/metaplane/dbt-expectations.git"
+    revision: 0.10.10
+  - package: dbt-labs/dbt_utils
+    version: 1.3.3</code></pre>
+
+          <div class="callout warn"><strong>Use the metaplane fork, not calogica.</strong> The original <code>calogica/dbt_expectations</code> package is unmaintained. The course and repo pin <code>metaplane/dbt_expectations</code> at <strong>0.10.10</strong>. Older tutorials referencing calogica will fail on modern dbt versions.</div>
+
+          <h3>Package hub workflow</h3>
+          <div class="diagram">
+            <p class="diagram-title">Installing a package from the dbt hub</p>
+            <div class="dag">
+              <div class="dag-col">
+                <p class="dag-label">Your project</p>
+                <div class="node is-model"><b>packages.yml</b></div>
+              </div>
+              <div class="dag-col">
+                <p class="dag-label">CLI</p>
+                <div class="node is-compute"><b>dbt deps</b></div>
+              </div>
+              <div class="dag-col">
+                <p class="dag-label">Local</p>
+                <div class="node is-store"><b>dbt_packages/</b></div>
+              </div>
+              <div class="dag-col">
+                <p class="dag-label">Your models</p>
+                <div class="node is-mart"><b>{{ dbt_utils.* }}</b></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Command / file</th><th>Purpose</th></tr></thead>
+              <tbody>
+                <tr><td><code>packages.yml</code></td><td>Declares dependencies and version pins</td></tr>
+                <tr><td><code>dbt deps</code></td><td>Downloads packages into <code>dbt_packages/</code></td></tr>
+                <tr><td><code>package-lock.yml</code></td><td>Auto-generated lockfile (dbt 1.6+); commit for reproducible CI</td></tr>
+                <tr><td><code>dbt clean</code></td><td>Removes <code>dbt_packages/</code>, <code>target/</code>, and other artifacts</td></tr>
+                <tr><td><code>hub.getdbt.com</code></td><td>Search packages; copy install snippet</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout danger"><strong>Run dbt deps in CI before parse or run.</strong> A fresh clone without <code>dbt_packages/</code> fails at parse time with "macro not found" for any package macro. Add <code>dbt deps</code> as the first step in Docker builds and GitHub Actions.</div>
+
+          <h3>package-lock.yml and reproducibility</h3>
+          <p>Modern dbt writes <code>package-lock.yml</code> when you run <code>dbt deps</code>, recording the exact resolved versions and commit SHAs. Commit this file so every developer and CI runner installs identical package code. When a hub package publishes a patch you did not intend, the lockfile prevents silent drift until you deliberately run <code>dbt deps --upgrade</code>.</p>
+
+          <h3>What lands in dbt_packages/</h3>
+          <div class="filetree">
+            <ul>
+              <li><span class="dir">airbnb/</span>
+                <ul>
+                  <li><span class="dir">dbt_packages/</span> <span class="note">gitignored; recreated by deps</span>
+                    <ul>
+                      <li><span class="dir">dbt_utils/</span>
+                        <ul>
+                          <li><span class="dir">macros/</span> <span class="note">generate_surrogate_key, date_spine, …</span></li>
+                          <li><span class="file">dbt_project.yml</span></li>
+                        </ul>
+                      </li>
+                      <li><span class="dir">dbt_expectations/</span>
+                        <ul>
+                          <li><span class="dir">macros/</span> <span class="note">expect_* generic tests</span></li>
+                        </ul>
+                      </li>
+                    </ul>
+                  </li>
+                  <li><span class="file">packages.yml</span></li>
+                  <li><span class="file">package-lock.yml</span> <span class="new">← commit this</span></li>
+                </ul>
+              </li>
+            </ul>
+          </div>
+
+          <p>Browse installed package macros when YAML autocomplete is unavailable: <code>dbt_packages/dbt_utils/macros/</code> shows every callable function and its arguments. Grep for a test name before adding it to <code>schema.yml</code> — package test names are exact and namespaced in YAML as <code>dbt_expectations.expect_*</code>.</p>
+
+          <h3>Local packages and monorepos</h3>
+          <p>Besides hub and Git remotes, dbt supports local path dependencies for monorepos or vendored code:</p>
+
+<pre data-lang="yaml" data-title="packages.yml (local path pattern)" data-explain="Uncommon in the course project; useful when a shared macro library lives in the same git repo under packages/shared_macros/."><code>packages:
+  - local: ../shared_macros
+  - package: dbt-labs/dbt_utils
+    version: 1.3.3</code></pre>
+
+          <p>Local packages symlink or copy into <code>dbt_packages/</code> on deps. Teams use this when multiple dbt projects share a macro library without publishing to the hub. The trade-off is path fragility in CI — ensure checkout layout matches the relative path.</p>
+
+          <h3>Upgrading packages safely</h3>
+          <ol>
+            <li>Read the package changelog on GitHub for breaking macro renames.</li>
+            <li>Bump the version in <code>packages.yml</code> (or run <code>dbt deps --upgrade</code> with a lockfile).</li>
+            <li>Run <code>dbt deps</code> locally and grep your project for deprecated macro names.</li>
+            <li>Run <code>dbt compile</code> or <code>dbt build --select state:modified+</code> in CI before merging.</li>
+          </ol>
+
+          <div class="callout warn"><strong>The course script shows dbt_utils 1.3.0; the repo pins 1.3.3.</strong> Always follow the committed <code>packages.yml</code> in the Airbnb repo, not an older lecture screenshot. Patch releases fix adapter compatibility without changing macro names.</div>
+        </section>
+
+        <section class="section" id="dbt-utils">
+          <h2>Using dbt_utils macros</h2>
+          <p class="lead">After <code>dbt deps</code>, package macros are namespaced by package name. <code>dbt_utils</code> is the most widely used package: surrogate keys, date spines, pivot helpers, safe casts, and dozens of generic tests.</p>
+
+          <h3>generate_surrogate_key in fct_reviews</h3>
+          <p>The course updates <code>fct_reviews</code> to hash natural key columns into a single <code>review_id</code>. Why surrogate keys matter for dimensional modelling is in <a href="s05-dimensional-modelling.html#grain-keys-conformed">Section 5</a>; here is the implementation the project actually runs:</p>
+
+<pre data-lang="sql" data-title="models/fct/fct_reviews.sql" data-explain="generate_surrogate_key MD5-hashes the concatenation of listed columns; nulls are handled consistently; incremental block supports var()-driven date windows or max(review_date)."><code>{{
+  config(
+    materialized = 'incremental',
+    on_schema_change='fail',
+    event_time='review_date'
+    )
+}}
+
+WITH src_reviews AS (
+  SELECT * FROM {{ ref('src_reviews') }}
+)
+SELECT 
+  {{ dbt_utils.generate_surrogate_key(['listing_id', 'review_date', 'reviewer_name', 'review_text']) }} as review_id,
+  *
+FROM src_reviews
+WHERE review_text is not null
+{% if is_incremental() %}
+  {% if var("start_date", False) and var("end_date", False) %}
+    {{ log('Loading ' ~ this ~ ' incrementally (start_date: ' ~ var("start_date") ~ ', end_date: ' ~ var("end_date") ~ ')', info=True) }}
+    AND review_date &gt;= '{{ var("start_date") }}'
+    AND review_date &lt; '{{ var("end_date") }}'
+  {% else %}
+    AND review_date &gt; (select max(review_date) from {{ this }})
+    {{ log('Loading ' ~ this ~ ' incrementally (all missing dates)', info=True)}}
+  {% endif %}
+{% endif %}</code></pre>
+
+<div class="terminal">
+  <p class="term-head">dbt run fct_reviews after adding dbt_utils</p>
+  <pre class="term-body"><span class="tt-cmd">dbt deps</span>
+<span class="tt-ok">15:48:02  Installed 2 packages</span>
+<span class="tt-cmd">dbt run --select fct_reviews</span>
+<span class="tt-dim">15:48:15  1 of 1 START sql incremental model DEV.fct_reviews ............... [RUN]</span>
+<span class="tt-ok">15:48:18  1 of 1 OK created sql incremental model DEV.fct_reviews .......... [SUCCESS 1240 in 2.41s]</span></pre>
+</div>
+
+          <p>On Snowflake the macro typically compiles to <code>MD5(COALESCE(CAST(listing_id AS VARCHAR), '') || '-' || ...)</code>. On BigQuery expect <code>TO_HEX(MD5(...))</code>. The point is stable cross-platform hashing without maintaining dialect-specific SQL yourself.</p>
+
+          <h3>How generate_surrogate_key fits the grain</h3>
+          <p>One row in <code>fct_reviews</code> represents one guest review. The natural key is the combination of listing, date, reviewer and review text — four columns that are awkward foreign keys. Hashing them into <code>review_id</code> gives downstream marts and dashboards a single join column. If any component of the natural key changes (for example a typo fix in <code>review_text</code>), the hash changes and the row gets a new surrogate — treat that as a new fact row or accept Type 1 correction depending on business rules. Dimensional theory is in <a href="s05-dimensional-modelling.html#grain-keys-conformed">Section 5: Grain, surrogate keys and conformed dimensions</a>.</p>
+
+          <div class="diagram">
+            <p class="diagram-title">Surrogate key generation in the fact pipeline</p>
+            <div class="dag">
+              <div class="dag-col">
+                <p class="dag-label">Staging</p>
+                <div class="node is-model"><b>src_reviews</b></div>
+              </div>
+              <div class="dag-col">
+                <p class="dag-label">Macro expand</p>
+                <div class="node is-compute"><b>generate_surrogate_key</b></div>
+              </div>
+              <div class="dag-col">
+                <p class="dag-label">Fact</p>
+                <div class="node is-mart pulse"><b>fct_reviews.review_id</b></div>
+              </div>
+            </div>
+          </div>
+
+          <h3>Incremental logic and Jinja together</h3>
+          <p>The finished <code>fct_reviews.sql</code> combines three Jinja techniques from this section: a package macro in the SELECT list, nested <code>{% if is_incremental() %}</code> with a secondary branch on <code>var()</code>, and <code>log()</code> calls that explain which branch ran. The surrogate key applies to every inserted row; incremental filters only control which source rows are considered on a given run.</p>
+
+<pre data-lang="sql" data-partial="true" data-title="models/fct/fct_reviews.sql (incremental branch only)" data-explain="Fragment showing var-driven backfill versus default max-date incremental — full file quoted above."><code>{% if is_incremental() %}
+  {% if var("start_date", False) and var("end_date", False) %}
+    AND review_date &gt;= '{{ var("start_date") }}'
+    AND review_date &lt; '{{ var("end_date") }}'
+  {% else %}
+    AND review_date &gt; (select max(review_date) from {{ this }})
+  {% endif %}
+{% endif %}</code></pre>
+
+          <p>Microbatch and <code>event_time='review_date'</code> extend this pattern in later production sections. The Jinja structure stays the same: outer incremental guard, inner business rule branch.</p>
+
+          <h3>Other dbt_utils macros you will reach for</h3>
+          <p>The dbt_utils README lists every macro with argument signatures. The table below covers the ones analytics engineering interviews mention most often after <code>generate_surrogate_key</code> and <code>date_spine</code>.</p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Macro</th><th>Purpose</th><th>Typical call</th></tr></thead>
+              <tbody>
+                <tr><td><code>generate_surrogate_key</code></td><td>Hash composite natural keys</td><td><code>{{ dbt_utils.generate_surrogate_key(['a','b']) }}</code></td></tr>
+                <tr><td><code>date_spine</code></td><td>Generate a contiguous date range</td><td>Used in gap-filling and calendar models</td></tr>
+                <tr><td><code>pivot</code> / <code>unpivot</code></td><td>Wide ↔ long transforms</td><td>Reporting-friendly column layouts</td></tr>
+                <tr><td><code>star</code></td><td>SELECT all columns except a list</td><td>Exclude PII or metadata columns quickly</td></tr>
+                <tr><td><code>safe_divide</code></td><td>Null-safe division</td><td>Metrics without divide-by-zero errors</td></tr>
+                <tr><td><code>union_relations</code></td><td>Union many tables with column alignment</td><td>Multi-region or multi-source stacks</td></tr>
+                <tr><td><code>get_column_values</code></td><td>Distinct values as Jinja list</td><td>Feed dynamic pivot macros at compile time</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+<pre data-lang="sql" data-title="Pattern: date_spine for gapless calendars" data-explain="date_spine returns a query you wrap in a CTE — common for filling missing dates in sparse fact tables."><code>WITH date_range AS (
+  {{ dbt_utils.date_spine(
+      datepart="day",
+      start_date="cast('2020-01-01' as date)",
+      end_date="cast('2024-12-31' as date)"
+  ) }}
+)
+SELECT d.date_day, f.metric
+FROM date_range d
+LEFT JOIN {{ ref('fct_daily_metrics') }} f ON d.date_day = f.metric_date</code></pre>
+
+          <p><code>dbt_expectations</code> (metaplane fork) adds Great Expectations-style tests used later in <a href="s16-debugging-logging.html">Section 16</a> on <code>sources.yml</code> and <code>schema.yml</code>. Install it in this section; apply the tests once you need regex, quantile, and row-count comparisons against other tables.</p>
+
+          <h3>surrogate_key naming history</h3>
+          <p>Older projects and blog posts reference <code>dbt_utils.surrogate_key</code>. dbt_utils 1.x renamed it to <code>generate_surrogate_key</code> for clarity. Searching the repo for <code>surrogate_key</code> should return only documentation cross-references — the live macro name in <code>fct_reviews</code> is <code>generate_surrogate_key</code>. The macro accepts a list of column names; order matters for hash stability but not for uniqueness as long as the set is consistent.</p>
+
+          <h3>date_spine in practice</h3>
+          <p>Sparse fact tables leave gaps on calendar charts. <code>date_spine</code> generates one row per day (or hour, week, month) between bounds, which you left-join to facts so dashboards show zeroes instead of disconnected lines. The start and end arguments are SQL snippets, not Jinja strings — pass warehouse-cast dates as shown below.</p>
+
+          <p>On BigQuery use <code>cast('2020-01-01' as date)</code>; on Snowflake the same cast works. Databricks may prefer <code>DATE'2020-01-01'</code> in the argument strings. dbt_utils handles the dialect-specific date arithmetic inside dispatched macros.</p>
+
+          <h3>When not to add a package</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Situation</th><th>Prefer</th></tr></thead>
+              <tbody>
+                <tr><td>One-line coalesce in a single model</td><td>Inline SQL</td></tr>
+                <tr><td>Surrogate key used in ten fact models</td><td><code>dbt_utils.generate_surrogate_key</code></td></tr>
+                <tr><td>Complex expectation-style test suite</td><td><code>dbt_expectations</code> after installing here</td></tr>
+                <tr><td>Company-specific naming convention</td><td>Project macro, not a package fork</td></tr>
+                <tr><td>Package unmaintained / wrong dbt version</td><td>Vendoring one macro file into <code>macros/</code> with attribution</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout exam"><strong>Certification:</strong> know that package macros are invoked with the namespace prefix (<code>dbt_utils.</code>), that <code>dbt deps</code> installs them, and that <code>generate_surrogate_key</code> replaced the older <code>surrogate_key</code> macro name in dbt_utils 1.x.</div>
+
+          <h3>star and safe_divide quick reference</h3>
+          <p><code>dbt_utils.star(from=ref('model'), except=['col_a'])</code> expands to a column list — useful when a source adds columns and you want most of them without maintaining a manual SELECT list. <code>dbt_utils.safe_divide(numerator, denominator)</code> returns null instead of erroring on divide-by-zero, cleaner than nested <code>CASE</code> in metric models.</p>
+
+<pre data-lang="sql" data-title="Pattern: star macro" data-explain="except removes sensitive or redundant columns from the generated star list."><code>SELECT
+  {{ dbt_utils.star(from=ref('src_reviews'), except=['review_text']) }}
+FROM {{ ref('src_reviews') }}</code></pre>
+        </section>
+
+        <section class="section" id="deeper">
+          <h2>Deeper detail and edge cases</h2>
+          <p class="lead">Macro compilation order, package lockfiles, adapter dispatch, compile-time queries, and the ways Jinja mistakes silently change production SQL.</p>
+
+          <h3>Version notes</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Behaviour</th><th>Before</th><th>Now</th><th>Version</th></tr></thead>
+              <tbody>
+                <tr><td>Surrogate key macro name</td><td><code>dbt_utils.surrogate_key</code></td><td><code>dbt_utils.generate_surrogate_key</code></td><td>dbt_utils 1.x</td></tr>
+                <tr><td>dbt_utils pin in course repo</td><td>1.3.0 in older script</td><td><strong>1.3.3</strong> in <code>packages.yml</code></td><td>course repo</td></tr>
+                <tr><td>dbt_expectations maintainer</td><td><code>calogica/dbt_expectations</code></td><td><code>metaplane/dbt_expectations</code> at <strong>0.10.10</strong></td><td>2024+ fork</td></tr>
+                <tr><td>Generic test arguments in YAML</td><td>Top-level keys beside test name</td><td>Nested under <code>arguments:</code></td><td>dbt 1.8+</td></tr>
+                <tr><td>Package lockfile</td><td>Manual version pins only</td><td><code>package-lock.yml</code> generated by <code>dbt deps</code></td><td>dbt 1.6+</td></tr>
+                <tr><td><code>dbt compile --inline</code></td><td>Not available</td><td>Ad-hoc Jinja/SQL without a model file</td><td>dbt 1.5+</td></tr>
+                <tr><td><code>dbt show</code></td><td>Preview via <code>dbt run --select</code> only</td><td>First-class preview command</td><td>dbt 1.5+</td></tr>
+                <tr><td>Materialization macro namespace</td><td>Project-level only</td><td>Adapter packages can ship materializations</td><td>dbt 1.x</td></tr>
+                <tr><td>Fusion Jinja docs URL</td><td><code>docs.getdbt.com/reference/dbt-jinja-functions</code></td><td>Also documented under Fusion name param</td><td>dbt Fusion era</td></tr>
+                <tr><td>Partial parsing</td><td>Full reparse every command</td><td>Skips unchanged files when enabled</td><td>dbt 1.5+ default</td></tr>
+                <tr><td>Macro <code>return()</code></td><td>Implicit last expression</td><td>Explicit <code>{{ return(value) }}</code> for early exit</td><td>Jinja2 / dbt</td></tr>
+                <tr><td>Hub package install</td><td><code>hub.getdbt.com</code> only</td><td>Git URL and local path also supported</td><td>dbt 1.x</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>What it costs to run</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>What runs</th><th>Where the cost lands</th><th>How to spend less</th></tr></thead>
+              <tbody>
+                <tr><td><code>adapter.get_columns_in_relation</code> in a macro</td><td>Metadata query per compile if not cached</td><td>Avoid calling in every model; cache in a variable; compile once in CI</td></tr>
+                <tr><td><code>run_query</code> at compile time</td><td>Full warehouse query during <code>dbt run</code> parse phase</td><td>Use only when necessary; guard with <code>{% if execute %}</code></td></tr>
+                <tr><td><code>dbt_utils.get_column_values</code></td><td><code>SELECT DISTINCT</code> on referenced column</td><td>Pass a static list when values are known; limit with <code>where</code></td></tr>
+                <tr><td><code>date_spine</code> over ten years daily</td><td>3,650-row CTE every run</td><td>Scope to reporting window; materialise calendar once</td></tr>
+                <tr><td>Macro-expanded wide pivot</td><td>Massive SELECT list; parser and executor work</td><td>Cap column count; pivot in the warehouse with native syntax when cheaper</td></tr>
+                <tr><td><code>dbt deps</code> in CI</td><td>Network + disk; negligible compute</td><td>Cache <code>dbt_packages/</code> layer in Docker; use lockfile</td></tr>
+                <tr><td>Package generic tests (expectations)</td><td>Often full table scans per test</td><td>Scope with <code>row_condition</code>; run heavy tests on schedule not every PR</td></tr>
+                <tr><td>Inline <code>dbt show</code> on large table macro</td><td>Preview query against production-scale data if mis-targeted</td><td>Confirm <code>target</code> is dev; use <code>--limit</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout cost"><strong>The biggest waste here is compile-time warehouse queries in macros.</strong> A macro that calls <code>run_query</code> or <code>get_column_values</code> on a billion-row table during every <code>dbt run</code> adds a full scan before your models even start. Push that logic into a small metadata model materialised once, or pass values as vars from orchestration.</div>
+
+          <h3>Traps that catch people</h3>
+          <ul>
+            <li><strong>Missing dbt deps in CI —</strong> parse fails with "Could not find macro dbt_utils.generate_surrogate_key". Fresh clones never include <code>dbt_packages/</code>. Run <code>dbt deps</code> before <code>dbt parse</code>, <code>dbt run</code>, or <code>dbt build</code>.</li>
+            <li><strong>Wrong expectations package —</strong> copying <code>calogica/dbt_expectations</code> from an old blog post installs unmaintained code that breaks on dbt 1.11. Pin <code>metaplane/dbt_expectations</code> at 0.10.10.</li>
+            <li><strong>Macro name collision —</strong> defining <code>generate_surrogate_key</code> in your project overrides the package macro depending on dispatch order. Prefix project macros (<code>airbnb_generate_surrogate_key</code>) or use namespaces deliberately.</li>
+            <li><strong>Unbalanced Jinja in macros —</strong> a missing <code>{% endif %}</code> fails at compile time with a line number in the macro file, not the calling model. Test macros with <code>--inline</code> before embedding.</li>
+            <li><strong>Quoting macro arguments —</strong> passing <code>'dim_listings_cleansed'</code> as a string to <code>select_positive_values</code> produces invalid SQL (<code>FROM dim_listings_cleansed</code> without schema). Pass <code>ref('dim_listings_cleansed')</code> instead.</li>
+            <li><strong>Adapter introspection in parsing phase —</strong> calling <code>run_query</code> without <code>{% if execute %}</code> can error during <code>dbt compile</code> on a cold DAG. Guard warehouse calls.</li>
+            <li><strong>Whitespace explosions —</strong> forgetting <code>{%- -%}</code> in loop macros adds dozens of blank lines to compiled SQL, making debugging harder and occasionally breaking parsers. Copy the trim pattern from <code>no_empty_strings</code>.</li>
+            <li><strong>Surrogate key column order —</strong> changing the column list in <code>generate_surrogate_key</code> reassigns every <code>review_id</code>, breaking downstream joins and historical snapshots. Treat key definitions as contract changes.</li>
+            <li><strong>Package version drift —</strong> developer A pins dbt_utils 1.3.3, developer B runs deps without pulling and stays on 1.2.x. Commit <code>package-lock.yml</code> and enforce deps in CI.</li>
+            <li><strong>Git URL without revision —</strong> installing a package from <code>main</code> branch breaks reproducibility the next time someone runs deps. Always pin <code>revision</code> to a tag or SHA.</li>
+            <li><strong>Macro SQL injection style bugs —</strong> interpolating <code>{{ column_name }}</code> without validation lets YAML typos produce invalid SQL or, in worst cases, unsafe dynamic SQL. Validate allowed identifiers in macros that accept names.</li>
+            <li><strong>Assuming macros are DAG nodes —</strong> they expand inline and do not appear separately in lineage. Documentation and ownership stay with the calling model.</li>
+          </ul>
+
+          <h3>Troubleshooting playbook</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Symptom</th><th>Most likely cause</th><th>What to check / fix</th></tr></thead>
+              <tbody>
+                <tr><td><code>Compilation Error: 'dbt_utils' is undefined</code></td><td>Package not installed</td><td>Run <code>dbt deps</code>; confirm <code>dbt_packages/dbt_utils</code> exists</td></tr>
+                <tr><td><code>Encountered an error while compiling macro generate_surrogate_key</code></td><td>Wrong argument type (not a list)</td><td>Pass a list: <code>['col_a','col_b']</code> not a string</td></tr>
+                <tr><td>Inline compile prints empty string</td><td>Expression has no output (comment-only or set-only)</td><td>Add <code>{{ var }}</code> after <code>{% set %}</code></td></tr>
+                <tr><td><code>no_empty_strings</code> filters nothing</td><td>All columns non-string types</td><td><code>adapter.get_columns_in_relation</code> output in <code>--debug</code> compile</td></tr>
+                <tr><td>Macro works in <code>--inline</code> but fails in model</td><td>Different <code>ref()</code> resolution or missing dependency</td><td>Compare <code>target/compiled</code> paths for both</td></tr>
+                <tr><td><code>dbt deps</code> version conflict</td><td>Incompatible package pins</td><td>Read error for required dbt version; align <code>packages.yml</code></td></tr>
+                <tr><td>Test parameter ignored in YAML</td><td>Argument not under <code>arguments:</code> key</td><td>Move <code>min_row_count</code> under <code>arguments:</code> per dbt 1.8+ syntax</td></tr>
+                <tr><td>Compiled SQL has literal <code>{{ ref(...) }}</code></td><td>Macro called inside a string or comment</td><td>Ensure call is inside <code>{{ }}</code> expression delimiter</td></tr>
+                <tr><td><code>run_query</code> returned None</td><td>Ran during parse phase without <code>execute</code></td><td>Wrap in <code>{% if execute %}</code>; provide default for compile-only</td></tr>
+                <tr><td>Package test not found</td><td>Typo in test name or deps not run</td><td>Grep <code>dbt_packages/dbt_expectations</code> for exact macro name</td></tr>
+                <tr><td>Surrogate keys differ dev vs prod</td><td>Different collation or cast behaviour</td><td>Compare compiled MD5 inputs in both targets</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Production patterns</h3>
+          <p>Mature teams treat <code>macros/</code> like a standard library: small, well-named functions with docstrings in comments, each tested via <code>dbt compile --inline</code> or a dedicated unit test model. Project-specific business logic stays in models; macros hold repeated SQL mechanics (surrogate keys, standardised incremental filters, audit column bundles). Package pins live in <code>packages.yml</code> with Renovate or Dependabot PRs; CI runs <code>dbt deps</code> then a slim <code>dbt build</code> to catch breaking macro signature changes.</p>
+          <p>Adapter dispatch lets you ship one macro name with Snowflake, BigQuery and Postgres implementations &mdash; dbt picks the right one at compile time. dbt_utils uses this internally; large organisations mirror the pattern for warehouse-specific optimisations without forking entire models.</p>
+
+          <div class="grid-2">
+            <div class="mini-card">
+              <h4>Pattern: macro library folder</h4>
+              <p><code>macros/utils/</code> for generic SQL helpers, <code>macros/audit/</code> for logging and metadata, <code>macros/schema/</code> for generate_schema_name overrides. One macro per file, named after the macro function.</p>
+            </div>
+            <div class="mini-card">
+              <h4>Anti-pattern: mega-macro</h4>
+              <p>A 400-line macro that builds an entire mart. Impossible to test, debug or reuse. Split into composable macros or move orchestration into models with CTEs.</p>
+            </div>
+          </div>
+
+          <div class="diagram">
+            <p class="diagram-title">Adapter dispatch selects the warehouse implementation</p>
+            <div class="flow">
+              <div class="node is-model"><b>my_macro()</b><small>project macro</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-compute"><b>adapter.dispatch</b><small>compile time</small></div>
+              <span class="arrow">→</span>
+              <div class="node is-store"><b>snowflake__my_macro</b><small>or bigquery__ / default__</small></div>
+            </div>
+          </div>
+
+<pre data-lang="sql" data-title="macros/dispatch_example.sql (pattern)" data-explain="default__ implementation falls back when no adapter-specific version exists; production teams split by warehouse."><code>{% macro my_macro(column_name) %}
+  {{ return(adapter.dispatch('my_macro', 'my_project')(column_name)) }}
+{% endmacro %}
+
+{% macro default__my_macro(column_name) %}
+  coalesce({{ column_name }}, 'unknown')
+{% endmacro %}
+
+{% macro snowflake__my_macro(column_name) %}
+  iff({{ column_name }} is null, 'unknown', {{ column_name }})
+{% endmacro %}</code></pre>
+
+          <h3>Certification pointers</h3>
+          <p>The exam tests Jinja delimiter types, macro definition and invocation, package installation workflow, and the relationship between generic tests and macros. Expect questions on <code>dbt deps</code>, what <code>ref()</code> vs <code>var()</code> vs <code>env_var()</code> resolve to, and which file declares packages. It distinguishes hub install syntax from Git install syntax.</p>
+          <ul>
+            <li><a href="s05-dimensional-modelling.html#grain-keys-conformed">Section 5</a> — why <code>generate_surrogate_key</code> exists and grain semantics for <code>review_id</code>.</li>
+            <li><a href="s08-materializations.html#incremental-models">Section 8</a> — <code>is_incremental()</code> and <code>{{ this }}</code> used inside <code>fct_reviews</code>.</li>
+            <li><a href="s11-tests.html">Section 11</a> — built-in generic tests before you write custom ones.</li>
+            <li><a href="s12-advanced-testing.html">Section 12</a> — full generic test, contract, and unit test coverage.</li>
+            <li><a href="s16-debugging-logging.html">Section 16</a> — <code>dbt_expectations</code> tests on sources and models.</li>
+            <li><a href="s19-production.html">Section 19</a> — <code>generate_schema_name</code> macro for prod schema naming.</li>
+          </ul>
+          <div class="callout exam"><strong>Certification:</strong> memorise the three Jinja delimiters, that macros live in <code>macros/</code>, packages install with <code>dbt deps</code>, and generic tests use <code>{% test %}</code> blocks. Know <code>dbt_utils.generate_surrogate_key</code> and that arguments nest under <code>arguments:</code> in modern YAML.</div>
+        </section>
+
+        <section class="section" id="interview">
+          <h2>Interview questions</h2>
+          <p class="muted">Answer each one out loud before opening it.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+
+            <details class="qa">
+              <summary>What is Jinja's role inside dbt?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>Jinja is the templating layer dbt uses to generate warehouse SQL from model files. Expressions like <code>{{ ref('model') }}</code> inject relation names; statements like <code>{% if is_incremental() %}</code> control which SQL branches compile; comments like <code>{# note #}</code> are stripped before execution.</p>
+                <p>dbt never sends Jinja to the warehouse — it compiles templates locally (or in Cloud's compile step) into pure SQL, then executes that. Macros are Jinja functions that return SQL fragments or full queries.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What is the difference between {{ }} and {% %} in Jinja?<span class="qa-tag">Jinja</span></summary>
+              <div class="qa-body">
+                <p><code>{{ ... }}</code> is an expression delimiter: it evaluates Jinja and prints the result into the compiled output. Use it wherever a value belongs in SQL — column lists, relation names, macro return values.</p>
+                <p><code>{% ... %}</code> is a statement delimiter: it runs logic without necessarily printing anything — <code>if</code>, <code>for</code>, <code>set</code>, <code>macro</code>, <code>test</code>. Statements control structure; expressions produce text in the final SQL.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How do you define and call a dbt macro?<span class="qa-tag">Jinja</span></summary>
+              <div class="qa-body">
+                <p>Define it in a <code>.sql</code> file under <code>macros/</code> with <code>{% macro name(arg1, arg2) %} ... {% endmacro %}</code>. dbt loads all macro files at parse time.</p>
+                <p>Call it from any model, test, or hook with <code>{{ name(value1, value2) }}</code> inside expression delimiters. The macro body can contain SQL and nested Jinja; the compiled result replaces the call site. Test macros quickly with <code>dbt compile --inline "{{ name(...) }}"</code>.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>When would you use a macro instead of a CTE?<span class="qa-tag">Design</span></summary>
+              <div class="qa-body">
+                <p>Use a CTE when the logic is specific to one model and readable inline. Use a macro when the same pattern repeats across many files, needs parameters, or must be shared with tests and hooks.</p>
+                <p>Examples macro-worthy in production: standard audit columns, surrogate key generation, dynamic pivot column lists, incremental date-window predicates, and generic test SQL. A one-off three-step transform stays a CTE.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What does the adapter object provide in Jinja macros?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p><code>adapter</code> is dbt's connection to the active warehouse adapter. It exposes methods for metadata (<code>get_columns_in_relation</code>), relation lookup (<code>get_relation</code>), identifier quoting, and dispatching dialect-specific macro implementations.</p>
+                <p>The course's <code>no_empty_strings</code> macro uses <code>adapter.get_columns_in_relation(model)</code> to loop string columns dynamically. Without adapter introspection you would hard-code column names and break when schemas change.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How are generic tests related to macros?<span class="qa-tag">Testing</span></summary>
+              <div class="qa-body">
+                <p>Generic tests are macros defined with <code>{% test test_name(model, ...) %}</code> instead of <code>{% macro %}</code>. dbt registers them as reusable tests attachable in YAML. The test body returns rows that represent failures; zero rows means pass.</p>
+                <p>Custom tests like <code>positive_values</code> and <code>minimum_row_count</code> from Section 12 follow this pattern. Package tests from <code>dbt_expectations</code> are the same mechanism with richer parameter sets.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>How do you install and pin dbt packages?<span class="qa-tag">Production</span></summary>
+              <div class="qa-body">
+                <p>Declare dependencies in <code>packages.yml</code> at the project root. Hub packages use <code>package: org/name</code> and <code>version:</code>. Git forks use <code>git:</code> URL and <code>revision:</code> tag or SHA. Run <code>dbt deps</code> to download into <code>dbt_packages/</code>.</p>
+                <p>Pin exact versions — the course uses <code>dbt-labs/dbt_utils</code> at 1.3.3 and <code>metaplane/dbt_expectations</code> at 0.10.10. Commit <code>packages.yml</code> and the generated <code>package-lock.yml</code>; gitignore <code>dbt_packages/</code>.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What does dbt_utils.generate_surrogate_key do and why use it?<span class="qa-tag">Modelling</span></summary>
+              <div class="qa-body">
+                <p>It hashes a list of column values into a single surrogate key column, handling nulls consistently and using warehouse-appropriate MD5/SHA logic via adapter dispatch. In <code>fct_reviews</code> it produces <code>review_id</code> from listing, date, reviewer and text.</p>
+                <p>Surrogate keys simplify joins, stabilise facts when natural keys are composite, and decouple the warehouse from source identifiers. Changing the column list changes every key — treat it as a breaking contract. Theory is in Section 5.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>What is the difference between var(), env_var() and ref()?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p><code>ref('model')</code> resolves to a relation dbt builds — models, seeds, snapshots — and establishes DAG dependencies. <code>var('name', default)</code> reads dbt project variables from <code>dbt_project.yml</code> or CLI <code>--vars</code>. <code>env_var('NAME')</code> reads operating-system environment variables, common for secrets in <code>profiles.yml</code>.</p>
+                <p>Mixing them up causes subtle bugs: <code>ref()</code> in a macro argument expects a relation object; a string table name skips schema resolution. <code>var('start_date')</code> in <code>fct_reviews</code> drives optional incremental windows without editing SQL.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Your CI job fails with "macro not found" for dbt_utils. What happened?<span class="qa-tag">Troubleshooting</span></summary>
+              <div class="qa-body">
+                <p>The CI runner parsed or compiled the project without installing packages. <code>dbt_packages/</code> is not committed to git, so a fresh clone has no package macros until <code>dbt deps</code> runs.</p>
+                <p>Fix: add <code>dbt deps</code> as the first CI step after checkout, before <code>dbt parse</code>, <code>dbt build</code>, or <code>dbt test</code>. Verify <code>packages.yml</code> is present and version pins resolve. Cache the deps folder in Docker layers to speed pipelines.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>When does run_query execute and what are the risks?<span class="qa-tag">Performance</span></summary>
+              <div class="qa-body">
+                <p><code>run_query()</code> executes SQL against the warehouse during the execution phase of compilation (when <code>execute</code> is true). Macros use it to fetch metadata — distinct column values, max dates — back into Jinja for dynamic SQL generation.</p>
+                <p>Risks: extra warehouse cost on every run, failures when the warehouse is unreachable at compile time, and non-deterministic compiles if source data changes between runs. Guard with <code>{% if execute %}</code> and prefer static vars or metadata models when possible.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Why pin dbt_expectations to the metaplane fork?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p>The original <code>calogica/dbt_expectations</code> package lagged behind dbt Core releases. Metaplane maintains a fork compatible with modern dbt (0.10.10 in this course). Installing the wrong package name yields missing tests or compile errors on current dbt.</p>
+                <p>Install via hub <code>package: metaplane/dbt_expectations</code> or Git URL <code>https://github.com/metaplane/dbt-expectations.git</code> with <code>revision: 0.10.10</code>. Check releases on GitHub before upgrading.</p>
+              </div>
+            </details>
+
+            <details class="qa">
+              <summary>Explain how dbt compile --inline helps you develop macros.<span class="qa-tag">Jinja</span></summary>
+              <div class="qa-body">
+                <p><code>dbt compile --inline</code> renders an arbitrary Jinja/SQL string using your project's macro context — package macros, project macros, <code>ref()</code>, and vars — without creating a throwaway model file. You see the exact SQL dbt would produce, printed to stdout or written for inspection.</p>
+                <p>Pair it with <code>dbt show --inline</code> to execute a preview when the macro returns a SELECT. This shortens the feedback loop for macros like <code>select_positive_values</code> and <code>no_empty_strings</code> before embedding them in production models where errors are harder to isolate.</p>
+              </div>
+            </details>
+
+          </div>
+        </section>
+
+        <section class="section" id="practice">
+          <h2>Hands-on practice</h2>
+          <p class="muted">Run these from the <code>airbnb</code> folder with your virtualenv active.</p>
+          <ol class="practice-list">
+
+            <li class="practice">
+              <p class="practice-task">Create <code>macros/select_positive_values.sql</code>, compile it inline against <code>dim_listings_cleansed.price</code>, and preview five rows with <code>dbt show</code>.</p>
+              <span class="console-path">airbnb/macros/select_positive_values.sql</span>
+              <p class="practice-expect">Compiled SQL shows <code>WHERE price &gt; 0</code> against your dev schema; preview returns only listings with positive prices.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Create the macro file with the course contents.</li>
+                    <li>Run <code>dbt compile --inline "{{ select_positive_values(ref('dim_listings_cleansed'), 'price') }}"</code> — note <code>ref()</code> not a string.</li>
+                    <li>Run <code>dbt show --inline "{{ select_positive_values(ref('dim_listings_cleansed'), 'price') }}"</code>.</li>
+                  </ol>
+<pre data-lang="sql" data-title="macros/select_positive_values.sql"><code>{% macro select_positive_values(model, column_name) %}
+    SELECT *
+    FROM {{ model }}
+    WHERE {{ column_name }} &gt; 0
+{% endmacro %}</code></pre>
+                  <p class="muted">Undo: delete the macro file if you do not need it for later sections; no warehouse objects created.</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">Add <code>macros/no_empty_strings.sql</code>, compile an inline query that filters <code>dim_listings_cleansed</code> through the macro, and inspect the generated AND chain in compiled output.</p>
+              <span class="console-path">airbnb/macros/no_empty_strings.sql</span>
+              <p class="practice-expect">Compiled SQL lists <code>IS NOT NULL AND ... &lt;&gt; ''</code> for each string column, ending with <code>TRUE</code>.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Copy the course macro into <code>macros/no_empty_strings.sql</code>.</li>
+                    <li>Run compile inline with the course command (single quoted string in shell).</li>
+                    <li>Open the compiled output and count predicates vs <code>DESCRIBE TABLE</code> string columns.</li>
+                  </ol>
+<pre data-lang="shell" data-title="Terminal"><code>dbt compile --inline "SELECT * FROM {{ ref('dim_listings_cleansed') }} WHERE {{ no_empty_strings(ref('dim_listings_cleansed')) }}"</code></pre>
+                  <p class="muted">Undo: remove the macro file; no persistent warehouse change.</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">Add <code>packages.yml</code> with dbt_utils 1.3.3 and metaplane dbt_expectations 0.10.10, run <code>dbt deps</code>, then update <code>fct_reviews.sql</code> to add <code>review_id</code> via <code>generate_surrogate_key</code> and run the model.</p>
+              <span class="console-path">airbnb/packages.yml · models/fct/fct_reviews.sql</span>
+              <p class="practice-expect"><code>dbt_packages/</code> contains both packages; <code>fct_reviews</code> rebuilds with a populated <code>review_id</code> column; incremental run succeeds.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Create <code>packages.yml</code> with pinned versions from the course repo.</li>
+                    <li>Run <code>dbt deps</code> and confirm two packages installed.</li>
+                    <li>Add the surrogate key line to the SELECT in <code>fct_reviews.sql</code>.</li>
+                    <li>Run <code>dbt run --select fct_reviews</code> (add <code>--full-refresh</code> if column layout changed).</li>
+                  </ol>
+<pre data-lang="yaml" data-title="packages.yml"><code>packages:
+  - package: dbt-labs/dbt_utils
+    version: 1.3.3
+  - package: metaplane/dbt_expectations
+    version: 0.10.10</code></pre>
+                  <p class="muted">Undo: revert <code>fct_reviews.sql</code> and <code>packages.yml</code>; run <code>dbt clean</code> to remove <code>dbt_packages/</code>; full-refresh <code>fct_reviews</code> if you need the old column list.</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">Experiment with Jinja variables: compile an inline expression that sets a greeting from <code>target.name</code> and concatenates it with a model name using the <code>~</code> operator.</p>
+              <span class="console-path">Terminal · dbt compile --inline</span>
+              <p class="practice-expect">Output string includes your active target name and demonstrates string concatenation in Jinja.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Run the course inline Jinja example first.</li>
+                    <li>Extend with <code>{% set greeting = 'Running on ' ~ target.name %}{{ greeting }}</code>.</li>
+                  </ol>
+<pre data-lang="shell" data-title="Terminal"><code>dbt compile --inline "{% set greeting = 'Running on ' ~ target.name %}{{ greeting }}"</code></pre>
+                  <p class="muted">Undo: nothing to revert.</p>
+                </div>
+              </details>
+            </li>
+
+            <li class="practice">
+              <p class="practice-task">Rewrite <code>packages.yml</code> to install metaplane dbt_expectations from the Git URL instead of the hub, run <code>dbt deps</code>, and confirm the same version installs.</p>
+              <span class="console-path">airbnb/packages.yml</span>
+              <p class="practice-expect"><code>dbt deps</code> succeeds; <code>dbt_packages/dbt_expectations</code> exists at tag 0.10.10; <code>dbt parse</code> finds expectation macros.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">Walkthrough</span></summary>
+                <div class="qa-body">
+                  <ol>
+                    <li>Replace the metaplane hub entry with git + revision syntax.</li>
+                    <li>Run <code>dbt clean</code> then <code>dbt deps</code>.</li>
+                    <li>Verify with <code>dbt parse</code> and inspect <code>dbt_packages/dbt_expectations/dbt_project.yml</code> version.</li>
+                  </ol>
+<pre data-lang="yaml" data-title="packages.yml (Git install)"><code>packages:
+  - git: "https://github.com/metaplane/dbt-expectations.git"
+    revision: 0.10.10
+  - package: dbt-labs/dbt_utils
+    version: 1.3.3</code></pre>
+                  <p class="muted">Undo: restore hub syntax from the course repo if your team standardises on hub installs.</p>
+                </div>
+              </details>
+            </li>
+
+          </ol>
+        </section>
+
+        <section class="section" id="recap">
+          <h2>Recap</h2>
+          <div class="recap">
+            <ul class="checklist">
+              <li>Jinja has three delimiters: <code>{{ }}</code> expressions, <code>{% %}</code> statements, <code>{# #}</code> comments.</li>
+              <li>Macros live in <code>macros/*.sql</code>, defined with <code>{% macro %}...{% endmacro %}</code>, called with <code>{{ macro_name(args) }}</code>.</li>
+              <li>Test macros with <code>dbt compile --inline</code> and <code>dbt show --inline</code> before wiring into models.</li>
+              <li>Advanced macros loop with <code>{% for %}</code>, introspect via <code>adapter</code>, and optionally call <code>run_query</code> at compile time.</li>
+              <li>Generic tests are <code>{% test %}</code> macros; full walkthrough is in Section 12.</li>
+              <li>Test parameters pass through YAML <code>arguments:</code>; severity is test config, not a macro arg.</li>
+              <li>Packages declare in <code>packages.yml</code>; install with <code>dbt deps</code> into <code>dbt_packages/</code>.</li>
+              <li>Pin <code>dbt_utils</code> at <strong>1.3.3</strong> and <code>metaplane/dbt_expectations</code> at <strong>0.10.10</strong> — not calogica.</li>
+              <li>Git install syntax: <code>git: "https://github.com/metaplane/dbt-expectations.git"</code> plus <code>revision:</code>.</li>
+              <li><code>dbt_utils.generate_surrogate_key</code> builds <code>review_id</code> in <code>fct_reviews</code>; theory in Section 5.</li>
+              <li>Package macros use a namespace prefix: <code>{{ dbt_utils.date_spine(...) }}</code>.</li>
+              <li>Run <code>dbt deps</code> in CI before any command that parses macros.</li>
+            </ul>
+            <p style="margin-top:1rem;">
+              <button type="button" data-complete="section-13">Mark complete</button>
+            </p>
+          </div>
+        </section>
+
+      </div>
+
+      <aside class="toc" aria-label="On this page">
+        <strong>On this page</strong>
+        <ol>
+          <li><a href="#lectures">Lectures</a></li>
+          <li><a href="#jinja-basics">Jinja basics</a></li>
+          <li><a href="#writing-macros">Writing macros</a></li>
+          <li><a href="#advanced-macros">Advanced macros</a></li>
+          <li><a href="#custom-generic-tests">Generic tests recap</a></li>
+          <li><a href="#test-parameters">Test parameters</a></li>
+          <li><a href="#packages">Packages</a></li>
+          <li><a href="#dbt-utils">dbt_utils</a></li>
+          <li><a href="#deeper">Deeper detail</a></li>
+          <li><a href="#interview">Interview questions</a></li>
+          <li><a href="#practice">Hands-on practice</a></li>
+          <li><a href="#recap">Recap</a></li>
+        </ol>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<footer class="footer">The Complete dbt Bootcamp: Zero to Hero · Section 13 · Offline study edition</footer>
+</body>
+</html>

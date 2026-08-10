@@ -1,0 +1,840 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="SnowPro Core COF-C03 Section 2: Snowsight sign-up, first SQL, warehouses, scaling, and table types (permanent, transient, temporary).">
+<title>Section 2 — Basic Concepts | Snowflake COF-C03 Course Notes</title>
+<link rel="stylesheet" href="assets/snowflake.css">
+<script defer src="assets/search-index.js"></script>
+<script defer src="assets/sql-glossary.js"></script>
+<script defer src="assets/sql-highlight.js"></script>
+<script defer src="assets/snowflake.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">Course section 2 of 17 · SnowPro Core (COF-C03)</p>
+    <h1>Basic Concepts</h1>
+    <p class="subtitle">Sign up for Snowflake, navigate Snowsight, set worksheet context, run your first SQL, create and size virtual warehouses, and choose the right table type for each workload.</p>
+    <div class="hero-meta">
+      <span class="chip">10 lectures · 57min</span>
+      <span class="chip">Exam domain: Snowflake AI Data Cloud Features &amp; Architecture</span>
+      <span class="chip">Last verified: 28 Jul 2026</span>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <nav class="pager" aria-label="Section navigation">
+    <a href="s01-introduction.html">← Introduction</a>
+    <a href="../index.html">Course contents</a>
+    <a href="s03-time-travel-views.html">Next: Time Travel, Views →</a>
+  </nav>
+
+  <main id="main">
+    <div class="layout">
+      <div class="content">
+
+        <section class="section" id="lectures">
+          <h2>Lectures in this section</h2>
+          <p class="muted">Every lecture below links to the notes that cover it.</p>
+          <ol class="lecture-list">
+            <li class="lecture">
+              <a class="lec-title" href="#snowflake-sign-up">Snowflake Sign-Up</a>
+              <span class="lec-time">2:19</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#snowflake-walkthrough">Snowflake WalkThrough</a>
+              <span class="lec-time">8:24</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#note-on-warehouse">Note on Warehouse</a>
+              <span class="lec-time">0:14</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#demo-first-code">Demo : First Snowflake Code</a>
+              <span class="lec-time">8:46</span>
+              <span class="lec-src">1. Basic Concepts/First Code.txt</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#new-ui-update">New UI Update</a>
+              <span class="lec-time">2:40</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#demo-create-warehouse">Demo : Create Warehouse</a>
+              <span class="lec-time">11:52</span>
+              <span class="lec-src">1. Basic Concepts/Warehouse.txt</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#scaling">Concept of Scaling Out and Scaling Up/Down</a>
+              <span class="lec-time">6:10</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#types-of-tables">Types of Tables</a>
+              <span class="lec-time">6:09</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#demo-table-types">Demo : Types of Tables</a>
+              <span class="lec-time">10:32</span>
+              <span class="lec-src">1. Basic Concepts/Table Type.txt</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#note">Note</a>
+              <span class="lec-time">0:04</span>
+            </li>
+            <li class="lecture">
+              <a class="lec-title" href="#basic-concepts-quiz">Basic Concepts Quiz</a>
+            </li>
+          </ol>
+        </section>
+
+        <section class="section" id="snowflake-sign-up">
+          <h2>Snowflake Sign-Up</h2>
+          <p class="lead">Create a free trial at <code>snowflake.com</code>. You choose a cloud provider (AWS, Azure, or GCP), a region, and an account identifier. Trials typically run on <strong>Enterprise edition</strong> so you can explore multi-cluster warehouses and extended Time Travel.</p>
+          <ul>
+            <li><strong>Account URL:</strong> <code>https://&lt;orgname&gt;-&lt;account_name&gt;.snowflakecomputing.com</code> (or legacy locator format).</li>
+            <li><strong>Initial role:</strong> <code>ACCOUNTADMIN</code> for the account owner; create <code>SYSADMIN</code> for day-to-day object management in labs.</li>
+            <li><strong>Credits:</strong> Trial credits expire after 30 days or when consumed — suspend warehouses aggressively.</li>
+          </ul>
+          <div class="callout tip">
+            <strong>Best practice:</strong> Do not use <code>ACCOUNTADMIN</code> for daily SQL work. Grant yourself <code>SYSADMIN</code> and use that role in worksheets.
+          </div>
+        </section>
+
+        <section class="section" id="snowflake-walkthrough">
+          <h2>Snowflake WalkThrough</h2>
+          <p class="lead"><strong>Snowsight</strong> is Snowflake's modern web interface. You can also connect via SnowSQL (legacy CLI), the Snowflake CLI, JDBC/ODBC drivers, or Python connectors — but Snowsight is where most beginners start.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Area</th><th>Purpose</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><strong>Projects / Worksheets</strong></td><td>Write and run SQL. Each worksheet remembers role, warehouse, database, and schema context.</td></tr>
+                <tr><td><strong>Data → Databases</strong></td><td>Browse the object tree: databases, schemas, tables, views, stages, pipes.</td></tr>
+                <tr><td><strong>Admin → Warehouses</strong></td><td>Create, resize, suspend, and monitor virtual warehouses.</td></tr>
+                <tr><td><strong>Activity → Query History</strong></td><td>Audit queries, duration, warehouse used, and credits consumed.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Worksheet context (Role · Warehouse · Database · Schema)</h3>
+          <p>Before a query runs, four context values must be correct. "Object does not exist" errors are often a wrong database or schema, not a missing table.</p>
+
+          <div class="analogy">
+            <strong>Everyday analogy — a car dashboard:</strong> Role is your driver's licence (what you're allowed to do), warehouse is the engine (power to move), database is the city, and schema is the neighbourhood. If any dial is wrong, you won't reach the right destination even with perfect SQL.
+          </div>
+
+          <div class="diagram" role="img" aria-label="Four context dimensions: role, warehouse, database, schema">
+            <div class="flow">
+              <div class="node pulse">Role</div>
+              <div class="node">Warehouse</div>
+              <div class="node pulse">Database</div>
+              <div class="node">Schema</div>
+            </div>
+          </div>
+
+          <pre><code>USE ROLE SYSADMIN;
+USE WAREHOUSE study_wh;
+USE DATABASE la_db;
+USE SCHEMA la_schema;
+
+SELECT CURRENT_ROLE()      AS active_role,
+       CURRENT_WAREHOUSE() AS active_wh,
+       CURRENT_DATABASE()  AS active_db,
+       CURRENT_SCHEMA()    AS active_schema;</code></pre>
+
+          <h3>Object hierarchy</h3>
+          <p>Every securable object has a fully qualified name: <code>database.schema.object</code>. Above the account, an <strong>organization</strong> can group multiple accounts for billing and governance — useful on Business Critical and VPS editions, though trial accounts typically see only a single account.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-043-containers.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-043-containers.png" alt="Hierarchy of containers: organization at the top, then account, database, schema, and objects such as tables and views" loading="lazy" width="1920" height="1080">
+            </a>
+            <figcaption><span class="slide-no">Slide 43</span>Organization → account → database → schema → objects. Everything you create in labs lives inside one account.</figcaption>
+          </figure>
+
+          <div class="diagram" role="img" aria-label="Object hierarchy from account to objects">
+            <div class="flow">
+              <div class="node">Account</div>
+              <span class="arrow" aria-hidden="true">→</span>
+              <div class="node pulse">Database</div>
+              <span class="arrow" aria-hidden="true">→</span>
+              <div class="node">Schema</div>
+              <span class="arrow" aria-hidden="true">→</span>
+              <div class="node">Tables · Views · Stages…</div>
+            </div>
+          </div>
+
+          <p>A <strong>database</strong> is a logical grouping of schemas; each database belongs to exactly one Snowflake account. A <strong>schema</strong> is a logical grouping of database objects (tables, views, stages, and so on); each schema belongs to exactly one database.</p>
+          <ul>
+            <li>When you create a database, Snowflake auto-creates <code>INFORMATION_SCHEMA</code> (read-only metadata) and <code>PUBLIC</code> (default working schema).</li>
+            <li>Custom schemas must be created explicitly — there is no third default schema.</li>
+          </ul>
+
+          <div class="callout exam">
+            <strong>COF-C03 exam tip:</strong> <code>USE DATABASE</code> and <code>USE SCHEMA</code> are metadata operations (cloud services). <code>USE WAREHOUSE</code> resumes compute if auto-resume is enabled. DDL like <code>CREATE TABLE</code> (empty definition) does <em>not</em> require an active warehouse; <code>INSERT</code> and <code>SELECT</code> that scan data do.
+          </div>
+        </section>
+
+        <section class="section" id="note-on-warehouse">
+          <h2>Note on Warehouse</h2>
+          <p>A <strong>virtual warehouse</strong> is compute — not storage. Data lives in the storage layer; warehouses process queries against it. You must select a warehouse before DML, data scans, and <code>COPY INTO</code>. Metadata commands (<code>SHOW</code>, <code>DESCRIBE</code>, empty DDL) run on cloud services without warehouse credits.</p>
+          <div class="callout warn">
+            <strong>Common mistake:</strong> Running <code>INSERT</code> without selecting a warehouse — the query fails or queues indefinitely.
+          </div>
+        </section>
+
+        <section class="section" id="demo-first-code">
+          <h2>Demo : First Snowflake Code</h2>
+          <p class="muted">Course file: <code>1. Basic Concepts/First Code.txt</code></p>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Category</th><th>Examples</th><th>Warehouse required?</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>DDL (structure)</td><td><code>CREATE</code>, <code>ALTER</code>, <code>DROP</code></td><td>No — cloud services</td></tr>
+                <tr><td>Session / metadata</td><td><code>USE</code>, <code>SHOW</code>, <code>DESCRIBE</code></td><td>No</td></tr>
+                <tr><td>DML (data change)</td><td><code>INSERT</code>, <code>UPDATE</code>, <code>DELETE</code></td><td>Yes</td></tr>
+                <tr><td>Queries (scan)</td><td><code>SELECT</code> with filters/joins</td><td>Yes</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <pre><code>USE ROLE SYSADMIN;
+USE WAREHOUSE compute_wh;
+
+CREATE DATABASE IF NOT EXISTS la_db;
+CREATE SCHEMA IF NOT EXISTS la_db.la_schema;
+USE DATABASE la_db;
+USE SCHEMA la_schema;
+
+CREATE OR REPLACE TABLE my_table (
+  id    INTEGER PRIMARY KEY,  -- PK is metadata only; not enforced
+  name  VARCHAR(50) NOT NULL,
+  email VARCHAR(100)
+);
+
+INSERT INTO my_table (id, name, email) VALUES
+  (1, 'John Smith',  'john@example.com'),
+  (2, 'Amit',        'amit@example.com'),
+  (3, 'Bob Johnson', 'bob@example.com');
+
+SELECT * FROM my_table ORDER BY id;
+
+DESCRIBE TABLE my_table;
+SHOW DATABASES LIKE 'LA%';
+DESCRIBE DATABASE la_db;</code></pre>
+
+          <div class="callout warn">
+            <strong>Course file note:</strong> The original demo inserts duplicate <code>id = 1</code> twice. Snowflake does not enforce PRIMARY KEY — duplicates are allowed. Use <code>NOT NULL</code> for enforced constraints; deduplicate in ETL with <code>MERGE</code> if needed.
+          </div>
+
+          <div class="callout tip">
+            <strong>Identifiers:</strong> Unquoted names are stored uppercase (<code>my_table</code> → <code>MY_TABLE</code>). Use quotes for case-sensitive names: <code>"myTable"</code>.
+          </div>
+
+          <h3>Data type families</h3>
+          <p>Snowflake groups column types into families. You do not need to memorise every alias, but exam questions often ask which family a type belongs to.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Family</th><th>Types</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><strong>Numeric</strong></td><td><code>NUMBER</code>, <code>DECIMAL</code>, <code>NUMERIC</code>, <code>INT</code>, <code>INTEGER</code>, <code>FLOAT</code>, <code>DOUBLE</code></td></tr>
+                <tr><td><strong>String / Binary</strong></td><td><code>VARCHAR</code>, <code>CHAR</code>, <code>STRING</code>, <code>TEXT</code>, <code>BINARY</code></td></tr>
+                <tr><td><strong>Logical</strong></td><td><code>BOOLEAN</code></td></tr>
+                <tr><td><strong>Date &amp; Time</strong></td><td><code>DATE</code>, <code>DATETIME</code>, <code>TIME</code>, <code>TIMESTAMP</code>, <code>TIMESTAMP_LTZ</code>, <code>TIMESTAMP_NTZ</code>, <code>TIMESTAMP_TZ</code></td></tr>
+                <tr><td><strong>Geospatial</strong></td><td><code>GEOGRAPHY</code>, <code>GEOMETRY</code></td></tr>
+                <tr><td><strong>Semi-structured</strong></td><td><code>VARIANT</code>, <code>OBJECT</code>, <code>ARRAY</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-044-data-types.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-044-data-types.png" alt="Snowflake data types grouped into Numeric, String/Binary, Logical, Date and Time, Geospatial, and Semi-Structured families with example types listed under each" loading="lazy" width="1920" height="1080">
+            </a>
+            <figcaption><span class="slide-no">Slide 44</span>The six type families and their members — semi-structured types (<code>VARIANT</code>, <code>OBJECT</code>, <code>ARRAY</code>) matter when loading JSON later.</figcaption>
+          </figure>
+        </section>
+
+        <section class="section" id="new-ui-update">
+          <h2>New UI Update</h2>
+          <p>Snowsight receives regular UI updates. Core workflows remain the same: open a worksheet, set role/warehouse/database/schema in the context bar (or via <code>USE</code> commands), and run SQL. If menu labels move, look under <strong>Projects</strong> for worksheets and <strong>Admin</strong> for warehouses.</p>
+          <p>Notebook-style cells and dashboards may appear in newer builds — they still require a running warehouse for data operations. When in doubt, use a classic SQL worksheet for course demos.</p>
+        </section>
+
+        <section class="section" id="demo-create-warehouse">
+          <h2>Demo : Create Warehouse</h2>
+          <p class="muted">Course file: <code>1. Basic Concepts/Warehouse.txt</code></p>
+
+          <p>Create a right-sized warehouse with auto-suspend and auto-resume to control cost.</p>
+          <pre><code>USE ROLE SYSADMIN;
+
+CREATE WAREHOUSE IF NOT EXISTS xs_warehouse
+  WAREHOUSE_SIZE = XSMALL
+  AUTO_SUSPEND = 60
+  AUTO_RESUME = TRUE
+  INITIALLY_SUSPENDED = TRUE;
+
+USE WAREHOUSE xs_warehouse;
+
+SHOW WAREHOUSES LIKE '%XS%';
+
+-- When finished with labs
+ALTER WAREHOUSE xs_warehouse SUSPEND;
+DROP WAREHOUSE IF EXISTS xs_warehouse;</code></pre>
+
+          <h3>Warehouse properties reference</h3>
+          <pre><code>CREATE [ OR REPLACE ] WAREHOUSE [ IF NOT EXISTS ] &lt;name&gt;
+  WAREHOUSE_TYPE = STANDARD | SNOWPARK-OPTIMIZED
+  WAREHOUSE_SIZE = XSMALL | SMALL | MEDIUM | LARGE | XLARGE
+                 | XXLARGE | XXXLARGE | X4LARGE | X5LARGE | X6LARGE
+  MAX_CLUSTER_COUNT = &lt;num&gt;
+  MIN_CLUSTER_COUNT = &lt;num&gt;
+  SCALING_POLICY = STANDARD | ECONOMY
+  AUTO_SUSPEND = &lt;seconds&gt; | NULL
+  AUTO_RESUME = TRUE | FALSE
+  INITIALLY_SUSPENDED = TRUE | FALSE
+  RESOURCE_MONITOR = &lt;monitor_name&gt;
+  ENABLE_QUERY_ACCELERATION = TRUE | FALSE</code></pre>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Size</th><th>Relative power</th><th>Credits / hour</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>X-Small</td><td>1</td><td>1</td></tr>
+                <tr><td>Small</td><td>2</td><td>2</td></tr>
+                <tr><td>Medium</td><td>4</td><td>4</td></tr>
+                <tr><td>Large</td><td>8</td><td>8</td></tr>
+                <tr><td>X-Large</td><td>16</td><td>16</td></tr>
+                <tr><td>2X-Large</td><td>32</td><td>32</td></tr>
+                <tr><td>3X-Large</td><td>64</td><td>64</td></tr>
+                <tr><td>4X-Large</td><td>128</td><td>128</td></tr>
+                <tr><td>5X-Large</td><td>256</td><td>256</td></tr>
+                <tr><td>6X-Large</td><td>512</td><td>512</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-031-warehouse-sizes.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-031-warehouse-sizes.png" alt="Virtual warehouse sizes from X-Small through 6X-Large with credit consumption rates doubling at each step" loading="lazy" width="1920" height="1080">
+            </a>
+            <figcaption><span class="slide-no">Slide 31</span>Each T-shirt size doubles both compute power and credits per hour — billing depends on size and runtime, not query complexity.</figcaption>
+          </figure>
+
+          <p>Each size step <strong>doubles</strong> compute power and <strong>doubles credits per hour</strong>. Billing is per second with a <strong>60-second minimum</strong> each time a warehouse resumes.</p>
+
+          <div class="callout tip">
+            <strong>Cost notes:</strong> Warehouse bills per second (60-second minimum per resume). Set <code>AUTO_SUSPEND = 60</code> in labs. Leaving auto-resume warehouses running overnight is a common trial-account mistake.
+          </div>
+        </section>
+
+        <section class="section" id="scaling">
+          <h2>Concept of Scaling Out and Scaling Up/Down</h2>
+
+          <div class="analogy">
+            <strong>Everyday analogy — kitchen stations:</strong> Storage is the pantry (one shared ingredient supply). Each warehouse is a separate cooking station. The dinner rush (ETL) and a tasting menu (BI dashboards) can cook simultaneously from the same pantry without stealing each other's burners.
+          </div>
+
+          <div class="diagram" role="img" aria-label="Multiple warehouses reading shared storage">
+            <div class="flow">
+              <div class="node pulse">WH_ETL</div>
+              <div class="node">WH_BI</div>
+              <div class="node pulse">WH_DS</div>
+            </div>
+            <p class="muted" style="text-align:center;margin:12px 0 0;">all read the same centralized storage</p>
+          </div>
+
+          <div class="grid-2">
+            <div class="mini-card">
+              <h4>Scale out (multi-cluster)</h4>
+              <ul>
+                <li>Can be <strong>automated</strong> — Snowflake adds clusters when load demands it.</li>
+                <li>Use when you have <strong>concurrent queries</strong> queuing behind each other.</li>
+                <li>Soft limit of <strong>10 clusters</strong> maximum per warehouse.</li>
+              </ul>
+            </div>
+            <div class="mini-card">
+              <h4>Scale up / down (resize)</h4>
+              <ul>
+                <li><strong>Not automatic</strong> — you change <code>WAREHOUSE_SIZE</code> manually (or via script).</li>
+                <li>Use when a single <strong>complex query</strong> needs more CPU and memory per cluster.</li>
+                <li>When scaling down, you are briefly charged for both sizes until the resize completes.</li>
+              </ul>
+            </div>
+          </div>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-034-scale-out.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-034-scale-out.png" alt="Scale out: extra identical clusters spin up to absorb concurrent queries, with a soft limit of ten clusters" loading="lazy" width="1920" height="1080">
+            </a>
+            <figcaption><span class="slide-no">Slide 34</span>Scale-out adds clusters for concurrency — it does not make one query faster by itself.</figcaption>
+          </figure>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-041-scale-up.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-041-scale-up.png" alt="Scale up and down: resizing a warehouse from small to large for complex queries, done manually not automatically" loading="lazy" width="1920" height="1080">
+            </a>
+            <figcaption><span class="slide-no">Slide 41</span>Scale-up gives one query more power per cluster; you resize manually when a single job is the bottleneck.</figcaption>
+          </figure>
+
+          <div class="callout exam">
+            <strong>Scale UP vs Scale OUT:</strong> Bigger <em>size</em> speeds up one heavy query (more CPU/RAM per cluster). More <em>clusters</em> (multi-cluster) handles concurrent queries. Queuing users need scale-out, not necessarily a larger T-shirt size.
+          </div>
+
+          <h3>Multi-cluster warehouses (Enterprise+)</h3>
+          <p>Snowflake runs multiple identical clusters behind one warehouse name and load-balances queries across them.</p>
+          <ul>
+            <li><code>MIN_CLUSTER_COUNT</code> — clusters always running (1–10).</li>
+            <li><code>MAX_CLUSTER_COUNT</code> — upper limit Snowflake can spin up (1–10).</li>
+            <li><strong>Auto-scale</strong> (<code>MIN &lt; MAX</code>): adds clusters when queries queue; removes idle clusters.</li>
+            <li><strong>Maximized</strong> (<code>MIN = MAX &gt; 1</code>): all clusters always on — predictable latency, higher baseline cost.</li>
+            <li><code>AUTO_SUSPEND</code> applies to the <em>entire</em> multi-cluster warehouse.</li>
+          </ul>
+
+          <div class="diagram" role="img" aria-label="Multi-cluster warehouse scaling out">
+            <div class="flow">
+              <div class="node pulse">Cluster 1</div>
+              <div class="node pulse">Cluster 2</div>
+              <div class="node">Cluster 3</div>
+              <span class="arrow" aria-hidden="true">↔</span>
+              <div class="node">Load balancer</div>
+            </div>
+          </div>
+
+          <h3>Scaling policies (STANDARD vs ECONOMY)</h3>
+          <p>Multi-cluster warehouses choose a <code>SCALING_POLICY</code> that controls how aggressively clusters start and stop. Both policies shut a cluster down when its load can be redistributed to the least-loaded remaining cluster, but they differ in how quickly they react.</p>
+
+          <div class="slide-row">
+            <figure class="slide-fig">
+              <a href="assets/slides/slide-036-scaling-standard.png" target="_blank" rel="noopener">
+                <img src="assets/slides/slide-036-scaling-standard.png" alt="Standard scaling policy: starts a cluster when a query queues; each new cluster waits twenty seconds after the prior one started; shuts after two to three consecutive checks at one-minute intervals" loading="lazy" width="1920" height="1080">
+              </a>
+              <figcaption><span class="slide-no">Slide 36</span><strong>STANDARD</strong> — starts a cluster as soon as a query queues.</figcaption>
+            </figure>
+            <figure class="slide-fig">
+              <a href="assets/slides/slide-037-scaling-economy.png" target="_blank" rel="noopener">
+                <img src="assets/slides/slide-037-scaling-economy.png" alt="Economy scaling policy: starts a cluster only when there is enough load to keep it busy for six minutes; shuts after five to six consecutive checks at one-minute intervals" loading="lazy" width="1920" height="1080">
+              </a>
+              <figcaption><span class="slide-no">Slide 37</span><strong>ECONOMY</strong> — waits until there is six minutes of queued work before starting another cluster.</figcaption>
+            </figure>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Policy</th><th>Cluster starts when…</th><th>Cluster shuts when…</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>STANDARD</strong> (default)</td>
+                  <td>A query is queued. Each additional cluster waits <strong>20 seconds</strong> after the prior one started (prevents thrashing).</td>
+                  <td>Load can be redistributed from the least-loaded cluster, after <strong>2–3 consecutive checks</strong> at <strong>1-minute</strong> intervals.</td>
+                </tr>
+                <tr>
+                  <td><strong>ECONOMY</strong></td>
+                  <td>There is enough queued load to keep a new cluster busy for about <strong>6 minutes</strong>.</td>
+                  <td>Load can be redistributed from the least-loaded cluster, after <strong>5–6 consecutive checks</strong> at <strong>1-minute</strong> intervals.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>STANDARD favours low latency during spikes; ECONOMY favours cost when bursts are short-lived. For Query Acceleration, caching layers, and resource monitors, see <a href="s09-performance.html">Section 9 — Performance</a>.</p>
+        </section>
+
+        <section class="section" id="types-of-tables">
+          <h2>Types of Tables</h2>
+          <p>Table type controls durability, Time Travel, Fail-safe protection, and storage cost. Default is <strong>permanent</strong>.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Type</th><th>Persistence</th><th>Cloning target</th><th>Time Travel (days, default 1)</th><th>Fail-safe (days, fixed)</th><th>Best for</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>Permanent</strong> (default)</td>
+                  <td>Until dropped</td>
+                  <td>Any type</td>
+                  <td>0–1 (Standard) · 0–90 (Enterprise+)</td>
+                  <td>7</td>
+                  <td>Production analytics tables</td>
+                </tr>
+                <tr>
+                  <td><strong>Transient</strong></td>
+                  <td>Until dropped</td>
+                  <td>Transient or temporary</td>
+                  <td>0–1</td>
+                  <td>0</td>
+                  <td>Reproducible staging — lower storage cost</td>
+                </tr>
+                <tr>
+                  <td><strong>Temporary</strong></td>
+                  <td>Session only</td>
+                  <td>Transient or temporary</td>
+                  <td>0–1</td>
+                  <td>0</td>
+                  <td>ETL scratch, intermediate results</td>
+                </tr>
+                <tr>
+                  <td><strong>External</strong>*</td>
+                  <td>Metadata in SF; files in cloud</td>
+                  <td>—</td>
+                  <td>None</td>
+                  <td>None</td>
+                  <td>Query data lake files without loading — see <a href="s07-connect-to-cloud.html">Section 7</a></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="muted">* External tables meet none of the permanent/transient/temporary criteria above — no Time Travel, no Fail-safe, no cloning semantics from this table.</p>
+
+          <figure class="slide-fig">
+            <a href="assets/slides/slide-046-table-types.png" target="_blank" rel="noopener">
+              <img src="assets/slides/slide-046-table-types.png" alt="Comparison of permanent, transient and temporary tables: persistence until dropped or session, cloning targets, Time Travel 0-1 or 0-90 days, Fail-safe 7 days for permanent only, external tables excluded" loading="lazy" width="1920" height="1080">
+            </a>
+            <figcaption><span class="slide-no">Slide 46</span>Permanent tables alone get 7-day Fail-safe and Enterprise+ retention up to 90 days; external tables are out of scope for all three native types.</figcaption>
+          </figure>
+
+          <div class="analogy">
+            <strong>Everyday analogy — hotel rooms:</strong> Permanent tables are owned apartments (full insurance and history). Transient rooms have a short checkout grace period but no long-term vault. Temporary rooms vanish when you check out (end session).
+          </div>
+
+          <h3>Retention</h3>
+          <ul>
+            <li><code>DATA_RETENTION_TIME_IN_DAYS</code> sets Time Travel window (subject to edition limits).</li>
+            <li>Account parameter <code>MIN_DATA_RETENTION_TIME_IN_DAYS</code> sets a floor.</li>
+            <li>Effective retention = <code>MAX(table setting, account minimum)</code>.</li>
+          </ul>
+        </section>
+
+        <section class="section" id="demo-table-types">
+          <h2>Demo : Types of Tables</h2>
+          <p class="muted">Course file: <code>1. Basic Concepts/Table Type.txt</code></p>
+
+          <pre><code>USE ROLE SYSADMIN;
+USE WAREHOUSE compute_wh;
+USE DATABASE la_db;
+USE SCHEMA la_schema;
+
+CREATE TABLE permanent_table (
+  id   NUMBER,
+  name VARCHAR,
+  dt   DATE
+);
+
+CREATE TRANSIENT TABLE transient_table (
+  id   NUMBER,
+  name VARCHAR,
+  dt   DATE
+);
+
+CREATE TEMPORARY TABLE temporary_table (
+  id   NUMBER,
+  name VARCHAR,
+  dt   DATE
+);
+
+INSERT INTO permanent_table  VALUES (1, 'John', '2022-01-01');
+INSERT INTO transient_table  VALUES (2, 'Jane', '2022-01-02');
+INSERT INTO temporary_table  VALUES (4, 'Jill', '2022-01-04');
+
+SHOW TABLES;
+
+SELECT * FROM permanent_table;
+SELECT * FROM transient_table;
+SELECT * FROM temporary_table;
+
+CREATE TEMPORARY TABLE temporary_table2 CLONE permanent_table;
+CREATE TRANSIENT TABLE transient_table2 CLONE permanent_table;
+CREATE TEMPORARY TABLE temporary_table3 CLONE transient_table;
+
+ALTER TABLE permanent_table SET DATA_RETENTION_TIME_IN_DAYS = 7;
+ALTER TABLE transient_table SET DATA_RETENTION_TIME_IN_DAYS = 0;</code></pre>
+
+          <div class="callout warn">
+            <strong>Course file corrections:</strong> The original sets <code>DATA_RETENTION_TIME_IN_DAYS = 31</code> and <code>32</code> — Standard edition caps permanent retention at 1 day; Enterprise allows up to 90. Use values within your edition limit (7 is a safe Enterprise demo).
+          </div>
+
+          <div class="callout tip">
+            <strong>Clone rules:</strong> Permanent clones to any type; transient clones to transient or temporary; temporary clones to transient or temporary. Cloning details and zero-copy semantics are covered in later sections — see <a href="s05-advance-data-loading.html">Section 5</a> for related data lifecycle topics.
+          </div>
+        </section>
+
+        <section class="section" id="note">
+          <h2>Note</h2>
+          <p>Temporary tables are session-scoped — they disappear when the session ends. Creating a temporary table does not require <code>CREATE TABLE</code> privilege on the schema (unlike permanent/transient). Use <code>TEMP</code> as shorthand for <code>TEMPORARY</code>.</p>
+        </section>
+
+        <section class="section" id="basic-concepts-quiz">
+          <h2>Basic Concepts Quiz</h2>
+          <p>After the Udemy quiz, you should be able to answer:</p>
+          <ul>
+            <li>Which four context values must a worksheet have before running DML?</li>
+            <li>Does <code>CREATE TABLE</code> require an active warehouse? Does <code>INSERT</code>?</li>
+            <li>What is the difference between scale-up and scale-out?</li>
+            <li>Which table types have Fail-safe protection?</li>
+            <li>What schemas are auto-created with a new database?</li>
+          </ul>
+          <div class="callout exam">
+            <strong>Quick check:</strong> Permanent tables have Fail-safe (7 days beyond Time Travel). Transient and temporary do not. Multi-cluster warehouses require Enterprise or higher.
+          </div>
+        </section>
+
+        <section class="section" id="interview">
+          <h2>Interview questions</h2>
+          <p class="muted">Try to answer each one before opening it.</p>
+          <div class="qa-controls">
+            <button class="filter-btn" type="button" data-qa-toggle="open">Show all answers</button>
+            <button class="filter-btn" type="button" data-qa-toggle="closed">Hide all answers</button>
+          </div>
+          <div class="qa-list">
+            <details class="qa">
+              <summary>What are the four context values a Snowsight worksheet needs, and what typically breaks when one is wrong?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>Role, warehouse, database, and schema. Role controls privileges — wrong role gives access errors. Warehouse provides compute for DML and data scans — missing or suspended warehouse causes queries to fail or queue. Database and schema locate objects — a wrong database or schema produces "Object does not exist" even when the table name in your SQL is correct. Always verify with <code>CURRENT_ROLE()</code>, <code>CURRENT_WAREHOUSE()</code>, <code>CURRENT_DATABASE()</code>, and <code>CURRENT_SCHEMA()</code>.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>When should you scale up versus scale out a warehouse?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p>Scale <strong>up</strong> (increase <code>WAREHOUSE_SIZE</code>) when a single heavy query needs more CPU and memory to finish faster — one big aggregation or join. Scale <strong>out</strong> (multi-cluster warehouse, Enterprise+) when many users or sessions are queuing concurrently and each individual query is fine-sized but waiting for a slot. Bigger T-shirt size does not help if the bottleneck is concurrency, not per-query power. Multiple separate warehouses (ETL vs BI) also isolate workloads without scaling any one warehouse larger.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What problem does a multi-cluster warehouse solve?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>It handles concurrent query load by running multiple identical clusters behind one warehouse name. Snowflake load-balances incoming queries across clusters and auto-scales between <code>MIN_CLUSTER_COUNT</code> and <code>MAX_CLUSTER_COUNT</code> when queries queue or clusters sit idle. This addresses user concurrency — not a single slow query, which scale-up handles. Multi-cluster warehouses require Enterprise edition or higher. <code>AUTO_SUSPEND</code> applies to the entire multi-cluster warehouse as a unit.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What are the trade-offs of auto-suspend and auto-resume on a warehouse?<span class="qa-tag">Cost</span></summary>
+              <div class="qa-body">
+                <p>Auto-suspend stops billing compute when idle — essential for cost control in dev and trial accounts. The trade-off is resume latency: the next query waits for the warehouse to spin up, and each resume triggers a <strong>60-second minimum</strong> billing window. Auto-resume makes this transparent but can surprise you with overnight charges if something keeps pinging the warehouse. Setting <code>AUTO_SUSPEND = 60</code> in labs is good practice; leaving a large warehouse auto-resuming unattended is a common trial-account mistake.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How do permanent, transient, and temporary tables differ in lifespan, Time Travel, and Fail-safe?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p><strong>Permanent</strong> (default) persists until dropped, supports 0–90 days Time Travel (edition-dependent), and has 7 days Fail-safe. <strong>Transient</strong> persists until dropped but caps Time Travel at 0–1 day and has no Fail-safe — good for rebuildable staging. <strong>Temporary</strong> is session-scoped, disappears when the session ends, has 0–1 day Time Travel within the session, and no Fail-safe. External tables are metadata-only pointers to cloud files — no Time Travel or Fail-safe on the Snowflake side.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Why do transient tables save money compared with permanent tables?<span class="qa-tag">Cost</span></summary>
+              <div class="qa-body">
+                <p>Transient tables skip Fail-safe entirely — Snowflake does not maintain that extra 7-day disaster-recovery window beyond Time Travel. They also default to shorter Time Travel retention (0–1 day), so historical micro-partitions are purged sooner, reducing Time Travel storage charges. For staging data you can rebuild from source files, that is deliberate savings. Active compressed data still bills at the normal storage rate while the table exists.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What happens if you create a temporary table with the same name as an existing permanent table in the same schema?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p>Within your session, the temporary table takes precedence — queries and DML resolve to the session-scoped temp table, effectively hiding the permanent table until the session ends or you drop the temp table. Other sessions still see the permanent table. This is easy to miss in ETL scripts that reuse familiar table names for scratch work. When the session closes, the temporary table vanishes and the permanent table is visible again to everyone.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How many credits per hour does each warehouse size step consume?<span class="qa-tag">Cost</span></summary>
+              <div class="qa-body">
+                <p>Each size step doubles both compute power and credits per hour: X-Small = 1, Small = 2, Medium = 4, Large = 8, X-Large = 16, and so on through 6X-Large. Billing is per second with a 60-second minimum each time a warehouse resumes. Doubling size does not always halve query time — diminishing returns apply — but the credit rate always doubles with each T-shirt step.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Does <code>CREATE TABLE</code> require an active warehouse? Does <code>INSERT</code>?<span class="qa-tag">Gotcha</span></summary>
+              <div class="qa-body">
+                <p>Empty DDL like <code>CREATE TABLE</code> runs on Cloud Services and does <strong>not</strong> require an active warehouse. <code>INSERT</code> is DML that writes data — it requires a running warehouse and will fail or hang if none is selected. The same split applies to <code>SHOW</code>/<code>DESCRIBE</code> (no warehouse) versus <code>SELECT</code> that scans rows (warehouse required). "Object does not exist" is often a context problem; "No active warehouse" is a compute problem.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>What schemas are auto-created when you create a new database?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p>Snowflake automatically creates <code>INFORMATION_SCHEMA</code> (read-only metadata views) and <code>PUBLIC</code> (the default working schema). Custom schemas such as <code>LA_SCHEMA</code> must be created explicitly — there is no third default schema. If you create objects without specifying a schema, they land in <code>PUBLIC</code> unless your session schema is set elsewhere via <code>USE SCHEMA</code>.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>How do STANDARD and ECONOMY multi-cluster scaling policies differ?<span class="qa-tag">Comparison</span></summary>
+              <div class="qa-body">
+                <p><strong>STANDARD</strong> (default) starts a new cluster as soon as a query queues, with a 20-second stagger between successive cluster starts. It shuts a cluster when load can be redistributed from the least-loaded cluster, after 2–3 consecutive checks at 1-minute intervals — favouring low latency. <strong>ECONOMY</strong> waits until there is enough queued work to keep a new cluster busy for about six minutes before starting it, and shuts after 5–6 consecutive 1-minute checks — favouring cost over instant scale-out. Both policies apply only to multi-cluster warehouses on Enterprise edition or higher.</p>
+              </div>
+            </details>
+            <details class="qa">
+              <summary>Which Snowflake data type family does <code>VARIANT</code> belong to, and why does it matter for loading?<span class="qa-tag">Fundamentals</span></summary>
+              <div class="qa-body">
+                <p><code>VARIANT</code> is in the <strong>semi-structured</strong> family, alongside <code>OBJECT</code> and <code>ARRAY</code>. Semi-structured types store JSON, Avro, Parquet nested data, or other hierarchical payloads without a fixed column schema upfront. When you load JSON files later in the course, columns typed as <code>VARIANT</code> let Snowflake parse and query nested fields with dot notation and flatten functions — a common exam and interview topic tied to Sections 4–6.</p>
+              </div>
+            </details>
+          </div>
+        </section>
+
+        <section class="section" id="practice">
+          <h2>Hands-on practice</h2>
+          <p class="muted">Run these in a trial account on an X-Small warehouse with <code>AUTO_SUSPEND = 60</code>. Clean up when you finish.</p>
+          <ol class="practice-list">
+            <li class="practice">
+              <p class="practice-task">Recreate the First Code demo: set context to <code>LA_DB.LA_SCHEMA</code>, create <code>my_table</code> with three rows, and verify with <code>SELECT * FROM my_table ORDER BY id</code>. Confirm all four context functions return the expected values.</p>
+              <p class="practice-expect">Three rows returned (ids 1, 1, 3 if you kept the course duplicate). <code>CURRENT_ROLE()</code> is <code>SYSADMIN</code>, <code>CURRENT_DATABASE()</code> is <code>LA_DB</code>, <code>CURRENT_SCHEMA()</code> is <code>LA_SCHEMA</code>.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">SQL</span></summary>
+                <div class="qa-body">
+<pre><code>USE ROLE SYSADMIN;
+USE WAREHOUSE compute_wh;
+
+CREATE DATABASE IF NOT EXISTS la_db;
+CREATE SCHEMA IF NOT EXISTS la_db.la_schema;
+USE DATABASE la_db;
+USE SCHEMA la_schema;
+
+CREATE OR REPLACE TABLE my_table (
+  id    INTEGER PRIMARY KEY,
+  name  VARCHAR(50) NOT NULL,
+  email VARCHAR(100)
+);
+
+INSERT INTO my_table (id, name, email) VALUES
+  (1, 'John Smith',  'john@example.com'),
+  (2, 'Amit',        'amit@example.com'),
+  (3, 'Bob Johnson', 'bob@example.com');
+
+SELECT * FROM my_table ORDER BY id;
+
+SELECT CURRENT_ROLE()      AS active_role,
+       CURRENT_WAREHOUSE() AS active_wh,
+       CURRENT_DATABASE()  AS active_db,
+       CURRENT_SCHEMA()    AS active_schema;</code></pre>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Create an X-Small warehouse named <code>xs_warehouse</code> with <code>AUTO_SUSPEND = 60</code>, <code>AUTO_RESUME = TRUE</code>, and <code>INITIALLY_SUSPENDED = TRUE</code>. Resume it, run a quick query, then suspend it manually.</p>
+              <p class="practice-expect"><code>SHOW WAREHOUSES LIKE '%XS%'</code> lists <code>XS_WAREHOUSE</code> with size X-Small. After manual suspend, state shows <code>SUSPENDED</code>.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">SQL</span></summary>
+                <div class="qa-body">
+<pre><code>USE ROLE SYSADMIN;
+
+CREATE WAREHOUSE IF NOT EXISTS xs_warehouse
+  WAREHOUSE_SIZE = XSMALL
+  AUTO_SUSPEND = 60
+  AUTO_RESUME = TRUE
+  INITIALLY_SUSPENDED = TRUE;
+
+USE WAREHOUSE xs_warehouse;
+
+SELECT 1 AS sanity_check;
+
+ALTER WAREHOUSE xs_warehouse SUSPEND;
+
+SHOW WAREHOUSES LIKE '%XS%';</code></pre>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">In <code>LA_DB.LA_SCHEMA</code>, create one permanent, one transient, and one temporary table. Insert one row into each, then run <code>SHOW TABLES</code>. Set <code>DATA_RETENTION_TIME_IN_DAYS = 7</code> on the permanent table and <code>0</code> on the transient table.</p>
+              <p class="practice-expect"><code>SHOW TABLES</code> lists all three tables. Permanent table retention parameter shows 7; transient shows 0. Temporary table exists only in the current session.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">SQL</span></summary>
+                <div class="qa-body">
+<pre><code>USE ROLE SYSADMIN;
+USE WAREHOUSE compute_wh;
+USE DATABASE la_db;
+USE SCHEMA la_schema;
+
+CREATE OR REPLACE TABLE permanent_table (id NUMBER, name VARCHAR, dt DATE);
+CREATE OR REPLACE TRANSIENT TABLE transient_table (id NUMBER, name VARCHAR, dt DATE);
+CREATE OR REPLACE TEMPORARY TABLE temporary_table (id NUMBER, name VARCHAR, dt DATE);
+
+INSERT INTO permanent_table  VALUES (1, 'John', '2022-01-01');
+INSERT INTO transient_table  VALUES (2, 'Jane', '2022-01-02');
+INSERT INTO temporary_table  VALUES (3, 'Jill', '2022-01-04');
+
+SHOW TABLES;
+
+ALTER TABLE permanent_table SET DATA_RETENTION_TIME_IN_DAYS = 7;
+ALTER TABLE transient_table SET DATA_RETENTION_TIME_IN_DAYS = 0;
+
+SHOW PARAMETERS LIKE 'DATA_RETENTION%' IN TABLE permanent_table;</code></pre>
+                </div>
+              </details>
+            </li>
+            <li class="practice">
+              <p class="practice-task">Clean up: drop the three table-type demo tables, <code>my_table</code>, and the <code>xs_warehouse</code> warehouse. Leave <code>LA_DB</code> in place if other sections still need it.</p>
+              <p class="practice-expect">All demo tables and <code>XS_WAREHOUSE</code> are gone. <code>SHOW TABLES</code> in <code>LA_SCHEMA</code> no longer lists the dropped objects.</p>
+              <details class="qa">
+                <summary>Show solution<span class="qa-tag">SQL</span></summary>
+                <div class="qa-body">
+<pre><code>USE SCHEMA la_db.la_schema;
+
+DROP TABLE IF EXISTS permanent_table;
+DROP TABLE IF EXISTS transient_table;
+DROP TABLE IF EXISTS temporary_table;
+DROP TABLE IF EXISTS my_table;
+
+DROP WAREHOUSE IF EXISTS xs_warehouse;</code></pre>
+                </div>
+              </details>
+            </li>
+          </ol>
+        </section>
+
+        <section class="section" id="recap">
+          <h2>Recap</h2>
+          <div class="recap">
+            <ul class="checklist">
+              <li>Snowsight worksheets need correct role, warehouse, database, and schema context.</li>
+              <li>Hierarchy: organization → account → database → schema → objects; auto-schemas are INFORMATION_SCHEMA and PUBLIC.</li>
+              <li>DDL and SHOW/DESCRIBE use cloud services; DML and data scans need a warehouse.</li>
+              <li>Each warehouse size doubles power and credits/hour (X-Small = 1 credit/hr through 6X-Large = 512); billed per second (60s minimum).</li>
+              <li>Scale UP (manual resize) for complex queries; scale OUT (automated multi-cluster, Enterprise+, max 10) for concurrency.</li>
+              <li>STANDARD scaling starts on queue; ECONOMY waits for ~6 minutes of load; both shut after consecutive 1-minute checks.</li>
+              <li>Permanent / transient / temporary differ in persistence, cloning targets, Time Travel (0–1 Standard, 0–90 Enterprise+), and Fail-safe (7 days permanent only).</li>
+              <li>External tables have no Time Travel, Fail-safe, or native-table cloning rules.</li>
+              <li>Data type families: numeric, string/binary, logical, date/time, geospatial, semi-structured (<code>VARIANT</code>, <code>OBJECT</code>, <code>ARRAY</code>).</li>
+              <li>PRIMARY KEY in Snowflake is metadata only — not enforced.</li>
+            </ul>
+            <p style="margin-top:1rem;">
+              <button type="button" data-complete="section-02">Mark complete</button>
+            </p>
+          </div>
+        </section>
+
+      </div>
+
+      <aside class="toc" aria-label="On this page">
+        <strong>On this page</strong>
+        <ol>
+          <li><a href="#lectures">Lectures</a></li>
+          <li><a href="#snowflake-sign-up">Sign-Up</a></li>
+          <li><a href="#snowflake-walkthrough">WalkThrough</a></li>
+          <li><a href="#note-on-warehouse">Note on Warehouse</a></li>
+          <li><a href="#demo-first-code">First Code</a></li>
+          <li><a href="#new-ui-update">New UI</a></li>
+          <li><a href="#demo-create-warehouse">Create Warehouse</a></li>
+          <li><a href="#scaling">Scaling</a></li>
+          <li><a href="#types-of-tables">Table Types</a></li>
+          <li><a href="#demo-table-types">Table Types Demo</a></li>
+          <li><a href="#note">Note</a></li>
+          <li><a href="#basic-concepts-quiz">Quiz</a></li>
+          <li><a href="#interview">Interview questions</a></li>
+          <li><a href="#practice">Hands-on practice</a></li>
+          <li><a href="#recap">Recap</a></li>
+        </ol>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<footer class="footer">Snowflake COF-C03 Course Notes · Section 2 · Offline study edition</footer>
+</body>
+</html>
