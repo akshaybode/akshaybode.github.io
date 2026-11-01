@@ -11,6 +11,7 @@
   let search = '';
   let storageAvailable = true;
   let engineModulePromise;
+  let setupSqlPromise;
   const editorResizeObserver = new ResizeObserver(entries => entries.forEach(entry => syncHighlight(entry.target)));
 
   const $ = selector => document.querySelector(selector);
@@ -101,6 +102,19 @@
 
   function renderSchema() {
     $('#schemaList').innerHTML = Object.entries(sampleData).map(([name, table]) => `<div class="schema-item"><strong>${escapeHtml(name)}</strong><span>${escapeHtml(table.columns.map(column => `${column.name} ${column.type}`).join(', '))}</span></div>`).join('');
+  }
+
+  async function loadSetupSql() {
+    if (!setupSqlPromise) {
+      setupSqlPromise = fetch('setup.sql').then(response => {
+        if (!response.ok) throw new Error('Could not load setup.sql. Use the download link instead.');
+        return response.text();
+      }).catch(error => { setupSqlPromise = null; throw error; });
+    }
+    const source = await setupSqlPromise;
+    $('#setupSqlCode').textContent = source;
+    $('#copySetupSql').disabled = false;
+    return source;
   }
 
   function renderDays() {
@@ -376,6 +390,20 @@
     announce('Answer saved privately in this browser.');
   });
   $('#exportSql').addEventListener('click', exportSql);
+  $('#snowflakeSetup').addEventListener('toggle', event => {
+    if (event.target.open) loadSetupSql().catch(error => { $('#setupSqlCode').textContent = error.message; });
+  });
+  $('#copySetupSql').addEventListener('click', async event => {
+    try {
+      await navigator.clipboard.writeText(await loadSetupSql());
+      event.target.textContent = 'Copied!';
+      setTimeout(() => { event.target.textContent = 'Copy all SQL'; }, 2000);
+      announce('Snowflake setup SQL copied.');
+    } catch (error) {
+      event.target.textContent = 'Use download instead';
+      announce('Could not copy. Use the download link.');
+    }
+  });
   $('#exportJson').addEventListener('click', exportJson);
   $('#importButton').addEventListener('click', () => $('#importFile').click());
   $('#importFile').addEventListener('change', event => importJson(event.target.files?.[0]));
