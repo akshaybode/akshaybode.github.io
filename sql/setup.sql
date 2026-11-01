@@ -1,0 +1,212 @@
+-- Snowflake sample data for the November SQL practice track.
+-- Run in a learning account with a warehouse selected. This script resets only
+-- the tables listed below inside SQL_PRACTICE.NOVEMBER_PRACTICE.
+-- Add your own rows to test NULLs, ties, missing dates, and late arrivals.
+
+CREATE DATABASE IF NOT EXISTS SQL_PRACTICE;
+CREATE SCHEMA IF NOT EXISTS SQL_PRACTICE.NOVEMBER_PRACTICE;
+USE SCHEMA SQL_PRACTICE.NOVEMBER_PRACTICE;
+
+CREATE OR REPLACE TABLE employees (
+  employee_id INTEGER, employee_name VARCHAR, manager_id INTEGER,
+  department_id INTEGER, hire_date DATE, salary NUMBER(12,2)
+);
+INSERT INTO employees VALUES
+  (1,'Asha',NULL,10,'2021-01-10',180000),
+  (2,'Ben',1,10,'2022-03-02',125000),
+  (3,'Chitra',1,10,'2023-06-14',125000),
+  (4,'Deep',2,10,'2024-08-01',90000),
+  (5,'Esha',NULL,20,'2020-09-20',175000),
+  (6,'Farah',5,20,'2022-04-12',115000),
+  (7,'Gopal',5,20,'2022-04-12',105000),
+  (8,'Hina',6,20,'2025-02-05',105000);
+
+CREATE OR REPLACE TABLE attendance (
+  employee_id INTEGER, attendance_date DATE, status VARCHAR
+);
+INSERT INTO attendance VALUES
+  (2,'2026-11-01','PRESENT'),(2,'2026-11-02','PRESENT'),
+  (2,'2026-11-02','PRESENT'),(2,'2026-11-03','PRESENT'),
+  (2,'2026-11-06','PRESENT'),(2,'2026-11-07','PRESENT'),
+  (3,'2026-11-01','PRESENT'),(3,'2026-11-02','ABSENT'),
+  (3,'2026-11-03','PRESENT'),(3,'2026-11-04','PRESENT'),
+  (3,'2026-11-05','PRESENT'),(3,'2026-11-06','PRESENT'),
+  (4,'2026-11-01','PRESENT'),(4,'2026-11-03','PRESENT');
+
+CREATE OR REPLACE TABLE customers (
+  customer_id INTEGER, signup_date DATE, region VARCHAR
+);
+INSERT INTO customers VALUES
+  (101,'2025-11-20','West'),(102,'2025-12-04','West'),
+  (103,'2026-01-02','East'),(104,'2026-01-19','East'),
+  (105,'2026-02-03','South'),(106,'2026-03-01','South'),
+  (107,'2026-03-08','West');
+
+CREATE OR REPLACE TABLE orders (
+  order_id INTEGER, customer_id INTEGER, order_ts TIMESTAMP_NTZ,
+  amount NUMBER(12,2), status VARCHAR
+);
+INSERT INTO orders VALUES
+  (1001,101,'2025-12-01 10:00:00',120,'COMPLETED'),
+  (1002,101,'2025-12-12 11:00:00',80,'COMPLETED'),
+  (1003,102,'2025-12-19 09:15:00',300,'COMPLETED'),
+  (1004,101,'2026-01-05 14:10:00',200,'CANCELLED'),
+  (1005,103,'2026-01-10 12:00:00',150,'COMPLETED'),
+  (1006,103,'2026-01-11 13:00:00',150,'COMPLETED'),
+  (1007,104,'2026-02-02 15:30:00',450,'COMPLETED'),
+  (1008,105,'2026-02-15 08:40:00',60,'COMPLETED'),
+  (1009,101,'2026-03-04 18:00:00',260,'COMPLETED'),
+  (1010,102,'2026-03-05 10:00:00',320,'COMPLETED'),
+  (1011,105,'2026-03-21 16:30:00',75,'CANCELLED'),
+  (1012,107,'2026-04-01 09:00:00',90,'COMPLETED');
+
+CREATE OR REPLACE TABLE products (
+  product_id INTEGER, category VARCHAR, product_name VARCHAR
+);
+INSERT INTO products VALUES
+  (201,'Electronics','Headphones'),(202,'Electronics','Speaker'),
+  (203,'Home','Lamp'),(204,'Home','Desk'),
+  (205,'Books','SQL Handbook'),(206,'Books','Data Engineering Guide');
+
+CREATE OR REPLACE TABLE order_items (
+  order_id INTEGER, product_id INTEGER, quantity INTEGER,
+  unit_price NUMBER(12,2)
+);
+INSERT INTO order_items VALUES
+  (1001,201,1,120),(1002,203,2,40),(1003,204,1,300),
+  (1004,202,1,200),(1005,205,1,50),(1005,203,2,50),
+  (1006,201,1,150),(1007,204,1,400),(1007,205,1,50),
+  (1008,205,1,60),(1009,202,1,260),(1010,204,1,320),
+  (1011,203,1,75),(1012,206,1,90);
+
+CREATE OR REPLACE TABLE events (
+  event_id INTEGER, user_id INTEGER, event_ts TIMESTAMP_NTZ,
+  event_type VARCHAR
+);
+INSERT INTO events VALUES
+  (1,101,'2026-01-01 09:00:00','SIGNUP'),
+  (2,101,'2026-01-01 09:05:00','VIEW'),
+  (3,101,'2026-01-01 09:20:00','CHECKOUT'),
+  (4,101,'2026-01-01 09:28:00','PURCHASE'),
+  (5,101,'2026-01-01 11:10:00','VIEW'),
+  (6,102,'2026-01-02 10:00:00','SIGNUP'),
+  (7,102,'2026-01-02 10:02:00','VIEW'),
+  (8,102,'2026-01-02 10:15:00','CHECKOUT'),
+  (9,102,'2026-01-02 10:21:00','CHECKOUT'),
+  (10,102,'2026-01-02 11:00:00','PURCHASE'),
+  (11,103,'2026-01-03 12:00:00','SIGNUP'),
+  (12,103,'2026-01-03 12:10:00','PURCHASE'),
+  (13,103,'2026-01-03 12:12:00','VIEW'),
+  (14,103,'2026-01-03 12:15:00','CHECKOUT'),
+  (15,104,'2026-01-04 08:00:00','SIGNUP'),
+  (16,104,'2026-01-04 08:10:00','VIEW'),
+  (17,104,'2026-01-04 08:40:00','CHECKOUT');
+
+CREATE OR REPLACE TABLE payments (
+  payment_id INTEGER, order_id INTEGER, payment_ts TIMESTAMP_NTZ,
+  amount NUMBER(12,2), state VARCHAR
+);
+INSERT INTO payments VALUES
+  (501,1001,'2025-12-01 10:01:00',120,'SUCCESS'),
+  (502,1002,'2025-12-12 11:01:00',80,'SUCCESS'),
+  (503,1003,'2025-12-19 09:16:00',300,'SUCCESS'),
+  (504,1005,'2026-01-10 12:01:00',100,'SUCCESS'),
+  (505,1005,'2026-01-10 12:02:00',50,'SUCCESS'),
+  (506,1006,'2026-01-11 13:01:00',150,'FAILED'),
+  (507,1007,'2026-02-02 15:31:00',450,'SUCCESS'),
+  (508,1008,'2026-02-15 08:41:00',60,'SUCCESS'),
+  (509,1009,'2026-03-04 18:01:00',240,'SUCCESS'),
+  (510,1999,'2026-03-04 18:01:00',40,'SUCCESS');
+
+CREATE OR REPLACE TABLE subscriptions (
+  subscription_id INTEGER, customer_id INTEGER, plan VARCHAR,
+  start_date DATE, end_date DATE
+);
+INSERT INTO subscriptions VALUES
+  (301,101,'Basic','2025-12-01','2026-02-01'),
+  (302,101,'Pro','2026-02-01',NULL),
+  (303,102,'Basic','2025-12-10','2026-01-10'),
+  (304,102,'Basic','2026-01-25','2026-03-01'),
+  (305,103,'Pro','2026-01-02',NULL),
+  (306,104,'Basic','2026-02-01','2026-02-20'),
+  (307,104,'Pro','2026-02-15','2026-04-01');
+
+CREATE OR REPLACE TABLE inventory_events (
+  event_id INTEGER, product_id INTEGER, event_ts TIMESTAMP_NTZ,
+  quantity_change INTEGER
+);
+INSERT INTO inventory_events VALUES
+  (701,201,'2026-01-01 08:00:00',10),
+  (702,201,'2026-01-01 10:00:00',-4),
+  (703,201,'2026-01-02 10:00:00',-6),
+  (704,201,'2026-01-04 10:00:00',5),
+  (705,203,'2026-01-01 08:00:00',3),
+  (706,203,'2026-01-02 10:00:00',-5),
+  (707,203,'2026-01-03 10:00:00',4);
+
+CREATE OR REPLACE TABLE customer_changes (
+  change_id INTEGER, customer_id INTEGER, source_updated_at TIMESTAMP_NTZ,
+  ingested_at TIMESTAMP_NTZ, operation VARCHAR, email VARCHAR, region VARCHAR
+);
+INSERT INTO customer_changes VALUES
+  (801,101,'2025-11-20 08:00:00','2025-11-20 08:01:00','UPSERT','a@example.test','West'),
+  (802,101,'2026-02-01 09:00:00','2026-02-01 09:01:00','UPSERT','a@example.test','East'),
+  (803,101,'2026-02-01 09:00:00','2026-02-01 09:02:00','UPSERT','a@example.test','East'),
+  (804,102,'2025-12-04 10:00:00','2025-12-04 10:01:00','UPSERT','b@example.test','West'),
+  (805,102,'2026-03-01 11:00:00','2026-03-01 11:01:00','DELETE',NULL,NULL),
+  (806,103,'2026-01-02 08:00:00','2026-01-02 08:01:00','UPSERT','c@example.test','East'),
+  (807,103,'2026-01-25 08:00:00','2026-02-02 08:00:00','UPSERT','c@example.test','South'),
+  (808,104,'2026-01-19 08:00:00','2026-01-19 08:01:00','UPSERT','d@example.test','East');
+
+CREATE OR REPLACE TABLE tickets (
+  ticket_id INTEGER, customer_id INTEGER, agent_id INTEGER,
+  created_at TIMESTAMP_NTZ, resolved_at TIMESTAMP_NTZ, priority VARCHAR
+);
+INSERT INTO tickets VALUES
+  (401,101,2,'2026-01-01 09:00:00','2026-01-01 11:00:00','HIGH'),
+  (402,102,2,'2026-01-02 09:00:00','2026-01-03 15:00:00','NORMAL'),
+  (403,103,3,'2026-01-03 10:00:00',NULL,'HIGH'),
+  (404,104,3,'2026-01-04 08:00:00','2026-01-04 12:30:00','HIGH'),
+  (405,105,2,'2026-01-05 09:00:00','2026-01-05 13:00:00','NORMAL');
+
+CREATE OR REPLACE TABLE price_history (
+  product_id INTEGER, valid_from TIMESTAMP_NTZ,
+  valid_to TIMESTAMP_NTZ, price NUMBER(12,2)
+);
+INSERT INTO price_history VALUES
+  (201,'2025-01-01 00:00:00','2026-01-01 00:00:00',120),
+  (201,'2026-01-01 00:00:00',NULL,150),
+  (202,'2025-01-01 00:00:00',NULL,260),
+  (203,'2025-01-01 00:00:00',NULL,40),
+  (204,'2025-01-01 00:00:00',NULL,300),
+  (205,'2025-01-01 00:00:00',NULL,50),
+  (206,'2025-01-01 00:00:00',NULL,90);
+
+CREATE OR REPLACE TABLE device_readings (
+  reading_id INTEGER, device_id INTEGER, reading_ts TIMESTAMP_NTZ,
+  reading_value NUMBER(12,2)
+);
+INSERT INTO device_readings VALUES
+  (601,1,'2026-01-01 09:00:00',10),
+  (602,1,'2026-01-02 09:00:00',11),
+  (603,1,'2026-01-03 09:00:00',10),
+  (604,1,'2026-01-04 09:00:00',12),
+  (605,1,'2026-01-05 09:00:00',11),
+  (606,1,'2026-01-06 09:00:00',40),
+  (607,2,'2026-01-01 09:00:00',20),
+  (608,2,'2026-01-03 09:00:00',21),
+  (609,2,'2026-01-06 09:00:00',19);
+
+CREATE OR REPLACE TABLE pipeline_runs (
+  run_id INTEGER, pipeline_name VARCHAR, batch_date DATE,
+  started_at TIMESTAMP_NTZ, finished_at TIMESTAMP_NTZ,
+  status VARCHAR, rows_loaded INTEGER
+);
+INSERT INTO pipeline_runs VALUES
+  (901,'orders_daily','2026-01-01','2026-01-02 01:00:00','2026-01-02 02:00:00','SUCCESS',120),
+  (902,'orders_daily','2026-01-02','2026-01-03 01:00:00','2026-01-03 02:00:00','FAILED',0),
+  (903,'orders_daily','2026-01-02','2026-01-03 03:00:00','2026-01-03 04:00:00','SUCCESS',118),
+  (904,'orders_daily','2026-01-03','2026-01-04 01:00:00','2026-01-04 08:00:00','SUCCESS',130),
+  (905,'cdr_daily','2026-01-01','2026-01-02 00:00:00','2026-01-02 01:00:00','FAILED',0),
+  (906,'cdr_daily','2026-01-02','2026-01-03 00:00:00','2026-01-03 01:00:00','FAILED',0),
+  (907,'cdr_daily','2026-01-03','2026-01-04 00:00:00','2026-01-04 01:00:00','FAILED',0);
