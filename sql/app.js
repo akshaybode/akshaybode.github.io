@@ -11,10 +11,41 @@
   let search = '';
   let storageAvailable = true;
   let engineModulePromise;
+  const editorResizeObserver = new ResizeObserver(entries => entries.forEach(entry => syncHighlight(entry.target)));
 
   const $ = selector => document.querySelector(selector);
   const escapeHtml = value => String(value).replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
   const announce = message => { $('#announcement').textContent = message; };
+  const sqlKeywords = new Set('SELECT FROM WHERE WITH AS JOIN INNER LEFT RIGHT FULL OUTER CROSS ON USING GROUP BY HAVING ORDER LIMIT OFFSET DISTINCT UNION ALL INTERSECT EXCEPT CASE WHEN THEN ELSE END OVER PARTITION ROWS RANGE BETWEEN UNBOUNDED PRECEDING FOLLOWING CURRENT ROW QUALIFY ASC DESC NULLS FIRST LAST AND OR NOT IN IS NULL EXISTS LIKE ILIKE TRUE FALSE CAST TRY_CAST DATE TIMESTAMP INTERVAL RECURSIVE LATERAL FILTER TOP FETCH NEXT ONLY'.split(' '));
+  const sqlFunctions = new Set('COUNT SUM AVG MIN MAX COALESCE NULLIF ROW_NUMBER RANK DENSE_RANK LAG LEAD FIRST_VALUE LAST_VALUE NTILE PERCENT_RANK CUME_DIST DATE_TRUNC DATEADD DATEDIFF DATE_DIFF EXTRACT ROUND ABS CEIL FLOOR UPPER LOWER TRIM CONCAT TO_DATE TO_TIMESTAMP TRY_TO_DATE IFF GENERATE_SERIES MEDIAN STDDEV STDDEV_SAMP'.split(' '));
+  const sqlToken = /(--[^\n]*|\/\*[\s\S]*?(?:\*\/|$)|'(?:''|[^'])*(?:'|$)|"(?:""|[^"])*(?:"|$)|\b[A-Za-z_][\w$]*\b|\b\d+(?:\.\d+)?\b|[<>!=]=?|[-+*/%])/g;
+
+  function highlightSql(sql) {
+    let html = '';
+    let last = 0;
+    for (const match of sql.matchAll(sqlToken)) {
+      const value = match[0];
+      html += escapeHtml(sql.slice(last, match.index));
+      let kind = '';
+      if (value.startsWith('--') || value.startsWith('/*')) kind = 'comment';
+      else if (value.startsWith("'") || value.startsWith('"')) kind = 'string';
+      else if (/^\d/.test(value)) kind = 'number';
+      else if (sqlFunctions.has(value.toUpperCase()) && /^\s*\(/.test(sql.slice(match.index + value.length))) kind = 'function';
+      else if (sqlKeywords.has(value.toUpperCase())) kind = 'keyword';
+      else if (/^[<>!=+*/%-]/.test(value)) kind = 'operator';
+      html += kind ? `<span class="sql-${kind}">${escapeHtml(value)}</span>` : escapeHtml(value);
+      last = match.index + value.length;
+    }
+    return html + escapeHtml(sql.slice(last)) + '\n';
+  }
+
+  function syncHighlight(editor) {
+    const layer = editor.previousElementSibling;
+    layer.innerHTML = highlightSql(editor.value);
+    layer.scrollTop = editor.scrollTop;
+    layer.scrollLeft = editor.scrollLeft;
+    layer.style.width = `${editor.clientWidth + 2}px`;
+  }
 
   try {
     const saved = JSON.parse(localStorage.getItem(storageKey) || '{}');
@@ -139,7 +170,7 @@
       </div>
       <div class="editor-area">
         <div class="editor-heading"><label for="answer-${question.id}">YOUR SQL</label><small>Draft saves as you type · DuckDB checks the sample · verify final syntax in Snowflake</small></div>
-        <textarea class="answer-editor" id="answer-${question.id}" data-question="${question.id}" spellcheck="false" placeholder="-- Write your SQL here. Include assumptions in comments if needed.">${escapeHtml(attempt.draft)}</textarea>
+        <div class="code-editor"><pre class="sql-highlight" aria-hidden="true"></pre><textarea class="answer-editor" id="answer-${question.id}" data-question="${question.id}" spellcheck="false" placeholder="-- Write your SQL here. Include assumptions in comments if needed.">${escapeHtml(attempt.draft)}</textarea></div>
         <div class="question-actions"><span class="save-status" data-save-for="${question.id}">${attempt.submittedAt ? `Last submitted ${escapeHtml(new Date(attempt.submittedAt).toLocaleString())}` : 'Not submitted yet'}</span><div class="answer-buttons"><button class="run-button" type="button" data-run="${question.id}">Run &amp; check</button><button type="button" data-submit="${question.id}">${attempt.submittedAt ? 'Resubmit answer' : 'Submit answer'}</button></div></div>
         <div class="run-result" data-result-for="${question.id}" aria-live="polite"></div>
       </div>
@@ -151,7 +182,12 @@
     $('#dayKicker').textContent = `DAY ${String(currentDay).padStart(2, '0')} · NOV ${String(currentDay).padStart(2, '0')}`;
     $('#dayTitle').textContent = day.title;
     $('#dayFocus').textContent = day.focus;
+    editorResizeObserver.disconnect();
     $('#questions').innerHTML = day.questions.map(renderQuestion).join('');
+    $('#questions').querySelectorAll('.answer-editor').forEach(editor => {
+      syncHighlight(editor);
+      editorResizeObserver.observe(editor);
+    });
     $('#previousDay').disabled = currentDay === 1;
     $('#nextDay').disabled = currentDay === days.length;
   }
@@ -299,6 +335,7 @@
     const editor = event.target.closest('[data-question]');
     if (!editor) return;
     const id = editor.dataset.question;
+    syncHighlight(editor);
     const attempt = attemptFor(id);
     attempt.draft = editor.value;
     persist();
@@ -308,6 +345,9 @@
     statusElement.className = `question-status ${status.className}`;
     updateProgress(); renderDays();
   });
+  $('#questions').addEventListener('scroll', event => {
+    if (event.target.matches('.answer-editor')) syncHighlight(event.target);
+  }, true);
   $('#questions').addEventListener('keydown', event => {
     if (event.key !== 'Tab' || !event.target.matches('.answer-editor')) return;
     event.preventDefault();
